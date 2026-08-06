@@ -1,11 +1,11 @@
 {
   "$schema": "../../node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": [".next/**", "out/**", "build/**", "next-env.d.ts"],
+  "ignorePatterns": [],
   "singleAttributePerLine": true,
   "semi": true,
   "sortImports": true,
   "sortTailwindcss": {
-    "stylesheet": "../../packages/ui/src/styles/globals.css",
+    "stylesheet": "src/styles/globals.css",
     "functions": ["cn", "cva"]
   }
 }

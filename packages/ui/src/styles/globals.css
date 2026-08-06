@@ -2,6 +2,14 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Tailwind auto-detects sources from the importing app's root and skips
+   node_modules, so this package's own components — reached through a pnpm
+   symlink — are invisible to it and their classes would be tree-shaken out of
+   every app's CSS. The path resolves against this file's real location, not the
+   symlink, so declaring it here rather than per app is what makes a new app need
+   nothing beyond importing this stylesheet. */
+@source "../**/*.{ts,tsx}";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

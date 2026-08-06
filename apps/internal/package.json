@@ -10,17 +10,13 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@base-ui/react": "catalog:",
     "@hugeicons/core-free-icons": "catalog:",
     "@hugeicons/react": "catalog:",
     "@sugt/domain": "workspace:*",
-    "class-variance-authority": "catalog:",
-    "clsx": "catalog:",
+    "@sugt/ui": "workspace:*",
     "next": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:",
-    "tailwind-merge": "catalog:",
-    "tw-animate-css": "catalog:"
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "catalog:",

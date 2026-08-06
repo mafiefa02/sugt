@@ -282,9 +282,6 @@ importers:
 
   apps/internal:
     dependencies:
-      '@base-ui/react':
-        specifier: 'catalog:'
-        version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@hugeicons/core-free-icons':
         specifier: 'catalog:'
         version: 4.2.3
@@ -294,12 +291,9 @@ importers:
       '@sugt/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      class-variance-authority:
-        specifier: 'catalog:'
-        version: 0.7.1
-      clsx:
-        specifier: 'catalog:'
-        version: 2.1.1
+      '@sugt/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: 'catalog:'
         version: 16.2.12(@babel/core@7.29.7(supports-color@7.2.0))(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -309,12 +303,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.4(react@19.2.4)
-      tailwind-merge:
-        specifier: 'catalog:'
-        version: 3.6.0
-      tw-animate-css:
-        specifier: 'catalog:'
-        version: 1.4.0
     devDependencies:
       '@tailwindcss/postcss':
         specifier: 'catalog:'
@@ -343,9 +331,6 @@ importers:
 
   apps/public:
     dependencies:
-      '@base-ui/react':
-        specifier: 'catalog:'
-        version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@hugeicons/core-free-icons':
         specifier: 'catalog:'
         version: 4.2.3
@@ -355,12 +340,9 @@ importers:
       '@sugt/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      class-variance-authority:
-        specifier: 'catalog:'
-        version: 0.7.1
-      clsx:
-        specifier: 'catalog:'
-        version: 2.1.1
+      '@sugt/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: 'catalog:'
         version: 16.2.12(@babel/core@7.29.7(supports-color@7.2.0))(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -370,12 +352,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.4(react@19.2.4)
-      tailwind-merge:
-        specifier: 'catalog:'
-        version: 3.6.0
-      tw-animate-css:
-        specifier: 'catalog:'
-        version: 1.4.0
     devDependencies:
       '@tailwindcss/postcss':
         specifier: 'catalog:'
@@ -404,6 +380,55 @@ importers:
 
   packages/domain:
     devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/ui:
+    dependencies:
+      '@base-ui/react':
+        specifier: 'catalog:'
+        version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@hugeicons/core-free-icons':
+        specifier: 'catalog:'
+        version: 4.2.3
+      '@hugeicons/react':
+        specifier: 'catalog:'
+        version: 1.1.9(react@19.2.4)
+      class-variance-authority:
+        specifier: 'catalog:'
+        version: 0.7.1
+      clsx:
+        specifier: 'catalog:'
+        version: 2.1.1
+      react:
+        specifier: 'catalog:'
+        version: 19.2.4
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.4(react@19.2.4)
+      tailwind-merge:
+        specifier: 'catalog:'
+        version: 3.6.0
+      tw-animate-css:
+        specifier: 'catalog:'
+        version: 1.4.0
+    devDependencies:
+      '@tailwindcss/postcss':
+        specifier: 'catalog:'
+        version: 4.3.3
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.4(@types/react@19.2.18)
+      shadcn:
+        specifier: 'catalog:'
+        version: 4.16.1(supports-color@7.2.0)(typescript@7.0.2)
+      tailwindcss:
+        specifier: 'catalog:'
+        version: 4.3.3
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

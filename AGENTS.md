@@ -4,13 +4,14 @@ Instructions for AI agents working in this repository.
 
 ## Workspace
 
-A pnpm workspace with two apps and a shared package:
+A pnpm workspace with two apps and two shared packages:
 
 - `apps/public` (`@sugt/public`) — the public site, port 3000
 - `apps/internal` (`@sugt/internal`) — the internal tool, port 3001
 - `packages/domain` (`@sugt/domain`) — vocabulary shared by both
+- `packages/ui` (`@sugt/ui`) — shadcn primitives and the design tokens, shared by both
 
-Three rules to work within:
+Four rules to work within:
 
 1. **`@sugt/public` must never gain a dependency that can read Session Records or
    Perjadin Reports.** ADR-0002 claims that leak is unbuildable rather than merely
@@ -22,14 +23,19 @@ Three rules to work within:
 3. **Add domain vocabulary to `packages/domain` only if it is in `CONTEXT.md` and
    needs no database.** Anything requiring stored data belongs in a data-access
    package (not yet created — ADR-0005 has not picked a vendor).
+4. **`@sugt/ui` stays presentational.** Both apps depend on it, so anything it can
+   reach, the public app can reach — see [ADR-0010](./docs/adr/0010-one-shared-ui-package-not-shadcn-per-app.md).
+   No data fetching, no `@sugt/domain` import, no environment variables.
 
-`@sugt/domain` is a Just-in-Time package: its `exports` point straight at
-`./src/index.ts`, it has no build step, and Turbopack compiles it as part of
-whichever app imports it (so no `transpilePackages` entry is needed — Next only
-requires that for `node_modules` dependencies shipping raw TS). The tradeoff is
-that turbo has no build output to cache for it. If it ever grows enough to be
-worth caching, the documented upgrade is a Compiled Package: add a `build` script
-and point `exports` at `./dist` with `types` at the source.
+`@sugt/domain` and `@sugt/ui` are Just-in-Time packages: their `exports` point
+straight at `./src`, they have no build step, and Turbopack compiles them as part
+of whichever app imports them (so no `transpilePackages` entry is needed — Next
+only requires that for `node_modules` dependencies shipping raw TS). The tradeoff
+is that turbo has no build output to cache for them; it does still hash their
+sources into each app's `build` and `typecheck`, so editing one is not a stale
+cache hit — verified with `turbo run build --dry=json`. If either grows enough to
+be worth caching, the documented upgrade is a Compiled Package: add a `build`
+script and point `exports` at `./dist` with `types` at the source.
 
 ## Tooling
 
@@ -64,13 +70,53 @@ Nested `.oxfmtrc.json` files **replace** the root config rather than merging wit
 it, so each app's copy restates every option it needs. Change a formatting rule in
 all three.
 
-`sortTailwindcss` lives only in the two app configs, each pointing at its own
-`src/styles.css`, because nothing outside an app has Tailwind classes in it —
-oxfmt does not sort inside markdown code fences either. A package that grows a
-Tailwind surface needs its own `.oxfmtrc.json`; adding the key at the root would
-not reach it. Note that a `stylesheet` path that doesn't resolve makes oxfmt skip
-class sorting silently — no error, exit 0 — so check the path first when sorting
-appears to stop working.
+`sortTailwindcss` lives in the two app configs and in `packages/ui`, all three
+pointing at `packages/ui/src/styles/globals.css` — the one stylesheet that
+declares the theme, so the one that defines the sort order. Anything else with a
+Tailwind surface needs its own `.oxfmtrc.json` too; adding the key at the root
+would not reach it. Note that a `stylesheet` path that doesn't resolve makes oxfmt
+skip class sorting silently — no error, exit 0 — so check the path first when
+sorting appears to stop working.
+
+## shadcn/ui
+
+Components and design tokens live in `packages/ui`, laid out the way
+`shadcn init --monorepo` expects, so `shadcn add` works unmodified:
+
+```
+packages/ui/
+├── components.json          # aliases resolve to @sugt/ui/*
+└── src/
+    ├── components/          # the primitives — @sugt/ui/components/button
+    ├── lib/utils.ts         # cn() — @sugt/ui/lib/utils
+    └── styles/globals.css   # the whole theme, imported by both apps
+```
+
+**Run `pnpm dlx shadcn@latest add <component>` from an app directory, not from
+`packages/ui`.** The CLI reads the app's `components.json`, sees that `ui` and
+`utils` are aliased into `@sugt/ui`, and writes primitives there while writing
+composed blocks into the app's own `src/components`. That split is the point: an
+app owns what only it uses; both apps share everything else. Each app's
+`components.json` also points `tailwind.css` at the shared stylesheet, so a theme
+change lands once.
+
+Three things here are load-bearing:
+
+- **`@source "../**/*.{ts,tsx}"` at the top of `globals.css`.** Tailwind detects
+  sources from the importing app's root and skips `node_modules`, so this
+  package's components — reached through a pnpm symlink — would otherwise be
+  invisible and every class in them tree-shaken out of both apps' CSS. Verified by
+  building with the line removed, not assumed. It lives in the package rather than
+  per app because the path resolves against the file's real location; the same
+  directive written in an app would resolve against the symlinked copy under that
+  app's `node_modules`, which the scanner ignores — it silently does nothing.
+- **Apps import `@sugt/ui/globals.css` directly** in `src/app/layout.tsx`. Neither
+  app has a stylesheet of its own; a second one would be a second place for tokens
+  to drift.
+- **`@sugt/ui` resolves through its `exports` map, not through tsconfig `paths`.**
+  Same as `@sugt/domain`. The `paths` entry inside `packages/ui/tsconfig.json` is
+  only so the package's own components can import `@sugt/ui/lib/utils` — the form
+  the CLI writes — rather than a relative path.
 
 `.agents/skills/` holds the skills vendored from `mattpocock/skills`, hash-checked
 by `skills-lock.json`; the formatter ignores it and so should you. `.claude/skills/`

@@ -5,7 +5,7 @@
   "semi": true,
   "sortImports": true,
   "sortTailwindcss": {
-    "stylesheet": "src/styles.css",
+    "stylesheet": "../../packages/ui/src/styles/globals.css",
     "functions": ["cn", "cva"]
   }
 }

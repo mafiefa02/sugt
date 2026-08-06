@@ -1,7 +1,7 @@
-import { cn } from "-/lib/utils";
+import { cn } from "@sugt/ui/lib/utils";
 import type { Metadata } from "next";
 
-import "-/styles.css";
+import "@sugt/ui/globals.css";
 import { Montserrat } from "next/font/google";
 
 const sans = Montserrat({ subsets: ["latin"], variable: "--font-sans" });
