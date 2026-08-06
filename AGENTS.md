@@ -166,3 +166,11 @@ The canonical five-label vocabulary: `needs-triage`, `needs-info`, `ready-for-ag
 ### Domain docs
 
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+`docs/product.md` sits alongside them and describes what the two apps do on screen —
+the surfaces, not the vocabulary and not the rationale. Read it before building a
+feature; `CONTEXT.md` tells you what the words mean, the ADRs tell you why, and only
+product.md tells you what the thing looks like. Keep the three separate: a glossary
+that acquires screens, or a product doc that re-argues a decision, stops being useful
+to the next reader. Anything in it marked _(Proposed, not ratified)_ is exactly that
+— confirm before building on it.

@@ -11,6 +11,7 @@ Progress does not depend on it. The denominator is the fixed Session count, so a
 ## Consequences
 
 - Nothing is ever "overdue" in the schedule sense, because nothing ever asserted a due date. A School falling behind shows as a low delivered count, and noticing that is a human reading a number.
-- At-risk surfacing still exists, but it is derived from what people wrote rather than from dates: the "how it went" signal on a Session Record is what colours a School on the coverage view. A School can therefore be flagged as struggling while being perfectly on pace, and vice versa — which is the honest split, since pace and health are different things.
-- The blocking field is prose for the next Group to read, not a tracked item with a resolved state, so it carries no status meaning. That keeps the colour honest: an unresolvable open item would otherwise turn every School permanently red and kill the signal.
+- There is no at-risk surfacing on the coverage view either. It shows delivered counts and nothing else — no flagging, no colour, no health indicator. Pace and health are different things, and the tool renders only pace.
+- The blocking field on a Session Record is prose for the next Group to read, not a tracked item with a resolved state, so it carries no status meaning anywhere.
+- The "how it went" pick is aggregated on a separate concerns list — recent parts marked "some concerns" or "struggling" across all Schools — and nowhere else. That list is the entire justification for the pick being a fixed set of values rather than prose. If it is not built, the pick should not be collected.
 - If at-risk detection later proves necessary, the cheap version is a target window per Session index across the Programme or per Cluster, not per School. Reopening this decision means accepting the maintenance it was rejected for.

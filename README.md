@@ -4,6 +4,7 @@ Sekolah Unggul Garuda Transformasi, as delivered by DITSAMA ITB. A public-facing
 showcase of the Programme, plus an internal tool for tracking delivery and travel
 administration.
 
+What the two apps actually do is described in [`docs/product.md`](./docs/product.md).
 Domain vocabulary lives in [`CONTEXT.md`](./CONTEXT.md); the decisions behind the
 shape of this repo live in [`docs/adr/`](./docs/adr).
 
