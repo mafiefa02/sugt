@@ -181,6 +181,7 @@
       ]
     },
     "YAML": {
+      "language_servers": ["!yaml-language-server"],
       "format_on_save": "on",
       "prettier": {
         "allowed": false
