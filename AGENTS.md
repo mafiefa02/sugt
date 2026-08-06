@@ -92,13 +92,20 @@ packages/ui/
     └── styles/globals.css   # the whole theme, imported by both apps
 ```
 
-**Run `pnpm dlx shadcn@latest add <component>` from an app directory, not from
-`packages/ui`.** The CLI reads the app's `components.json`, sees that `ui` and
-`utils` are aliased into `@sugt/ui`, and writes primitives there while writing
-composed blocks into the app's own `src/components`. That split is the point: an
-app owns what only it uses; both apps share everything else. Each app's
-`components.json` also points `tailwind.css` at the shared stylesheet, so a theme
-change lands once.
+**Run `pnpm dlx shadcn@latest add <component>` against an app, not against
+`packages/ui`** — either from the app directory or with `-c apps/public` from the
+root. The CLI reads the app's `components.json`, sees that `ui` and `utils` are
+aliased into `@sugt/ui`, and writes primitives there while writing composed blocks
+into the app's own `src/components`. That split is the point: an app owns what only
+it uses; both apps share everything else. `packages/ui/components.json` aliases
+`components` to the same place as `ui`, so targeting it puts blocks among the
+primitives and the split quietly collapses. Each app's `components.json` also points
+`tailwind.css` at the shared stylesheet, so a theme change lands once.
+
+At the repo root the CLI has no single workspace to read, so `shadcn info` returns
+`{"error": "monorepo_root"}` — which is also what the vendored `shadcn` skill's
+injected context block resolves to. The `shadcn-sugt` skill covers that and the
+config this repo differs on (Base UI, not Radix; `hugeicons`, not lucide).
 
 Three things here are load-bearing:
 
@@ -118,11 +125,15 @@ Three things here are load-bearing:
   only so the package's own components can import `@sugt/ui/lib/utils` — the form
   the CLI writes — rather than a relative path.
 
-`.agents/skills/` holds the skills vendored from `mattpocock/skills`, hash-checked
-by `skills-lock.json`; the formatter ignores it and so should you. `.claude/skills/`
-is 25 symlinks into it and holds no content of its own — it exists because Claude
-Code only discovers skills under `.claude/skills/`, so deleting it would make them
-invisible. Don't try to collapse the two.
+`.agents/skills/` holds skills vendored by the `skills` CLI — from
+`mattpocock/skills`, plus `shadcn` from `shadcn/ui` — hash-checked by
+`skills-lock.json`; the formatter ignores it and so should you. Re-add a vendored
+skill with `pnpm dlx skills add <owner>/<repo> --skill <name>` rather than editing it
+in place, since an edit breaks its hash. `shadcn-sugt` is the exception: it is
+hand-written, has no lock entry, and is the right place for anything repo-specific.
+`.claude/skills/` is symlinks into `.agents/skills/` and holds no content of its own
+— it exists because Claude Code only discovers skills under `.claude/skills/`, so
+deleting it would make them invisible. Don't try to collapse the two.
 
 ## Agent skills
 
