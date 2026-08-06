@@ -20,6 +20,7 @@
     "clsx": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "shadcn": "catalog:",
     "tailwind-merge": "catalog:",
     "tw-animate-css": "catalog:"
   },
@@ -27,7 +28,6 @@
     "@tailwindcss/postcss": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "shadcn": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   }

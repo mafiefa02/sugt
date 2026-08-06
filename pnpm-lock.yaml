@@ -319,9 +319,6 @@ importers:
       babel-plugin-react-compiler:
         specifier: 'catalog:'
         version: 1.0.0
-      shadcn:
-        specifier: 'catalog:'
-        version: 4.16.1(supports-color@7.2.0)(typescript@7.0.2)
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
@@ -368,9 +365,6 @@ importers:
       babel-plugin-react-compiler:
         specifier: 'catalog:'
         version: 1.0.0
-      shadcn:
-        specifier: 'catalog:'
-        version: 4.16.1(supports-color@7.2.0)(typescript@7.0.2)
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
@@ -407,6 +401,9 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.4(react@19.2.4)
+      shadcn:
+        specifier: 'catalog:'
+        version: 4.16.1(supports-color@7.2.0)(typescript@7.0.2)
       tailwind-merge:
         specifier: 'catalog:'
         version: 3.6.0
@@ -423,9 +420,6 @@ importers:
       '@types/react-dom':
         specifier: 'catalog:'
         version: 19.2.4(@types/react@19.2.18)
-      shadcn:
-        specifier: 'catalog:'
-        version: 4.16.1(supports-color@7.2.0)(typescript@7.0.2)
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
@@ -1747,8 +1741,8 @@ packages:
     resolution: {integrity: sha512-9Be3ZoN4LmYR90tUoVu2te2BsbzHfhJyfEiAVfz7N5/zv+jduIfLrV2xdQXOHbaD6KgpGdO9PRPM1Y4Q9QkPkA==}
     engines: {node: ^18.19.0 || >=20.5.0}
 
-  express-rate-limit@8.6.1:
-    resolution: {integrity: sha512-0D493aP61w0TJ2A0wy27riRsO7FMQ7FK+KUHOKCSfPvYo0R55aiC6emCVgFUeShH0fq0ICPVzNcgoS+BsbXQCA==}
+  express-rate-limit@8.6.2:
+    resolution: {integrity: sha512-YH4ru+eOJxQABscKFfRCy9R7x9QFGdezclVMwwgFFndzS2Xnm0uo6B0ABZsLhcpeptGv2qvuJVWlQr9gQZoC3A==}
     engines: {node: '>= 16'}
     peerDependencies:
       express: '>= 4.11'
@@ -3103,7 +3097,7 @@ snapshots:
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
       express: 5.2.1(supports-color@7.2.0)
-      express-rate-limit: 8.6.1(express@5.2.1(supports-color@7.2.0))(supports-color@7.2.0)
+      express-rate-limit: 8.6.2(express@5.2.1(supports-color@7.2.0))(supports-color@7.2.0)
       hono: 4.13.0
       jose: 6.2.8
       json-schema-typed: 8.0.2
@@ -3738,7 +3732,7 @@ snapshots:
       strip-final-newline: 4.0.0
       yoctocolors: 2.2.0
 
-  express-rate-limit@8.6.1(express@5.2.1(supports-color@7.2.0))(supports-color@7.2.0):
+  express-rate-limit@8.6.2(express@5.2.1(supports-color@7.2.0))(supports-color@7.2.0):
     dependencies:
       debug: 4.4.3(supports-color@7.2.0)
       express: 5.2.1(supports-color@7.2.0)

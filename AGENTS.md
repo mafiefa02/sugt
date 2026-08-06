@@ -107,6 +107,24 @@ At the repo root the CLI has no single workspace to read, so `shadcn info` retur
 injected context block resolves to. The `shadcn-sugt` skill covers that and the
 config this repo differs on (Base UI, not Radix; `hugeicons`, not lucide).
 
+**`shadcn` is a dependency of `@sugt/ui`, not a CLI pin.** `globals.css` opens with
+`@import "shadcn/tailwind.css"`, so the package ships CSS that compiles into both
+apps — which is why it sits in `dependencies` beside `tw-animate-css`, its sibling on
+the line above, rather than in `devDependencies`. Removing it fails the build with
+`Can't resolve 'shadcn/tailwind.css'`, not a missing binary.
+
+Only `packages/ui` needs it. The apps used to carry a copy too, and those were dead
+weight: the import resolves from the stylesheet's real location, so it is
+`packages/ui/node_modules` that gets searched no matter which app pulls the CSS in.
+Verified by building both apps with the app-level copies removed.
+
+Nothing runs the installed binary — `pnpm exec shadcn` isn't even reachable from the
+root, since strict `node_modules` keeps it in `packages/ui`. CLI work goes through
+`pnpm dlx shadcn@latest`, as above. When `@latest` has moved past the `catalog:`
+version, bump the catalog in the same commit: a generated component and the
+`shadcn/tailwind.css` it is styled against are a matched pair, and only the catalog
+entry decides which CSS the apps compile.
+
 Three things here are load-bearing:
 
 - **`@source "../**/*.{ts,tsx}"` at the top of `globals.css`.** Tailwind detects
