@@ -1,4 +1,4 @@
-<!-- @dsCard group="Components" viewport="700x460" name="Core" subtitle="Button, Badge, Card, Input — the built primitives" -->
+<!-- @dsCard group="Components" viewport="700x680" name="Core" subtitle="Button, Badge, Rating, Card, Input — the built primitives" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,7 +18,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { Button, Badge, Card, Input } = window.SUGTDesignSystem_4f31cd;
+const { Button, Badge, Rating, Card, Input } = window.SUGTDesignSystem_4f31cd;
 function Demo(){
   return (
     <div>
@@ -39,13 +39,29 @@ function Demo(){
         <Button>default</Button>
         <Button size="lg">lg</Button>
       </div>
-      <p className="lbl">Badge — how it went</p>
+      <p className="lbl">Badge — labels &amp; counts (no severity: see Rating)</p>
       <div className="row">
-        <Badge variant="ontrack">On track</Badge>
-        <Badge variant="concern">Some concerns</Badge>
-        <Badge variant="struggling">Struggling</Badge>
         <Badge variant="primary">3 / 10</Badge>
-        <Badge variant="outline">Online</Badge>
+        <Badge variant="outline">Daring</Badge>
+        <Badge variant="muted">Dibatalkan</Badge>
+        <Badge>Luring</Badge>
+      </div>
+      <p className="lbl">Rating — 1–10 per Aspect. Red at or below 7; quiet above it.</p>
+      <div className="row" style={{flexDirection:'column',alignItems:'flex-start',gap:'6px'}}>
+        <Rating value={9} label="Penyampaian" />
+        <Rating value={8} label="Materi" />
+        <Rating value={7} label="Ketepatan waktu" />
+        <Rating value={4} label="Pemahaman" />
+        <Rating value={1} label="Fasilitas" />
+      </div>
+      <p className="lbl">Rating — compact, for dense rows</p>
+      <div className="row">
+        <Rating value={10} variant="compact" />
+        <Rating value={8} variant="compact" />
+        <Rating value={7} variant="compact" />
+        <Rating value={5} variant="compact" />
+        <Rating value={3} variant="compact" />
+        <Rating value={1} variant="compact" />
       </div>
       <div className="grid" style={{marginTop:'6px'}}>
         <Card title="SMA Negeri 3 Bandung" description="Cluster Priangan Timur">

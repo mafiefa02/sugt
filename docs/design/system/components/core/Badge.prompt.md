@@ -1,10 +1,12 @@
-Compact status / count pill. Chief use is the Session Record "how it went" scale.
+Compact status / count pill. Labels, counts, and a Session's status.
 
 ```jsx
-<Badge variant="ontrack">On track</Badge>
-<Badge variant="concern">Some concerns</Badge>
-<Badge variant="struggling">Struggling</Badge>
 <Badge variant="primary">3 / 10</Badge>
+<Badge variant="outline">Daring</Badge>
+<Badge variant="muted">Dibatalkan</Badge>
+<Badge>Luring</Badge>
 ```
 
-Variants: `ontrack` (calm neutral), `concern` (soft red tint), `struggling` (destructive red) — the palette has no green/amber, so severity is read within the red ramp. Also `default`, `primary`, `outline` for generic labels and counts. Square corners.
+Variants: `default`, `primary`, `outline`, `muted`. Rounded corners like everything else (`--radius-md`).
+
+**Badge no longer carries severity.** It used to hold the `on track / some concerns / struggling` pick, and that pick no longer exists — the outcome signal is a 1–10 Rating against a named Aspect. Use `<Rating>` for anything scored. A pill reading "4" is a label pretending to be a measurement.

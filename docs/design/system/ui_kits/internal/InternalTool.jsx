@@ -1,10 +1,12 @@
 /* SUGT Internal tool — interactive recreation of the surfaces in docs/product.md:
    Coverage view (landing), Concerns list, and the acquittal (Perjadin Report).
+   Ratings and the four evaluation forms follow docs/data-model.md; the reference
+   data is the real allocation from packages/db/seed/reference-data.sql.
    The repo app is a placeholder, so this is built to spec with the real design
    system. Staff-facing, English domain terms, Indonesian UI copy where natural.
    Exports InternalTool to window. */
 
-const { Button, Badge, Card, Input } = window.SUGTDesignSystem_4f31cd;
+const { Button, Badge, Rating, Card, Input } = window.SUGTDesignSystem_4f31cd;
 const { useState, useEffect } = React;
 
 function Icon({ name, size = 18, color, style }) {
@@ -12,24 +14,49 @@ function Icon({ name, size = 18, color, style }) {
 }
 const rupiah = (n) => "Rp " + n.toLocaleString("id-ID");
 
+/* The real allocation — packages/db/seed/reference-data.sql. Four Clusters, 42
+   Schools, sizes 6 / 17 / 11 / 8. Abridged here to a few Schools each; the point
+   is that the names and Topics are real, and that Clusters are not comparable
+   in size. Cluster Problems in the seed are placeholders, so none are shown. */
 const CLUSTERS = [
-  { name: "Cluster Priangan Timur", topic: "Ketahanan Pangan", schools: [
-    { id: 1, name: "SMA Negeri 3 Bandung", done: 6 },
-    { id: 2, name: "SMA Negeri 1 Garut", done: 3 },
-    { id: 3, name: "SMA Negeri 2 Tasikmalaya", done: 1 },
-    { id: 4, name: "SMA Negeri 1 Ciamis", done: 0 },
+  { name: "Klaster 1", topic: "Mitigasi Bencana", total: 6, schools: [
+    { id: 1, name: "SMAN 10 Fajar Harapan Banda Aceh", done: 6 },
+    { id: 2, name: "SMAS Unggul Del", done: 3 },
+    { id: 3, name: "MAN Insan Cendekia OKI", done: 1 },
   ] },
-  { name: "Cluster Pantura", topic: "Energi Terbarukan", schools: [
-    { id: 5, name: "SMA Negeri 1 Cirebon", done: 8 },
-    { id: 6, name: "SMA Negeri 2 Indramayu", done: 4 },
-    { id: 7, name: "SMA Negeri 1 Subang", done: 2 },
+  { name: "Klaster 2", topic: "Smart City", total: 17, schools: [
+    { id: 4, name: "SMAN 8 Jakarta", done: 4 },
+    { id: 5, name: "SMAS Kharisma Bangsa", done: 2 },
+    { id: 6, name: "SMA Cahaya Rancamaya", done: 0 },
+  ] },
+  { name: "Klaster 3", topic: "Ketahanan Pangan", total: 11, schools: [
+    { id: 7, name: "SMA Pradita Dirgantara", done: 8 },
+    { id: 8, name: "SMA Negeri 3 Semarang", done: 4 },
+  ] },
+  { name: "Klaster 4", topic: "Waste Management", total: 8, schools: [
+    { id: 9, name: "SMAN 10 Samarinda", done: 2 },
+    { id: 10, name: "SMAN Siwalima Ambon", done: 1 },
   ] },
 ];
 
+/* A concerns row is now (source, subject, aspect, rating, who, said) — see the
+   four-source query in docs/data-model.md. Aspects are labelled in Indonesian;
+   the columns behind them are English. Only Ratings at or below 7 appear.
+   Participant rows have no explanation: the elaboration rule binds signed-in
+   filers only. */
 const CONCERNS = [
-  { school: "SMA Negeri 2 Tasikmalaya", stream: "Research", klass: "Student Class", level: "struggling", note: "Kelas belum punya akses internet stabil untuk sesi daring.", when: "2 hari lalu" },
-  { school: "SMA Negeri 1 Garut", stream: "STEM", klass: "GTK Class", level: "concern", note: "Guru meminta materi tambahan sebelum sesi berikutnya.", when: "5 hari lalu" },
-  { school: "SMA Negeri 1 Subang", stream: "Research", klass: "MS Class", level: "concern", note: "Jadwal bentrok dengan agenda sekolah; perlu penyesuaian.", when: "1 minggu lalu" },
+  { source: "Class Record", subject: "SMAN 8 Jakarta", klass: "Student Class",
+    aspect: "Pemahaman", rating: 4, who: "Citra Dewi · Research",
+    said: "Belum paham dasar sensor; perlu pengulangan sebelum sesi berikutnya.", when: "2 hari lalu" },
+  { source: "Participant", subject: "SMAN 8 Jakarta", klass: "Student Class",
+    aspect: "Pengajar", rating: 3, who: "Rina (peserta)",
+    said: null, when: "2 hari lalu" },
+  { source: "Session Record", subject: "SMAN 10 Samarinda", klass: null,
+    aspect: "Kehadiran", rating: 5, who: "Ani Rahmawati · PIC",
+    said: "Hanya 12 dari 30 guru hadir; bentrok dengan agenda sekolah.", when: "5 hari lalu" },
+  { source: "Perjadin Evaluation", subject: "Perjadin Ambon", klass: null,
+    aspect: "Penginapan", rating: 4, who: "Budi Santoso · Teaching Team",
+    said: "Penginapan tidak ada air panas dan jauh dari sekolah.", when: "1 minggu lalu" },
 ];
 
 const TX = [
@@ -173,20 +200,31 @@ function PerjadinForm({ count, onClose }) {
 function Concerns() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Topbar title="Concerns" sub="Bagian Session Record yang ditandai some concerns atau struggling, terbaru dahulu." />
+      <Topbar title="Concerns" sub="Aspek yang dinilai 7 ke bawah, dari keempat sumber, terbaru dahulu." />
       <div style={{ flex: 1, overflow: "auto", padding: 28 }}>
         <div style={{ border: "1px solid var(--border)", borderBottom: "none", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
           {CONCERNS.map((c, i) => (
             <div key={i} style={{ display: "flex", gap: 16, padding: "16px 18px", borderBottom: "1px solid var(--border)", alignItems: "flex-start" }}>
-              <Badge variant={c.level === "struggling" ? "struggling" : "concern"}>{c.level === "struggling" ? "Struggling" : "Some concerns"}</Badge>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{c.school}</div>
-                <div style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "2px 0 8px" }}>{c.stream} · {c.klass}</div>
-                <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{c.note}</div>
+              <div style={{ width: 132, flexShrink: 0 }}>
+                <Rating value={c.rating} label={c.aspect} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  {c.subject}{c.klass ? <span style={{ color: "var(--muted-foreground)", fontWeight: 500 }}> · {c.klass}</span> : null}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted-foreground)", margin: "3px 0 8px", display: "flex", alignItems: "center", gap: 8 }}>
+                  <Badge variant="outline">{c.source}</Badge>
+                  <span>{c.who}</span>
+                </div>
+                {c.said
+                  ? <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{c.said}</div>
+                  : <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--muted-foreground)", fontStyle: "italic" }}>
+                      Tanpa penjelasan — peserta tidak diwajibkan menuliskannya.
+                    </div>}
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
                 <span style={{ fontSize: 12, color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>{c.when}</span>
-                <Button size="xs" variant="ghost">Buka Record <Icon name="arrow-right" size={12} /></Button>
+                <Button size="xs" variant="ghost">Buka <Icon name="arrow-right" size={12} /></Button>
               </div>
             </div>
           ))}
@@ -229,7 +267,7 @@ function Acquittal() {
               <div style={cell}>{t.desc}</div>
               <div style={{ ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{rupiah(t.amt)}</div>
               <div style={cell}>
-                {t.ev ? <Badge variant="ontrack"><Icon name="paperclip" size={12} /> Ada</Badge>
+                {t.ev ? <Badge variant="muted"><Icon name="paperclip" size={12} /> Ada</Badge>
                   : <Button size="xs" variant="destructive" onClick={() => setTx((p) => p.map((x) => x.id === t.id ? { ...x, ev: true } : x))}>Lampirkan</Button>}
               </div>
             </div>

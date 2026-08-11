@@ -11,13 +11,17 @@ out and create static HTML files for the user to view — link `styles.css` for 
 tokens (Montserrat, brick-red primary, rounded corners) and compose the components in
 `components/core/`. If working on production code, copy assets and read the rules here
 to become an expert in designing with this brand; the source lives in `mafiefa02/sugt`
-(shadcn base-rhea + Base UI, hugeicons, Tailwind v4).
+(shadcn base-rhea + Base UI, Lucide, Tailwind v4).
 
 Key rules to honour: rounded corners (`--radius: 0.625rem`); one brand hue (brick red),
-no green/amber; Montserrat everywhere; icons are **Lucide** (canonical for this system —
-the source repo declares hugeicons, but new work uses Lucide); copy is Indonesian for
-public, English domain terms throughout; tone is counts-not-claims (never
-"overdue"/"finished").
+no green/amber; Montserrat everywhere; icons are **Lucide** (canonical for this system);
+copy is Indonesian for public, English domain terms throughout; tone is counts-not-claims
+(never "overdue"/"finished").
+
+**Severity is a number, not a hue.** Outcomes are 1–10 Ratings against named Aspects. The
+digit always shows; colour marks one boundary only — red at or below 7, quiet grey above
+— and deepens continuously below it. Never invent severity bands, and never make a good
+score green. Use `<Rating>`; `<Badge>` carries no severity.
 
 If the user invokes this skill without any other guidance, ask them what they want to
 build or design, ask some questions, and act as an expert designer who outputs HTML

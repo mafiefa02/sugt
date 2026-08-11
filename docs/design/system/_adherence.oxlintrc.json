@@ -44,8 +44,20 @@
         "message": "<Badge> doesn't accept that prop. Declared props: variant, children."
       },
       {
-        "selector": "JSXOpeningElement[name.name='Badge'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:default|primary|outline|ontrack|concern|struggling)$/]",
-        "message": "<Badge> variant must be one of 'default' | 'primary' | 'outline' | 'ontrack' | 'concern' | 'struggling'."
+        "selector": "JSXOpeningElement[name.name='Badge'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:default|primary|outline|muted)$/]",
+        "message": "<Badge> variant must be one of 'default' | 'primary' | 'outline' | 'muted'. The severity scale moved to <Rating>."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Rating'] > JSXAttribute > JSXIdentifier[name!=/^(?:value|label|variant|key|ref|className|style)$/]",
+        "message": "<Rating> doesn't accept that prop. Declared props: value, label, variant."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Rating'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:default|compact)$/]",
+        "message": "<Rating> variant must be one of 'default' | 'compact'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Rating'] > JSXAttribute[name.name='value'] > Literal[value!=/^(?:10|[1-9])$/]",
+        "message": "<Rating> value must be 1-10. RATING_MIN / RATING_MAX in @sugt/domain."
       },
       {
         "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute > JSXIdentifier[name!=/^(?:variant|size|className|children|key|ref|className|style|children)$/]",
@@ -95,6 +107,9 @@
         "replaces": []
       },
       "Input": {
+        "replaces": []
+      },
+      "Rating": {
         "replaces": []
       }
     },

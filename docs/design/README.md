@@ -99,3 +99,23 @@ existing header comment, saying what to take from it and what to leave. Those ar
 the upstream project, so a fresh export drops them. After re-unpacking, re-apply them —
 `git diff` against the previous commit of `docs/design/system/**/*.css` shows exactly
 what they were.
+
+**Re-exporting also reverts the rating rework.** The bundle was generated when the outcome
+signal was a three-value pick (*on track / some concerns / struggling*). It is now a 1–10
+**Rating** against a named **Aspect**, on four forms — see `docs/data-model.md`. A fresh
+export would bring the dead scale back, so these are the second set of local modifications
+to re-apply:
+
+| Path | What was changed |
+| --- | --- |
+| `components/core/Rating.*` | **New component.** Did not exist upstream; carries the whole severity encoding |
+| `components/core/Badge.*` | Severity variants removed; `ontrack`/`concern`/`struggling` → `muted` |
+| `components/core/core.card.html` | Rating specimen added, Badge specimen no longer shows severity |
+| `_adherence.oxlintrc.json` | Badge variants narrowed, three `Rating` rules added, `Rating` registered |
+| `readme.md` | New *Ratings and severity* section incl. the Aspect label table; severity language and component list updated |
+| `SKILL.md` | Severity rule added; stale hugeicons reference dropped |
+| `ui_kits/internal/*` | Concerns screen rebuilt around the four sources; Coverage and Concerns mocks use the real allocation |
+| `ui_kits/public/PublicSite.jsx`, `templates/public-hero/`, `guidelines/brand-voice.card.html` | `9 provinsi` → `15`, `6 Cluster` → `4` |
+
+Mitigating fact: that design project lives under a different account than this workspace's
+login reaches, so a re-export is unlikely to happen by accident.
