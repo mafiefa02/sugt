@@ -52,4 +52,9 @@ They are not two different states. `active = false` does not mean "off the Progr
 - One more screen in the internal tool, Staff-only for writes. Reads follow [ADR-0004](./0004-delivery-data-is-open-internally-money-is-not.md)'s open-delivery rule: anyone signed in can see the roster, because a Group is assembled from it.
 - A migration to make `person_email_key` partial.
 - The founding-Staff seed is a real artefact someone has to write and keep out of the reference-data seed, which is about fixed facts and re-run freely.
-- Better Auth's admin plugin joins the stack, and with it a `banned` column on `better_auth.user` that the domain writes but never reads. Revocation is now two writes in one operation instead of one.
+- Better Auth's admin plugin joins the stack. Revocation is now two writes in one operation instead of one.
+- **It brings four columns, not one.** The plugin's schema adds `role`, `banned`, `banReason` and `banExpires` to `user`, plus `impersonatedBy` to `session` — verified against the 1.6.27 bundle, not inferred. Only `banned` is written by the domain, and none is read by it; the discipline above ("`person.active` is authoritative") extends to all four.
+
+  **`role` is the one to watch.** The plugin registers its own `databaseHooks.user.create.before` writing `role: defaultRole ?? "user"` on every signup, so a column named `role` would otherwise sit on the identity table beside write-once `person.role` meaning something entirely different. It is **renamed** through the plugin's schema mapping so the collision cannot be read as intentional.
+
+- **Revocation is immediate only while `session.cookieCache` stays disabled**, which is the default. `banUser` deletes session rows and the ban is enforced on `session.create.before`, but nothing checks `banned` per request — a cached session cookie is served without a database read for up to its `maxAge`. Enabling cookie caching for performance would silently reopen the hole this section exists to close, and the performance case is weak anyway: every request already resolves the Person in order to read `role`.

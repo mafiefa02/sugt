@@ -24,6 +24,12 @@ Waiting is not the answer either. Everything else on the acquittal screen — it
 
 **The constraint on that export is that it invents nothing.** It renders only what `transaction` and `transaction_evidence` already hold, plus the derived remainder. No category, no cost-centre, no account code, no payee — nothing added to make the output look more like official paperwork. `data-model.md` warns that designing columns for a template nobody has read produces fields that do not fit it, and that warning holds; a view over existing columns cannot be wrong when the real SPJ arrives, it is simply replaced.
 
+> **Narrowed: `transaction` does carry a category, and it is not invented.** The clause above rules out *inventing* fields for an unread template. The Programme's approved budget turned out to name eleven line items, repeated across all twenty-three travel groups, and those are now `transaction.category` — a closed set, in Indonesian, taken from an approved document rather than guessed at. The objection is answered rather than overridden.
+>
+> The same evidence brought a nullable `transaction.incurred_by_person_id`: the budget carries per-diems as `2 orang × N hari`, at different rates per role. `data-model.md` had already sanctioned that column as "a nullable column, not a migration of meaning" if evidence ever appeared.
+>
+> **Everything else in this amendment stands.** No cost-centre, no account code, no payee, and no `Ref Standar Biaya` — which the budget does carry on most lines and which stays out until a real form asks for it. The export still renders these columns and nothing more, and is still replaced rather than corrected when a completed SPJ exists.
+
 **What this means for reading adoption.** Until the export is real, a PIC still retypes the figures into the actual form, which is the one thing the argument above says the tool exists to prevent. So a lukewarm reception before then is not evidence the bet failed — the bet has not been placed. The fallback in [What this decision rests on](#what-this-decision-rests-on) is only reachable after a PIC has used the real generated document and still preferred a spreadsheet.
 
 **The unblock is a filled set, not a blank one.** A blank template shows the fields; a completed one shows which are actually mandatory, what a real line item looks like, and whether the Treasurer accepts an attached itemisation or wants everything on the form. Collect that from the first Perjadin as it is filed.
