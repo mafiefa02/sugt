@@ -10,10 +10,9 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@hugeicons/core-free-icons": "catalog:",
-    "@hugeicons/react": "catalog:",
     "@sugt/domain": "workspace:*",
     "@sugt/ui": "workspace:*",
+    "lucide-react": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"

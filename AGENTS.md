@@ -105,7 +105,7 @@ primitives and the split quietly collapses. Each app's `components.json` also po
 At the repo root the CLI has no single workspace to read, so `shadcn info` returns
 `{"error": "monorepo_root"}` — which is also what the vendored `shadcn` skill's
 injected context block resolves to. The `shadcn-sugt` skill covers that and the
-config this repo differs on (Base UI, not Radix; `hugeicons`, not lucide).
+config this repo differs on (Base UI, not Radix).
 
 **`shadcn` is a dependency of `@sugt/ui`, not a CLI pin.** `globals.css` opens with
 `@import "shadcn/tailwind.css"`, so the package ships CSS that compiles into both
