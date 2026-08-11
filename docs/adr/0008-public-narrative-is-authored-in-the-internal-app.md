@@ -34,4 +34,4 @@ Scope figures — Schools, Clusters, Topics, provinces — are served by the agg
 
 [ADR-0001](./0001-public-site-reads-aggregates-only.md) rules out internal records reaching public pages. Public narrative is a different kind of content: written deliberately for publication, by someone who knows it is public as they write it. Session Records and Perjadin Reports are filed after a trip on the understanding that they are not.
 
-The two now live in the same application, which makes it tempting to serve them through the same publishing path. Doing so would destroy the candour that makes Session Records worth keeping. The separation is the point, not an accident of where the code sits.
+The two now live in the same application, which makes it tempting to serve them through the same publishing path. Doing so would destroy the candour that makes internal records — Class Records especially — worth keeping. The separation is the point, not an accident of where the code sits.
