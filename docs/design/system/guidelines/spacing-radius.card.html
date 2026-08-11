@@ -1,0 +1,27 @@
+<!-- @dsCard group="Spacing" viewport="700x160" name="Radius" subtitle="--radius is 0.625rem (10px); every step multiplies the base." -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--background);color:var(--foreground);font-family:var(--font-sans);padding:20px}
+  .swatches{display:flex;gap:0;border:1px solid var(--border)}
+  .sw{flex:1;display:flex;flex-direction:column}
+  .sw .chip{height:60px}
+  .sw .cap{padding:7px 9px;font-size:11px;line-height:1.35;border-top:1px solid var(--border)}
+  .sw .cap b{display:block;font-weight:600;font-size:11.5px;letter-spacing:.01em}
+  .sw .cap span{color:var(--muted-foreground);font-size:10px}
+  .sw + .sw{border-left:1px solid var(--border)}
+  .ramp{display:flex;height:70px;border:1px solid var(--border)}
+  .ramp div{flex:1}
+  .ramplbl{display:flex;margin-top:6px}
+  .ramplbl div{flex:1;text-align:center;font-size:10px;color:var(--muted-foreground)}
+  .sq{display:flex;gap:16px;align-items:flex-end}.sq figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px}.sq div{width:66px;height:66px;background:var(--secondary);border:1px solid var(--border)}.sq small{font-size:10.5px;color:var(--muted-foreground)}
+</style></head><body>
+<div class="sq">
+<figure><div style="border-radius:var(--radius-sm)"></div><small>sm · 6px</small></figure>
+<figure><div style="border-radius:var(--radius-md)"></div><small>md · 8px</small></figure>
+<figure><div style="border-radius:var(--radius-lg)"></div><small>lg · 10px</small></figure>
+<figure><div style="border-radius:var(--radius-2xl)"></div><small>2xl · 18px</small></figure>
+<figure><div style="background:var(--primary);border-radius:var(--radius-2xl)"></div><small>controls</small></figure>
+<p style="margin:0 0 4px 8px;font-size:13px;color:var(--muted-foreground);max-width:220px">Every step multiplies <code>--radius</code>; re-rounding the whole system is a one-line change.</p>
+</div></body></html>

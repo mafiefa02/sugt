@@ -16,7 +16,8 @@
     "**/out/**",
     "**/build/**",
     "**/next-env.d.ts",
-    "pnpm-lock.yaml"
+    "pnpm-lock.yaml",
+    "docs/design/**"
   ],
   "rules": {
     "no-array-constructor": "error",
