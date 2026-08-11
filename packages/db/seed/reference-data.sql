@@ -1,9 +1,7 @@
 -- Reference data: Provinces, the four Clusters, and the forty-two Schools.
 --
--- NOTE: `packages/db` is a directory in waiting, not yet a workspace package — there is no
--- package.json here, so `pnpm --filter @sugt/db` will not resolve. AGENTS.md rule 3 points at
--- it as the eventual home for the Drizzle schema, migrations and queries. This file is the
--- authored reference data and can be applied with psql in the meantime.
+-- Apply with `pnpm --filter @sugt/db db:seed`, which runs it against DIRECT_URL (Supavisor
+-- session mode). Run the migrations first.
 --
 -- This is the authored source. Schools are fixed and Clusters are allocated, so these are
 -- static facts seeded once rather than records with an editing lifecycle — which is why

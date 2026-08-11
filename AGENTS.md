@@ -4,10 +4,11 @@ Instructions for AI agents working in this repository.
 
 ## Workspace
 
-A pnpm workspace with two apps and two shared packages:
+A pnpm workspace with two apps and three shared packages:
 
 - `apps/public` (`@sugt/public`) — the public site, port 3000
 - `apps/internal` (`@sugt/internal`) — the internal tool, port 3001
+- `packages/db` (`@sugt/db`) — the Drizzle schema, migrations and connection
 - `packages/domain` (`@sugt/domain`) — vocabulary shared by both
 - `packages/ui` (`@sugt/ui`) — shadcn primitives and the design tokens, shared by both
 
@@ -28,7 +29,7 @@ Four rules to work within:
    reach, the public app can reach — see [ADR-0010](./docs/adr/0010-one-shared-ui-package-not-shadcn-per-app.md).
    No data fetching, no `@sugt/domain` import, no environment variables.
 
-`@sugt/domain` and `@sugt/ui` are Just-in-Time packages: their `exports` point
+`@sugt/db`, `@sugt/domain` and `@sugt/ui` are Just-in-Time packages: their `exports` point
 straight at `./src`, they have no build step, and Turbopack compiles them as part
 of whichever app imports them (so no `transpilePackages` entry is needed — Next
 only requires that for `node_modules` dependencies shipping raw TS). The tradeoff
@@ -47,9 +48,10 @@ editing `apps/public/src/**` leaves it a cache hit and the changed code goes
 unlinted. Verified, not assumed. Keep whole-repo scanners as plain root scripts.
 
 `envMode` defaults to `strict`: a task only sees environment variables declared in
-its `env` (or `globalEnv`). Nothing reads env yet, so there is nothing to declare —
-but the first `DATABASE_URL` needs adding to the consuming task's `env`, or it will
-be invisible at build time. `NEXT_PUBLIC_*` is handled automatically for Next apps.
+its `env` (or `globalEnv`). `DATABASE_URL` is declared on `build`, `typecheck` and
+`dev` for exactly that reason — without it the value is invisible even when set in
+the shell. `DIRECT_URL` is deliberately absent: drizzle-kit runs as a package script,
+outside turbo. `NEXT_PUBLIC_*` is handled automatically for Next apps.
 
 Two things in `turbo.json` are load-bearing and easy to break:
 
