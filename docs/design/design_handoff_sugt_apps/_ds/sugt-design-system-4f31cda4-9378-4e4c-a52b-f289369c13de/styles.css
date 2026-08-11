@@ -1,0 +1,8 @@
+/* SUGT — STEM & Research Track · Design System
+   Global entry point. Consumers link this one file.
+   Everything reachable from here ships to consumers. */
+@import "./tokens/typography.css";
+@import "./tokens/colors.css";
+@import "./tokens/radius.css";
+@import "./tokens/elevation.css";
+@import "./tokens/spacing.css";

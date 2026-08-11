@@ -1,0 +1,18 @@
+/* Elevation & borders — SUGT
+   The system is flat and border-led. shadcn/base-rhea defines the Tailwind
+   default shadow ramp; SUGT leans on the 1px --border far more than on shadow.
+   Focus is a 3px ring at --ring/30%. */
+
+:root {
+  --border-width: 1px;
+
+  /* Tailwind default shadow ramp (used sparingly — popovers, dialogs) */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Focus ring — matches focus-visible:ring-3 ring-ring/30 */
+  --ring-width: 3px;
+  --ring-color: color-mix(in oklch, var(--ring), transparent 70%);
+}
