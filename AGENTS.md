@@ -21,8 +21,9 @@ Four rules to work within:
 2. **Shared dependency versions come from the `catalog:` block in
    `pnpm-workspace.yaml`**, not from ranges in an app's `package.json`.
 3. **Add domain vocabulary to `packages/domain` only if it is in `CONTEXT.md` and
-   needs no database.** Anything requiring stored data belongs in a data-access
-   package (not yet created — ADR-0005 has not picked a vendor).
+   needs no database.** Anything requiring stored data belongs in `packages/db`
+   (`@sugt/db` — Drizzle schema, migrations and queries), which rule 1 forbids
+   `@sugt/public` from declaring. See [`docs/data-model.md`](./docs/data-model.md).
 4. **`@sugt/ui` stays presentational.** Both apps depend on it, so anything it can
    reach, the public app can reach — see [ADR-0010](./docs/adr/0010-one-shared-ui-package-not-shadcn-per-app.md).
    No data fetching, no `@sugt/domain` import, no environment variables.
@@ -168,9 +169,14 @@ The canonical five-label vocabulary: `needs-triage`, `needs-info`, `ready-for-ag
 Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
 `docs/product.md` sits alongside them and describes what the two apps do on screen —
-the surfaces, not the vocabulary and not the rationale. Read it before building a
-feature; `CONTEXT.md` tells you what the words mean, the ADRs tell you why, and only
-product.md tells you what the thing looks like. Keep the three separate: a glossary
-that acquires screens, or a product doc that re-argues a decision, stops being useful
-to the next reader. Anything in it marked _(Proposed, not ratified)_ is exactly that
-— confirm before building on it.
+the surfaces, not the vocabulary and not the rationale. `docs/data-model.md` is the
+fourth: what is stored and which rules the database holds rather than the application.
+Read the relevant ones before building a feature; `CONTEXT.md` tells you what the words
+mean, the ADRs tell you why, product.md tells you what the thing looks like, and
+data-model.md tells you what the tables are. Keep them separate: a glossary that
+acquires screens, or a product doc that re-argues a decision, stops being useful to the
+next reader. Anything marked _(Proposed, not ratified)_ is exactly that — confirm before
+building on it.
+
+Note that far fewer things are tables than are glossary terms. data-model.md opens with
+the list of terms that are deliberately _not_ stored; read it before adding one.
