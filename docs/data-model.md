@@ -837,7 +837,9 @@ receipt, so it belongs at one choke point, not at each call site.
 
 ## Where the code lives
 
-A new `packages/db` (`@sugt/db`) holds the Drizzle schema, the migrations and the queries.
+`packages/db` (`@sugt/db`) holds the Drizzle schema, the migrations and the connection —
+a Just-in-Time package like `@sugt/domain` and `@sugt/ui`, with `exports` pointing straight
+at `./src` and no build step. Its own README covers running it.
 
 **`@sugt/public` must never declare it.** That is AGENTS.md rule 1 and the mechanism behind
 [ADR-0002](./adr/0002-two-apps-in-a-pnpm-workspace.md) — pnpm's strict symlinked
@@ -848,6 +850,19 @@ Drizzle rather than Prisma, for one reason that matters here: this schema leans 
 constraints, composite and deferred foreign keys, four partial indexes and two Postgres
 schemas. `schema.prisma` cannot express any of those, so Prisma would mean hand-written
 migration SQL anyway — at which point the generated client is the only thing left to weigh.
+
+Drizzle expresses all of it **except two things**, both hand-written migrations:
+`DEFERRABLE INITIALLY DEFERRED` on the PIC-membership foreign key (drizzle-orm has
+`deferrable` on transactions but not on foreign keys), and `better_auth.user.person_id`,
+which crosses into tables the Better Auth CLI owns. drizzle-kit leaves both alone because
+neither is in its snapshot — verified by re-generating against an unchanged schema and
+getting no statements.
+
+**The Drizzle schema is the source of truth, and it was checked against this document
+rather than assumed to match it.** Both were applied to a real Postgres and the catalogs
+compared — every column, CHECK, foreign key, unique constraint and index. 239 entries each,
+identical apart from the constraint names Drizzle auto-generates. The invariant suite then
+ran against the Drizzle-built database.
 
 The unauthenticated feedback route needs its own care. It is the only path in either app that
 writes without a signed-in Person, so it belongs behind a single handler that resolves the
