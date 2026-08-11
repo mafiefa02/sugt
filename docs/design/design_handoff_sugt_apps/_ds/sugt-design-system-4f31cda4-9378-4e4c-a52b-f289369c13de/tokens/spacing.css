@@ -1,0 +1,28 @@
+/* Spacing — SUGT
+   No custom spacing tokens exist in the codebase; it uses Tailwind's default
+   0.25rem (4px) step directly (px-3 = 12px, gap-1.5 = 6px, h-8 = 32px …).
+   These aliases name that scale so specimens and consumers can reference it. */
+
+:root {
+  --space-0: 0;
+  --space-0-5: 0.125rem; /* 2px  */
+  --space-1: 0.25rem;    /* 4px  */
+  --space-1-5: 0.375rem; /* 6px  — button gap */
+  --space-2: 0.5rem;     /* 8px  */
+  --space-2-5: 0.625rem; /* 10px */
+  --space-3: 0.75rem;    /* 12px — button padding-x */
+  --space-4: 1rem;       /* 16px */
+  --space-5: 1.25rem;    /* 20px */
+  --space-6: 1.5rem;     /* 24px */
+  --space-8: 2rem;       /* 32px — control height (h-8) */
+  --space-10: 2.5rem;    /* 40px */
+  --space-12: 3rem;      /* 48px */
+  --space-16: 4rem;      /* 64px */
+  --space-24: 6rem;      /* 96px — section rhythm */
+
+  /* Control heights, from the Button size variants */
+  --control-h-xs: 1.5rem;   /* 24px */
+  --control-h-sm: 1.75rem;  /* 28px */
+  --control-h: 2rem;        /* 32px — default */
+  --control-h-lg: 2.25rem;  /* 36px */
+}

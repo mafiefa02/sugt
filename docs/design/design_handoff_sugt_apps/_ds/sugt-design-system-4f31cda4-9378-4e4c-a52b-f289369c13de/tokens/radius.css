@@ -1,0 +1,15 @@
+/* Radius — SUGT
+   Rounded corners across the system. Every step multiplies this base, so
+   changing --radius alone re-rounds (or squares, at 0) the whole system.
+   Scale copied from the @theme inline block in globals.css. */
+
+:root {
+  --radius: 0.625rem; /* 10px base */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
