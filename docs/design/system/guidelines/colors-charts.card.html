@@ -1,0 +1,23 @@
+<!-- @dsCard group="Colors" viewport="700x140" name="Chart Ramp" subtitle="Data viz is a single red ramp — no categorical palette." -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--background);color:var(--foreground);font-family:var(--font-sans);padding:20px}
+  .swatches{display:flex;gap:0;border:1px solid var(--border)}
+  .sw{flex:1;display:flex;flex-direction:column}
+  .sw .chip{height:60px}
+  .sw .cap{padding:7px 9px;font-size:11px;line-height:1.35;border-top:1px solid var(--border)}
+  .sw .cap b{display:block;font-weight:600;font-size:11.5px;letter-spacing:.01em}
+  .sw .cap span{color:var(--muted-foreground);font-size:10px}
+  .sw + .sw{border-left:1px solid var(--border)}
+  .ramp{display:flex;height:70px;border:1px solid var(--border)}
+  .ramp div{flex:1}
+  .ramplbl{display:flex;margin-top:6px}
+  .ramplbl div{flex:1;text-align:center;font-size:10px;color:var(--muted-foreground)}
+  
+</style></head><body><div class="ramp">
+<div style="background:var(--chart-1)"></div><div style="background:var(--chart-2)"></div>
+<div style="background:var(--chart-3)"></div><div style="background:var(--chart-4)"></div>
+<div style="background:var(--chart-5)"></div></div>
+<div class="ramplbl"><div>chart-1</div><div>chart-2</div><div>chart-3</div><div>chart-4</div><div>chart-5</div></div></body></html>

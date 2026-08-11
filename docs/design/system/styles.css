@@ -1,0 +1,14 @@
+/* SUGT — STEM & Research Track · Design System
+   Global entry point. Consumers link this one file.
+   Everything reachable from here ships to consumers.
+
+   Porting: never wire this file into an app build. "Consumers" means the standalone
+   HTML prototypes in this bundle, not the Next apps. It pulls in typography.css and
+   with it a Google Fonts @import, and spacing/elevation tokens the repo deliberately
+   does without — see each file's own Porting note. The apps get their tokens from
+   packages/ui/src/styles/globals.css, which is the only stylesheet they load. */
+@import "./tokens/typography.css";
+@import "./tokens/colors.css";
+@import "./tokens/radius.css";
+@import "./tokens/elevation.css";
+@import "./tokens/spacing.css";

@@ -1,0 +1,26 @@
+<!-- @dsCard group="Type" viewport="700x150" name="Weights" subtitle="400 · 500 (UI) · 600 · 700 · 800 (display)." -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--background);color:var(--foreground);font-family:var(--font-sans);padding:20px}
+  .swatches{display:flex;gap:0;border:1px solid var(--border)}
+  .sw{flex:1;display:flex;flex-direction:column}
+  .sw .chip{height:60px}
+  .sw .cap{padding:7px 9px;font-size:11px;line-height:1.35;border-top:1px solid var(--border)}
+  .sw .cap b{display:block;font-weight:600;font-size:11.5px;letter-spacing:.01em}
+  .sw .cap span{color:var(--muted-foreground);font-size:10px}
+  .sw + .sw{border-left:1px solid var(--border)}
+  .ramp{display:flex;height:70px;border:1px solid var(--border)}
+  .ramp div{flex:1}
+  .ramplbl{display:flex;margin-top:6px}
+  .ramplbl div{flex:1;text-align:center;font-size:10px;color:var(--muted-foreground)}
+  .w{display:flex;gap:18px;flex-wrap:wrap;font-size:26px}.w div{display:flex;flex-direction:column}.w small{font-size:10px;color:var(--muted-foreground);font-weight:400;margin-top:2px}
+</style></head><body>
+<div class="w">
+<div><span style="font-weight:400">Regular</span><small>400</small></div>
+<div><span style="font-weight:500">Medium</span><small>500 · UI</small></div>
+<div><span style="font-weight:600">Semibold</span><small>600</small></div>
+<div><span style="font-weight:700">Bold</span><small>700 · headings</small></div>
+<div><span style="font-weight:800">Extrabold</span><small>800 · display</small></div>
+</div></body></html>

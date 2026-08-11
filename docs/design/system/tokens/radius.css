@@ -1,0 +1,20 @@
+/* Radius — SUGT
+   Rounded corners across the system. Every step multiplies this base, so
+   changing --radius alone re-rounds (or squares, at 0) the whole system.
+   Scale copied from the @theme inline block in globals.css.
+
+   Porting: take values, never structure. The values here now match the repo exactly,
+   which is what makes copying this file tempting — but globals.css declares the scale
+   inside @theme inline, and that is what generates the rounded-* utilities. A :root
+   block like the one below does not. --radius: 0.625rem is already adopted. */
+
+:root {
+  --radius: 0.625rem; /* 10px base */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}

@@ -1,0 +1,26 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Neutrals" subtitle="Achromatic surfaces & text — hue 0 throughout." -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--background);color:var(--foreground);font-family:var(--font-sans);padding:20px}
+  .swatches{display:flex;gap:0;border:1px solid var(--border)}
+  .sw{flex:1;display:flex;flex-direction:column}
+  .sw .chip{height:60px}
+  .sw .cap{padding:7px 9px;font-size:11px;line-height:1.35;border-top:1px solid var(--border)}
+  .sw .cap b{display:block;font-weight:600;font-size:11.5px;letter-spacing:.01em}
+  .sw .cap span{color:var(--muted-foreground);font-size:10px}
+  .sw + .sw{border-left:1px solid var(--border)}
+  .ramp{display:flex;height:70px;border:1px solid var(--border)}
+  .ramp div{flex:1}
+  .ramplbl{display:flex;margin-top:6px}
+  .ramplbl div{flex:1;text-align:center;font-size:10px;color:var(--muted-foreground)}
+  
+</style></head><body><div class="swatches">
+<div class="sw"><div class="chip" style="background:var(--background)"></div><div class="cap"><b>Background</b><span>oklch(1 0 0)</span></div></div>
+<div class="sw"><div class="chip" style="background:var(--foreground)"></div><div class="cap"><b>Foreground</b><span>oklch(0.145 0 0)</span></div></div>
+<div class="sw"><div class="chip" style="background:var(--secondary)"></div><div class="cap"><b>Secondary</b><span>oklch(0.967)</span></div></div>
+<div class="sw"><div class="chip" style="background:var(--muted)"></div><div class="cap"><b>Muted</b><span>oklch(0.97 0 0)</span></div></div>
+<div class="sw"><div class="chip" style="background:var(--muted-foreground)"></div><div class="cap"><b>Muted fg</b><span>oklch(0.556 0 0)</span></div></div>
+<div class="sw"><div class="chip" style="background:var(--border)"></div><div class="cap"><b>Border</b><span>oklch(0.845 0 0)</span></div></div>
+</div></body></html>

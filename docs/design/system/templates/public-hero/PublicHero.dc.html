@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Public hero — Beranda" description="Scope-led hero + figures band for the SUGT public site" -->
+<helmet>
+<script src="./ds-base.js"></script>
+</helmet>
+<div style="font-family:var(--font-sans);color:var(--foreground);background:var(--background)">
+  <section style="border-bottom:1px solid var(--border)">
+    <div style="max-width:900px;margin:0 auto;padding:88px 32px 72px">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:22px">
+        <span style="display:inline-flex;align-items:center;padding:3px 8px;font-size:12px;font-weight:500;background:var(--primary);color:var(--primary-foreground);border-radius:var(--radius-md)">STEM &amp; Research Track</span>
+        <span style="font-size:12.5px;color:var(--muted-foreground)">Program Kementerian Pendidikan Tinggi</span>
+      </div>
+      <h1 style="font-size:52px;font-weight:800;line-height:1.05;letter-spacing:-0.025em;margin:0 0 22px;max-width:780px">Membangun kapasitas riset di sekolah-sekolah unggul Indonesia.</h1>
+      <p style="font-size:18px;line-height:1.6;color:var(--muted-foreground);max-width:620px;margin:0 0 32px">Sekolah Unggul Garuda Transformasi, dijalankan oleh DITSAMA ITB. Pengajaran STEM dan Riset yang dibawa langsung ke sekolah — luring dan daring.</p>
+      <div style="display:flex;gap:12px">
+        <x-import component-from-global-scope="SUGTDesignSystem_4f31cd.Button" size="lg" hint-size="150px,36px">Lihat Program</x-import>
+        <x-import component-from-global-scope="SUGTDesignSystem_4f31cd.Button" size="lg" variant="outline" hint-size="150px,36px">Cerita Lapangan</x-import>
+      </div>
+    </div>
+  </section>
+  <section>
+    <div style="max-width:1120px;margin:0 auto;padding:56px 32px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:28px">Cakupan Program</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0">
+        <div><div style="font-size:46px;font-weight:800;letter-spacing:-0.03em;line-height:1">42</div><div style="font-size:15px;font-weight:600;margin-top:10px">Sekolah peserta</div><div style="font-size:12.5px;color:var(--muted-foreground);margin-top:3px">tersebar di 9 provinsi</div></div>
+        <div><div style="font-size:46px;font-weight:800;letter-spacing:-0.03em;line-height:1">2</div><div style="font-size:15px;font-weight:600;margin-top:10px">Stream</div><div style="font-size:12.5px;color:var(--muted-foreground);margin-top:3px">STEM &amp; Research</div></div>
+        <div><div style="font-size:46px;font-weight:800;letter-spacing:-0.03em;line-height:1">3</div><div style="font-size:15px;font-weight:600;margin-top:10px">Kelas / sekolah</div><div style="font-size:12.5px;color:var(--muted-foreground);margin-top:3px">GTK · MS · Siswa</div></div>
+        <div><div style="font-size:46px;font-weight:800;letter-spacing:-0.03em;line-height:1">10</div><div style="font-size:15px;font-weight:600;margin-top:10px">Sesi / sekolah</div><div style="font-size:12.5px;color:var(--muted-foreground);margin-top:3px">4 luring · 6 daring</div></div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+</body>
+</html>

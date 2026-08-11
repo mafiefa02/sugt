@@ -1,0 +1,26 @@
+<!-- @dsCard group="Spacing" viewport="700x180" name="Spacing Scale" subtitle="Tailwind 4px step — px-3 = 12, gap-1.5 = 6, h-8 = 32." -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--background);color:var(--foreground);font-family:var(--font-sans);padding:20px}
+  .swatches{display:flex;gap:0;border:1px solid var(--border)}
+  .sw{flex:1;display:flex;flex-direction:column}
+  .sw .chip{height:60px}
+  .sw .cap{padding:7px 9px;font-size:11px;line-height:1.35;border-top:1px solid var(--border)}
+  .sw .cap b{display:block;font-weight:600;font-size:11.5px;letter-spacing:.01em}
+  .sw .cap span{color:var(--muted-foreground);font-size:10px}
+  .sw + .sw{border-left:1px solid var(--border)}
+  .ramp{display:flex;height:70px;border:1px solid var(--border)}
+  .ramp div{flex:1}
+  .ramplbl{display:flex;margin-top:6px}
+  .ramplbl div{flex:1;text-align:center;font-size:10px;color:var(--muted-foreground)}
+  .bar{display:flex;align-items:center;gap:12px;margin:4px 0}.bar i{display:block;height:14px;background:var(--primary)}.bar span{font-size:11px;color:var(--muted-foreground);width:120px}
+</style></head><body>
+<div class="bar"><i style="width:4px"></i><span>1 · 4px</span></div>
+<div class="bar"><i style="width:6px"></i><span>1.5 · 6px · gap</span></div>
+<div class="bar"><i style="width:8px"></i><span>2 · 8px</span></div>
+<div class="bar"><i style="width:12px"></i><span>3 · 12px · padding-x</span></div>
+<div class="bar"><i style="width:16px"></i><span>4 · 16px</span></div>
+<div class="bar"><i style="width:24px"></i><span>6 · 24px</span></div>
+<div class="bar"><i style="width:32px"></i><span>8 · 32px · control h</span></div></body></html>
