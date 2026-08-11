@@ -13,8 +13,6 @@ packages:
 # on React versions is exactly what this prevents; depend on `catalog:` not a range.
 catalog:
   "@base-ui/react": ^1.7.0
-  "@hugeicons/core-free-icons": ^4.2.3
-  "@hugeicons/react": ^1.1.9
   "@tailwindcss/postcss": ^4
   "@types/node": ^20
   "@types/react": ^19
@@ -22,6 +20,7 @@ catalog:
   babel-plugin-react-compiler: 1.0.0
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
+  lucide-react: ^1.31.0
   next: 16.2.12
   react: 19.2.4
   react-dom: 19.2.4

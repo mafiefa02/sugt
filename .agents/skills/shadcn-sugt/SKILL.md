@@ -45,7 +45,7 @@ either way, so when unsure, pass the app you are editing.
 | field | value | what it changes |
 | --- | --- | --- |
 | `base` | `base` — Base UI (`@base-ui/react`) | custom triggers use `render={<X />}`, **never** `asChild`; see `../shadcn/rules/base-vs-radix.md` |
-| `iconLibrary` | `hugeicons` | icons come from `@hugeicons/react` + `@hugeicons/core-free-icons`. Never `lucide-react` |
+| `iconLibrary` | `lucide` | icons come from `lucide-react` — the shadcn default, so registry items need no icon rewriting |
 | toasts | Base UI | use the `toast` component, not `sonner` |
 | `style` | `base-rhea`, preset `b4iTlAJ44` | |
 | `rsc` | `true` | anything with state, effects or handlers needs `"use client"` |

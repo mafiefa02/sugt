@@ -14,10 +14,9 @@
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
-    "@hugeicons/core-free-icons": "catalog:",
-    "@hugeicons/react": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
+    "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "shadcn": "catalog:",
