@@ -35,11 +35,20 @@ Direktorat Persiapan Bersama ITB — the organiser appointed to deliver the STEM
 **School**:
 A participating school receiving teaching under the Programme. Around 42, and the set is fixed.
 
+**Province**:
+The Indonesian province a School sits in. Nothing is organised by Province — it is not a Cluster and does not group anything — but the number of them the Programme reaches is one of the figures the public site leads with.
+_Avoid_: region, area, location
+
+**Kabupaten/Kota**:
+The regency or city a School sits in, one level below the Province. Kept in Indonesian because the level covers both a _kabupaten_ and a _kota_ and no single English word means the same thing.
+_Avoid_: city (a Kabupaten is not one), regency (a Kota is not one), district, municipality
+
 **Cluster**:
-A group of geographically proximate Schools that share one Topic. Not yet allocated, and fixed once it is.
+A group of Schools sharing one Topic. Broadly regional, but not tightly so — one Cluster reaches from Kalimantan to Papua Barat Daya, so a Cluster is never a plausible single journey. There are four, and they are allocated and fixed.
+_Avoid_: region (the Cluster is the unit; the island groups a spreadsheet may show are not a level the Programme is organised by)
 
 **Topic**:
-The subject matter assigned to a Cluster. Each Cluster carries a different one. Not yet allocated, and fixed once it is.
+The subject matter assigned to a Cluster. Each Cluster carries a different one. Allocated, and fixed.
 
 **Problem**:
 The specific challenge a Cluster is directed to solve, drawn from its Topic. Both Streams work the same Problem from their own angle.
@@ -70,12 +79,16 @@ _Avoid_: visit, teaching, meeting, class (a Session is an occurrence; a Class is
 
 ### People and travel
 
+**Person**:
+A named human the Programme's records refer to — Staff or Teaching Team, never both. A Person is named before they ever sign in, because a Group can be formed around someone who has not.
+_Avoid_: user (a sign-in identity, which a Person may or may not yet have), member, participant, resource
+
 **Staff**:
 A DITSAMA ITB employee working on the Programme, the Programme's leadership included.
 _Avoid_: leadership, admin, organiser (senior Staff are Staff; there is no separate role)
 
 **Teaching Team**:
-The professors and instructors who deliver Sessions. A member is assigned to a Stream when a Group is formed, not permanently — someone able to teach both is available for both.
+The professors and instructors who deliver Sessions — a maintained roster of named People, not simply whoever happened to teach. A member is assigned to a Stream when a Group is formed, not permanently; someone able to teach both is available for both.
 _Avoid_: lecturers, trainers, facilitators
 
 **Perjadin**:
@@ -87,7 +100,7 @@ The people who travel on one Perjadin — around four, drawn from Staff and Teac
 _Avoid_: team, squad, class
 
 **PIC**:
-The Staff member on a Group accountable for that Perjadin's administrative reporting.
+The Staff member accountable for one piece of work being filed. A Perjadin has one, answerable for its administrative reporting; an online Session has one of its own, since it has no Group. The PIC files the Session Record — the account of the visit — and no Class Records, because they organised the Session rather than taught it.
 _Avoid_: lead, owner, manager
 
 ### Reporting
@@ -105,8 +118,32 @@ The acquittal of one Perjadin — every transaction that consumed the Advance, e
 _Avoid_: report (unqualified), expense report, reimbursement (nothing is claimed back; the money was transferred upfront)
 
 **Session Record**:
-The account of one Session, carrying a part for each Class in each Stream — six in all — covering what was taught, how it went, and what is outstanding.
-_Avoid_: report (unqualified), notes, minutes
+What the PIC says about one Session as a whole — the visit rather than the teaching. Rates five Aspects: **Facilities**, **Turnout**, **School support**, **Timing** and **Coordination**. Filed by Staff, who organised the Session and taught none of it, so it asks nothing about how a cohort got on.
+_Avoid_: report (unqualified), notes, minutes, evaluation (unqualified — it names none of the four)
+
+**Class Record**:
+What a Teaching Team member says about one **Class** they taught at one Session. Rates seven Aspects: **Comprehension**, **Participation**, **Readiness**, **Materials**, **Delivery**, **Facilities** and **Timing**, plus what was covered, what went wrong and what to do differently. Six per Session make the full set — two professors, one per Stream, each filing for all three Classes.
+_Avoid_: Session Record (that is the PIC's, and covers the visit), part (the old six-part structure is gone), class evaluation
+
+**Aspect**:
+One of the named things an evaluation scores. Each of the four evaluations has its own list, because each asks a question only that filer can answer — the PIC never saw comprehension, a Participant cannot grade their own readiness, and nobody but the Group slept in the hotel.
+_Avoid_: category, criterion, dimension, metric, section
+
+**Rating**:
+The score one person gives one Aspect, from 1 to 10. Ratings are the only thing in the system anything counts. An Aspect reaches the concerns list when any single Rating of it is 7 or below — one low score is enough and is never averaged away — and on a Class Record or a Session Record, a Rating that low cannot be filed without saying why.
+_Avoid_: grade, mark, health, RAG, status
+
+**Perjadin Evaluation**:
+How the trip went, as against how the teaching went: a Rating for each of **Lodging**, **Transport**, **Meals** and **Punctuality**, plus what went wrong and what to do differently. Only the Group that travelled may file one, and each of them files at most one. Open to anyone signed in — it carries no money.
+_Avoid_: travel evaluation ("travel" is reserved against **Perjadin**), trip report, Perjadin Report (that is the acquittal, and is Staff-only)
+
+**Participant**:
+Someone taught at a Session — a member of a GTK, MS or Student Class. The Programme's records never name Participants, except where one names themselves in Participant Feedback.
+_Avoid_: attendee, student (only one of the three Classes is students), user, respondent
+
+**Participant Feedback**:
+What one Participant says about the Class they sat in: a Rating of **Materials**, **Instructor** and **Relevance**, a comment, and a name they type themselves. Left without signing in, through a link live only briefly. Nothing asks them to rate themselves — Comprehension, Participation and Readiness are on the Class Record precisely because they are judgements about the room. Deliberately not part of any internal record; the two are filed by different people who expect different readers.
+_Avoid_: review, survey, evaluation (unqualified), Class Record, Session Record
 
 **Final Project**:
 The artefact one Project Team produces against its Cluster's Problem, worked on across the closing stretch of the Programme.
@@ -116,8 +153,10 @@ _Avoid_: output, deliverable, capstone
 
 - The **Programme** is divided into **Tracks**; DITSAMA ITB holds the STEM & Research **Track**
 - The **Track** has exactly two **Streams**: STEM and Research
-- The **Track** covers many **Clusters**
-- A **Cluster** contains many **Schools**; a **School** belongs to exactly one **Cluster**
+- The **Track** covers four **Clusters**
+- A **Cluster** contains many **Schools** — between six and seventeen; a **School** belongs to exactly one **Cluster**
+- A **School** sits in exactly one **Kabupaten/Kota**, which sits in exactly one **Province**
+- A **Cluster** spans several **Provinces**, and a **Province** never spans **Clusters**
 - A **Cluster** has exactly one **Topic** and exactly one **Problem**; both **Streams** work that same **Problem**
 - A **School** runs three **Classes**: **GTK**, **MS** and **Student**
 - Each **Class** is taught in both **Streams** — six teaching threads per **School**
@@ -131,20 +170,33 @@ _Avoid_: output, deliverable, capstone
 - A **Group** exists for one **Perjadin** only — no **Cluster** has a standing team
 - A **Group** must contain one **PIC** and at least one **Teaching Team** member assigned to each **Stream**
 - A person is **Staff** or **Teaching Team**, never both, so a valid **Group** is always at least three people
-- A **Session** records which **Teaching Team** member taught each **Stream** — which is how online **Sessions**, having no **Group**, still attribute their **Session Record** parts
+- A **Session** records which **Teaching Team** member taught each **Stream**, whether or not it had a **Group** — which is how an online **Session** still knows who was in the room and therefore who might file a **Session Record**
 - Offline **Sessions** happen during a **Perjadin**; online **Sessions** have no **Perjadin** at all
 - A **Perjadin** is funded by an **Advance**, fixed when the trip is planned and transferred to the **PIC** before departure
 - A **Perjadin** yields exactly one **Perjadin Report** covering the whole **Group**, filed by its **PIC**, itemising every transaction with evidence and reconciling them against the **Advance**
 - Whatever is left of an **Advance** is returned to the **Treasurer**
-- A **Session** yields exactly one **Session Record**, whether or not it had a **Perjadin**
-- A **Session Record** has six parts — one per **Class** per **Stream**
-- Each part is owed by the **Teaching Team** member who taught that **Stream**, so each of them owes three parts per **Session**; the **PIC** may write on their behalf, and the part records who actually wrote it
+- An offline **Session**'s **PIC** is its **Perjadin**'s; an online **Session** has a **PIC** of its own, drawn from **Staff**
+- A **Session** is judged from three vantage points, each with its own **Aspects**: the **PIC** files one **Session Record**, each **Teaching Team** member files a **Class Record** per **Class**, and **Participants** leave **Participant Feedback** on the **Class** they sat in
+- Six **Class Records** are the full set for a **Session** — two professors, one per **Stream**, each filing for all three **Classes**
+- **Stream** needs no field on a **Class Record**: it follows from who filed it. Two **Class Records** on one **Class** are STEM and Research disagreeing, which is worth having
+- A **Rating** of 7 or below cannot be filed on a **Class Record** or a **Session Record** without saying what went wrong. A **Participant** owes nothing and is held to no such rule
+- Nothing is required and nothing is blocked. The tool names who has not filed so they can be chased; **Participants** cannot be named, because nobody knows who was in the room
+- **Participant Feedback** is never part of a **Session Record**, and neither is derived from the other
+- Every member of a **Group** may file one **Perjadin Evaluation** on their **Perjadin**, and nobody else may
 - One **Perjadin** may cover several **Schools**, so it sits behind many **Session Records**
 
 ## Example dialogue
 
 > **Dev:** "School 17 had a **Session** last week — can I tick it off?"
-> **Domain expert:** "Tick off the **Session**, yes — all three **Classes** get taught every time. But read the **Session Record**: six parts, one for each **Class** in each **Stream**. The **GTK Class** may be thriving while the **Student Class** is stuck on Research."
+> **Domain expert:** "Tick off the **Session**, yes — all three **Classes** get taught every time. But read the **Class Records**: the **Student Class** scored 4 on **Comprehension** from both professors."
+> **Dev:** "Both? So there are two records for one **Class**."
+> **Domain expert:** "Six for the **Session**. Two professors, three **Classes** each. If STEM says 8 and Research says 4 on the same cohort, that is the most useful thing on the screen."
+> **Dev:** "And the **PIC** files one of those six?"
+> **Domain expert:** "None of them. The **PIC** did not teach — they file a **Session Record**, about the visit: was the room usable, did people turn up, did the School help. Different questions, because they were standing at the back."
+> **Dev:** "So which **Class** is in trouble at School 17?"
+> **Domain expert:** "Now you can ask that. It is on the concerns list by **Class** and by **Aspect** — and a 4 always comes with an explanation, because nobody can file one without."
+> **Dev:** "And the **Participant Feedback** goes in the same place?"
+> **Domain expert:** "No. Never put those together. A **Class Record** gets written frankly because only colleagues read it."
 > **Dev:** "So to know how much teaching has happened overall, I count **Perjadins**?"
 > **Domain expert:** "No — count **Sessions**. Six of a School's ten are online and never had a **Perjadin** at all."
 
@@ -155,10 +207,17 @@ _Avoid_: output, deliverable, capstone
 - "the STEM and Research domain" (one thing) and "2 domains (STEM and Riset)" (two things) were both used — resolved: one **Track** containing two **Streams**.
 - The team says "Riset", "Perjadin" and "Sesi"; the codebase is English — resolved: **Research** and **Session** translate cleanly and are used; **Perjadin**, **PIC**, **GTK** and **MS** do not and are kept.
 - **Classes** were first described as two, split by **Stream** ("2 classes since we're handling 2 domains"), and later as three, split by audience (GTK, MS, students) — resolved: the division is by audience. **Stream** is subject matter that every **Class** receives, never a way of dividing cohorts.
+- **Teaching Team** was open between "a fixed named body" and "whoever teaches" — resolved: a maintained roster. A **Group** names its **Teaching Team** members when the **Perjadin** is planned, before anyone has taught anything, so they have to be nameable in advance.
+- "user" and **Person** were used interchangeably — resolved: a **Person** is a human the records name; a user is a sign-in identity that a **Person** may not have yet. A **Group** can contain a **Person** who has never signed in.
+- A **Session Record** was once six parts split by **Class** and **Stream**, each owed by whoever taught that **Stream** — resolved: the unit is the person filing, not the teaching thread, and **Stream** does not divide it at all.
+- What a **Rating** is attached to moved twice: first to each **Class**, then to each **Aspect** — resolved: **Aspects**. A score against a cohort said only _that_ a **Session** went badly; a score against an **Aspect** says _what_ did. Nothing counts **Classes** any more.
+- "evaluation" was used for three different things — the internal **Session** form, the **Participant** one, and the travel one — resolved: they produce a **Session Record**, **Participant Feedback** and a **Perjadin Evaluation** respectively. Unqualified "evaluation" names none of them.
+- The team says "evaluation form" for both the internal one and the **Participant** one — resolved: the internal form produces a **Session Record**; the **Participant** one produces **Participant Feedback**. "Evaluation" unqualified names neither, because the whole point is that they are different documents.
+- The source spreadsheet groups **Schools** by island (Sumatera, Jawa, Kalimantan, Sulawesi/Maluku/Papua) and separately by numbered **Cluster**, and the two do not agree — Jawa splits across two **Clusters** and Kalimantan merges with Sulawesi into one — resolved: only the **Cluster** is a level the Programme is organised by. The island grouping is a way of reading a spreadsheet and has no term here.
 
 ## Open questions
 
 - When is a **Final Project** due? Still unset.
+- Each **Cluster**'s **Problem** — the specific challenge drawn from its **Topic**. The four **Topics** are set (Mitigasi Bencana, Smart City, Ketahanan Pangan, Waste Management). The **Problems** currently in the seed are **invented placeholders**, plausible for each **Cluster**'s geography but not DITSAMA's. They exist so screens have something real-shaped to render; treat any of them appearing in a design or a document as unconfirmed.
 - No stages are defined between a **School**'s first and last **Session**, and **Final Projects** are not tracked at all. Progress is therefore delivered **Sessions** out of ten, and nothing else — this is the deliberate position, not an oversight.
-- Is **Teaching Team** a fixed named body, or just "whoever teaches"?
 - The ITB documents a **Perjadin Report** produces have no terms here yet. Their real names — Surat Tugas, SPPD, SPJ or otherwise — need confirming against actual paperwork before they enter the glossary or the code.
