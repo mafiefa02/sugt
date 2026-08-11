@@ -4,7 +4,7 @@ The public site and the internal tool are separate applications in this repo's p
 
 ## Why
 
-[ADR-0001](./0001-public-site-reads-aggregates-only.md) requires that Session Records and Perjadin Reports never reach a public page. In a single app that rule is held by discipline — one careless import puts internal narrative on a public route, and only code review stands in the way. With separate apps the public app does not depend on the package that can read those records, so the leak is not merely unlikely but unbuildable.
+[ADR-0001](./0001-public-site-reads-aggregates-only.md) requires that Session Records and Perjadin Reports never reach a public page. In a single app that rule is held by discipline — one careless import puts internal narrative on a public route, and only code review stands in the way. With separate apps the public app does not depend on the package that can read those records, so the leak is not merely unlikely but unbuildable. That package now exists and is `@sugt/db`; `@sugt/public` does not declare it.
 
 Secondarily, the public site is the portfolio DITSAMA ITB is judged on and the internal tool is where staff file paperwork against deadlines. Independent deploys mean work on the latter cannot take down the former.
 

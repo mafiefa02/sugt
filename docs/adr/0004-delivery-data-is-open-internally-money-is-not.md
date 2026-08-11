@@ -1,6 +1,6 @@
 # Delivery data is open to everyone signed in; financial data is not
 
-Inside the internal tool, anyone authenticated can read every Session, Session Record and progress view. Perjadin Reports and their financial detail are visible to Staff only. Write access in both cases stays with the record's owner.
+Inside the internal tool, anyone authenticated can read every Session, every internal record of one, and every progress view. Perjadin Reports and their financial detail are visible to Staff only. Write access in both cases stays with the record's owner.
 
 There are two roles, Staff and Teaching Team. The Programme's leadership are senior Staff, not a separate role.
 
@@ -12,7 +12,13 @@ Perjadin Reports carry per-diem amounts and personal travel claims. No delivery 
 
 ## Publishing
 
-Only Staff may publish content to the public site (see [ADR-0008](./0008-public-narrative-is-authored-in-the-internal-app.md)). Every Group contains a Staff member by construction, since a Perjadin requires a PIC, so no trip's material is out of reach. Teaching Team members write Session Records and nothing public.
+Only Staff may publish content to the public site (see [ADR-0008](./0008-public-narrative-is-authored-in-the-internal-app.md)). Every Group contains a Staff member by construction, since a Perjadin requires a PIC, so no trip's material is out of reach. Teaching Team members write internal records and nothing public.
+
+> **Amended for the rename.** "Session Record" meant every internal account of a Session when this was written; it now means the PIC's account of the visit specifically, and the teaching account is a **Class Record**. Read the rule above as covering both — plus **Perjadin Evaluations**, which are also open to everyone signed in, because they carry no money.
+>
+> One sentence inverted and has been corrected rather than left standing: it read _"Teaching Team members write Session Records"_, which is now precisely backwards. Teaching Team file **Class Records**; the **PIC** files the Session Record. Both facts are enforced by composite foreign keys into `person (id, role)`, so neither is a convention.
+>
+> The stated reason for hiding money also got thinner: transactions are not attributed to a person, so per-diems appear as unattributed lines. The rule stands; its justification is weaker than when it was written.
 
 ## Consequences
 

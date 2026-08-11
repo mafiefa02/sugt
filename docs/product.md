@@ -309,10 +309,15 @@ differently would be two things to learn.
 ### Publishing
 
 Staff write public stories and upload photographs here; the public app fetches published
-items through the same endpoint as the aggregates. This is deliberately _not_ in the
-first release — launch content is hand-seeded in the repo, and the publishing bottleneck
-it exists to prevent is a month-six problem. See
-[ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md).
+items through the same endpoint as the aggregates.
+
+**Still deferred, on a thinner argument than before.** The authoring UI was left out of
+the first release partly because the public site shipped alone — and it no longer does,
+since scope figures come from the database. What survives is that the publishing
+bottleneck this prevents is a month-six problem. Launch narrative is hand-seeded in the
+repo; **scope figures are not**, and never were meant to be maintained by hand. See the
+amendment to [ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md),
+which flags this as worth confirming rather than inheriting.
 
 ---
 

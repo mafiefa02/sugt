@@ -1,5 +1,7 @@
 # The public site reads aggregates only, never narrative
 
+> **Terminology note.** When this ADR was written, "Session Record" meant every internal account of a Session. It has since narrowed: the PIC's account of the visit is a **Session Record**, and the teaching account — one per Class per professor — is a **Class Record**. **Read every "Session Record" below as covering both.** The Class Record is if anything the sharper case, since it is the one that says a cohort is three weeks behind. Neither ever reaches a public page, and nor does **Participant Feedback**, which is not published either despite being written by people who were not promised confidentiality.
+
 The public site doubles as DITSAMA ITB's portfolio, so live coverage figures — Schools reached, Sessions delivered, provinces, Clusters and their Topics — are derived from real Programme data. Narrative content is authored separately for publication. Session Records and Perjadin Reports are not a source for public pages.
 
 ## Why
