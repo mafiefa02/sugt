@@ -25,20 +25,26 @@ start. Delivery figures — Sessions delivered, Schools reached — appear as th
 Conflating the two means publishing "0 of 42 Schools reached" at launch, which is worse
 than publishing nothing.
 
-**Scope figures are reference data.** Schools are fixed; Clusters and Topics are fixed
-once allocated. They are static facts, not queries, so the first release needs no
-database and no endpoint.
+**Scope figures are reference data.** Schools are fixed, and Clusters and Topics are
+fixed now they are allocated. They change rarely enough to be seeded by migration rather
+than edited — but the database is still their single source of truth, not a static file
+in this repository. Two authored copies of the same 42 Schools drift silently, and this
+is the portfolio site.
 
-**Delivery figures come from an aggregates endpoint** served by the internal app. The
-public app holds no database credentials of its own — that is what makes
+**Both scope and delivery figures come from an aggregates endpoint** served by the
+internal app, so the public site launches after the internal app rather than before it —
+see the amendment to
+[ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md). The public
+app holds no database credentials and no Supabase client of its own; it reads the
+endpoint and caches. That is what makes
 [ADR-0001](./adr/0001-public-site-reads-aggregates-only.md) and
 [ADR-0002](./adr/0002-two-apps-in-a-pnpm-workspace.md) constraints rather than
 conventions.
 
 **Narrative is authored for publication, never harvested.** Stories and photographs are
-written deliberately by Staff. Session Records and Perjadin Reports never reach a public
-page — not filtered, not flagged, not summarised. A Session Record is only worth keeping
-if its author is certain it will never be public.
+written deliberately by Staff. Class Records, Session Records and Perjadin Reports never reach
+a public page — not filtered, not flagged, not summarised. An internal record is only worth
+keeping if its author is certain it will never be public.
 
 Content is in Indonesian. Published material may name Schools and show students and
 their work; the Programme's enrolment terms cover media consent, so nothing needs
@@ -53,8 +59,9 @@ included) and **Teaching Team** (the professors who deliver Sessions). Sign-in i
 restricted to an invite list.
 
 Access splits along one line: **delivery data is open, money is not.** Anyone signed in
-can read every Session, Session Record and progress view — with Groups assembled per
-Perjadin and no standing team per Cluster, that openness *is* the continuity mechanism.
+can read every Session, every Class Record and Session Record, and every progress view — with
+Groups assembled per
+Perjadin and no standing team per Cluster, that openness _is_ the continuity mechanism.
 Perjadin Reports and their financial detail are Staff-only. Writing stays with the
 record's owner throughout. Publishing to the public site is Staff-only; every Group
 contains a Staff member by construction, so no trip's material is unreachable.
@@ -75,13 +82,32 @@ in front of them rather than from memory.
 
 ### Concerns list
 
-A plain list of Session Record parts marked *some concerns* or *struggling*, across all
-Schools, newest first, each linking to the Record it came from.
+A plain list of **Aspects Rated 7 or below**, across all Schools and all trips, newest first,
+each linking to what it came from — and naming the Class where the Rating had one.
 
-This is the only place the "how it went" pick is aggregated, and the only reason it is
-worth collecting at all — it lets someone find trouble without opening 42 Schools' worth
-of Records. Deliberately a separate screen rather than a column on the coverage view:
-pace and health are different questions and get different surfaces.
+**Any single low Rating surfaces an Aspect — never an average.** Nothing is required, so a
+Class may carry one Rating or four; and where several people did file, a lone 2 among three 9s
+is the most informative number in the set, which is exactly what an average destroys.
+
+Because the score is against an Aspect of a named Class, the list says _which cohort_ and _what
+about it_ — "SMAN 8 · Student Class · Comprehension 4" is a different instruction from "SMAN 8 ·
+Facilities 3". Internal entries always carry prose, because a Rating that low cannot be filed
+without an explanation; Participant entries may not, since they are held to no such rule.
+
+It draws on four sources — Class Records, Session Records, Participant Feedback and Perjadin
+Evaluations — and **shows which kind each came from**. A professor scoring Delivery 3 and a
+student scoring Instructor 3 are not the same claim, and a screen that flattens them invites
+the wrong response. The rubrics do not collide: Comprehension only ever comes from a professor,
+Instructor only from the room, Turnout only from the PIC.
+
+This is the only place Ratings are aggregated, and the only reason they are worth collecting
+at all. Deliberately a separate screen rather than a column on the coverage view: pace and
+health are different questions and get different surfaces.
+
+Seven is a wide net — roughly the bottom two-thirds of the scale — and it is a guess. It is
+also what makes prose mandatory on internal records, so it costs writing as well as screen
+space, and it lives in four index predicates, so moving it is a migration. Read the first month
+of this list before settling it.
 
 ### Sessions
 
@@ -98,6 +124,10 @@ An arranged Session is then delivered or **cancelled**. A cancelled Session pers
 flagged with a reason. It counts for nothing, but a School that was planned for and
 missed looks different from one nobody has reached yet — which is the actionable
 difference.
+
+**Every Session has a PIC.** An offline Session's is its Perjadin's. An online Session has
+no Perjadin, so scheduling one means naming a Staff member as its PIC — otherwise six of
+every ten Sessions would have nobody to file the Session Record.
 
 ### Perjadin
 
@@ -141,9 +171,13 @@ Receipts from the other travellers reach the PIC however they reach them today. 
 does not collect them from Group members; it tracks who is still outstanding so the PIC
 has a checklist rather than a memory.
 
-A deadline is recorded and shown with days remaining. **Nothing is gated.** DITSAMA sets
-that deadline itself, and the tool is never stricter than the process it serves —
-invented friction has the same escape route as duplicated work.
+**The Report is due two days after the Group gets back**, and the screen shows days
+remaining. Nothing enters that date — it follows from the Perjadin's end date, so it
+cannot be typed wrong and it moves by itself if the trip's dates are corrected.
+
+**Nothing is gated.** DITSAMA sets that deadline itself, and the tool is never stricter
+than the process it serves — invented friction has the same escape route as duplicated
+work.
 
 This screen is load-bearing in a way the others are not. Nothing structurally compels a
 PIC to use this tool: the Treasurer accepts any format. So it has to be plainly better
@@ -152,37 +186,130 @@ the line it belongs to, arithmetic done for you, nothing retyped to produce the 
 See [ADR-0007](./adr/0007-the-tool-generates-the-acquittal.md), including what to do if
 that bet does not land.
 
-### Session Record
+### Session Record — the PIC's
 
-One per Session, with **six parts** — one for each Class in each Stream. Each part is
-owed by the Teaching Team member who taught that Stream, so each of the two professors
-owes three parts per Session. The PIC may write on someone's behalf; the part records who
-actually wrote it, so a first-hand account stays distinguishable from a second-hand one.
+**The PIC files one per Session**, about the visit rather than the teaching. They organised it
+and taught none of it, so they are asked only what an organiser can see from the back of the
+room:
 
-Each part carries four fields:
+| Aspect             | What a low score means                            |
+| ------------------ | ------------------------------------------------- |
+| **Facilities**     | The room, equipment or — online — the connection. |
+| **Turnout**        | The people expected did not come.                 |
+| **School support** | The School hosted badly.                          |
+| **Timing**         | The day did not run to schedule.                  |
+| **Coordination**   | The logistics on the day did not work.            |
 
-| Field | Purpose |
-|---|---|
-| **Covered** | What was taught. |
-| **How it went** | A pick, not prose — on track / some concerns / struggling. Prose cannot be aggregated; this is what feeds the concerns list, and is the only field in the system anything counts. |
-| **Next group should know** | The handover. With no standing team per Cluster, this sentence *is* the institutional memory. |
-| **Blocking** | Something actionable by someone back in Bandung. Prose only — nothing tracks it to closure, nothing owns it, and it carries no status meaning anywhere. It is there for the next Group to read. |
+Then **Problems** and **Suggestions**. No Covered field — they taught nothing.
 
-Six parts is a real ask of authors who have no structural reason to open the tool at all,
-so what is required scales with what happened. **The pick is mandatory on all six parts.
-The prose fields are optional while it reads *on track*, and required as soon as it does
-not.**
+Coordination is the PIC rating their own planning, which people do generously. It stays because
+a low one is then very informative, and nobody else was in a position to judge it.
 
-A Session where everything went well costs six taps. A Session with a problem demands an
-account of it — which is the only time the writing was worth having anyway. Nobody ends up
-typing "went fine" six times, so a filled prose field always means something. The cost is
-that a genuinely useful observation about a healthy Class can go unwritten because nothing
-prompted for it.
+### Class Record — the Teaching Team's
+
+**One per Class, per professor.** Both Stream professors teach all three Classes, so a Session
+expects **six**: 2 × 3. Each carries seven Ratings.
+
+| Aspect            | What a low score means                  |
+| ----------------- | --------------------------------------- |
+| **Comprehension** | They did not follow it.                 |
+| **Participation** | They did not take part.                 |
+| **Readiness**     | They arrived unprepared.                |
+| **Materials**     | The material was wrong for this cohort. |
+| **Delivery**      | How it was taught did not land.         |
+| **Facilities**    | The room or equipment for this Class.   |
+| **Timing**        | This Class's slot did not run to plan.  |
+
+The first three are judgements only the person at the front can make — which is exactly why the
+Participant form does not ask them.
+
+Then **Covered** (what was taught), **Problems** and **Suggestions**. With no standing team per
+Cluster, Suggestions _is_ the institutional memory.
+
+**Stream is not a field.** It follows from who filed. Two Class Records on the same Class from
+different professors is not duplication — STEM saying 8 and Research saying 4 about the same
+cohort is the most useful thing on the screen.
+
+**A Rating of 7 or below cannot be filed without saying what went wrong.** Prose is otherwise
+optional, so a Class that went well costs seven taps.
+
+That is twenty-one Ratings per professor per Session. It is the largest ask in the system and
+it was chosen rather than stumbled into — see
+[ADR-0009](./adr/0009-the-tool-tracks-delivery-not-outcomes.md), which is where to look first
+if Records stop arriving.
+
+### Who still owes what
+
+**Nothing is required and nothing is blocked.** No deadlines, no gating. What the tool does is
+name who has not filed, so they can be chased in the group chat.
+
+For a Session that is a simple subtraction: `session_teacher` names the two professors, the
+three Class kinds are a constant, so six Class Records are expected and whatever is missing is
+listed with the name of whoever owes it. The PIC's Session Record is one more row on the same
+list.
+
+**Participants cannot be listed.** Nobody knows who was in the room, so "4 of ? responded" is a
+count with no denominator — which is precisely the half-figure
+[ADR-0009](./adr/0009-the-tool-tracks-delivery-not-outcomes.md) warns reads as a system of
+record and is not one. Their form is chased in the room, not by the tool.
+
+### Participant feedback
+
+Separate from every internal record, deliberately and permanently — see
+[ADR-0012](./adr/0012-participants-write-through-a-short-lived-session-token.md).
+
+At the end of a Session a link or QR code is shown, live for **24 hours**. Anyone taught there
+can open it without signing in, say which Class they sat in, Rate three things, leave a comment
+and type their name:
+
+| Aspect         | What a low score means  |
+| -------------- | ----------------------- |
+| **Materials**  | It was not clear.       |
+| **Instructor** | It was not well taught. |
+| **Relevance**  | It will not help us.    |
+
+**Nothing asks them to rate themselves.** Comprehension, Participation and Readiness sit on the
+Class Record precisely because they are judgements about the room, and a room grading its own
+readiness is not evidence. Materials and Instructor overlap with the Class Record on purpose —
+that overlap is what lets the professor's view be set against the room's on the same cohort.
+
+No elaboration rule applies. A Participant owes nothing and is not signed in; refusing their 3
+because they did not justify it would simply lose the 3.
+
+It is **indicative, not a census**. Nothing stops one person submitting twice or the link being
+forwarded, and the names are self-reported. Anything stricter needs an attendee list, which
+ADR-0009 decided against building.
+
+Internal records are written frankly because only colleagues read them. That is why these never
+share a table, a screen or a query.
+
+### Perjadin evaluation
+
+How the trip went, as against how the teaching went. **Only the Group that travelled can file
+one**, and each of them files at most one.
+
+Four Aspects, same 1–10 scale, same rule that 7 or below needs an explanation:
+**Lodging**, **Transport**, **Meals** and **Punctuality**. Transport is the ground transport
+generally rather than the shuttle specifically; Punctuality is whether the schedule held.
+They are separate because they fail independently — a good car an hour late is a different
+complaint from a bad car that was prompt, and one is the vendor's fault while the other is
+the plan's.
+
+Then **Problems** and **Suggestions**. There is no Covered field; nothing was taught on a
+journey.
+
+**It is not Staff-only.** A Perjadin Evaluation carries no money, so it follows the
+open-delivery rule rather than the Perjadin Report's — anyone signed in can read one. Worth
+saying plainly because it hangs off a Perjadin, and Teaching Team members are the ones who
+slept in the hotel.
+
+The form deliberately matches the Session Record's shape. Two evaluation forms that behaved
+differently would be two things to learn.
 
 ### Publishing
 
 Staff write public stories and upload photographs here; the public app fetches published
-items through the same endpoint as the aggregates. This is deliberately *not* in the
+items through the same endpoint as the aggregates. This is deliberately _not_ in the
 first release — launch content is hand-seeded in the repo, and the publishing bottleneck
 it exists to prevent is a month-six problem. See
 [ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md).
@@ -197,7 +324,7 @@ Absences look like oversights unless they are written down. These are decisions.
   Sessions out of ten, and nothing else.
 - **No Project Teams and no Final Projects.** Several hundred exist across the Programme;
   none are tracked. They reach the public as curated showcase pieces, never as records.
-- **No outcome tracking beyond the "how it went" picks.** Every further outcome field
+- **No outcome tracking beyond the Ratings.** Every further outcome field
   competes with the six that already exist, and data that will not be entered is worse
   than data that is absent — a half-filled field looks like a system of record and is not
   one.
@@ -205,8 +332,8 @@ Absences look like oversights unless they are written down. These are decisions.
   seeded by migration.
 - **No scheduling, no overdue, no alerts.**
 
-The consequence, stated plainly so nobody builds against the opposite: *"has this School
-had all its Sessions?"* is answerable. *"Is this School finished?"* is not. See
+The consequence, stated plainly so nobody builds against the opposite: _"has this School
+had all its Sessions?"_ is answerable. _"Is this School finished?"_ is not. See
 [ADR-0009](./adr/0009-the-tool-tracks-delivery-not-outcomes.md).
 
 ---
