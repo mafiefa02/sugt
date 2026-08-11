@@ -8,5 +8,5 @@ The site runs on a domain we own rather than an `itb.ac.id` subdomain, so no ins
 
 ## Consequences
 
-- The invite list is maintained by hand; someone owns adding and removing people.
+- The invite list is maintained by hand; someone owns adding and removing people. Where and by whom is settled in [ADR-0013](./0013-people-are-added-in-the-tool-and-their-role-is-write-once.md): a Staff-only People screen in the internal tool, with the founding rows seeded because nobody can sign in to reach it otherwise.
 - Identity is a Google account, not an ITB one, so a person leaving ITB does not automatically lose access.
