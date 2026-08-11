@@ -29,13 +29,22 @@ The domain lexicon is strict and the copy is disciplined. Follow it exactly — 
 words carry meaning the product depends on.
 
 **Language.** Domain terms are **English** (the codebase is English): *Session, School,
-Cluster, Stream, Perjadin, Advance, PIC, Session Record*. Public-facing **UI copy is
-Indonesian**. Some Indonesian terms have no English equivalent and are kept verbatim:
-**Perjadin, PIC, GTK, MS**.
+Cluster, Stream, Perjadin, Advance, PIC, Class Record, Session Record, Aspect, Rating,
+Participant Feedback, Perjadin Evaluation*. Public-facing **UI copy is Indonesian**. Some
+Indonesian terms have no English equivalent and are kept verbatim: **Perjadin, PIC, GTK,
+MS, Kabupaten/Kota**.
+
+**Aspects are the exception**: English in the schema, Indonesian on screen — *Pemahaman*,
+*Fasilitas*, *Penginapan*. They are the only domain terms a Participant reads, and the
+Participant form is filled by school teachers and students. See *Ratings and severity*.
+
+**A Session Record is the PIC's** account of the visit; the teaching account is a **Class
+Record**, one per Class per professor. They are different documents with different rubrics
+— do not use one word for both.
 
 **Tone: counts, not claims.** The system reports what happened and lets a human judge it.
-- The internal tool shows **"3 of 10 delivered"** — never "behind", "overdue", or "finished". Nothing is ever gated on a deadline; nothing is coloured as a health verdict except the explicit *how it went* pick.
-- The public site **leads with scope** ("42 Sekolah, tersebar di 9 provinsi"), and shows delivery figures only *as they accrue* — never "0 of 42 reached".
+- The internal tool shows **"3 of 10 delivered"** — never "behind", "overdue", or "finished". Nothing is ever gated on a deadline. The only thing coloured as a verdict is a **Rating** at or below 7, and even then the number does the work and the colour reinforces it.
+- The public site **leads with scope** ("42 Sekolah, tersebar di 15 provinsi"), and shows delivery figures only *as they accrue* — never "0 of 42 reached".
 
 **Casing.** Domain nouns are **Capitalised** in prose (a School, a Session, the Group).
 UI labels and headings use sentence case. The wordmark **SUGT** is all-caps.
@@ -50,7 +59,7 @@ Describes the Programme, doesn't sell it.
 - Public: *"Membangun kapasitas riset di sekolah-sekolah unggul Indonesia."*
 - Public scope: *"42 Sekolah · 2 Stream · 3 Kelas / sekolah · 10 Sesi / sekolah."*
 - Internal count: *"3 dari 10 sesi terlaksana."*
-- Session Record pick: *on track · some concerns · struggling.*
+- Aspect Rating: *Pemahaman 4 · Fasilitas 9.* The digit is the message.
 
 ---
 
@@ -64,10 +73,10 @@ re-rounding — or squaring, at `0` — the whole system is a single-line change
 **Colour.** Achromatic neutrals (hue 0) plus a **single brand hue: brick red**
 (`--primary: oklch(0.527 0.16 26.893)`). There is no second brand colour — `--accent`
 *equals* `--primary`. Data visualisation is a **single red ramp** (`--chart-1…5`), not a
-categorical palette. Because the palette has no green or amber, severity is expressed
-within the red ramp: *on track* reads as calm neutral, *some concerns* as a soft red
-tint, *struggling* as full destructive red. Full light (`:root`) and dark (`.dark`)
-themes; the brand red is unchanged between them. All colours are authored in **oklch**.
+categorical palette. Because the palette has no green and no amber, **severity is never a hue** — it is a
+number, reinforced by one colour. See *Ratings and severity* below. Full light (`:root`)
+and dark (`.dark`) themes; the brand red is unchanged between them. All colours are
+authored in **oklch**.
 
 **Type.** One family: **Montserrat** (geometric sans), used for both body and headings
 (`--font-heading` = `--font-sans`). Loaded via Google Fonts here; the repo loads it via
@@ -96,6 +105,63 @@ real photographs in for production.
 **Layout.** Public site is centred, max-width ~1120px, generous vertical rhythm, full-width
 bordered section bands. Internal tool is a fixed 240px sidebar + fluid main, dense
 bordered tables and tiles.
+
+---
+
+## RATINGS AND SEVERITY
+
+The outcome signal is a **Rating**: 1–10 against a named **Aspect**, on four forms with
+four different rubrics (`docs/data-model.md`). This replaces an earlier three-value pick
+(*on track / some concerns / struggling*) that no longer exists anywhere in the product.
+
+**The number carries the magnitude.** Always shown, tabular figures, reinforced by the
+length of a ten-segment meter. Colour never carries it alone — which is the accessible
+answer and, in a palette with no green and no amber, the only one available.
+
+**Colour marks exactly one boundary.** At or below **7** an Aspect reaches the concerns
+list and reads red; **8 and above are quiet grey**. That threshold is the domain's
+(`CONCERN_AT_OR_BELOW` in `@sugt/domain`) and it is the only one. Do **not** invent
+"mild / bad / severe" bands — the product apologises for the one threshold it has, and
+adding two more in the visual layer would be worse than the palette limitation ever was.
+
+**Within 1–7, density is continuous.** The fill deepens smoothly from a faint 7 to a solid
+1. No steps, no categories, nothing for a reader to decode.
+
+**Good is quiet, never green.** A high Rating gets no reward colour; it simply stops being
+red. Counts, not claims.
+
+### Aspect labels
+
+Aspects are English in the schema and **Indonesian on screen** — the same rule
+`CONTEXT.md` already applies to every domain term. The Participant form settles it: it is
+filled by school teachers and students, so it cannot be in English, and one language
+across all four forms beats two.
+
+| Form | Aspect (column) | Label |
+| --- | --- | --- |
+| Class Record | `comprehension` | Pemahaman |
+| | `participation` | Partisipasi |
+| | `readiness` | Kesiapan |
+| | `materials` | Materi |
+| | `delivery` | Penyampaian |
+| | `facilities` | Fasilitas |
+| | `timing` | Ketepatan waktu |
+| Session Record | `facilities` | Fasilitas |
+| | `turnout` | Kehadiran |
+| | `school_support` | Dukungan sekolah |
+| | `timing` | Ketepatan waktu |
+| | `coordination` | Koordinasi |
+| Participant Feedback | `materials` | Materi |
+| | `instructor` | Pengajar |
+| | `relevance` | Relevansi |
+| Perjadin Evaluation | `lodging` | Penginapan |
+| | `transport` | Transportasi |
+| | `meals` | Konsumsi |
+| | `punctuality` | Ketepatan jadwal |
+
+`timing` and `punctuality` would both read "Ketepatan waktu" literally; they never share a
+form, but they are given distinct labels anyway so the concerns list — which unions all
+four sources — never shows the same words meaning two things.
 
 ---
 
@@ -132,13 +198,14 @@ Built in `components/core/` (namespace `window.SUGTDesignSystem_4f31cd`):
 
 - **Button** — faithful port of the repo's only real component (Base UI + cva, shadcn base-rhea). Variants: default / outline / secondary / ghost / destructive / link. Sizes: default / xs / sm / lg + square icon sizes.
 - **Card** — bordered surface container (title / description / footer / body).
-- **Badge** — status & count pill; carries the *on track / some concerns / struggling* scale within the red palette.
+- **Badge** — status & count pill. Labels and counts only; it carries no severity.
+- **Rating** — a 1–10 Aspect score: label, meter, digit. The component every evaluation form and the concerns list is built from.
 - **Input** — text field + `as="textarea"`, with error (`aria-invalid`) state.
 
 ### Intentional additions
 
 The source defines exactly **one** component (Button); the apps are placeholders. **Card,
-Badge, and Input** are additions, included because the product surfaces in `docs/product.md`
+Badge, Rating and Input** are additions, included because the product surfaces in `docs/product.md`
 cannot be rendered without them. Each is styled strictly to the established base-rhea
 vocabulary (rounded corners, 1px border, muted fills, the exact control metrics from
 Button) and adds no new visual ideas. If the team implements its own versions, treat those
@@ -166,7 +233,7 @@ tokens/
   radius.css                    --radius: 0.625rem (10px) + scale
   elevation.css                 borders, shadow ramp, focus ring
   spacing.css                   Tailwind 4px step, control heights
-components/core/                 Button, Card, Badge, Input (+ .d.ts, .prompt.md, card)
+components/core/                 Button, Card, Badge, Rating, Input (+ .d.ts, .prompt.md, card)
 guidelines/                      13 foundation specimen cards (Colors / Type / Spacing / Brand)
 ui_kits/public/                  Beranda homepage recreation
 ui_kits/internal/                Coverage / Concerns / Acquittal recreation
