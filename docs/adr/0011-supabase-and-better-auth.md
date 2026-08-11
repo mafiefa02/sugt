@@ -41,6 +41,15 @@ reading the aggregates endpoint.
 A useful consequence: **no anon-role policy is ever needed anywhere**, because nothing
 unauthenticated ever touches the database.
 
+> That claim is about the anon **role**, and it still holds — but two routes now serve
+> callers with no signed-in Person: the Participant Feedback handler
+> ([ADR-0012](./0012-participants-write-through-a-short-lived-session-token.md)) and the
+> aggregates endpoints `@sugt/public` reads (the endpoint contract in
+> [ADR-0008](./0008-public-narrative-is-authored-in-the-internal-app.md)). Both go through
+> the internal app's own credentials after a check — a token in the first case, a shared
+> secret in the second — so neither is an anonymous database client. Worth knowing before
+> reading the sentence above as "every query has a Person behind it".
+
 ## Consequences
 
 - Better Auth's core tables (`user`, `session`, `account`, `verification`) live in a `better_auth`
@@ -50,7 +59,9 @@ unauthenticated ever touches the database.
 - Sign-in is Google via Better Auth, which satisfies
   [ADR-0003](./0003-google-sign-in-with-an-invite-list.md) unchanged. The invite list is the
   `person` table; a `databaseHooks.user.create.before` hook rejects an email with no row, so an
-  uninvited account cannot be created at all.
+  uninvited account cannot be created at all. That hook gates **signup only** — it does not
+  fire on a returning sign-in — so revoking access additionally uses the admin plugin. See
+  [ADR-0013](./0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
 - Storage policies cannot identify the caller either, for the same reason RLS cannot. Receipts sit
   in a private bucket and are reached only through signed URLs the internal app mints after
   checking the caller is Staff.

@@ -16,6 +16,18 @@ A transaction can be entered whenever suits the PIC — photographed and logged 
 
 **Offline support is deliberately deferred.** Capture needs connectivity, and trips cross the archipelago, so there will be moments — airports, remote Schools — where logging on the spot fails. That costs convenience rather than data, precisely because post-trip entry is fully supported: a PIC who cannot upload at the gate does it that evening and loses nothing. Worth adding later; not worth blocking on now.
 
+## Amendment: the bet is not placed until the real template exists
+
+The document this ADR promises to fill cannot be built yet. `CONTEXT.md` and [`data-model.md`](../data-model.md) both record that the acquittal's real paperwork — Surat Tugas, SPPD, SPJ or otherwise — is unconfirmed, and it is worse than that: **no completed example exists to confirm it against.** Nobody has filed one for this Programme and no prior trip's set is available to borrow, so the first real Perjadin is what produces one.
+
+Waiting is not the answer either. Everything else on the acquittal screen — itemised transactions, evidence attached to the line it belongs to, the running reconciliation against the Advance, the returned-to-Treasurer mark, the receipts checklist — needs nothing from the template. So the screen ships, with a **generic export**: a plain itemisation a PIC can attach, not the real form.
+
+**The constraint on that export is that it invents nothing.** It renders only what `transaction` and `transaction_evidence` already hold, plus the derived remainder. No category, no cost-centre, no account code, no payee — nothing added to make the output look more like official paperwork. `data-model.md` warns that designing columns for a template nobody has read produces fields that do not fit it, and that warning holds; a view over existing columns cannot be wrong when the real SPJ arrives, it is simply replaced.
+
+**What this means for reading adoption.** Until the export is real, a PIC still retypes the figures into the actual form, which is the one thing the argument above says the tool exists to prevent. So a lukewarm reception before then is not evidence the bet failed — the bet has not been placed. The fallback in [What this decision rests on](#what-this-decision-rests-on) is only reachable after a PIC has used the real generated document and still preferred a spreadsheet.
+
+**The unblock is a filled set, not a blank one.** A blank template shows the fields; a completed one shows which are actually mandatory, what a real line item looks like, and whether the Treasurer accepts an attached itemisation or wants everything on the form. Collect that from the first Perjadin as it is filed.
+
 ## What this decision rests on
 
 Execution quality, not structure. If the form is mediocre, PICs keep doing what they did last time, and the largest single piece of this build serves nobody.

@@ -149,6 +149,12 @@ _Avoid_: review, survey, evaluation (unqualified), Class Record, Session Record
 The artefact one Project Team produces against its Cluster's Problem, worked on across the closing stretch of the Programme.
 _Avoid_: output, deliverable, capstone
 
+### Publishing
+
+**Story**:
+A piece of narrative written by Staff for publication on the public site — prose and photographs about one **School**, written by someone who knows it is public as they write it. A Story is authored, never derived: no **Session Record**, **Class Record**, **Participant Feedback** or **Perjadin Report** is ever a source for one. The team says _Cerita_; it translates cleanly.
+_Avoid_: post (imports blog assumptions — a feed, comments, an author byline — none of which apply), article, publication (that is the act), content, Session Record
+
 ## Relationships
 
 - The **Programme** is divided into **Tracks**; DITSAMA ITB holds the STEM & Research **Track**
@@ -184,6 +190,9 @@ _Avoid_: output, deliverable, capstone
 - **Participant Feedback** is never part of a **Session Record**, and neither is derived from the other
 - Every member of a **Group** may file one **Perjadin Evaluation** on their **Perjadin**, and nobody else may
 - One **Perjadin** may cover several **Schools**, so it sits behind many **Session Records**
+- A **Story** is written by **Staff** about exactly one **School**, and is the only Programme narrative a public page ever carries — nothing filed after a **Session** or a trip is ever a source for one
+- A **Story** may name a **Stream**, since a piece is usually about one; its **Cluster** is the **School**'s and is never stated separately
+- A **Story** is never about a **Perjadin**. Public narrative and the trip that carries the money stay apart
 
 ## Example dialogue
 
@@ -213,6 +222,7 @@ _Avoid_: output, deliverable, capstone
 - What a **Rating** is attached to moved twice: first to each **Class**, then to each **Aspect** — resolved: **Aspects**. A score against a cohort said only _that_ a **Session** went badly; a score against an **Aspect** says _what_ did. Nothing counts **Classes** any more.
 - "evaluation" was used for three different things — the internal **Session** form, the **Participant** one, and the travel one — resolved: they produce a **Session Record**, **Participant Feedback** and a **Perjadin Evaluation** respectively. Unqualified "evaluation" names none of them.
 - The team says "evaluation form" for both the internal one and the **Participant** one — resolved: the internal form produces a **Session Record**; the **Participant** one produces **Participant Feedback**. "Evaluation" unqualified names neither, because the whole point is that they are different documents.
+- The public narrative had three names and no term — "stories and photographs" in product.md, "published items" in ADR-0008, _Cerita_ in the design — while every internal record had a precise one. Resolved: one authored piece is a **Story**. "Publishing" remains the act, and names no document.
 - The source spreadsheet groups **Schools** by island (Sumatera, Jawa, Kalimantan, Sulawesi/Maluku/Papua) and separately by numbered **Cluster**, and the two do not agree — Jawa splits across two **Clusters** and Kalimantan merges with Sulawesi into one — resolved: only the **Cluster** is a level the Programme is organised by. The island grouping is a way of reading a spreadsheet and has no term here.
 
 ## Open questions
@@ -220,4 +230,4 @@ _Avoid_: output, deliverable, capstone
 - When is a **Final Project** due? Still unset.
 - Each **Cluster**'s **Problem** — the specific challenge drawn from its **Topic**. The four **Topics** are set (Mitigasi Bencana, Smart City, Ketahanan Pangan, Waste Management). The **Problems** currently in the seed are **invented placeholders**, plausible for each **Cluster**'s geography but not DITSAMA's. They exist so screens have something real-shaped to render; treat any of them appearing in a design or a document as unconfirmed.
 - No stages are defined between a **School**'s first and last **Session**, and **Final Projects** are not tracked at all. Progress is therefore delivered **Sessions** out of ten, and nothing else — this is the deliberate position, not an oversight.
-- The ITB documents a **Perjadin Report** produces have no terms here yet. Their real names — Surat Tugas, SPPD, SPJ or otherwise — need confirming against actual paperwork before they enter the glossary or the code.
+- The ITB documents a **Perjadin Report** produces have no terms here yet. Their real names — Surat Tugas, SPPD, SPJ or otherwise — need confirming against actual paperwork before they enter the glossary or the code. **No completed example exists to confirm them against**: nobody has filed one for this Programme, and no prior trip's set is available to borrow. The first real Perjadin is what produces one, so these terms stay out of the glossary until then — see the amendment to [ADR-0007](./docs/adr/0007-the-tool-generates-the-acquittal.md).

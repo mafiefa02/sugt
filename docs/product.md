@@ -33,7 +33,7 @@ is the portfolio site.
 
 **Both scope and delivery figures come from an aggregates endpoint** served by the
 internal app, so the public site launches after the internal app rather than before it —
-see the amendment to
+see the amendments to
 [ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md). The public
 app holds no database credentials and no Supabase client of its own; it reads the
 endpoint and caches. That is what makes
@@ -41,10 +41,28 @@ endpoint and caches. That is what makes
 [ADR-0002](./adr/0002-two-apps-in-a-pnpm-workspace.md) constraints rather than
 conventions.
 
-**Narrative is authored for publication, never harvested.** Stories and photographs are
-written deliberately by Staff. Class Records, Session Records and Perjadin Reports never reach
-a public page — not filtered, not flagged, not summarised. An internal record is only worth
-keeping if its author is certain it will never be public.
+**Not everything on the scope band is a figure from the database.** Four stats lead the
+page, and only the first is fetched: 42 Schools across 15 provinces. Two Streams, three
+Classes per School and ten Sessions per School are `@sugt/domain` constants both apps
+already hold. Serving those over the endpoint would put the same fixed set in two places,
+which is the duplication the ADR-0008 amendment exists to remove — just pointing the
+other way.
+
+**The delivery band is absent until there is delivery to report.** It renders only once at
+least one Session has been delivered, so launch day is scope → Streams → Clusters with no
+gap, and the band appears by itself after the first trip. "0 Sesi terlaksana · 0 Sekolah
+terjangkau" under a caption promising the figures will grow is the screen
+[ADR-0001](./adr/0001-public-site-reads-aggregates-only.md) names as worse than publishing
+nothing.
+
+**A failed fetch never degrades to zeros.** At build time it fails the deploy; at runtime
+the last good payload is served indefinitely. The internal app being down is invisible to
+visitors, and a zero on the page is always a real zero.
+
+**Narrative is authored for publication, never harvested.** A **Story** is written
+deliberately by Staff, in the internal tool. Class Records, Session Records and Perjadin
+Reports never reach a public page — not filtered, not flagged, not summarised. An internal
+record is only worth keeping if its author is certain it will never be public.
 
 Content is in Indonesian. Published material may name Schools and show students and
 their work; the Programme's enrolment terms cover media consent, so nothing needs
@@ -161,6 +179,16 @@ of every ten Sessions are invisible to anything trip-shaped.
 The PIC accounts for the whole Group. They enter each transaction that consumed the
 Advance, attach its evidence, and export a filled template of the acquittal paperwork.
 Whatever is left is returned to the Treasurer.
+
+**The export is generic until the real paperwork exists.** Nobody has filed an acquittal
+for this Programme yet and no prior trip's completed set is available to borrow, so the
+first version exports a plain itemisation the PIC attaches rather than the real SPJ. It
+**invents no fields** — it renders what a transaction already holds and the derived
+remainder, nothing added to make it look more official — so it is replaced rather than
+corrected when a filled example arrives. Until then a PIC still retypes the figures into
+the real form, which is the one thing this screen exists to stop; see the amendment to
+[ADR-0007](./adr/0007-the-tool-generates-the-acquittal.md) for why that means the bet is
+not yet placed.
 
 Transactions can be entered **as they happen or after returning** — whichever suits.
 Both are first-class paths. There is no offline support; capture needs connectivity, and
@@ -308,16 +336,59 @@ differently would be two things to learn.
 
 ### Publishing
 
-Staff write public stories and upload photographs here; the public app fetches published
-items through the same endpoint as the aggregates.
+Staff write **Stories** here — prose and photographs about one School, Cluster or
+Perjadin — and the public app fetches the published ones through the same mechanism as
+the figures. Staff-only, per
+[ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md); every Group
+contains a Staff member by construction, so no trip's material is unreachable.
 
-**Still deferred, on a thinner argument than before.** The authoring UI was left out of
-the first release partly because the public site shipped alone — and it no longer does,
-since scope figures come from the database. What survives is that the publishing
-bottleneck this prevents is a month-six problem. Launch narrative is hand-seeded in the
-repo; **scope figures are not**, and never were meant to be maintained by hand. See the
-amendment to [ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md),
-which flags this as worth confirming rather than inheriting.
+**No longer deferred.** The authoring UI was left out of the first release partly because
+the public site shipped alone, and it no longer does. That deferral was re-examined rather
+than inherited and dropped: the alternative is launch narrative committed to the repo and
+then migrated into rows once the UI lands, so the material the portfolio leads with gets
+written twice and is meanwhile the one thing on the site a Staff member cannot change.
+**Nothing narrative is hand-seeded, at any point** — the same rule scope figures already
+follow. See the second amendment to
+[ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md).
+
+The public site therefore launches with real Stories in the database, which makes the
+launch gate Better Auth, the invite list, the `public-media` bucket, the publishing tables
+and this editor — not the aggregates endpoint alone.
+
+**A Story is about exactly one School**, carries a cover photograph and any number of
+others, and may name a Stream. Its Cluster is the School's and is never chosen separately.
+It is never about a Perjadin; public narrative and the trip that carries the money stay
+apart.
+
+**A Story is a draft until it is published, and comes down immediately when withdrawn.**
+Publishing or unpublishing tells the public site to refresh rather than waiting for its next
+scheduled one — the site otherwise serves its last good copy indefinitely, which is right for
+a figure and wrong for a photograph someone has asked to have removed.
+
+### People — the invite list
+
+Staff add and revoke People here. This is the invite list from
+[ADR-0003](./adr/0003-google-sign-in-with-an-invite-list.md): a `person` row **is** an
+invitation, and nobody whose email has no row can sign in at all.
+
+Writes are Staff-only; reads follow the open-delivery rule, since a Group is assembled
+from the roster. Schools, Clusters and Topics have no admin screen because they are fixed
+reference data — People are not, so they do.
+
+**A Person's role cannot be changed once they have been used.** The database refuses it,
+and correcting a wrong one means revoking that Person and adding a new one, which keeps
+every historical reference truthful. The screen says so rather than offering an edit that
+will be rejected.
+
+**Revoking is two things, not one.** `active = false` gates _signup_ — it stops an email that
+has never signed in from creating an account — but someone who has already signed in has a
+session the invite list cannot see. So revoking also bans them through Better Auth, which
+blocks sign-in and ends existing sessions. `active` is the fact; the ban is how it is
+enforced.
+
+The founding Staff rows are seeded, because nothing else can be: without a Person, nobody
+can sign in to reach this screen. See
+[ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
 
 ---
 
@@ -334,7 +405,9 @@ Absences look like oversights unless they are written down. These are decisions.
   than data that is absent — a half-filled field looks like a system of record and is not
   one.
 - **No admin screens for Schools, Clusters or Topics.** They are fixed reference data,
-  seeded by migration.
+  seeded by migration. **This does not extend to People** — the roster grows and
+  revocations happen, so there is a People screen; see
+  [ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
 - **No scheduling, no overdue, no alerts.**
 
 The consequence, stated plainly so nobody builds against the opposite: _"has this School

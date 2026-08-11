@@ -29,9 +29,10 @@ records or Perjadin Reports — see
 convention.
 
 Both apps are still placeholders. The public site was originally to ship first and
-alone, but scope figures now come from the database rather than a second authored
-copy in this repo, so it waits on the internal app and its aggregates endpoint —
-see the amendment to
+alone; it now ships last. Neither its figures nor its Stories are authored in this
+repo — both come from the database — so it waits on the internal app, the
+aggregates endpoints, sign-in, the invite list and the Story editor. See the two
+amendments to
 [ADR-0008](./docs/adr/0008-public-narrative-is-authored-in-the-internal-app.md).
 
 ## Working on it
@@ -64,6 +65,12 @@ pnpm --filter @sugt/db db:seed      # Provinces, 4 Clusters, 42 Schools
 `DATABASE_URL` is declared in `turbo.json` under `build`, `typecheck` and `dev`.
 Turbo runs with `envMode: strict`, so a variable missing from a task's `env` is
 invisible to it even when the shell has it.
+
+The aggregates endpoints add `INTERNAL_APP_URL`, `PUBLIC_APP_URL`,
+`AGGREGATES_SECRET` and `REVALIDATE_SECRET`, all subject to the same rule — and the
+public app's build _fetches_, so a missing one fails the deploy rather than
+degrading quietly. [`docs/data-model.md`](./docs/data-model.md) says which task
+declares each.
 
 `dev`, `build` and `typecheck` run through Turborepo, so an unchanged package is
 restored from cache rather than rebuilt — a repeat `pnpm build` is milliseconds

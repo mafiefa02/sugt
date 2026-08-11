@@ -14,7 +14,7 @@ Published content may name Schools and show students and their work. The Program
 
 ## Deliberately not in the first release
 
-> **Amended — the sequencing below is reversed.** See [Amendment: the public site waits for the database](#amendment-the-public-site-waits-for-the-database). The paragraph is kept because the rest of this ADR was argued on top of it.
+> **Amended twice, and now void.** The sequencing below was reversed by [Amendment: the public site waits for the database](#amendment-the-public-site-waits-for-the-database), and the deferral it argues for was itself dropped by [Second amendment: the authoring UI is in the first release](#second-amendment-the-authoring-ui-is-in-the-first-release). The paragraph is kept because the rest of this ADR was argued on top of it.
 
 The first release ships the public site alone, with launch content hand-seeded in the repository and scope figures as static reference data — no auth, no database, no aggregates endpoint, and so nothing blocked by the ITB conversation except DNS. The authoring UI described here arrives with the internal app. The publishing bottleneck this ADR exists to prevent is a month-six problem, not a week-one one; the absence of the UI at launch is a sequencing choice, not an oversight.
 
@@ -28,7 +28,31 @@ Scope figures — Schools, Clusters, Topics, provinces — are served by the agg
 
 **What it does not change.** The public app still holds no database credentials and no Supabase client; it reads the endpoint and caches. [ADR-0001](./0001-public-site-reads-aggregates-only.md) and [ADR-0002](./0002-two-apps-in-a-pnpm-workspace.md) are untouched, and [ADR-0011](./0011-supabase-and-better-auth.md) restates why.
 
-**Left open.** The deferral of the authoring UI rested partly on the public site shipping alone. That premise is gone, so the deferral now rests only on the bottleneck being a month-six problem. It is probably still right — but it is a thinner argument than the one written above, and worth confirming rather than inheriting.
+**Left open.** The deferral of the authoring UI rested partly on the public site shipping alone. That premise is gone, so the deferral now rests only on the bottleneck being a month-six problem. It is probably still right — but it is a thinner argument than the one written above, and worth confirming rather than inheriting. — _Confirmed and reversed; see below._
+
+## Second amendment: the authoring UI is in the first release
+
+The deferral above was examined rather than inherited, and it does not survive. **Stories and the authoring UI ship with the internal app, and the public site launches with real Stories in the database.** Nothing narrative is hand-seeded in this repository, at any point, for the same reason no scope figure is.
+
+**Why the deferral fails.** It rested on the bottleneck being a month-six problem. But the alternative is launch content committed to `@sugt/public` and then migrated into `story` rows once the UI arrives — the launch narrative gets written twice, and in between the public site's most visible content is the one thing on it a Staff member cannot change. The first amendment already rejected two authored copies of the same 42 Schools; a second set of authored copies, of the material the portfolio actually leads with, is the same mistake with a shorter half-life.
+
+**What it costs.** Launch is now gated on Better Auth working, the invite list existing ([ADR-0013](./0013-people-are-added-in-the-tool-and-their-role-is-write-once.md)), the `public-media` bucket, publishing tables and a Staff-only editor — on top of the aggregates endpoint the first amendment already added. That is a substantially larger gate than "one route handler", and it is accepted with that named.
+
+**What it does not change.** Publishing is Staff-only, per [ADR-0004](./0004-delivery-data-is-open-internally-money-is-not.md). The public app still holds no database credentials and reads Stories through the same mechanism as the figures. And the wall below stands: a Story is authored for publication, and no internal record is ever a source for one.
+
+The unit is a **Story** — `CONTEXT.md` has the term, added because three documents had three different names for a thing about to become a table.
+
+## The endpoint contract
+
+"The same endpoint" means the same mechanism, not one route. What the public app depends on:
+
+- **Three routes, by lifetime.** Scope figures change ~never, delivery figures accrue weekly, Stories change when someone writes one. One payload behind one cache would revalidate everything at the fastest cadence any part of it needs, and one broken query would take the homepage's scope figures with it.
+- **Server-side fetch, with a shared secret.** `@sugt/public` calls from a Server Component with a bearer token only it holds. The routes are never browser-reachable, so no visitor's request reaches Postgres and the figures stay crawlable — which matters on a portfolio site. Note this is a second unauthenticated path into the database alongside the Participant Feedback route; [ADR-0011](./0011-supabase-and-better-auth.md)'s "nothing unauthenticated ever touches the database" is about the anon **role**, and both of these go through the internal app's own credentials after a check.
+- **Fixed sets never travel over it.** Two Streams, three Class kinds, ten Sessions per School are `@sugt/domain` constants both apps already depend on. Serving them from the database would recreate the duplication the first amendment removed, in the other direction.
+- **One route goes the other way.** Publishing or unpublishing a Story makes the internal app call a revalidation route on `@sugt/public`, so a takedown is live in seconds instead of waiting for the next refresh. It is the only write-shaped thing the public app will have, and it writes nothing but its own cache — no database credential, no Supabase client, nothing that touches [ADR-0002](./0002-two-apps-in-a-pnpm-workspace.md).
+- **A failed fetch never renders zeros.** At build time the fetch throws and the deploy fails, because a broken build is visible and a site of zeros is not. At runtime the last good payload is served indefinitely. [ADR-0001](./0001-public-site-reads-aggregates-only.md) calls "0 of 42 schools reached" worse than publishing nothing, and an empty-data fallback produces exactly that screen by accident.
+
+[`product.md`](../product.md) has how this reads on screen.
 
 ## This does not contradict ADR-0001
 

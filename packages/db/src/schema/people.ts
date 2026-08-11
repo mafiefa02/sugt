@@ -29,10 +29,17 @@ export const ROLE_VALUES = ["Staff", "Teaching Team"] as const;
  * historical reference to that person.
  *
  * `unique (id, role)` looks pointless beside a primary key on `id`. It is not — it
- * is the target of five composite foreign keys elsewhere in this schema, and it is
+ * is the target of six composite foreign keys elsewhere in this schema, and it is
  * what lets "the PIC is Staff", "only Teaching Team taught a Stream", "only
  * Teaching Team file Class Records" and "only Staff file Session Records" be
  * declarative constraints instead of triggers. **Do not drop it.**
+ *
+ * None of the six declares `on update`, so all default to `NO ACTION` — which makes
+ * `role` **write-once** once a Person has been used anywhere. A wrong role is
+ * corrected by revoking the row and creating a new Person. That needs
+ * `person_email_key` to be partial (`where active`), which is decided but not yet
+ * migrated — see
+ * `docs/adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md`.
  */
 export const person = pgTable(
   "person",

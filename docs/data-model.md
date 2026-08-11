@@ -15,6 +15,11 @@ meant to reject — 54 checks, all behaving as claimed. Where this document says
 enforced by the database, that was verified rather than assumed; where it says a rule is not,
 that is in [what the database does not hold](#what-the-database-does-not-hold).
 
+**Except where a section says otherwise.** Two blocks are decided but not yet applied, and
+each says so where it appears: the partial `person_email_key` under
+[Identity](#identity), and the whole of [Stories](#stories). Nothing else in this document
+describes a schema that does not exist.
+
 The blocks are ordered for reading, by topic, **not** in dependency order — `session`
 appears before the `perjadin` it references. Migrations need reordering: reference data,
 then `person`, then `perjadin` and `group_member` (the deferred foreign key between them
@@ -92,8 +97,39 @@ create table person (
   unique (id, role)                    -- not redundant; see below
 );
 
-create unique index person_email_key on person (lower(email));
+create unique index person_email_key on person (lower(email));   -- becomes partial, below
 ```
+
+**The email index has to become partial** — decided, not yet migrated. This is one of the two
+exceptions the header names; [Stories](#stories) is the other:
+
+```sql
+drop index person_email_key;
+create unique index person_email_key on person (lower(email)) where active;
+```
+
+At most one _active_ Person per email, any number of revoked ones — the same trick as
+`session_one_per_school_per_perjadin`. It has to be partial because a wrong `role` is corrected by revoking the row and creating a new Person
+([ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md)),
+which means the same email legitimately appears twice. It also makes the sign-up hook's
+lookup — `where lower(email) = $1 and active` — unambiguous by construction rather than
+by convention.
+
+**`active = false` does not by itself stop anyone signing in.** The hook below fires when a
+`user` row is _created_, so it gates signup only; a returning sign-in creates a session and
+never reaches it. Revocation therefore goes through Better Auth's admin plugin, which blocks
+sign-in and revokes existing sessions. `person.active` is authoritative and `banned` is its
+effect — the People screen writes both, every domain query reads only `active`. See
+[ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
+
+**`role` is write-once, and the database already enforces it.** Six composite foreign
+keys point at `person (id, role)` — from `group_member`, `session_teacher`,
+`class_record`, `session_record`, `perjadin.pic_person_id` and
+`session.online_pic_person_id` — and none declares
+`on update`, so all default to `NO ACTION`. The moment a Person has been on a trip,
+taught a Stream or filed a record, Postgres refuses to change their role. This is not a
+policy anyone added; it falls out of the composite keys, and it is written here because
+an unwritten enforced constraint reads as a bug the first time it fires.
 
 `unique (id, role)` looks pointless next to a primary key on `id`. It is the target of
 composite foreign keys elsewhere in this schema, and it is what lets "the PIC is Staff" and
@@ -129,6 +165,12 @@ not own.
 
 Seeded by migration. No admin screens — [`product.md`](./product.md) is explicit that Schools,
 Clusters and Topics are fixed facts, not records with an editing lifecycle.
+
+**`person` is not reference data and this rule does not reach it.** The roster grows and
+revocations happen, so People are added through a Staff-only screen; only the founding
+Staff rows are seeded, and only because the sign-in hook makes them a prerequisite for
+anyone reaching that screen. Keep that seed separate from this file, which is re-run
+freely.
 
 ```sql
 create table province (
@@ -798,10 +840,18 @@ from Teaching Team by citing "per-diem amounts and personal travel claims" — t
 holds, its stated reason is just thinner than when it was written. Adding
 `incurred_by_person_id` later is a nullable column, not a migration of meaning.
 
-**There is no category column yet.** `CONTEXT.md` records that the acquittal's real paperwork
-— Surat Tugas, SPPD, SPJ or otherwise — has not been confirmed against actual documents.
-Designing columns for a template nobody has read produces fields that do not fit it. This
-table is shaped to be extended; extend it once the paperwork is in hand.
+**There is no category column yet, and the export does not get to add one.** `CONTEXT.md`
+records that the acquittal's real paperwork — Surat Tugas, SPPD, SPJ or otherwise — has not
+been confirmed against actual documents, and there is no completed example to confirm it
+against until the first Perjadin is filed. Designing columns for a template nobody has read
+produces fields that do not fit it.
+
+The acquittal screen ships anyway, with a generic export whose stated constraint is that it
+**renders these columns and nothing else** — `spent_on`, `description`, `amount_idr`, the
+evidence, and the derived remainder. No category, no cost-centre, no account code, no payee.
+A view over existing columns cannot be wrong when the real form arrives; it is replaced. This
+table is shaped to be extended; extend it once the paperwork is in hand. See the amendment to
+[ADR-0007](./adr/0007-the-tool-generates-the-acquittal.md).
 
 **The reconciliation is derived, never stored.** `advance_idr - sum(amount_idr)` is the
 running remainder the acquittal screen shows, and it is a query. Only the fact that money was
@@ -811,6 +861,92 @@ Evidence is many-per-transaction. `storage_path` is the object key in the privat
 `unique` on it means an upload cannot be attached twice.
 
 ---
+
+## Stories
+
+The public narrative, authored in the internal app by Staff and read by `@sugt/public`
+through the published-Stories route. Decided, not yet written as Drizzle — the shape below
+is the contract, and it is the largest thing on the critical path now that
+[ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md)'s second
+amendment puts the authoring UI in the first release.
+
+```sql
+create table story (
+  id            uuid primary key default gen_random_uuid(),
+  slug          text not null unique,
+  school_id     uuid not null references school (id),
+  stream        text check (stream in ('STEM', 'Research')),
+  title         text not null,
+  body          text not null,
+  published_at  timestamptz,
+
+  written_by_person_id  uuid not null,
+  written_by_role       text not null default 'Staff' check (written_by_role = 'Staff'),
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+
+  foreign key (written_by_person_id, written_by_role) references person (id, role)
+);
+
+create table story_photo (
+  id                     uuid primary key default gen_random_uuid(),
+  story_id               uuid not null references story (id) on delete cascade,
+  storage_path           text not null unique,
+  content_type           text not null,
+  byte_size              bigint not null,
+  position               smallint not null,
+  caption                text,
+  uploaded_by_person_id  uuid not null references person (id),
+  uploaded_at            timestamptz not null default now(),
+
+  unique (story_id, position)
+);
+```
+
+**`school_id` is NOT NULL, and it is the only thing a Story attaches to.** The design's cards
+carry a School, a Cluster and a Stream — but the Cluster is `school.cluster_id` reached
+through the join, exactly as everywhere else, so it is not a second reference. There is no
+`cluster_id` and no `perjadin_id`. A public Story hanging off the trip that carries the money
+is a boundary [ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md) draws
+deliberately, and the design never asks for one.
+
+The cost is stated plainly: a Programme-wide piece belonging to no single School has nowhere
+to live. That is a homepage-copy problem, not a feed entry.
+
+**`stream` is nullable**, unlike everywhere else it appears. It is the badge on the card, and
+a Story about a whole visit is about both.
+
+**`published_at` NULL is a draft.** No status enum — three states would owe three glossary
+terms for a distinction the surface does not yet make. Setting it publishes; clearing it takes
+the Story down, and the internal app calls a revalidation route on `@sugt/public` when either
+happens. That route is the only write-shaped thing the public app will ever have, and it
+writes nothing but its own cache. It exists because the public site serves its last good
+payload indefinitely (see the endpoint contract in ADR-0008) — fine for a figure, not fine for
+a photograph that has to come down now.
+
+**Publishing is Staff-only, and that is a composite foreign key like every other role rule
+here.** `written_by_role` is pinned to `'Staff'` and the pair references `person (id, role)`
+— the seventh target of the `unique (id, role)` index, alongside the PIC, who taught, and who
+filed each internal record. [ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md)
+says publishing is Staff-only; without this it would be the one such rule held by convention.
+It also means a Story's author inherits write-once `role`, which is the correct behaviour: the
+person who wrote it was Staff when they wrote it.
+
+**`story_photo` mirrors `transaction_evidence`** column for column, deliberately: same
+`storage_path unique`, same `content_type`/`byte_size`, same uploader and timestamp. One
+upload pattern to build and one to learn. `uploaded_by_person_id` references `person` alone
+rather than the pair, exactly as `transaction_evidence` does — uploading is not a role-gated
+act, and the Story it hangs off already carries the Staff constraint. Keys are
+`story/{story_id}/{uuid}` in `public-media`, mirroring the `receipts` convention.
+
+`position` orders them and makes the first the cover. **`unique (story_id, position)` is
+immediate, not deferred**, so reordering photographs cannot be a naive two-row swap — the
+intermediate state collides. The editor submits the whole ordering and rewrites every row,
+the same wholesale-replacement pattern [the Group](#the-group) uses and for the same reason.
+Worth stating because that is what the constraint costs.
+
+The two buckets stay exactly as split below. A Story's photographs are public by intent, which
+is the whole difference from a receipt.
 
 ## Object storage
 
@@ -878,6 +1014,27 @@ Connection strings, both IPv4:
 `turbo.json` runs with `envMode: strict`, so `DATABASE_URL` has to be declared in the
 consuming task's `env` or it is invisible at build time. Nothing reads env today, so this is
 the first entry.
+
+**The aggregates endpoints add four more, and the same trap applies to all of them.** The
+public app's build now fetches — and fails the deploy when it cannot — so a variable missing
+from a task's `env` surfaces as an undefined secret at build time, one layer removed from
+the cause:
+
+| Variable            | Read by          | Declared on    |
+| ------------------- | ---------------- | -------------- |
+| `INTERNAL_APP_URL`  | `@sugt/public`   | `build`, `dev` |
+| `AGGREGATES_SECRET` | both apps        | `build`, `dev` |
+| `PUBLIC_APP_URL`    | `@sugt/internal` | `build`, `dev` |
+| `REVALIDATE_SECRET` | both apps        | `build`, `dev` |
+
+The first pair is `@sugt/public` calling in; the second is `@sugt/internal` calling back to
+revalidate after a Story is published or withdrawn. Both secrets are shared between the two
+apps, so each is declared in both — a value present on one side and missing on the other
+fails at request time rather than build time, which is the harder failure to read.
+
+None is `NEXT_PUBLIC_*`, and none may become one. A secret in the client bundle is a secret
+anyone can read, and `AGGREGATES_SECRET` is the only thing making the endpoints
+non-browser-reachable.
 
 ---
 
@@ -989,6 +1146,17 @@ cascade and the deferred PIC foreign key resolve against each other rather than 
   workable from both Streams; they are not DITSAMA's. Replace them by editing
   `packages/db/seed/reference-data.sql` and re-running, not by updating the rows — the seed
   overwrites that column like every other one.
-- The acquittal's real paperwork, and therefore whether `transaction` needs a category.
-- Publishing tables. [ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md)
-  defers the authoring UI, but its sequencing has changed — see the amendment there.
+- The acquittal's real paperwork, and therefore whether `transaction` needs a category. Now
+  known to be unobtainable until the first Perjadin is filed, so the export ships generic
+  and adds no columns in the meantime.
+- **The publishing tables are designed but not written.** [Stories](#stories) has the
+  contract; it is not yet Drizzle, not yet migrated, and not yet checked against a real
+  Postgres the way the rest of this document was. Treat it as the one section whose
+  verification claim in the header does not yet apply.
+- **The founding-Staff seed.** A separate artefact from `reference-data.sql`, holding the
+  rows that break the sign-in bootstrap and nothing else. See
+  [ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
+- **The aggregates endpoints.** Three routes on `@sugt/internal` — scope, delivery,
+  published Stories — read server-side by `@sugt/public` with a shared secret. The queries
+  themselves are small; what is undecided is where they live in `@sugt/db` and whether the
+  Staff-only choke point needs a sibling for "no Person at all, but a valid secret".
