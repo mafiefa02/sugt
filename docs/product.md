@@ -56,8 +56,17 @@ terjangkau" under a caption promising the figures will grow is the screen
 nothing.
 
 **A failed fetch never degrades to zeros.** At build time it fails the deploy; at runtime
-the last good payload is served indefinitely. The internal app being down is invisible to
-visitors, and a zero on the page is always a real zero.
+the last good payload keeps being served. The internal app being down is invisible to
+visitors, and a zero on the page is always a real zero. That holds until the next deploy and no
+further — caches do not survive one — and it is a measured property of one caching model rather
+than a setting, which is why it has an ADR of its own:
+[ADR-0014](./adr/0014-the-public-site-uses-the-pre-cache-components-caching-model.md).
+
+**There is a search page, and it queries nothing.** Schools, Clusters and Story titles are
+already on the page in the payloads the site fetched; searching them is a filter in the browser.
+Forty-two Schools and four Clusters is a browsable set, and a search box that reaches the
+database would be the one hole in an app that deliberately holds no credentials. Story bodies
+are not searched — that would mean shipping every Story's full text to every visitor.
 
 **Narrative is authored for publication, never harvested.** A **Story** is written
 deliberately by Staff, in the internal tool. Class Records, Session Records and Perjadin
@@ -74,7 +83,15 @@ building around permissions.
 
 `@sugt/internal`. Two roles, and no third: **Staff** (DITSAMA employees, leadership
 included) and **Teaching Team** (the professors who deliver Sessions). Sign-in is Google,
-restricted to an invite list.
+restricted to an invite list — Staff with a DITSAMA account, Teaching Team with whatever Google
+account they have, and a `person` row required either way. See
+[ADR-0003](./adr/0003-google-sign-in-with-an-invite-list.md).
+
+**Nothing is approved.** There is no approver, no queue, no submitted-and-returned state on an
+Advance or an acquittal, and no lifecycle on a Perjadin beyond its dates. Whatever sign-off
+DITSAMA does happens where it happens today; the tool records that an Advance exists and what it
+was spent on. This is said plainly because the shape is so common that its absence reads as an
+omission, and because an early design drew it in full.
 
 Access splits along one line: **delivery data is open, money is not.** Anyone signed in
 can read every Session, every Class Record and Session Record, and every progress view — with
@@ -147,6 +164,24 @@ difference.
 no Perjadin, so scheduling one means naming a Staff member as its PIC — otherwise six of
 every ten Sessions would have nobody to file the Session Record.
 
+**Online Sessions are scheduled from the coverage view, beside trip planning.** Selecting
+Schools there offers two actions rather than one: plan a Perjadin, or schedule an online
+Session across the selection — one date and one PIC applied to all of them, each row editable
+first. Six of every ten Sessions are online, so this is not a secondary path; and it belongs
+where the delivered counts are, because it is the same decision a trip is, made against the
+same numbers.
+
+**Marking a Session delivered is also how it records who taught.** The form asks for the
+Teaching Team member on each Stream — pre-filled from the Group on an offline Session, empty on
+an online one — and will not submit with a Stream unnamed. This is deliberately one act rather
+than two: the list of who still owes a Class Record is computed from who taught, so a Session
+marked delivered with nobody recorded owes nothing, and the chase list is silently empty. That
+is the worst failure available to a tool whose only enforcement is naming who has not filed.
+
+**Cancelling happens on the Session, and only while it is arranged.** The reason is required in
+the same dialog, because it is required by the database — a Session that was delivered and then
+went wrong is a correction, not a cancellation.
+
 ### Perjadin
 
 Created inside the tool, because the Group rule is enforced at creation: **one PIC, and
@@ -180,12 +215,20 @@ The PIC accounts for the whole Group. They enter each transaction that consumed 
 Advance, attach its evidence, and export a filled template of the acquittal paperwork.
 Whatever is left is returned to the Treasurer.
 
+**Each transaction carries a category**, from a closed list of eleven plus _Lainnya_ —
+_Tiket Pesawat/Kereta PP_, _Uang Harian_, _Honorarium Narasumber_, _Akomodasi_,
+_Transport Bandara/Stasiun_, _Transport Lokal Dalam Provinsi_, _Konsumsi_, _Modul_, _ATK_,
+_Alat dan Bahan Research Project_, _Seminar kit_. They are the line items the Programme's
+approved budget repeats across every travel group, so they are what DITSAMA already itemises
+rather than a scheme invented here, and they are in Indonesian because that is what goes on the
+paperwork. A transaction may also name **who incurred it**, which per-diems and honoraria do
+and a taxi does not; the Advance is still one pot and the acquittal still reconciles the pot.
+
 **The export is generic until the real paperwork exists.** Nobody has filed an acquittal
 for this Programme yet and no prior trip's completed set is available to borrow, so the
 first version exports a plain itemisation the PIC attaches rather than the real SPJ. It
-**invents no fields** — it renders what a transaction already holds and the derived
-remainder, nothing added to make it look more official — so it is replaced rather than
-corrected when a filled example arrives. Until then a PIC still retypes the figures into
+**invents no fields beyond those** — no cost-centre, no account code, no payee — so it is
+replaced rather than corrected when a filled example arrives. Until then a PIC still retypes the figures into
 the real form, which is the one thing this screen exists to stop; see the amendment to
 [ADR-0007](./adr/0007-the-tool-generates-the-acquittal.md) for why that means the bet is
 not yet placed.
@@ -331,13 +374,22 @@ open-delivery rule rather than the Perjadin Report's — anyone signed in can re
 saying plainly because it hangs off a Perjadin, and Teaching Team members are the ones who
 slept in the hotel.
 
+Which means **the Perjadin screens have a money-free variant**, and Teaching Team see it: the
+same trip, its dates, its Group, its Schools, with the Advance, the transactions and the Report
+absent rather than disabled. They need it to find the trip they are filing about, and a greyed
+box saying they may not look is worse than no box.
+
+**Lodging is the one Aspect a Group may leave blank**, because not every Perjadin involves a
+night away — a School close enough for a day trip has no hotel to rate, and asking for a Rating
+anyway would produce an invented one.
+
 The form deliberately matches the Session Record's shape. Two evaluation forms that behaved
 differently would be two things to learn.
 
 ### Publishing
 
-Staff write **Stories** here — prose and photographs about one School, Cluster or
-Perjadin — and the public app fetches the published ones through the same mechanism as
+Staff write **Stories** here — prose and photographs about **exactly one School** — and the
+public app fetches the published ones through the same mechanism as
 the figures. Staff-only, per
 [ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md); every Group
 contains a Staff member by construction, so no trip's material is unreachable.
@@ -359,6 +411,19 @@ and this editor — not the aggregates endpoint alone.
 others, and may name a Stream. Its Cluster is the School's and is never chosen separately.
 It is never about a Perjadin; public narrative and the trip that carries the money stay
 apart.
+
+**A Story is either field narrative or a Final Project piece**, and that is the only thing that
+differs between them — same editor, same photographs, same rule that neither is derived from an
+internal record. The distinction exists because the public site gives Final Projects their own
+section rather than a filter on the stories feed. It is also how a Final Project reaches the
+public at all: [ADR-0009](./adr/0009-the-tool-tracks-delivery-not-outcomes.md) still refuses to
+track them, and a curated piece about one is not tracking.
+
+**Prose is written in a visual editor and stored as Markdown.** Staff are describing a school
+visit, not learning syntax. What the editor can produce and what the public site will render are
+one list rather than two — see
+[ADR-0015](./adr/0015-story-bodies-are-markdown-and-the-editor-schema-is-the-allowlist.md), which
+is where that constraint is argued, because the failure it prevents is silent.
 
 **A Story is a draft until it is published, and comes down immediately when withdrawn.**
 Publishing or unpublishing tells the public site to refresh rather than waiting for its next
@@ -399,7 +464,13 @@ Absences look like oversights unless they are written down. These are decisions.
 - **No stages** between a School's first and last Session. Progress is delivered
   Sessions out of ten, and nothing else.
 - **No Project Teams and no Final Projects.** Several hundred exist across the Programme;
-  none are tracked. They reach the public as curated showcase pieces, never as records.
+  none are tracked. They reach the public as curated Stories, never as records — a piece
+  written about one is not a record of it.
+- **No approvals.** No approver role, no queue, no submitted/returned/approved states, no
+  Perjadin lifecycle. Nothing in this tool waits on a decision by somebody else, and the two
+  roles are the only two. An early design drew the whole apparatus and it is not being built.
+- **No search inside the internal tool.** Coverage groups every School by Cluster and the
+  directory filters; a third way to find a School is a screen to maintain and nothing more.
 - **No outcome tracking beyond the Ratings.** Every further outcome field
   competes with the six that already exist, and data that will not be entered is worse
   than data that is absent — a half-filled field looks like a system of record and is not

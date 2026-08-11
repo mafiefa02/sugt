@@ -155,6 +155,10 @@ _Avoid_: output, deliverable, capstone
 A piece of narrative written by Staff for publication on the public site — prose and photographs about one **School**, written by someone who knows it is public as they write it. A Story is authored, never derived: no **Session Record**, **Class Record**, **Participant Feedback** or **Perjadin Report** is ever a source for one. The team says _Cerita_; it translates cleanly.
 _Avoid_: post (imports blog assumptions — a feed, comments, an author byline — none of which apply), article, publication (that is the act), content, Session Record
 
+**Field Story** / **Final Project Story**:
+The two kinds a **Story** may be. A Field Story is an account of teaching at a **School**; a Final Project Story is a curated piece about what a **Project Team** produced. They differ in where the public site lists them and in nothing else — same author, same photographs, same rule that neither is derived from a record. A Final Project Story is how a **Final Project** reaches the public without becoming a tracked record.
+_Avoid_: showcase (that is the section, not the piece), case study, portfolio item
+
 ## Relationships
 
 - The **Programme** is divided into **Tracks**; DITSAMA ITB holds the STEM & Research **Track**
@@ -231,3 +235,5 @@ _Avoid_: post (imports blog assumptions — a feed, comments, an author byline �
 - Each **Cluster**'s **Problem** — the specific challenge drawn from its **Topic**. The four **Topics** are set (Mitigasi Bencana, Smart City, Ketahanan Pangan, Waste Management). The **Problems** currently in the seed are **invented placeholders**, plausible for each **Cluster**'s geography but not DITSAMA's. They exist so screens have something real-shaped to render; treat any of them appearing in a design or a document as unconfirmed.
 - No stages are defined between a **School**'s first and last **Session**, and **Final Projects** are not tracked at all. Progress is therefore delivered **Sessions** out of ten, and nothing else — this is the deliberate position, not an oversight.
 - The ITB documents a **Perjadin Report** produces have no terms here yet. Their real names — Surat Tugas, SPPD, SPJ or otherwise — need confirming against actual paperwork before they enter the glossary or the code. **No completed example exists to confirm them against**: nobody has filed one for this Programme, and no prior trip's set is available to borrow. The first real Perjadin is what produces one, so these terms stay out of the glossary until then — see the amendment to [ADR-0007](./docs/adr/0007-the-tool-generates-the-acquittal.md).
+
+  **What a transaction is spent on is no longer open.** The Programme's approved budget names eleven recurring line items across all twenty-three travel groups, and those are what a transaction is categorised by. They are Indonesian because they are what goes on the paperwork, and they live in `packages/domain` rather than here: a category is a value a column may hold, not a term this glossary defines. The document those categories will eventually be typed onto is still the open question above.
