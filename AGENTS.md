@@ -88,12 +88,17 @@ Components and design tokens live in `packages/ui`, laid out the way
 
 ```
 packages/ui/
+├── README.md                # the inventory: which primitive exists, and for which surface
 ├── components.json          # aliases resolve to @sugt/ui/*
 └── src/
     ├── components/          # the primitives — @sugt/ui/components/button
     ├── lib/utils.ts         # cn() — @sugt/ui/lib/utils
     └── styles/globals.css   # the whole theme, imported by both apps
 ```
+
+[`packages/ui/README.md`](./packages/ui/README.md) lists every primitive against the
+surface that needs it, says which ones are deliberately absent, and carries the two
+Rating controls' rules. Read it before adding a component there.
 
 **Run `pnpm dlx shadcn@latest add <component>` against an app, not against
 `packages/ui`** — either from the app directory or with `-c apps/public` from the
