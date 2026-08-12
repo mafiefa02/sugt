@@ -1263,8 +1263,27 @@ per Stream, not that both rows exist. Required at the point a Session is marked 
 
 **That an arranged offline Session falls inside its Perjadin.** `session.held_on` and
 `perjadin.starts_on`/`ends_on` are unrelated columns as far as the database is concerned. The
-rule and why a CHECK cannot carry it are in [Delivery](#delivery); what belongs here is that
-nothing enforces it today, so an arranged Session can be dated outside the Perjadin it is on.
+rule and why a CHECK cannot carry it are in [Delivery](#delivery). It is now held by the
+application — `heldOnWithinPerjadin` in `@sugt/db`, exported rather than private because it
+belongs _wherever the date is written_ and there is more than one such place. The constraint
+trigger was the alternative and is still the upgrade if raw SQL ever produces a row this
+refuses; it was not taken here for the reason the two rules above were not, which is that
+every write path this schema has goes through one package.
+
+**The rule reaches one of its three write paths.** A Session's date is written in three
+places, and only the first exists:
+
+1. **Moving one Session's date** — Detail Sesi, which calls the validator and refuses.
+2. **Arranging an offline Session** — Rencanakan Perjadin
+   ([#29](https://github.com/mafiefa02/sugt/issues/29)) writes one `session` row per School
+   on the trip and has not been built. It has to call the validator too, or a Session can
+   still be _born_ outside the trip it is on.
+3. **Moving the trip** — nothing edits `perjadin.starts_on`/`ends_on` at all, in either
+   ticket, so the rule that a trip's **arranged** Sessions move with it has nothing to hang
+   from. [#55](https://github.com/mafiefa02/sugt/issues/55) carries it.
+
+So an arranged offline Session can no longer be _moved_ outside its window, and can still
+arrive outside one by either of the other two routes.
 
 **That `delivered` is terminal.** `session_status_check` permits all three values with no
 regard to what a row already holds, so nothing in the database stops `delivered` being written

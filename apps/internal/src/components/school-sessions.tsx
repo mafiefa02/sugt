@@ -1,13 +1,8 @@
+import { MODE_LABELS, SessionStatusBadge } from "-/components/session-labels";
 import type { SchoolSession, SessionAspect } from "@sugt/db/queries";
-import {
-  CONCERN_AT_OR_BELOW,
-  RATING_MAX,
-  RATING_MIN,
-  type SessionMode,
-  type SessionStatus,
-} from "@sugt/domain";
-import { Badge } from "@sugt/ui/components/badge";
+import { CONCERN_AT_OR_BELOW, RATING_MAX, RATING_MIN } from "@sugt/domain";
 import { Rating } from "@sugt/ui/components/rating";
+import Link from "next/link";
 
 /**
  * One School's Sessions, oldest first.
@@ -38,9 +33,19 @@ function SchoolSessions({ sessions }: { sessions: SchoolSession[] }) {
           key={session.id}
           className="flex flex-wrap items-center gap-x-3.5 gap-y-1 border-b border-border px-7 py-3"
         >
-          <span className="text-sm font-medium tabular-nums">{session.heldOn}</span>
+          {/*
+            The date is the link, because it is what names a Session — there is no other
+            handle, and the School is already the page this list is on. Detail Sesi is
+            where a Session is read and written, and this list is the only route to it.
+          */}
+          <Link
+            href={`/sesi/${session.id}`}
+            className="text-sm font-medium tabular-nums hover:underline"
+          >
+            {session.heldOn}
+          </Link>
           <span className="text-xs text-muted-foreground">{MODE_LABELS[session.mode]}</span>
-          <StatusBadge status={session.status} />
+          <SessionStatusBadge status={session.status} />
 
           <span className="ml-auto">
             <ConcernChip session={session} />
@@ -95,14 +100,6 @@ function ConcernChip({ session }: { session: SchoolSession }) {
   );
 }
 
-function StatusBadge({ status }: { status: SessionStatus }) {
-  return (
-    <Badge variant={status === "cancelled" ? "destructive" : "outline"}>
-      {STATUS_LABELS[status]}
-    </Badge>
-  );
-}
-
 /**
  * The copy is Indonesian and the domain terms are English — `CONTEXT.md` § *Language*,
  * which is why these are a translation at the edge rather than names in `@sugt/domain`.
@@ -110,17 +107,6 @@ function StatusBadge({ status }: { status: SessionStatus }) {
  * Typed against the domain's unions rather than as loose records, so an Aspect added to
  * a rubric fails the build here until somebody writes its Indonesian.
  */
-const MODE_LABELS: Record<SessionMode, string> = {
-  offline: "Luring",
-  online: "Daring",
-};
-
-const STATUS_LABELS: Record<SessionStatus, string> = {
-  arranged: "Terjadwal",
-  delivered: "Terlaksana",
-  cancelled: "Dibatalkan",
-};
-
 const ASPECT_LABELS: Record<SessionAspect, string> = {
   comprehension: "Pemahaman",
   participation: "Partisipasi",
