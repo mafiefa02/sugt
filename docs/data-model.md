@@ -154,9 +154,16 @@ by convention.
 
 **`active = false` does not by itself stop anyone signing in.** The hook below fires when a
 `user` row is _created_, so it gates signup only; a returning sign-in creates a session and
-never reaches it. Revocation therefore goes through Better Auth's admin plugin, which blocks
-sign-in and revokes existing sessions. `person.active` is authoritative and `banned` is its
-effect — the People screen writes both, every domain query reads only `active`. See
+never reaches it. Revocation is therefore **one write to `person.active`, read on every
+request** — no second column, no ban, and nothing in `better_auth` to keep in step. Three points
+enforce it and every one of them reads `person.active` and nothing else:
+`databaseHooks.user.create.before` refuses a first account to somebody with no active Person;
+`databaseHooks.session.create.before` refuses a new session to a revoked Person who already has
+a `user` row; and `requirePerson()` refuses each request, including one made mid-session on a
+cookie already issued. The third is what makes revocation immediate, and `@sugt/db`'s choke
+point is where it binds for **writes**, because a layout does not run before a Server Action.
+This document previously routed revocation through Better Auth's admin plugin and described
+`banned` as `person.active`'s effect; both are gone. See the amendment to
 [ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
 
 **`role` is write-once, and the database already enforces it.** Six composite foreign
@@ -337,6 +344,16 @@ column set, pass without a special case.
 `held_on` is the date the Session is arranged for, and the date it happened once delivered.
 It is a `date`, not a `timestamptz` — Indonesia spans three time zones and a Session is a
 calendar day, not an instant.
+
+**An arranged offline Session's `held_on` lies inside its Perjadin's `starts_on`–`ends_on`.**
+Nothing holds that — not this schema, and until now not any document either. It is scoped to
+_arranged_ deliberately: a trip's dates are correctable and its arranged Sessions move with them,
+while delivered and cancelled ones stay where they are, so a delivered Session may legitimately
+sit outside the window its Perjadin now claims. A CHECK cannot carry it, because a CHECK sees
+only the row it is written on and the date range sits on `perjadin`; the choice is a constraint
+trigger or the application, and it belongs wherever the date is written — both at arrangement and
+when a trip's dates move. Online Sessions have no Perjadin and are untouched. Listed with the
+rest in [what the database does not hold](#what-the-database-does-not-hold).
 
 A Session exists only once arranged
 ([ADR-0006](./adr/0006-sessions-are-created-when-arranged.md)), so there are no planned rows,
@@ -959,15 +976,16 @@ amendment puts the authoring UI in the first release.
 
 ```sql
 create table story (
-  id            uuid primary key default gen_random_uuid(),
-  slug          text not null unique,
-  school_id     uuid not null references school (id),
-  stream        text check (stream in ('STEM', 'Research')),
-  kind          text not null default 'field'
-                  check (kind in ('field', 'final_project')),
-  title         text not null,
-  body          text not null,
-  published_at  timestamptz,
+  id              uuid primary key default gen_random_uuid(),
+  slug            text not null unique,
+  school_id       uuid not null references school (id),
+  stream          text check (stream in ('STEM', 'Research')),
+  kind            text not null default 'field'
+                    check (kind in ('field', 'final_project')),
+  title           text not null,
+  body            text not null,
+  cover_photo_id  uuid,              -- references story_photo (id); added below
+  published_at    timestamptz,
 
   written_by_person_id  uuid not null,
   written_by_role       text not null default 'Staff' check (written_by_role = 'Staff'),
@@ -983,13 +1001,20 @@ create table story_photo (
   storage_path           text not null unique,
   content_type           text not null,
   byte_size              bigint not null,
-  position               smallint not null,
   caption                text,
   uploaded_by_person_id  uuid not null references person (id),
-  uploaded_at            timestamptz not null default now(),
-
-  unique (story_id, position)
+  uploaded_at            timestamptz not null default now()
 );
+```
+
+`story` and `story_photo` reference each other, so the cover cannot be inline — it is added
+once both tables exist, the way the PIC-membership constraint on [Travel](#travel) is. Only the
+placement is shared; this one needs no deferral, and why is below:
+
+```sql
+alter table story
+  add constraint story_cover_photo_id_fkey
+  foreign key (cover_photo_id) references story_photo (id) on delete set null;
 ```
 
 **`school_id` is NOT NULL, and it is the only thing a Story attaches to.** The design's cards
@@ -1044,13 +1069,43 @@ person who wrote it was Staff when they wrote it.
 upload pattern to build and one to learn. `uploaded_by_person_id` references `person` alone
 rather than the pair, exactly as `transaction_evidence` does — uploading is not a role-gated
 act, and the Story it hangs off already carries the Staff constraint. Keys are
-`story/{story_id}/{uuid}` in `public-media`, mirroring the `receipts` convention.
+`story/{story_id}/{uuid}` in `public-media`, mirroring the `receipts` convention. **Dropping
+`position` makes that mirror tighter**, and the mirror is worth keeping true: a caption is now
+the only column one table has and the other does not.
 
-`position` orders them and makes the first the cover. **`unique (story_id, position)` is
-immediate, not deferred**, so reordering photographs cannot be a naive two-row swap — the
-intermediate state collides. The editor submits the whole ordering and rewrites every row,
-the same wholesale-replacement pattern [the Group](#the-group) uses and for the same reason.
-Worth stating because that is what the constraint costs.
+**There is no ordering.** The gallery renders by `uploaded_at`, tie-broken by `id`, and Staff
+cannot rearrange it without deleting and re-uploading — a cost named and accepted rather than
+overlooked. The tie-break is not decoration: a bulk upload gives several rows the same default
+timestamp, and without it the order is not stable between reads.
+
+**The cover is its own field, not "whichever photograph is first".** `story.cover_photo_id` is
+nullable and `on delete set null`, so deleting the photograph that happens to be the cover clears
+the field rather than blocking the delete. Two consequences come with that choice and were taken
+with it: the two tables now reference each other, so **the cover is set in a second statement**
+once the photographs have landed rather than in the insert; and **no deferred constraint is
+needed**, because the column is nullable — unlike the PIC-membership foreign key, which had to be
+deferred precisely because neither side could go first.
+
+**This document previously said `position` orders them and makes the first the cover.** That was
+false in both halves, and the wholesale-rewrite pattern it argued for went with it: there is no
+`unique (story_id, position)` left for an intermediate state to collide with, so nothing here
+rewrites every row. [The Group](#the-group) is now the only place in this schema that pattern
+lives.
+
+**Publishing is blocked while photographs exist and none of them is the cover.** Not a warning —
+the control is unavailable. A Story with **no** photographs at all is not gated, because there is
+nothing to choose a cover from and nothing missing.
+
+**It is the only gate in the product, and that is worth stating rather than burying.** The
+standing rule is the opposite: `CONTEXT.md` says nothing is required and nothing is blocked, and
+[`product.md`](./product.md) says _"Nothing is gated"_ of the one screen most tempted to gate
+something. The approval regime an early design drew was refused outright, and so was gating the
+acquittal's submission on evidence being attached. This exception is accepted for a reason that
+does not generalise: the public site is the portfolio DITSAMA is judged by, and an imageless card
+beside eight illustrated ones reads as broken rather than as a choice. It gates publishing and
+nothing else. It is also not a precedent — a field a form insists on before it will submit is a
+different thing, and the next rule that wants to withhold an action until some **other** record
+is complete has to make its own case rather than cite this one.
 
 The two buckets stay exactly as split below. A Story's photographs are public by intent, which
 is the whole difference from a receipt.
@@ -1062,7 +1117,14 @@ Two buckets, and the split is doing real work:
 | Bucket         | Visibility | Holds                                                                        |
 | -------------- | ---------- | ---------------------------------------------------------------------------- |
 | `receipts`     | Private    | Transaction evidence. Keys: `perjadin/{perjadin_id}/{transaction_id}/{uuid}` |
-| `public-media` | Public     | Published photographs (a later release)                                      |
+| `public-media` | Public     | Published Story photographs. Keys: `story/{story_id}/{uuid}`                 |
+
+**`public-media` is needed at provisioning time, not at some later one.** This row read
+_"Published photographs (a later release)"_ until
+[ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md)'s second amendment put
+Story authoring in the first iteration. The public site launches with real Stories in the
+database, so the bucket has to exist before the first Story can be written — it is part of the
+launch gate, not a follow-up.
 
 Participant Feedback uploads nothing, and should not start. A file upload on an
 unauthenticated route is a different risk from a text field on one.
@@ -1171,6 +1233,19 @@ wholesale replacement made it unnecessary.
 **"Both Streams were taught."** Same shape: `session_teacher` guarantees at most one teacher
 per Stream, not that both rows exist. Required at the point a Session is marked delivered.
 
+**That an arranged offline Session falls inside its trip.** `session.held_on` and
+`perjadin.starts_on`/`ends_on` are unrelated columns as far as the database is concerned. The
+rule and why a CHECK cannot carry it are in [Delivery](#delivery); what belongs here is that
+nothing enforces it today, so an arranged Session can be dated outside the Perjadin it is on.
+
+**That `delivered` is terminal.** `session_status_check` permits all three values with no
+regard to what a row already holds, so nothing in the database stops `delivered` being written
+back to `arranged` or `cancelled`. The rule is real and the reason is sharp — a reversal leaves
+filed Class Records describing a Session that claims not to have happened, with their Ratings
+still on the concerns list — but it is held by the application alone: the Session screen offers
+cancellation while a Session is `arranged` and never after, and offers no way back from
+`delivered` at all.
+
 **"Every transaction has at least one piece of evidence."** Also a cross-row count. Required
 when the Report is filed, not when the transaction is entered — `product.md` is explicit that
 a receipt can be attached later.
@@ -1200,7 +1275,7 @@ three named types rather than one with optional fields:
 
 | Caller | Is | May read | May write |
 | ---------------------- | ------------------------------------------ | ------------------------- | ------------------------------ |
-| `Person` | somebody signed in | delivery; money only if Staff | their own records |
+| `Person` | somebody signed in whose `person` row is still `active` | delivery; money only if Staff | their own records |
 | `ServiceCaller` | `@sugt/public`, holding `AGGREGATES_SECRET` | the three aggregate payloads | nothing |
 | `ParticipantToken` | a live Session feedback token | nothing | `participant_feedback` only |
 
@@ -1221,6 +1296,16 @@ Left to the application, which only offers the form on a delivered one.
 foreign key holds that they are Teaching Team, not that they were in that room —
 `session_teacher` says who taught, and comparing against it is a query. Worth knowing because
 "who still owes what" is computed from exactly that comparison.
+
+**That `session_teacher` and `class_record` are kept in step.** There is no foreign key between
+them: `class_record` references `session (id)` and `person (id, role)` and nothing else. So a
+Record filed by a professor the Session never named is a legal row, and removing a named
+professor does not delete the Records they already filed. The divergence is permitted rather
+than tolerated — `session_teacher` stays editable by Staff after delivery, because until a
+mis-named professor is removed they owe three Class Records they cannot honestly file, and there
+is no other route to correcting it. The Session screen therefore reports filed against expected
+and does not reconcile them; showing both numbers is the honest rendering of two sets that can
+legitimately differ.
 
 **That all six Class Records exist.** Nothing is required and nothing is blocked; the missing
 ones are a list to chase, computed from `session_teacher` × the three Class kinds. See
