@@ -19,8 +19,15 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1786463427785,
-      "tag": "0002_link_better_auth_user_to_person",
+      "when": 1786509888394,
+      "tag": "0002_better_auth_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786509902684,
+      "tag": "0003_link_better_auth_user_to_person",
       "breakpoints": true
     }
   ]

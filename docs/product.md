@@ -445,11 +445,10 @@ and correcting a wrong one means revoking that Person and adding a new one, whic
 every historical reference truthful. The screen says so rather than offering an edit that
 will be rejected.
 
-**Revoking is two things, not one.** `active = false` gates _signup_ — it stops an email that
-has never signed in from creating an account — but someone who has already signed in has a
-session the invite list cannot see. So revoking also bans them through Better Auth, which
-blocks sign-in and ends existing sessions. `active` is the fact; the ban is how it is
-enforced.
+**Revoking is one write, and it takes effect on the revoked Person's next request.**
+`active = false` is the whole mechanism. It gates _signup_, it is checked again when a session
+is created, and it is read on every request thereafter — so somebody who signed in yesterday is
+out as soon as they click anything, rather than whenever their cookie happens to expire.
 
 The founding Staff rows are seeded, because nothing else can be: without a Person, nobody
 can sign in to reach this screen. See

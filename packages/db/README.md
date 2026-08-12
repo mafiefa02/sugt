@@ -33,10 +33,15 @@ drizzle-kit is invoked as a package script, outside turbo.
 ## Scripts
 
 ```sh
-pnpm --filter @sugt/db db:generate   # diff src/schema against the last snapshot
-pnpm --filter @sugt/db db:migrate    # apply pending migrations
-pnpm --filter @sugt/db db:seed       # Provinces, 4 Clusters, 42 Schools (idempotent)
+pnpm --filter @sugt/db db:generate     # diff src/schema against the last snapshot
+pnpm --filter @sugt/db db:migrate      # apply pending migrations
+pnpm --filter @sugt/db db:seed         # Provinces, 4 Clusters, 42 Schools (idempotent)
+pnpm --filter @sugt/db db:seed:people  # the founding Staff, once, on a new environment
 ```
+
+`db:seed:people` reads `seed/founding-staff.sql`, which is **gitignored**: this repository
+is public and those are real addresses. Copy `seed/founding-staff.example.sql` and fill it
+in. It is deliberately not idempotent — see the header in the template for why.
 
 ## Two things drizzle-kit cannot express
 
@@ -48,13 +53,23 @@ unchanged and getting _"No schema changes, nothing to migrate"_.
   key putting the PIC inside their own Group. drizzle-orm has `deferrable` on
   transactions but not on foreign keys. It must be deferred: `perjadin` and its
   `group_member` rows are inserted in one transaction and neither can go first.
-- **`0002_link_better_auth_user_to_person.sql`** — `better_auth.user.person_id` and its
-  cross-schema foreign key. **Run the Better Auth CLI migration first**; the file guards
-  on that and raises a sentence rather than a missing-relation error.
+- **`0003_link_better_auth_user_to_person.sql`** — the cross-schema foreign key from
+  `better_auth.user.person_id` to `public.person`. The column itself is **not** here: it
+  is declared on the Drizzle table and created by `0002` with everything else.
 
-Better Auth's four tables are not declared in `src/schema/`. Declaring them would make
-drizzle-kit and the Better Auth CLI fight over the same DDL. Only the `better_auth`
-schema itself is declared, so drizzle-kit creates it.
+## Better Auth's four tables are declared here
+
+`user`, `session`, `account` and `verification`, by hand, inside the
+`pgSchema("better_auth")` object in `src/schema/people.ts`, and created by `0002`. They
+cannot be generated: the Better Auth CLI emits `pgTable` and only `pgTable`, and
+`auth migrate` refuses the Drizzle adapter outright. Hand-declaring them is the path the
+library's own Drizzle documentation sanctions, because the adapter looks each model up as
+a key in the schema object it is given rather than building a table name.
+
+`auth generate`'s output is kept verbatim at
+`reference/better-auth-1.6.27.generated.ts`. It is not a step in any workflow — it is what
+to diff against when the library is upgraded. **The Drizzle property keys are the
+library's field names**; renaming one breaks the adapter at runtime and not at typecheck.
 
 ## Verified, not assumed
 
@@ -72,5 +87,6 @@ it doesn't.
 
 [ADR-0011](../../docs/adr/0011-supabase-and-better-auth.md) puts the money choke point
 here — every money-reading query taking the authenticated Person and refusing a non-Staff
-caller. There is no Person-resolution layer until the internal app exists, so a guard
-written now would have no caller and an invented signature. It arrives with the app.
+caller. `@sugt/internal` now resolves a Person, so the caller and the signature exist; the
+choke point and the `Caller` union that goes with it are still the query layer's own work
+and are not here.

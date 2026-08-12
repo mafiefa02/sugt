@@ -1,6 +1,6 @@
 # People are added in the tool, and a Person's role is write-once
 
-[ADR-0003](./0003-google-sign-in-with-an-invite-list.md) says the invite list is "maintained by hand" and leaves who and where open. It is a Staff-only People screen in the internal tool. The founding Staff rows are seeded, because the sign-up hook makes a `person` row a prerequisite for anyone getting an account at all; everyone after that is added through the screen. A Person's `role` cannot be changed once they have been used, so correcting one means revoking the row and adding a new one — and revoking has to reach further than `active = false` does on its own.
+[ADR-0003](./0003-google-sign-in-with-an-invite-list.md) says the invite list is "maintained by hand" and leaves who and where open. It is a Staff-only People screen in the internal tool. The founding Staff rows are seeded, because the sign-up hook makes a `person` row a prerequisite for anyone getting an account at all; everyone after that is added through the screen. A Person's `role` cannot be changed once they have been used, so correcting one means revoking the row and adding a new one — and setting `active = false` has to be **read** in more places than the signup hook, or somebody who has signed in once keeps signing in.
 
 ## Why a screen and not a seed file
 
@@ -35,26 +35,31 @@ At most one **active** Person per email, any number of revoked ones — the same
 - The sign-up hook's lookup becomes `where lower(email) = $1 and active`, and is unambiguous by construction rather than by convention.
 - A revoked person who has **never signed in** can no longer create an account, because the hook finds nothing.
 
-## Revocation needs a second mechanism, and it is the admin plugin
+## Revocation needs enforcing on every request, and `active` is the whole mechanism
+
+_Amended while the auth work was built. This section first said revocation went through Better Auth's **admin plugin** and its ban. The problem below is unchanged and still correct; the answer is not, and the plugin is dropped._
 
 The point above is as far as `active = false` reaches on its own, and it is much less far than it looks. `databaseHooks.user.create.before` fires **before a user row is created** — Better Auth's own documentation files this hook under `signup_disabled`. A returning sign-in creates a _session_, not a user, so the hook never runs again. `data-model.md` was right that the invite list "gates signup, not merely authorisation"; the corollary nobody had drawn is that **anyone who has signed in once keeps signing in after being revoked.**
 
 That was tolerable when the internal tool held only delivery records. It is not now: the invite list gates a Staff-only publishing surface that writes the public site.
 
-So revocation goes through Better Auth's **admin plugin** — `/admin/ban-user` blocks sign-in and revokes existing sessions in one call, which is the library's supported answer rather than one we invent.
+The plugin was chosen because nothing checked revocation _per request_. Something does now. **`requirePerson()` reads `person.active` on every request** and refuses when it is false — and the argument for why that is free was already in this ADR: every request resolves the Person in order to read `role`, so the row is being fetched regardless and one more column off it costs nothing.
 
-**`person.active` is authoritative; `banned` is its effect.** Revoking in the People screen sets `active = false` and bans in the same operation, and re-inviting reverses both. Every domain query reads `person.active` and nothing reads `banned`, which exists solely so Better Auth enforces a decision the domain made. One writer, one direction — and if the two ever disagree, `person.active` wins and the ban is re-applied. The alternative, letting the plugin own the fact, is exactly the coupling [ADR-0011](./0011-supabase-and-better-auth.md) chose Better Auth to avoid.
+So there is **one authority and no second state to keep in step**: `person.active`, read at three points.
 
-They are not two different states. `active = false` does not mean "off the Programme but still allowed to read" — that would be a third role, and [`product.md`](../product.md) says there are two.
+- `databaseHooks.user.create.before` — the invite gate. No active Person, no `user` row.
+- `databaseHooks.session.create.before` — the same lookup at sign-in, which is what keeps "no new session" true for a revoked Person who already has a `user` row.
+- `requirePerson()` — every request thereafter, including one they are already mid-session for.
+
+A revoked Person's existing session row survives until it expires. Nothing deletes it, and nothing needs to: every request re-reads `active` and is refused. **Revocation is one write**, so there is no half-failed state for the People screen to design for.
+
+`active = false` does not mean "off the Programme but still allowed to read" — that would be a third role, and [`product.md`](../product.md) says there are two.
 
 ## Consequences
 
 - One more screen in the internal tool, Staff-only for writes. Reads follow [ADR-0004](./0004-delivery-data-is-open-internally-money-is-not.md)'s open-delivery rule: anyone signed in can see the roster, because a Group is assembled from it.
 - A migration to make `person_email_key` partial.
 - The founding-Staff seed is a real artefact someone has to write and keep out of the reference-data seed, which is about fixed facts and re-run freely.
-- Better Auth's admin plugin joins the stack. Revocation is now two writes in one operation instead of one.
-- **It brings four columns, not one.** The plugin's schema adds `role`, `banned`, `banReason` and `banExpires` to `user`, plus `impersonatedBy` to `session` — verified against the 1.6.27 bundle, not inferred. Only `banned` is written by the domain, and none is read by it; the discipline above ("`person.active` is authoritative") extends to all four.
-
-  **`role` is the one to watch.** The plugin registers its own `databaseHooks.user.create.before` writing `role: defaultRole ?? "user"` on every signup, so a column named `role` would otherwise sit on the identity table beside write-once `person.role` meaning something entirely different. It is **renamed** through the plugin's schema mapping so the collision cannot be read as intentional.
-
-- **Revocation is immediate only while `session.cookieCache` stays disabled**, which is the default. `banUser` deletes session rows and the ban is enforced on `session.create.before`, but nothing checks `banned` per request — a cached session cookie is served without a database read for up to its `maxAge`. Enabling cookie caching for performance would silently reopen the hole this section exists to close, and the performance case is weak anyway: every request already resolves the Person in order to read `role`.
+- **No plugin joins the stack.** Revocation is one write. _(Amended: this read "Better Auth's admin plugin joins the stack" and budgeted for the four columns it adds — `role`, `banned`, `banReason`, `banExpires` on `user` and `impersonatedBy` on `session`. None of them exists, so neither does the `role` collision beside write-once `person.role` that the plugin's schema mapping was going to rename away.)_
+- **A second `databaseHooks` entry instead**, on `session.create.before`, making the same lookup as the invite hook. Two enforcement points in the library, one authority in our own table.
+- **Revocation is immediate by construction, and `session.cookieCache` is no longer what makes it so.** _(Amended.)_ `person` is our table, not Better Auth's, so the `active` lookup on every request is a fresh read whatever the library's session cache does. Cookie caching stays off — it is the default and the performance case for turning it on is weak, since every request already resolves the Person in order to read `role` — but nothing about revocation now depends on that.

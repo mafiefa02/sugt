@@ -5,13 +5,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./migrations": "./src/migrations.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "psql \"$DIRECT_URL\" -v ON_ERROR_STOP=1 -f seed/reference-data.sql"
+    "db:seed": "psql \"$DIRECT_URL\" -v ON_ERROR_STOP=1 -f seed/reference-data.sql",
+    "db:seed:people": "psql \"$DIRECT_URL\" -v ON_ERROR_STOP=1 -f seed/founding-staff.sql"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
