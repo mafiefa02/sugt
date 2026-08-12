@@ -12,8 +12,13 @@ node_modules
 !.yarn/releases
 !.yarn/versions
 
-# testing
-coverage
+# testing — anchored, unlike the rest. Unanchored, `coverage` matches a directory of
+# that name at any depth, and the internal tool has a surface called Coverage: it
+# silently swallowed `apps/internal/src/app/(app)/coverage/`, which typechecks locally
+# and fails from a clean clone. Name the three places a runner would write it instead.
+/coverage
+apps/*/coverage
+packages/*/coverage
 
 # next.js
 .next/
