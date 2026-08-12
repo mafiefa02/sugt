@@ -8,7 +8,7 @@ A pnpm workspace with two apps and three shared packages:
 
 - `apps/public` (`@sugt/public`) — the public site, port 3000
 - `apps/internal` (`@sugt/internal`) — the internal tool, port 3001
-- `packages/db` (`@sugt/db`) — the Drizzle schema, migrations and connection
+- `packages/db` (`@sugt/db`) — the Drizzle schema, migrations, connection and queries
 - `packages/domain` (`@sugt/domain`) — vocabulary shared by both
 - `packages/ui` (`@sugt/ui`) — shadcn primitives and the design tokens, shared by both
 

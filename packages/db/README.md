@@ -1,10 +1,23 @@
 # `@sugt/db`
 
-The schema, the migrations and the connection. Supabase Postgres; both apps deploy to
-Vercel.
+The schema, the migrations, the connection and the queries. Supabase Postgres; both apps
+deploy to Vercel.
 
 `docs/data-model.md` is the document this package is a translation of — read it for why
 anything is shaped the way it is. This file covers only how to run it.
+
+## The queries are a subpath of their own
+
+`@sugt/db/queries`, beside `@sugt/db/schema`. **Read `src/queries/index.ts` before adding
+one** — it carries the five conventions every query follows, and they are the settled
+answer to [#12](https://github.com/mafiefa02/sugt/issues/12) rather than one module's
+house style. In short: every exported function takes a caller and takes it first, the
+caller is three named types rather than one with optional fields, each function returns
+what one screen renders in one round trip, money opens with the Staff-only choke point,
+and a write owns its own transaction.
+
+**This package resolves nobody.** It takes a `Person` it is given; `@sugt/internal`
+produces one, because resolving is React-aware and this package is not.
 
 ## `@sugt/public` must never declare this package
 
