@@ -63,23 +63,27 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<SignInRe
   };
 }
 
-/** Every `Set-Cookie` on a response, folded into the `Cookie` header a browser would send back. */
+/** Every `Set-Cookie` on a response, as the `name=value` pairs a browser would send back. */
+function issuedCookies(response: Response): string[] {
+  return response.headers.getSetCookie().map((cookie) => cookie.split(";", 1)[0]!);
+}
+
+/** Those pairs folded into one `Cookie` header. */
 export function cookieHeader(response: Response): string {
-  return response.headers
-    .getSetCookie()
-    .map((cookie) => cookie.split(";", 1)[0])
-    .join("; ");
+  return issuedCookies(response).join("; ");
 }
 
 /**
  * The session cookie alone, as a `Cookie` header. Seam 2 is fed by seam 1: sign in
  * through the handler, take what it issued, hand it to the resolver — so the
  * resolver's inputs are always real ones.
+ *
+ * The empty-value filter matters: signing out and being refused both clear the cookie
+ * by setting it to `""`, and a cleared cookie is not an issued one.
  */
 export function sessionCookie(response: Response): string | null {
-  const issued = response.headers
-    .getSetCookie()
-    .map((cookie) => cookie.split(";", 1)[0])
-    .filter((cookie) => cookie.includes("session_token") && !cookie.endsWith("="));
-  return issued.length > 0 ? issued.join("; ") : null;
+  const session = issuedCookies(response).filter(
+    (cookie) => cookie.includes("session_token") && !cookie.endsWith("="),
+  );
+  return session.length > 0 ? session.join("; ") : null;
 }

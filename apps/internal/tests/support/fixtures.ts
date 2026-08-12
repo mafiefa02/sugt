@@ -1,10 +1,11 @@
 import { db, schema } from "@sugt/db";
-import { sql } from "drizzle-orm";
+import type { Role } from "@sugt/domain";
+import { eq, sql } from "drizzle-orm";
 
 export type PersonFixture = {
   fullName: string;
   email: string;
-  role: "Staff" | "Teaching Team";
+  role: Role;
   active?: boolean;
 };
 
@@ -24,10 +25,7 @@ export async function addPerson(fixture: PersonFixture) {
 
 /** Revoke a Person. One write — this is the whole revocation mechanism. */
 export async function revokePerson(id: string) {
-  await db
-    .update(schema.person)
-    .set({ active: false })
-    .where(sql`${schema.person.id} = ${id}`);
+  await db.update(schema.person).set({ active: false }).where(eq(schema.person.id, id));
 }
 
 /** Every `better_auth.user` row. The invite gate's job is to leave this empty. */

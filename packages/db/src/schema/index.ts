@@ -17,6 +17,7 @@
  */
 export * from "./reference";
 export * from "./people";
+export * from "./auth";
 export * from "./travel";
 export * from "./delivery";
 export * from "./evaluations";

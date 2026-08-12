@@ -1,3 +1,4 @@
+import { STAFF_EMAIL_DOMAIN } from "-/lib/invite-list";
 import { getPerson } from "-/lib/person";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -37,7 +38,7 @@ export default async function SignInPage({
         <div className="flex flex-col gap-2">
           <h1 className="font-heading text-2xl font-semibold">Masuk</h1>
           <p className="text-sm text-muted-foreground">
-            Alat internal Program Sekolah Unggul Garuda Transformatif.
+            Alat internal Program Sekolah Unggul Garuda Transformasi.
           </p>
         </div>
 
@@ -54,7 +55,7 @@ export default async function SignInPage({
 
         <p className="text-xs text-muted-foreground">
           Gunakan akun Google yang terdaftar. Tim DITSAMA memakai akun
-          {" @ditsama.itb.ac.id"}; Tim Pengajar memakai akun Google apa pun.
+          {` ${STAFF_EMAIL_DOMAIN}`}; Tim Pengajar memakai akun Google apa pun.
         </p>
       </div>
     </main>

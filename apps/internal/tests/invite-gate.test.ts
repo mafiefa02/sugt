@@ -120,42 +120,47 @@ describe("the invite gate", () => {
     expect(result.sessionCookie).toBeNull();
     expect(result.location.pathname).toBe(SIGN_IN_PATH);
     await expect(authUsers()).resolves.toHaveLength(0);
+    await expect(authSessions()).resolves.toHaveLength(0);
   });
 
   it("matches the active Person, not the revoked one, when an email was re-added", async () => {
+    /**
+     * A wrong role is corrected by revoking the row and adding a new Person, so one
+     * address legitimately appears twice. `person_email_key` is partial (`where
+     * active`) for exactly this, and all three enforcement points look a Person up by
+     * `lower(email) = $1 and active`.
+     *
+     * **The two rows are arranged so that only one of them can succeed.** The revoked
+     * row is the wrong one — `Staff` against a personal Gmail — so matching it would
+     * be refused by the domain backstop. The active row is `Teaching Team`, which any
+     * Google address satisfies. Sign-in therefore succeeds only if the lookup skipped
+     * the revoked row, and `person_id` names which row it landed on.
+     */
     await addPerson({
       fullName: "Salah Peran",
       email: "salah.peran@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
       active: false,
     });
     const corrected = await addPerson({
       fullName: "Salah Peran",
       email: "Salah.Peran@gmail.com",
-      role: "Staff",
+      role: "Teaching Team",
       active: true,
     });
 
-    /**
-     * A wrong role is corrected by revoking the row and adding a new Person, so one
-     * address legitimately appears twice. `person_email_key` is partial (`where
-     * active`) for exactly this, and the hooks look a Person up by
-     * `lower(email) = $1 and active`.
-     */
     const result = await signInWithGoogle({
       googleId: "google-salah",
       email: "salah.peran@gmail.com",
       name: "Salah Peran",
     });
 
-    expect(result.sessionCookie).toBeNull();
-    // Refused, because the *active* row now says Staff against a non-DITSAMA address.
-    // What this asserts is which of the two rows was matched.
-    expect(result.location.pathname).toBe(SIGN_IN_PATH);
+    expect(result.sessionCookie).not.toBeNull();
+    expect(result.location.pathname).toBe("/");
 
-    const [staff] = await authUsers();
-    expect(staff).toBeUndefined();
-    expect(corrected.role).toBe("Staff");
+    const users = await authUsers();
+    expect(users).toHaveLength(1);
+    expect(users[0]!.personId).toBe(corrected.id);
   });
 
   it("refuses a revoked Person who already has a user row, and mints no new session", async () => {

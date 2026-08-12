@@ -1,5 +1,6 @@
 import { resolvePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
+import type { Role } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,7 +21,7 @@ describe("resolving who is asking", () => {
     vi.unstubAllGlobals();
   });
 
-  async function signIn(role: "Staff" | "Teaching Team", email: string) {
+  async function signIn(role: Role, email: string) {
     const person = await addPerson({ fullName: "Yang Masuk", email, role });
     const result = await signInWithGoogle({
       googleId: `google-${email}`,

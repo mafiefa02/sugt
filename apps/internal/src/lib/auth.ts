@@ -22,7 +22,7 @@ import { findActivePersonByEmail, satisfiesStaffDomainRule } from "./invite-list
  * `/^['A-Za-z0-9_-]+$/` and renders `UNKNOWN` on anything else. The Indonesian
  * sentence contains two full stops. The copy stays in the app.
  */
-export const REJECTED = "NOT_ON_INVITE_LIST";
+const REJECTED = "NOT_ON_INVITE_LIST";
 
 /**
  * **`code` is load-bearing and `message` is not interchangeable with it**, because the

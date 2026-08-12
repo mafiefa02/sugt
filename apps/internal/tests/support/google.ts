@@ -50,8 +50,8 @@ export function stubGoogle(profile: GoogleProfile) {
 
 function mintIdToken(profile: GoogleProfile): string {
   const issuedAt = Math.floor(Date.now() / 1000);
-  const header = segment({ alg: "RS256", kid: "stub", typ: "JWT" });
-  const payload = segment({
+  const header = base64UrlSegment({ alg: "RS256", kid: "stub", typ: "JWT" });
+  const payload = base64UrlSegment({
     iss: "https://accounts.google.com",
     aud: process.env.GOOGLE_CLIENT_ID,
     sub: profile.googleId,
@@ -65,6 +65,6 @@ function mintIdToken(profile: GoogleProfile): string {
   return `${header}.${payload}.c3R1Yi1zaWduYXR1cmU`;
 }
 
-function segment(value: object): string {
+function base64UrlSegment(value: object): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }

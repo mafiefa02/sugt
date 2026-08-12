@@ -13,6 +13,14 @@ import { and, eq, sql } from "drizzle-orm";
  * This module holds the lookup rather than `auth.ts` because **three** places need
  * it and none of them may disagree: the invite hook at user creation, the revocation
  * hook at session creation, and `requirePerson()` on every request.
+ *
+ * **Why a query lives in the app rather than in `@sugt/db`.** AGENTS.md rule 3 sends
+ * stored data to `@sugt/db`, and this is the one deliberate exception. `@sugt/db`'s
+ * query layer takes a `Person` it is given and never resolves one — resolving is what
+ * produces the caller its queries are checked against, so it cannot itself be one of
+ * them. The two Better Auth hooks are the other reason: they run inside the library's
+ * request handling, before anything has a `Person` to be given. When the query layer
+ * lands it will import this `Person`, not redefine it.
  */
 
 /** Who a request resolves to. `role` is write-once, so nothing re-reads it within a session. */
