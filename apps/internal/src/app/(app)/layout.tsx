@@ -1,9 +1,12 @@
+import { AppShell } from "-/components/app-shell";
 import { SignOutButton } from "-/components/sign-out-button";
 import { getPerson } from "-/lib/person";
 import { redirect } from "next/navigation";
 
 /**
- * The signed-in tree. Everything under this layout can assume a Person.
+ * The signed-in tree. Everything under this layout can assume a Person, and it is
+ * where the shell goes — `/masuk` stays outside it, because a sign-in screen with a
+ * sidebar offers navigation to someone who cannot navigate yet.
  *
  * **This is the cheap outer gate, and it is not the last word.** There are three
  * checks and only the third cannot be bypassed:
@@ -22,6 +25,10 @@ import { redirect } from "next/navigation";
  * not on an error page. Everything **inside** this tree uses `requirePerson()`, where
  * a null can only come from a bug. Both share one memoised read, so the page below
  * costs no second round trip.
+ *
+ * `role` and `personName` were a placeholder literal until this landed — the shell was
+ * built against issue #14 while knowing-who-is-asking was still issue #24. They are now
+ * the session's.
  */
 export default async function SignedInLayout({
   children,
@@ -30,17 +37,12 @@ export default async function SignedInLayout({
   if (!person) redirect("/masuk");
 
   return (
-    <>
-      <header className="flex items-center justify-between border-b border-border px-6 py-3">
-        <span className="text-sm font-medium">SUGT</span>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            {person.fullName} · {person.role}
-          </span>
-          <SignOutButton />
-        </div>
-      </header>
+    <AppShell
+      role={person.role}
+      personName={person.fullName}
+      footerAction={<SignOutButton />}
+    >
       {children}
-    </>
+    </AppShell>
   );
 }

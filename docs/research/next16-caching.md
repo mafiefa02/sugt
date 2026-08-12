@@ -29,9 +29,9 @@ and [`product.md`](../product.md):
 
 **nextjs.org does not serve versioned documentation.** Every page fetched for this research
 carries `version: 16.3.0` in its frontmatter, one minor ahead of what is installed. The delta is
-demonstrably behavioural — the 16.3 ISR page states outright: *"The App Shell for unlisted params
+demonstrably behavioural — the 16.3 ISR page states outright: _"The App Shell for unlisted params
 is served from Next.js 16.3. Earlier versions wait for a full server render before sending the
-response."*
+response."_
 
 Fortunately the npm package ships its own documentation, generated for the exact installed
 version, at `apps/public/node_modules/next/dist/docs/`. That directory is the primary source of
@@ -39,26 +39,26 @@ record for this document. Where a claim comes from the website instead, it is la
 
 ### How claims are labelled
 
-| Label | Meaning |
-| --- | --- |
-| **[16.2.12 docs]** | Verified in `node_modules/next/dist/docs/…` — the docs shipped with the installed version |
-| **[16.2.12 source]** | Verified by reading `node_modules/next/dist/…` JS or `.d.ts` |
-| **[16.3 web]** | From nextjs.org, which documents 16.3.0. Believed to hold for 16.2.12 but **not** version-verified |
-| **[inferred]** | Not stated anywhere. Reasoning from documented parts, flagged as such |
+| Label                | Meaning                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| **[16.2.12 docs]**   | Verified in `node_modules/next/dist/docs/…` — the docs shipped with the installed version          |
+| **[16.2.12 source]** | Verified by reading `node_modules/next/dist/…` JS or `.d.ts`                                       |
+| **[16.3 web]**       | From nextjs.org, which documents 16.3.0. Believed to hold for 16.2.12 but **not** version-verified |
+| **[inferred]**       | Not stated anywhere. Reasoning from documented parts, flagged as such                              |
 
 ---
 
 ## The fork everything hangs on: `cacheComponents`
 
 Next.js 16 ships **two caching models**, and which one you are in is decided by a single config
-flag. This is not a detail — the answer to rule 2 is *different in each*.
+flag. This is not a detail — the answer to rule 2 is _different in each_.
 
 `apps/public/next.config.ts` currently sets `reactCompiler`, `typedRoutes`,
 `experimental.useTypeScriptCli` and `experimental.typedEnv`. **It does not set
 `cacheComponents`.** The default is `false` **[16.2.12 source]**
 (`dist/server/config-shared.d.ts` → `cacheComponents: false` in the resolved-config defaults).
 
-So today the app is in the *previous* model, and `use cache` is unavailable. This is not a
+So today the app is in the _previous_ model, and `use cache` is unavailable. This is not a
 soft-fail. The installed source hard-throws:
 
 ```js
@@ -88,8 +88,8 @@ It also makes Partial Prerendering the default App Router behaviour **[16.2.12 d
 (`dist/docs/01-app/03-api-reference/05-config/01-next-config-js/cacheComponents.md`;
 <https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents>).
 
-One thing does survive the switch: *"Your existing `fetch` and `unstable_cache` caching keeps
-working as a separate layer"* **[16.2.12 docs]**
+One thing does survive the switch: _"Your existing `fetch` and `unstable_cache` caching keeps
+working as a separate layer"_ **[16.2.12 docs]**
 (`migrating-to-cache-components.md:19`). So the fetch Data Cache is available in **both** worlds;
 route-segment `revalidate` and `use cache` are mutually exclusive.
 
@@ -101,7 +101,7 @@ route-segment `revalidate` and `use cache` are mutually exclusive.
 
 **The primitive with documented stale-on-error behaviour is ISR — route-segment `revalidate`
 (the Full Route Cache) together with the `fetch` Data Cache and `unstable_cache`. That is the
-*previous*, non-Cache-Components model.** The sentence that carries rule 2 is:
+_previous_, non-Cache-Components model.** The sentence that carries rule 2 is:
 
 > ### Handling uncaught exceptions
 >
@@ -120,7 +120,7 @@ Pages-Router prose, one in the App Router sentence above).
 
 ### And the asymmetry that matters
 
-That guide opens with a scope note: *"This guide covers ISR without Cache Components."*
+That guide opens with a scope note: _"This guide covers ISR without Cache Components."_
 **[16.3 web]** (the 16.2.12 copy predates the split banner but the content is the pre-Cache-Components model).
 
 **There is no equivalent guarantee documented for `use cache`.** Specifically:
@@ -131,44 +131,44 @@ That guide opens with a scope note: *"This guide covers ISR without Cache Compon
 - The 16.3 version of that guide has **no "Handling uncaught exceptions" section**, and no
   equivalent sentence. **[16.3 web]**
   (<https://nextjs.org/docs/app/guides/incremental-static-regeneration-cache-components>)
-- `getting-started/caching`, the Cache Components caching guide, discusses error *boundaries*
+- `getting-started/caching`, the Cache Components caching guide, discusses error _boundaries_
   (`catchError`, `error.js`) for containing a failed render, but says nothing about what the
   server cache does when a background refresh throws. **[16.3 web]**
   (<https://nextjs.org/docs/app/getting-started/caching>)
-- `how-revalidation-works` has a **Graceful Degradation** section covering *cache write failure*
-  and *cache read failure* — but not "the regeneration render itself threw". **[16.3 web]**
+- `how-revalidation-works` has a **Graceful Degradation** section covering _cache write failure_
+  and _cache read failure_ — but not "the regeneration render itself threw". **[16.3 web]**
   (<https://nextjs.org/docs/app/guides/how-revalidation-works#graceful-degradation>)
 
 So: **stale-on-error is documented for one caching model and undocumented for the other, and the
 two are separated by a config flag `apps/public` does not currently set.** That is the single
 most important finding in this document.
 
-It is *plausible* the same behaviour holds for `use cache` — time-based revalidation is described
-as "stale-while-revalidate", and *"The stale content continues to be served until the fresh
-content is ready"* **[16.3 web]** (`how-revalidation-works`). But "until the fresh content is
-ready" is a statement about *timing*, not about *failure*, and it does not say what happens if
+It is _plausible_ the same behaviour holds for `use cache` — time-based revalidation is described
+as "stale-while-revalidate", and _"The stale content continues to be served until the fresh
+content is ready"_ **[16.3 web]** (`how-revalidation-works`). But "until the fresh content is
+ready" is a statement about _timing_, not about _failure_, and it does not say what happens if
 fresh content never becomes ready because the render threw. Treating it as a guarantee is
 **[inferred]**, and rule 2 is a hard commitment. If the strategy ticket picks `use cache`, this
 needs an empirical test, not a citation.
 
 ### The full inventory
 
-| Primitive | Available in 16.2.12? | Failure behaviour on a bad revalidation |
-| --- | --- | --- |
-| Route segment `export const revalidate` (ISR / Full Route Cache) | Yes — **only without `cacheComponents`** | **Serves last good.** Documented **[16.2.12 docs]** |
-| `fetch(url, { next: { revalidate, tags } })` (Data Cache) | Yes — **in both models, source-verified** | Only `200` responses are stored; the ISR sentence covers the route **[16.2.12 docs]** / **[16.3 web]** |
-| `unstable_cache(fn, keys, { revalidate, tags })` | Yes — **in both models, source-verified**, but marked replaced | Covered by the same ISR sentence. See deprecation note below **[16.2.12 docs]** |
-| `use cache` directive | **No** — requires `cacheComponents: true`, currently unset | Stale-on-error **not documented** **[16.2.12 source + docs]** |
-| `cacheLife(profile)` | **No** — throws `E887` without `cacheComponents` | n/a **[16.2.12 source]** |
-| `cacheTag(tag)` | **No** — same gate | n/a **[16.2.12 docs]** |
-| `revalidateTag(tag, profile)` | Yes | Invalidation primitive, not a fetch. See §3 |
-| `revalidatePath(path, type?)` | Yes | Invalidation primitive. See §3 |
-| `updateTag(tag)` | Yes, **but Server-Action-only** — see §3 | n/a |
+| Primitive                                                        | Available in 16.2.12?                                          | Failure behaviour on a bad revalidation                                                                |
+| ---------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Route segment `export const revalidate` (ISR / Full Route Cache) | Yes — **only without `cacheComponents`**                       | **Serves last good.** Documented **[16.2.12 docs]**                                                    |
+| `fetch(url, { next: { revalidate, tags } })` (Data Cache)        | Yes — **in both models, source-verified**                      | Only `200` responses are stored; the ISR sentence covers the route **[16.2.12 docs]** / **[16.3 web]** |
+| `unstable_cache(fn, keys, { revalidate, tags })`                 | Yes — **in both models, source-verified**, but marked replaced | Covered by the same ISR sentence. See deprecation note below **[16.2.12 docs]**                        |
+| `use cache` directive                                            | **No** — requires `cacheComponents: true`, currently unset     | Stale-on-error **not documented** **[16.2.12 source + docs]**                                          |
+| `cacheLife(profile)`                                             | **No** — throws `E887` without `cacheComponents`               | n/a **[16.2.12 source]**                                                                               |
+| `cacheTag(tag)`                                                  | **No** — same gate                                             | n/a **[16.2.12 docs]**                                                                                 |
+| `revalidateTag(tag, profile)`                                    | Yes                                                            | Invalidation primitive, not a fetch. See §3                                                            |
+| `revalidatePath(path, type?)`                                    | Yes                                                            | Invalidation primitive. See §3                                                                         |
+| `updateTag(tag)`                                                 | Yes, **but Server-Action-only** — see §3                       | n/a                                                                                                    |
 
 ### The two models are not mutually exclusive — a hybrid is available
 
-The migration guide claims *"Your existing `fetch` and `unstable_cache` caching keeps working as a
-separate layer"* **[16.2.12 docs]** (`migrating-to-cache-components.md:19`). That prose is
+The migration guide claims _"Your existing `fetch` and `unstable_cache` caching keeps working as a
+separate layer"_ **[16.2.12 docs]** (`migrating-to-cache-components.md:19`). That prose is
 confirmed in the installed source **[16.2.12 source]**:
 
 - `dist/server/web/spec-extension/unstable-cache.js` contains **no** `__NEXT_USE_CACHE` or
@@ -178,12 +178,12 @@ confirmed in the installed source **[16.2.12 source]**:
   `fetch` — contains **zero** occurrences of `__NEXT_USE_CACHE`.
 
 **So `use cache` and the fetch Data Cache can coexist in one app.** This matters for the strategy
-ticket: the choice is *not* binary. A hybrid is on the table — `use cache` + `cacheLife` +
+ticket: the choice is _not_ binary. A hybrid is on the table — `use cache` + `cacheLife` +
 `cacheTag` for clean per-payload lifetime expression, alongside a `fetch`-level Data Cache entry
 for whichever payload most needs the documented stale-on-error behaviour.
 
 What a hybrid does **not** recover is route-segment `revalidate`, which `cacheComponents`
-genuinely does replace. And note the documented stale-on-error sentence lives in the *ISR* guide
+genuinely does replace. And note the documented stale-on-error sentence lives in the _ISR_ guide
 and is phrased about revalidating **data**, not specifically about the route cache — whether it
 extends to a Data Cache entry inside a Cache Components app is **[inferred]**, not documented.
 
@@ -200,7 +200,7 @@ not have.
 
 ### "Indefinitely" is a real constraint, and most profiles fail it
 
-Rule 2 says the last good payload is served *indefinitely*. Under `cacheLife` that maps to
+Rule 2 says the last good payload is served _indefinitely_. Under `cacheLife` that maps to
 `expire`, and the preset table in the installed source is:
 
 ```js
@@ -219,8 +219,8 @@ cacheLife: {
 **[16.2.12 source]** — this matches the published table exactly **[16.3 web]**
 (<https://nextjs.org/docs/app/api-reference/functions/cacheLife>).
 
-`expire` means: *"After this period with no traffic, the server regenerates content
-**synchronously** on the next request"* **[16.3 web]**. A synchronous regeneration against a
+`expire` means: _"After this period with no traffic, the server regenerates content
+**synchronously** on the next request"_ **[16.3 web]**. A synchronous regeneration against a
 down internal app is a blocking failure, not a stale serve.
 
 **Only `default` never expires by time** — its `expire` is `INFINITE_CACHE`. Every other preset,
@@ -232,10 +232,10 @@ top-level `expireTime`, defaults to the same `31536000` **[16.2.12 source]**
 when a partial `default` profile is declared **[16.2.12 source]** (`dist/server/config.js:927`).
 One year is simply Next's general "effectively forever" convention.
 
-The point that survives is narrower but still real: **rule 2 says *indefinitely*, and only
+The point that survives is narrower but still real: **rule 2 says _indefinitely_, and only
 `default` or a custom profile with `expire: Infinity` delivers that literally.** `cacheLife`
-rejects `expire: false` explicitly and tells you which value to use: *"Pass `Infinity` instead of
-`false` if you want to cache on the server forever without checking with the origin."* — error
+rejects `expire: false` explicitly and tells you which value to use: _"Pass `Infinity` instead of
+`false` if you want to cache on the server forever without checking with the origin."_ — error
 `E658` **[16.2.12 source]** (`dist/server/use-cache/cache-life.js`). Whether one year is close
 enough to indefinite for this project is a strategy decision, not a research finding.
 
@@ -268,7 +268,7 @@ default rather than by configuration.** But only given the next paragraph.
 ### The application half: `fetch` does not throw on a bad response — you must make it
 
 This is the gap the ADR's wording hides. `fetch` follows the Web standard: it rejects on a
-*network* error (connection refused, DNS failure, TLS error), but a `500`, `502` or `404`
+_network_ error (connection refused, DNS failure, TLS error), but a `500`, `502` or `404`
 **resolves normally** with `res.ok === false`. Nothing in Next.js changes that; the `fetch`
 reference documents only the caching extensions **[16.2.12 docs]**
 (<https://nextjs.org/docs/app/api-reference/functions/fetch>).
@@ -276,7 +276,7 @@ reference documents only the caching extensions **[16.2.12 docs]**
 Two concrete consequences for `@sugt/public`:
 
 - **The internal app returning `500` will not fail the build on its own.** `await res.json()`
-  on an HTML error page throws a `SyntaxError`, which *would* fail the build — but that is an
+  on an HTML error page throws a `SyntaxError`, which _would_ fail the build — but that is an
   accident of the error body's content type, not a guarantee. A JSON-shaped error body
   (`{"error":"…"}`) parses fine and flows into the page. **[inferred]**
 - **The recommended pattern in Next's own docs does the wrong thing here.** The Cache Components
@@ -284,9 +284,9 @@ Two concrete consequences for `@sugt/public`:
 
   ```ts
   export async function getCategory(slug: string) {
-    const res = await fetch(`${API}/categories/${slug}`)
-    if (!res.ok) return null       // ← swallows the failure
-    return res.json()
+    const res = await fetch(`${API}/categories/${slug}`);
+    if (!res.ok) return null; // ← swallows the failure
+    return res.json();
   }
   ```
 
@@ -296,10 +296,10 @@ Two concrete consequences for `@sugt/public`:
 
 **Rule 1 is therefore an application obligation, not a framework behaviour.** The fetch wrapper
 must `throw` on `!res.ok`, on a schema mismatch, and on a non-JSON content type. The framework
-guarantee is only that *a throw during prerender fails the build*.
+guarantee is only that _a throw during prerender fails the build_.
 
 One related caveat worth carrying, even though it does not apply directly (the fetches go to a
-*different* app, not to `@sugt/public`'s own routes):
+_different_ app, not to `@sugt/public`'s own routes):
 
 > "For Server Components prerendered at build time, using Route Handlers will fail the build
 > step. This is because, while building there is no server listening for these requests."
@@ -313,7 +313,7 @@ One related caveat worth carrying, even though it does not apply directly (the f
 ### Shape
 
 A `GET` or `POST` Route Handler at, say, `app/api/revalidate/route.ts`, calling `revalidateTag`.
-`revalidateTag` *"can be called in Server Functions and Route Handlers"* **[16.2.12 docs]**
+`revalidateTag` _"can be called in Server Functions and Route Handlers"_ **[16.2.12 docs]**
 (`dist/docs/01-app/03-api-reference/04-functions/revalidateTag.md`;
 <https://nextjs.org/docs/app/api-reference/functions/revalidateTag>).
 
@@ -325,16 +325,16 @@ type CacheLifeConfig = { expire?: number };
 export declare function revalidateTag(tag: string, profile: string | CacheLifeConfig): undefined;
 export declare function updateTag(tag: string): undefined;
 export declare function refresh(): void;
-export declare function revalidatePath(originalPath: string, type?: 'layout' | 'page'): undefined;
+export declare function revalidatePath(originalPath: string, type?: "layout" | "page"): undefined;
 ```
 
 Note `profile` has no `?`. The one-argument form is a **type error** in 16.2.12, matching the
-docs: *"The single-argument form `revalidateTag(tag)` is deprecated. It currently works if
-TypeScript errors are suppressed, but this behavior may be removed in a future version."*
+docs: _"The single-argument form `revalidateTag(tag)` is deprecated. It currently works if
+TypeScript errors are suppressed, but this behavior may be removed in a future version."_
 **[16.2.12 docs]**
 
-**`updateTag` is unusable from this route.** Its own JSDoc in the installed source says: *"This
-can only be called from within a Server Action to enable read-your-own-writes semantics."*
+**`updateTag` is unusable from this route.** Its own JSDoc in the installed source says: _"This
+can only be called from within a Server Action to enable read-your-own-writes semantics."_
 **[16.2.12 source]**. The internal app calls `@sugt/public` over HTTP, which lands in a Route
 Handler, not a Server Action. So the choice is `revalidateTag` or `revalidatePath`.
 
@@ -343,14 +343,14 @@ Handler, not a Server Action. So the choice is `revalidateTag` or `revalidatePat
 Both tag- and path-level are available, and tags are the finer instrument:
 
 - **Tags.** `cacheTag('stories')` inside a `use cache` scope, or `fetch(url, { next: { tags:
-  ['stories'] } })` in the previous model. Limits: max tag length **256 characters**, max
+['stories'] } })` in the previous model. Limits: max tag length **256 characters**, max
   **128** tags per `fetch` call **[16.3 web]**
   (<https://nextjs.org/docs/app/api-reference/functions/fetch>); a single `cacheTag()` call
-  accepts up to 128 tags of 256 characters, *"Tags longer than 256 characters are skipped, and
-  any tags past the 128th in one call are dropped. Both cases log a console warning."*
+  accepts up to 128 tags of 256 characters, _"Tags longer than 256 characters are skipped, and
+  any tags past the 128th in one call are dropped. Both cases log a console warning."_
   **[16.2.12 docs]** (`dist/docs/01-app/03-api-reference/04-functions/cacheTag.md:101`).
 - **Paths.** `revalidatePath('/stories')` works through the same tag system using auto-generated
-  "soft tags" prefixed `_N_T_`, invalidating the leaf route tag *and its ancestor layout tags*
+  "soft tags" prefixed `_N_T_`, invalidating the leaf route tag _and its ancestor layout tags_
   **[16.3 web]** (<https://nextjs.org/docs/app/guides/how-revalidation-works#soft-tags>). Because it
   sweeps ancestors, it is the blunter tool — `revalidatePath('/')` on a Story publish would
   invalidate the scope figures too.
@@ -360,7 +360,7 @@ asks for.
 
 ### Latency — and a direct conflict with the ADR
 
-The ADR promises a takedown is *"live in seconds instead of waiting for the next refresh."*
+The ADR promises a takedown is _"live in seconds instead of waiting for the next refresh."_
 The recommended call does not deliver that:
 
 > **With `profile="max"` (recommended)**: The tag entry is marked as stale, and the next time a
@@ -384,15 +384,15 @@ the immediate-expiry form:
 **[16.2.12 docs]** (`revalidateTag.md`) — and `CacheLifeConfig = { expire?: number }` in the
 installed types confirms the object form is accepted **[16.2.12 source]**.
 
-But `{ expire: 0 }` means *"the next request to that resource will be a blocking
-revalidate/cache miss"* **[16.2.12 docs]**. **A blocking revalidate against a down internal app
+But `{ expire: 0 }` means _"the next request to that resource will be a blocking
+revalidate/cache miss"_ **[16.2.12 docs]**. **A blocking revalidate against a down internal app
 is precisely the failure rule 2 exists to prevent.**
 
 > **This is the central tension for the strategy ticket.** Stale-on-error and
 > immediate-takedown are the same knob pulled in opposite directions. `profile="max"` protects
 > rule 2 and delays takedowns by one visit; `{ expire: 0 }` honours the takedown promise and
 > opens a window where a failed refetch has no stale entry to fall back on. Note the asymmetry
-> in stakes: a takedown is a *correctness/consent* concern, a stale figure is a *freshness*
+> in stakes: a takedown is a _correctness/consent_ concern, a stale figure is a _freshness_
 > concern. They may deserve different answers per tag.
 
 ### Multi-instance caveat
@@ -402,8 +402,8 @@ is precisely the failure rule 2 exists to prevent.**
 
 **[16.3 web]** (<https://nextjs.org/docs/app/guides/incremental-static-regeneration#caveats>)
 
-Also: *"Proxy won't be executed for on-demand ISR requests… Ensure you are revalidating the exact
-path"* **[16.3 web]**, same section. If `@sugt/public` ever runs more than one instance, a
+Also: _"Proxy won't be executed for on-demand ISR requests… Ensure you are revalidating the exact
+path"_ **[16.3 web]**, same section. If `@sugt/public` ever runs more than one instance, a
 takedown reaches one of them unless a shared cache handler (`updateTags`/`refreshTags`) is
 configured **[16.3 web]** (<https://nextjs.org/docs/app/guides/how-revalidation-works#multi-instance-considerations>).
 
@@ -430,16 +430,16 @@ This maps onto the contract's three routes exactly:
 - delivery → accrues weekly → `weeks`-shaped, or on-demand
 - Stories → on write → long lifetime + `cacheTag('stories')`, invalidated by the route in §3
 
-One rule to respect: nesting matters. *"If you don't call `cacheLife` in the outer cache, it uses
+One rule to respect: nesting matters. _"If you don't call `cacheLife` in the outer cache, it uses
 the `default` profile… Inner caches with shorter lifetimes can reduce the outer cache's `default`
-lifetime."* **[16.3 web]**. And nesting a short-lived cache inside a `use cache` without an
+lifetime."_ **[16.3 web]**. And nesting a short-lived cache inside a `use cache` without an
 explicit `cacheLife` **fails the build during prerendering** **[16.3 web]**. Setting an explicit
 `cacheLife` in every scope avoids both.
 
 ### Under the previous model (fetch Data Cache + route `revalidate`) — data-level independent, route-level coupled
 
 The three `fetch` calls hold three independent Data Cache entries with independent `revalidate`
-values and independent tags. But the *page's* regeneration cadence is not independent:
+values and independent tags. But the _page's_ regeneration cadence is not independent:
 
 > "If you have multiple `fetch` requests in a prerendered route, and each has a different
 > `revalidate` frequency, **the lowest time will be used for ISR**. However, those revalidate
@@ -448,26 +448,26 @@ values and independent tags. But the *page's* regeneration cadence is not indepe
 **[16.3 web]** (<https://nextjs.org/docs/app/guides/incremental-static-regeneration#caveats>), and:
 
 > "The lowest `revalidate` across each layout and page of a single route will determine the
-> revalidation frequency of the *entire* route."
+> revalidation frequency of the _entire_ route."
 
 **[16.3 web]** (<https://nextjs.org/docs/app/guides/caching-without-cache-components#revalidation-frequency>)
 
 Read carefully, this may be **less bad than it sounds**, but the reasoning is an inference and is
 flagged as one because the strategy ticket will lean on it:
 
-- The *route* re-renders at the fastest cadence any payload needs (delivery's, weekly). This part
+- The _route_ re-renders at the fastest cadence any payload needs (delivery's, weekly). This part
   is **documented**, in both caveats quoted above.
 - A re-render **does not refetch** payloads whose Data Cache entries are still fresh — those
   frequencies "will still be respected by the cache". So scope figures would not be re-requested
   from the internal app on every delivery refresh, and the cost is extra renders rather than
   extra load on the endpoint. This is **[inferred]** from the second clause of the first caveat;
   no source states it directly.
-- If the Stories fetch throws, the render throws, and ISR serves the last good *page* — scope
+- If the Stories fetch throws, the render throws, and ISR serves the last good _page_ — scope
   figures included, stale but never zeros. The throw-fails-the-render half is **documented**;
   that ISR then serves the last good page is the §1 sentence, also **documented**.
 
-Taken together these suggest the ADR's stated fear — *"one broken query would take the homepage's
-scope figures with it"* — is **not** realised in this model. That conclusion is only as strong as
+Taken together these suggest the ADR's stated fear — _"one broken query would take the homepage's
+scope figures with it"_ — is **not** realised in this model. That conclusion is only as strong as
 the inference in the second bullet, so it is carried into the Verification debt list below rather
 than recorded here as settled.
 
@@ -479,8 +479,8 @@ contract's three-route split is sound and is not invalidated.**
 ## 5. The first deploy, when the internal app may be unreachable
 
 **Rule 1, taken literally, does make the first deploy fail — and that is the rule working, not a
-bug.** ADR-0008's first amendment already accepted this: *"Launch is now gated on the internal app
-existing, its database being seeded and the aggregates endpoint being built."*
+bug.** ADR-0008's first amendment already accepted this: _"Launch is now gated on the internal app
+existing, its database being seeded and the aggregates endpoint being built."_
 
 The mechanism: on the first build there is no cache, every payload is a cache miss, all three
 fetches run during prerendering. If the endpoint is unreachable, `fetch` rejects on the network
@@ -506,17 +506,17 @@ lever here but changes deploy semantics and is out of scope for this ticket.)
 There is no configuration that means "fail the build on a bad fetch, except when there is no
 good data yet". The options are all trade-offs:
 
-| Escape | What it costs |
-| --- | --- |
-| Wrap the fetch in `<Suspense>` and leave it uncached | The data is no longer prerendered, so it **cannot fail the build**. Rule 1 is abandoned for that payload |
-| A short `cacheLife` (`seconds`, or `expire` < 5 min) | Short-lived caches are *"excluded from prerenders, becoming a dynamic hole resolved at request time"* **[16.3 web]** — same effect: no prerender, no build failure |
-| `try/catch` returning a fallback | Renders zeros. Explicitly forbidden by ADR-0001 |
-| Deployment sequencing | Costs process, not correctness |
+| Escape                                               | What it costs                                                                                                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Wrap the fetch in `<Suspense>` and leave it uncached | The data is no longer prerendered, so it **cannot fail the build**. Rule 1 is abandoned for that payload                                                           |
+| A short `cacheLife` (`seconds`, or `expire` < 5 min) | Short-lived caches are _"excluded from prerenders, becoming a dynamic hole resolved at request time"_ **[16.3 web]** — same effect: no prerender, no build failure |
+| `try/catch` returning a fallback                     | Renders zeros. Explicitly forbidden by ADR-0001                                                                                                                    |
+| Deployment sequencing                                | Costs process, not correctness                                                                                                                                     |
 
 **The resolution is sequencing, not a framework feature: stand the internal app and its endpoint
 up first, verify the three routes respond, then deploy `@sugt/public`.** That is already what the
 first amendment committed to. Rule 1 and "the first deploy completes" are in genuine tension, and
-*which primitive is chosen decides which one wins* — anything that keeps a payload out of the
+_which primitive is chosen decides which one wins_ — anything that keeps a payload out of the
 prerender silently forfeits rule 1 for it.
 
 ### A crawler caveat that bears on the portfolio requirement
@@ -563,12 +563,12 @@ expose the programmatic API Next uses") matches the docs:
 
 Three caveats that could touch this work indirectly **[16.2.12 docs]** (same file, lines 63-66):
 
-- *"CLI type checking prints the native `tsc` diagnostics. It does not apply Next.js-specific
-  code frames or rewrite errors for routes, pages, layouts, or route handlers."* → a type error
+- _"CLI type checking prints the native `tsc` diagnostics. It does not apply Next.js-specific
+  code frames or rewrite errors for routes, pages, layouts, or route handlers."_ → a type error
   in the revalidation Route Handler will read as raw `tsc` output.
-- *"The CLI checks the complete project selected by your `tsconfig` file. This includes test
-  files and `.next/dev/types` when they are included by that configuration."*
-- *"`experimental.useTypeScriptCli` is experimental and its behavior may change."*
+- _"The CLI checks the complete project selected by your `tsconfig` file. This includes test
+  files and `.next/dev/types` when they are included by that configuration."_
+- _"`experimental.useTypeScriptCli` is experimental and its behavior may change."_
 
 ### The one genuine link, and it is already satisfied
 
@@ -587,8 +587,8 @@ custom profile added without re-running `typegen` would fail `tsc` under `useTyp
 because the CLI checks the project as `tsconfig` selects it and would not see the regenerated
 type. **[inferred]**
 
-Note also that `typescript.ignoreBuildErrors` *"skips the type-checking step, including the CLI
-checker"* **[16.2.12 docs]** — it must not be set, or rule 1's sibling guarantee (a broken build
+Note also that `typescript.ignoreBuildErrors` _"skips the type-checking step, including the CLI
+checker"_ **[16.2.12 docs]** — it must not be set, or rule 1's sibling guarantee (a broken build
 is visible) weakens.
 
 ---
@@ -601,8 +601,8 @@ What is settled:
    throw during prerender fails the build. **But `fetch` does not throw on `!res.ok`; the
    application must.** This is the single most important implementation obligation.
 2. **Rule 2 has a documented guarantee in exactly one model** — ISR / route-segment `revalidate`
-   + the fetch Data Cache: *"the last successfully generated data will continue to be served from
-   the cache"*. For `use cache` it is undocumented in both 16.2.12 and 16.3.
+   - the fetch Data Cache: _"the last successfully generated data will continue to be served from
+     the cache"_. For `use cache` it is undocumented in both 16.2.12 and 16.3.
 3. **`use cache`, `cacheLife` and `cacheTag` are unavailable as the app is configured today** —
    they need `cacheComponents: true`, which is unset, and enabling it removes route-segment
    `revalidate`.
@@ -662,15 +662,15 @@ outage while serving `200` to humans.**
 
 ## Environment observed on
 
-| | |
-| --- | --- |
-| Next.js | **16.2.12** (matches the catalog pin; verified in the experiment's own `node_modules`) |
-| React / React DOM | **19.2.4** / **19.2.4** |
-| Node.js | **v24.11.1** |
-| pnpm | 11.20.0 |
-| OS | **macOS 27.0** (build 26A5388g), arm64 (Apple Silicon) |
-| Mode | production only — `next build` then `next start`. No `next dev` result is reported |
-| Date | 2026-08-12 |
+|                   |                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| Next.js           | **16.2.12** (matches the catalog pin; verified in the experiment's own `node_modules`) |
+| React / React DOM | **19.2.4** / **19.2.4**                                                                |
+| Node.js           | **v24.11.1**                                                                           |
+| pnpm              | 11.20.0                                                                                |
+| OS                | **macOS 27.0** (build 26A5388g), arm64 (Apple Silicon)                                 |
+| Mode              | production only — `next build` then `next start`. No `next dev` result is reported     |
+| Date              | 2026-08-12                                                                             |
 
 ### The rig
 
@@ -687,8 +687,8 @@ that HTTP status, the `x-nextjs-cache` header and the rendered value were captur
 throws on `!res.ok`. The stub was restarted between configurations with an offset counter
 (`START_N`) so values from different runs can never be confused.
 
-Method note: "`n` did not change" alone would be equally consistent with *no revalidation was
-attempted*. Every stale-serve claim below is therefore paired with the matching
+Method note: "`n` did not change" alone would be equally consistent with _no revalidation was
+attempted_. Every stale-serve claim below is therefore paired with the matching
 `ECONNREFUSED` trace from the server log, which is what proves a revalidation ran **and threw**.
 
 ---
@@ -748,11 +748,11 @@ it is fresh. Recovery costs one visit, exactly as `revalidateTag(tag,'max')` doe
 
 ### (e) Build
 
-| Stub state | Helper | `next build` | Result |
-| --- | --- | --- | --- |
-| **Down** (ECONNREFUSED) | bare `fetch` | **exit 1** | `TypeError: fetch failed` → `Export encountered an error on /page: /, exiting the build.` |
-| **Up, returns `500`** (JSON body) | bare `fetch` | **exit 0** | Build **passes** |
-| **Up, returns `500`** (JSON body) | throws on `!res.ok` | **exit 1** | `Error: STRICT: stub returned HTTP 500 for /fast` |
+| Stub state                        | Helper              | `next build` | Result                                                                                    |
+| --------------------------------- | ------------------- | ------------ | ----------------------------------------------------------------------------------------- |
+| **Down** (ECONNREFUSED)           | bare `fetch`        | **exit 1**   | `TypeError: fetch failed` → `Export encountered an error on /page: /, exiting the build.` |
+| **Up, returns `500`** (JSON body) | bare `fetch`        | **exit 0**   | Build **passes**                                                                          |
+| **Up, returns `500`** (JSON body) | throws on `!res.ok` | **exit 1**   | `Error: STRICT: stub returned HTTP 500 for /fast`                                         |
 
 **§2 is confirmed exactly, and this is the sharpest result in the experiment.** The passing build
 in row 2 baked this into `.next/server/app/index.html`:
@@ -827,7 +827,7 @@ holds the resolved copy), and `JSON.stringify({expire: Infinity})` is `{"expire"
 `null < 300` is `true`, so the entry is classified short-lived and dropped from the prerender.
 
 **This directly qualifies §1.** That section says rule 2's "indefinitely" is delivered literally
-only by `default` or *"a custom profile with `expire: Infinity`"*, citing error `E658`'s advice to
+only by `default` or _"a custom profile with `expire: Infinity`"_, citing error `E658`'s advice to
 pass `Infinity`. That advice holds for an **inline** `cacheLife({…})` call; written into a
 **`next.config.ts` profile it does the opposite of what is intended** — it silently converts the
 payload into a request-time dynamic hole, which forfeits rule 1 (no prerender, so no build-time
@@ -882,11 +882,11 @@ degrade. **(d)** recovered on the request after the stub returned: `n=407` (STAL
 
 Identical to configuration 1 in every row:
 
-| Stub state | Helper | `next build` |
-| --- | --- | --- |
-| Down | bare | **exit 1** — `Error: connect ECONNREFUSED` → `exiting the build` |
-| Up, `500` | bare | **exit 0** — bakes `usecache: schools=undefined n=603 err=internal app is broken` |
-| Up, `500` | throws on `!res.ok` | **exit 1** — `STRICT: stub returned HTTP 500 for /usecache` |
+| Stub state | Helper              | `next build`                                                                      |
+| ---------- | ------------------- | --------------------------------------------------------------------------------- |
+| Down       | bare                | **exit 1** — `Error: connect ECONNREFUSED` → `exiting the build`                  |
+| Up, `500`  | bare                | **exit 0** — bakes `usecache: schools=undefined n=603 err=internal app is broken` |
+| Up, `500`  | throws on `!res.ok` | **exit 1** — `STRICT: stub returned HTTP 500 for /usecache`                       |
 
 Enabling Cache Components changes nothing about rule 1, **provided the cached function is long-
 lived enough to be prerendered** — which is exactly what blocker (ii) above can silently take away.
@@ -983,13 +983,13 @@ HTTP `200`, shell renders, payload never arrives. The escape-hatch row in §5 ("
 implies: **nothing in the build output flags it as an error.** The `○`→`◐` change in the route
 table is the only signal, and it is not an error, not a warning, and not a non-zero exit code.
 
-The `500` rows, however, go the *other* way and are genuinely good news:
+The `500` rows, however, go the _other_ way and are genuinely good news:
 
-| Route | Stub `500`, **bare** `fetch` | Stub `500`, throws on `!res.ok` |
-| --- | --- | --- |
-| `/direct` (no Suspense) | **exit 1** | **exit 1** |
-| `/` (Suspense, Data Cache) | exit 0, degrades to `◐` | exit 1 |
-| `/unstable` (Suspense, `unstable_cache`) | exit 0, stays `○` — **bakes the `500` body in** | exit 1 |
+| Route                                    | Stub `500`, **bare** `fetch`                    | Stub `500`, throws on `!res.ok` |
+| ---------------------------------------- | ----------------------------------------------- | ------------------------------- |
+| `/direct` (no Suspense)                  | **exit 1**                                      | **exit 1**                      |
+| `/` (Suspense, Data Cache)               | exit 0, degrades to `◐`                         | exit 1                          |
+| `/unstable` (Suspense, `unstable_cache`) | exit 0, stays `○` — **bakes the `500` body in** | exit 1                          |
 
 `/direct` failed with a message that is not about fetching at all:
 
@@ -1000,8 +1000,8 @@ Error occurred prerendering page "/direct". Read more: https://nextjs.org/docs/m
 
 **Because only `200` responses are stored in the Data Cache (§1), a `500` leaves the fetch
 uncached — and `cacheComponents` refuses to prerender uncached data outside `<Suspense>`.** So
-`cacheComponents` + Data Cache + no `<Suspense>` fails the build on a bad status *even with a bare
-`fetch`*, which configuration 1 does not. That is a real safety margin the previous model lacks —
+`cacheComponents` + Data Cache + no `<Suspense>` fails the build on a bad status _even with a bare
+`fetch`_, which configuration 1 does not. That is a real safety margin the previous model lacks —
 but it is a side effect of a rule about Suspense, not a guarantee about data, so it should not be
 leaned on in place of the throwing wrapper. `unstable_cache` shows why: it caches the **function's
 return value** regardless of HTTP status, stayed `○`, and baked the error body into the prerender.
@@ -1030,9 +1030,9 @@ cached path does.
 Two controls were run so the cause is not misattributed:
 
 - **Not an artefact of the isolation helper.** Both configuration-2 routes fail — `/` (raw
-  `node:http`) *and* `/viafetch` (plain `fetch` inside `use cache`). It is the `use cache` layer.
+  `node:http`) _and_ `/viafetch` (plain `fetch` inside `use cache`). It is the `use cache` layer.
 - **Not merely "no `<Suspense>` boundary on the bot's dynamic path".** This is the confound worth
-  ruling out, because configuration 2 and the hybrid differ in *two* ways at once — cache
+  ruling out, because configuration 2 and the hybrid differ in _two_ ways at once — cache
   primitive and Suspense placement. So the hybrid's `/direct` (Data Cache, **no** `<Suspense>`,
   `cacheComponents: true`) was rebuilt at `revalidate: 5` and given the same treatment:
 
@@ -1057,13 +1057,13 @@ the hybrid are both unaffected.
 
 ## Reconciling the Verification debt list
 
-| Debt item | Status |
-| --- | --- |
-| Whether `use cache` serves stale on a failed revalidation | **Settled — yes.** HTTP 200 and the last good payload across 16 s and four requests, with `DefaultCacheHandler: set … failed ECONNREFUSED` in the log proving the refresh ran and threw. Retries every window; recovers one request after the origin returns. **Caveat: not for crawlers — see below.** |
-| Whether the ISR stale-on-error sentence extends to a `fetch` Data Cache entry inside a Cache Components app (*"the highest-value thing to verify"*) | **Settled — yes.** Both `fetch(next:{revalidate})` and `unstable_cache` served last-good under `cacheComponents: true`, and both are prerendered at build. **The hybrid is viable on rule 2 — read that narrowly.** Rule 1 is a separate question and the hybrid does *not* pass it by default: with the origin dead, the `<Suspense>`-wrapped hybrid routes build green and serve `200` with no data (see (e) above). Rule 2 holding is not rule 1 holding. |
-| Whether a route re-render skips refetching payloads whose Data Cache entries are still fresh | **Settled — yes, it skips.** `/slow` (revalidate 3600) was fetched once at build and never again across ~15 regenerations of a route with `revalidate = 5`. §4's inference was correct; the blast-radius concern does not arise. |
-| Whether the 16.3 web docs' behavioural statements hold in 16.2.12 | **Still open in general**, but every statement this experiment exercised held: `x-nextjs-cache` values, the `cacheLife` preset semantics, `200`-only Data Cache storage, and the `<Suspense>`-forfeits-prerender escape. One **[16.3 web]** claim was *sharpened*: the short-lived-cache exclusion threshold is `expire < 300s`, source-verified as `DYNAMIC_EXPIRE`. |
-| Whether a crawler hitting a Cache Components page during an outage gets a failed render | **Settled — yes, and worse than inferred.** Reproducible HTTP `500` to a Googlebot user-agent while humans get `200`. Confirmed absent in the previous model and in the hybrid, so it is specific to `use cache`. |
+| Debt item                                                                                                                                           | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Whether `use cache` serves stale on a failed revalidation                                                                                           | **Settled — yes.** HTTP 200 and the last good payload across 16 s and four requests, with `DefaultCacheHandler: set … failed ECONNREFUSED` in the log proving the refresh ran and threw. Retries every window; recovers one request after the origin returns. **Caveat: not for crawlers — see below.**                                                                                                                                                      |
+| Whether the ISR stale-on-error sentence extends to a `fetch` Data Cache entry inside a Cache Components app (_"the highest-value thing to verify"_) | **Settled — yes.** Both `fetch(next:{revalidate})` and `unstable_cache` served last-good under `cacheComponents: true`, and both are prerendered at build. **The hybrid is viable on rule 2 — read that narrowly.** Rule 1 is a separate question and the hybrid does _not_ pass it by default: with the origin dead, the `<Suspense>`-wrapped hybrid routes build green and serve `200` with no data (see (e) above). Rule 2 holding is not rule 1 holding. |
+| Whether a route re-render skips refetching payloads whose Data Cache entries are still fresh                                                        | **Settled — yes, it skips.** `/slow` (revalidate 3600) was fetched once at build and never again across ~15 regenerations of a route with `revalidate = 5`. §4's inference was correct; the blast-radius concern does not arise.                                                                                                                                                                                                                             |
+| Whether the 16.3 web docs' behavioural statements hold in 16.2.12                                                                                   | **Still open in general**, but every statement this experiment exercised held: `x-nextjs-cache` values, the `cacheLife` preset semantics, `200`-only Data Cache storage, and the `<Suspense>`-forfeits-prerender escape. One **[16.3 web]** claim was _sharpened_: the short-lived-cache exclusion threshold is `expire < 300s`, source-verified as `DYNAMIC_EXPIRE`.                                                                                        |
+| Whether a crawler hitting a Cache Components page during an outage gets a failed render                                                             | **Settled — yes, and worse than inferred.** Reproducible HTTP `500` to a Googlebot user-agent while humans get `200`. Confirmed absent in the previous model and in the hybrid, so it is specific to `use cache`.                                                                                                                                                                                                                                            |
 
 ### Two things the experiment added that were not on the list
 

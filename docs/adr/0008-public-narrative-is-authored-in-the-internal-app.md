@@ -46,7 +46,10 @@ The unit is a **Story** — `CONTEXT.md` has the term, added because three docum
 
 "The same endpoint" means the same mechanism, not one route. What the public app depends on:
 
-- **Three routes, by lifetime.** Scope figures change ~never, delivery figures accrue weekly, Stories change when someone writes one. One payload behind one cache would revalidate everything at the fastest cadence any part of it needs, and one broken query would take the homepage's scope figures with it.
+- **Four routes across three lifetimes.** Scope figures change ~never, delivery figures accrue weekly, Stories change when someone writes one. One payload behind one cache would revalidate everything at the fastest cadence any part of it needs, and one broken query would take the homepage's scope figures with it.
+
+  This bullet read _"three routes, by lifetime"_ until the payloads were settled, and the count is the only thing that changed. The Stories list carries titles, covers and excerpts but **no bodies**, so a Story's prose and its full gallery travel on a **detail** route of their own — scope, delivery, Stories list, Story detail. That route shares the Stories lifetime, so it adds a route without adding a lifetime, which is why the split above still has three of those and not four.
+
 - **Server-side fetch, with a shared secret.** `@sugt/public` calls from a Server Component with a bearer token only it holds. The routes are never browser-reachable, so no visitor's request reaches Postgres and the figures stay crawlable — which matters on a portfolio site. Note this is a second unauthenticated path into the database alongside the Participant Feedback route; [ADR-0011](./0011-supabase-and-better-auth.md)'s "nothing unauthenticated ever touches the database" is about the anon **role**, and both of these go through the internal app's own credentials after a check.
 - **Fixed sets never travel over it.** Two Streams, three Class kinds, ten Sessions per School are `@sugt/domain` constants both apps already depend on. Serving them from the database would recreate the duplication the first amendment removed, in the other direction.
 - **One route goes the other way.** Publishing or unpublishing a Story makes the internal app call a revalidation route on `@sugt/public`, so a takedown is live in seconds instead of waiting for the next refresh. It is the only write-shaped thing the public app will have, and it writes nothing but its own cache — no database credential, no Supabase client, nothing that touches [ADR-0002](./0002-two-apps-in-a-pnpm-workspace.md).
@@ -54,7 +57,7 @@ The unit is a **Story** — `CONTEXT.md` has the term, added because three docum
 
   Two corrections to that sentence, both measured rather than assumed — see [ADR-0014](./0014-the-public-site-uses-the-pre-cache-components-caching-model.md) and [`docs/research/next16-caching.md`](../research/next16-caching.md):
 
-  **"Indefinitely" is really "until the next deploy."** Caches are keyed by build ID, so no stale payload survives a deployment — which means *every* deploy re-exposes the build-time rule, not just the first. That is a deployment-sequencing problem and no configuration expresses "fail on a bad fetch except when there is no good data yet".
+  **"Indefinitely" is really "until the next deploy."** Caches are keyed by build ID, so no stale payload survives a deployment — which means _every_ deploy re-exposes the build-time rule, not just the first. That is a deployment-sequencing problem and no configuration expresses "fail on a bad fetch except when there is no good data yet".
 
   **The build-time half is an application obligation, not framework behaviour.** `fetch` does not throw on a bad status. An internal app returning `500` to a bare `fetch` produces a **green build** with `undefined` baked into the HTML — precisely the screen this bullet forbids. The fetch wrapper must throw on `!res.ok` itself.
 
