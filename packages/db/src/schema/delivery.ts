@@ -1,3 +1,4 @@
+import type { SessionMode, SessionStatus, Stream } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -53,9 +54,13 @@ export const session = pgTable(
     // No `onDelete`: an offline Session BLOCKS deleting its Perjadin. A trip that
     // produced teaching cannot be quietly erased.
     perjadinId: uuid("perjadin_id").references(() => perjadin.id),
-    mode: text("mode").notNull(),
+    // `session_mode_check` and `session_status_check` name exactly the values
+    // `SESSION_MODES` and `SESSION_STATUSES` hold, so these narrowings are the database's
+    // guarantee rather than this module's hope. `$type<>()` comes before `.default()` so
+    // that the default is checked against the set too.
+    mode: text("mode").$type<SessionMode>().notNull(),
     heldOn: date("held_on").notNull(),
-    status: text("status").notNull().default("arranged"),
+    status: text("status").$type<SessionStatus>().notNull().default("arranged"),
     cancelledReason: text("cancelled_reason"),
 
     onlinePicPersonId: uuid("online_pic_person_id"),
@@ -131,7 +136,7 @@ export const sessionTeacher = pgTable(
     sessionId: uuid("session_id")
       .notNull()
       .references(() => session.id, { onDelete: "cascade" }),
-    stream: text("stream").notNull(),
+    stream: text("stream").$type<Stream>().notNull(),
     personId: uuid("person_id").notNull(),
     personRole: text("person_role").notNull().default("Teaching Team"),
   },

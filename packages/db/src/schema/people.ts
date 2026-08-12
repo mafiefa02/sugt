@@ -1,3 +1,4 @@
+import type { Role } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -18,9 +19,6 @@ import {
  * professor may be named to it months before they first sign in. A domain that
  * FKs into `user` cannot express that.
  */
-
-/** Matches `ROLES` in `@sugt/domain`, character for character. */
-export const ROLE_VALUES = ["Staff", "Teaching Team"] as const;
 
 /**
  * `person` **is** the invite list. There is no separate invite table: a row here is
@@ -45,7 +43,9 @@ export const person = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     fullName: text("full_name").notNull(),
     email: text("email").notNull(),
-    role: text("role").notNull(),
+    // `person_role_check` names exactly the values `ROLES` holds. `$type` off it replaces
+    // a hand-copied `ROLE_VALUES` array that nothing ever read.
+    role: text("role").$type<Role>().notNull(),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

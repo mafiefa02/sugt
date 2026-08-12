@@ -1,3 +1,4 @@
+import type { Role, Stream } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -93,8 +94,12 @@ export const groupMember = pgTable(
       .notNull()
       .references(() => perjadin.id, { onDelete: "cascade" }),
     personId: uuid("person_id").notNull(),
-    role: text("role").notNull(),
-    stream: text("stream"),
+    // `group_member_role_check` and `group_member_stream_check` name exactly the values
+    // `ROLES` and `STREAMS` hold. `stream` stays nullable, so it reads as `Stream | null`
+    // — the CHECK pins which strings are allowed, and `group_member_stream_iff_teaching`
+    // below pins when the column may be null at all.
+    role: text("role").$type<Role>().notNull(),
+    stream: text("stream").$type<Stream>(),
     receiptsSettledAt: timestamp("receipts_settled_at", { withTimezone: true }),
   },
   (t) => [
