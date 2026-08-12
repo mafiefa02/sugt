@@ -16,6 +16,27 @@ import { school } from "./reference";
 import { perjadin } from "./travel";
 
 /**
+ * Which rows `session_one_online_per_school_per_day` covers: an online Session that has
+ * not been cancelled.
+ *
+ * **Exported because a second place has to say the same thing, character for character.**
+ * `arrangeOnlineSessions` names this index as its `on conflict` arbiter and has to repeat
+ * the predicate to do so — and Postgres refuses to infer an index whose predicate does not
+ * match, which fails at runtime rather than at typecheck. Two copies of it are two chances
+ * to find that out in production.
+ *
+ * Column names are unqualified deliberately. A `create index … where` clause may not carry
+ * a qualified reference, so the form that works in the index is the form that has to be
+ * shared.
+ *
+ * `./index.ts` re-exports this file with `export *`, so this is on the public
+ * `@sugt/db/schema` surface rather than schema-internal. That is intended — the query
+ * layer is its one consumer and is a separate subpath — but it does mean the fragment is
+ * as public as the table it belongs to.
+ */
+export const ONLINE_SESSION_STILL_STANDS = sql`perjadin_id is null and status <> 'cancelled'`;
+
+/**
  * Delivery: Sessions, and who taught which Stream at them.
  *
  * A Session exists only once **arranged** — never before — so there are no planned
@@ -81,6 +102,18 @@ export const session = pgTable(
     uniqueIndex("session_one_per_school_per_perjadin")
       .on(t.perjadinId, t.schoolId)
       .where(sql`status <> 'cancelled'`),
+    // The gap the index above cannot close. It keys on `perjadin_id`, which is NULL for
+    // every online Session, and Postgres treats NULLs in a unique index as distinct — so
+    // nothing stopped two online Sessions for one School on one day. Jadwalkan Sesi
+    // daring arranges them from Coverage in a batch, one date across a multi-selection,
+    // which moves that from theoretical to one mis-click away.
+    //
+    // Partial in both the ways the first index is, and for the same two reasons:
+    // cancelled rows accumulate and must not collide with the Session that replaced
+    // them, and offline Sessions are untouched because their `perjadin_id` is not null.
+    uniqueIndex("session_one_online_per_school_per_day")
+      .on(t.schoolId, t.heldOn)
+      .where(ONLINE_SESSION_STILL_STANDS),
   ],
 );
 

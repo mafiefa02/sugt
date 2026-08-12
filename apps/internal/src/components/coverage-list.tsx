@@ -6,6 +6,8 @@ import { Button } from "@sugt/ui/components/button";
 import { Checkbox } from "@sugt/ui/components/checkbox";
 import { Progress } from "@sugt/ui/components/progress";
 import { cn } from "@sugt/ui/lib/utils";
+import type { Route } from "next";
+import Link from "next/link";
 import { useId, useState } from "react";
 
 /**
@@ -67,7 +69,7 @@ function CoverageList({ clusters, canPlan }: { clusters: CoverageCluster[]; canP
 
       {selected.size > 0 && (
         <SelectionBar
-          count={selected.size}
+          selected={selected}
           canPlan={canPlan}
           onClear={() => {
             setSelected(new Set());
@@ -151,29 +153,35 @@ function SchoolRow({
  * A Teaching Team member sees the count and Batal. The two actions are Staff-only
  * surfaces, and a Staff-only surface is absent rather than shown and refused.
  *
- * Both are disabled because neither destination exists yet. They are buttons rather
- * than links deliberately: `typedRoutes` is on, so a `Link` to a route nobody has
- * built does not typecheck — the same guard that gave every sidebar destination a
- * placeholder page.
+ * **Jadwalkan Sesi daring is a link and Rencanakan Perjadin is still a disabled
+ * button**, and the difference is not stylistic: `typedRoutes` is on, so a `Link` to a
+ * route nobody has built does not typecheck. One of the two destinations now exists.
+ *
+ * The selection travels in the URL rather than in a store, because it is transient —
+ * thrown away on navigation, and an argument to the next screen rather than anything
+ * stored. `Route` is asserted on the query string for the same `typedRoutes` reason:
+ * the generated type knows the pathname and cannot know a runtime-built query.
  */
 function SelectionBar({
-  count,
+  selected,
   canPlan,
   onClear,
 }: {
-  count: number;
+  selected: ReadonlySet<string>;
   canPlan: boolean;
   onClear: () => void;
 }) {
+  const arrangeOnline = `/jadwalkan-sesi-daring?sekolah=${[...selected].join(",")}` as Route;
+
   return (
     <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-7 py-3.5 shadow-lg">
       <div>
         <span className="text-sm">
-          <b>{count}</b> Sekolah dipilih
+          <b>{selected.size}</b> Sekolah dipilih
         </span>
         {canPlan && (
           <p className="text-xs text-muted-foreground">
-            Kedua tindakan ini belum dibangun — lihat issue #29 dan #27.
+            Rencanakan Perjadin belum dibangun — lihat issue #29.
           </p>
         )}
       </div>
@@ -189,8 +197,7 @@ function SelectionBar({
           <>
             <Button
               variant="outline"
-              disabled
-              title="Jadwalkan Sesi daring — issue #27"
+              render={<Link href={arrangeOnline} />}
             >
               Jadwalkan Sesi daring
             </Button>

@@ -16,19 +16,25 @@ import { forbidden } from "next/navigation";
  * development and silently fail once deployed — the worst shape of bug available
  * here, because the failing case is the one nobody exercises locally.
  *
- * Wrap the read instead:
+ * Wrap the call instead:
  *
  * ```ts
  * const acquittal = await staffSurface(() => perjadinAcquittal(person, id));
  * ```
  *
- * Reaching it is still a bug or an attack rather than a user state — the surfaces
- * that read money are **absent** for a Teaching Team member, not disabled — so this
- * renders a refusal and does not try to be helpful about it.
+ * **It wraps writes as well as reads, and the argument above is the reason it has to.**
+ * Jadwalkan Sesi daring's Server Action is the first: a Staff-only *write* refused inside
+ * a Server Action has exactly the same problem, because the sanitizing happens on the way
+ * to the client and not on the way to a page. So this is not a rendering-time helper — it
+ * is wherever `@sugt/db` is called from with a `Person`.
+ *
+ * Reaching it is still a bug or an attack rather than a user state — the surfaces behind
+ * it are **absent** for a Teaching Team member, not disabled — so this renders a refusal
+ * and does not try to be helpful about it.
  */
-export async function staffSurface<T>(read: () => Promise<T>): Promise<T> {
+export async function staffSurface<T>(call: () => Promise<T>): Promise<T> {
   try {
-    return await read();
+    return await call();
   } catch (error) {
     if (isNotStaffError(error)) forbidden();
     throw error;
