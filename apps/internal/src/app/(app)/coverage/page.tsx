@@ -1,7 +1,6 @@
 import { CoverageList } from "-/components/coverage-list";
 import { requirePerson } from "-/lib/person";
 import { coverage } from "@sugt/db/queries";
-import { TOTAL_SESSIONS_PER_SCHOOL } from "@sugt/domain";
 
 /**
  * **Coverage** — the landing screen for trip planning, and the first real read
@@ -36,14 +35,12 @@ export default async function Page() {
       ) : (
         <CoverageList
           clusters={clusters}
-          sessionsPerSchool={TOTAL_SESSIONS_PER_SCHOOL}
           /**
-           * Both actions on a selection — Rencanakan Perjadin and Jadwalkan Sesi
-           * daring — are Staff-only, so a Teaching Team member reads the counts and
-           * is offered no selection. ADR-0004 opens the counts themselves to
-           * everyone signed in, which is why the query above applies no role check.
+           * The counts and the selection are open to everyone signed in — ADR-0004,
+           * and why the query above applies no role check. Only the two **actions** a
+           * selection feeds are Staff, so only they are withheld.
            */
-          selectable={person.role === "Staff"}
+          canPlan={person.role === "Staff"}
         />
       )}
     </div>

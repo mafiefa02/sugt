@@ -46,10 +46,10 @@ export type PerjadinAcquittal = {
  *
  * Opens with the choke point, which throws `NotStaffError` on a Teaching Team
  * `Person` — **not** an empty result, because an empty return would make a
- * mis-passed caller indistinguishable from a trip that has spent nothing yet.
+ * mis-passed caller indistinguishable from a Perjadin that has spent nothing yet.
  *
  * Returns `null` when there is no such Perjadin. That is a genuinely reachable state
- * — a stale link to a deleted trip — and is distinct from the refusal above, which
+ * — a stale link to a deleted Perjadin — and is distinct from the refusal above, which
  * is not.
  */
 export async function perjadinAcquittal(
@@ -63,7 +63,7 @@ export async function perjadinAcquittal(
       perjadinId: perjadin.id,
       destination: perjadin.destination,
       advanceIdr: perjadin.advanceIdr,
-      // `coalesce` because the left join finds nothing at all on a trip with no
+      // `coalesce` because the left join finds nothing at all on a Perjadin with no
       // transactions, and "spent nothing" is 0 rather than unknown.
       spentIdr: sql<number>`coalesce(sum(${transaction.amountIdr}), 0)`.mapWith(Number),
       returnedToTreasurerIdr: perjadin.returnedToTreasurerIdr,

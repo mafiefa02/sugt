@@ -12,9 +12,6 @@ import type { Person } from "./caller";
  * hold*.
  */
 
-/** A `Person` the choke point has already checked. Money queries pass this on. */
-export type StaffPerson = Person & { role: "Staff" };
-
 const NOT_STAFF_ERROR_CODE = "sugt/not-staff";
 
 /**
@@ -80,8 +77,11 @@ export function isNotStaffError(error: unknown): error is NotStaffError {
  * `ParticipantToken` reads nothing at all, so neither can be handed to a money query
  * in the first place. Narrowing the union here instead would make the arm a runtime
  * shape check, which is what three named types exist to avoid.
+ *
+ * It returns nothing. A narrowed `Person & { role: "Staff" }` would be a type with no
+ * consumer — a money query that wants the caller already has it — and the passing case
+ * is not what any call site here is interested in.
  */
-export function requireStaff(person: Person): StaffPerson {
+export function requireStaff(person: Person): void {
   if (person.role !== "Staff") throw new NotStaffError(person);
-  return person as StaffPerson;
 }

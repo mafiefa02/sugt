@@ -1,6 +1,7 @@
 "use client";
 
-import type { CoverageCluster } from "@sugt/db/queries";
+import type { CoverageCluster, CoverageSchool } from "@sugt/db/queries";
+import { TOTAL_SESSIONS_PER_SCHOOL } from "@sugt/domain";
 import { Button } from "@sugt/ui/components/button";
 import { Checkbox } from "@sugt/ui/components/checkbox";
 import { Progress } from "@sugt/ui/components/progress";
@@ -16,21 +17,15 @@ import { useId, useState } from "react";
  * an argument rather than as a stored state. The counts arrive from the server as
  * props; nothing here fetches.
  *
- * **`selectable` is a role decision made one layer up.** Both of Coverage's actions
- * are Staff-only, so a Teaching Team member gets the counts and no checkboxes at all
- * — not checkboxes that lead nowhere. Absent rather than disabled is the rule the
- * whole tool follows for Staff-only work, and offering a selection that buys nothing
- * is exactly the advertising it exists to prevent.
+ * **Selecting is open to anyone signed in; the two actions are not.** Both halves are
+ * the spec's rather than an inference: Coverage's row on the surface list reads *"who:
+ * signed in"*, and [#25](https://github.com/mafiefa02/sugt/issues/25) says a Staff
+ * **or** Teaching Team member *"can select several of them"* — while Rencanakan
+ * Perjadin and Jadwalkan Sesi daring are both Staff. So a Teaching Team member selects
+ * and is shown what they selected, and the two Staff actions are **absent** rather
+ * than offered and refused.
  */
-
-/** The denominator, passed in rather than read here: it belongs to `@sugt/domain`. */
-type CoverageListProps = {
-  clusters: CoverageCluster[];
-  sessionsPerSchool: number;
-  selectable: boolean;
-};
-
-function CoverageList({ clusters, sessionsPerSchool, selectable }: CoverageListProps) {
+function CoverageList({ clusters, canPlan }: { clusters: CoverageCluster[]; canPlan: boolean }) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
 
   function toggle(schoolId: string) {
@@ -58,11 +53,7 @@ function CoverageList({ clusters, sessionsPerSchool, selectable }: CoverageListP
               {cluster.schools.map((school) => (
                 <SchoolRow
                   key={school.id}
-                  name={school.name}
-                  kabupatenKota={school.kabupatenKota}
-                  deliveredSessions={school.deliveredSessions}
-                  sessionsPerSchool={sessionsPerSchool}
-                  selectable={selectable}
+                  school={school}
                   selected={selected.has(school.id)}
                   onToggle={() => {
                     toggle(school.id);
@@ -74,9 +65,10 @@ function CoverageList({ clusters, sessionsPerSchool, selectable }: CoverageListP
         ))}
       </div>
 
-      {selectable && selected.size > 0 && (
+      {selected.size > 0 && (
         <SelectionBar
           count={selected.size}
+          canPlan={canPlan}
           onClear={() => {
             setSelected(new Set());
           }}
@@ -89,31 +81,28 @@ function CoverageList({ clusters, sessionsPerSchool, selectable }: CoverageListP
 /**
  * One School: how much teaching has happened, against the fixed ten.
  *
- * **It shows counts and nothing else** — no health indicator, no flagging, no colour.
- * Nothing is ever overdue, because no Session ever asserted a due date, so a School
- * behind on pace shows a low number and noticing that is a human reading it. Pace and
- * health are different questions and Concerns is the other screen.
+ * **It shows counts and nothing else.** Nothing is ever overdue, because no Session
+ * ever asserted a due date, so a School behind on pace shows a low number and noticing
+ * that is a human reading it. Pace and health are different questions, and Concerns is
+ * the other screen.
+ *
+ * The meter is the design handoff's, and it restates the count rather than judging it:
+ * one length, one colour, no ramp and no threshold. That is the distinction
+ * `docs/product.md` draws when it rules out a health indicator — a Rating's severity
+ * ramp belongs to the two Rating controls, and deliberately not here.
  *
  * The Checkbox is the control and the School's name labels it. The row is not itself
  * clickable: a `<label>` around a Base UI Checkbox has two plausible targets — the
  * `role="checkbox"` button and the visually-hidden input beside it — and which one a
- * click lands on decides whether the toggle fires once or twice. The primitive
- * already carries an enlarged hit area for this reason.
+ * click lands on decides whether the toggle fires once or twice. The primitive already
+ * carries an enlarged hit area for this reason.
  */
 function SchoolRow({
-  name,
-  kabupatenKota,
-  deliveredSessions,
-  sessionsPerSchool,
-  selectable,
+  school,
   selected,
   onToggle,
 }: {
-  name: string;
-  kabupatenKota: string;
-  deliveredSessions: number;
-  sessionsPerSchool: number;
-  selectable: boolean;
+  school: CoverageSchool;
   selected: boolean;
   onToggle: () => void;
 }) {
@@ -126,56 +115,67 @@ function SchoolRow({
         selected && "bg-primary/8",
       )}
     >
-      {selectable && (
-        <Checkbox
-          checked={selected}
-          onCheckedChange={onToggle}
-          aria-labelledby={nameId}
-        />
-      )}
+      <Checkbox
+        checked={selected}
+        onCheckedChange={onToggle}
+        aria-labelledby={nameId}
+      />
 
       <span
         id={nameId}
         className="flex-1 text-sm font-medium"
       >
-        {name}
+        {school.name}
       </span>
-      <span className="hidden text-xs text-muted-foreground sm:inline">{kabupatenKota}</span>
+      <span className="hidden text-xs text-muted-foreground sm:inline">{school.kabupatenKota}</span>
 
       <span className="text-[13px] text-muted-foreground tabular-nums">
-        {deliveredSessions} / {sessionsPerSchool}
+        {school.deliveredSessions} / {TOTAL_SESSIONS_PER_SCHOOL}
       </span>
       <Progress
         className="w-21 shrink-0"
-        value={deliveredSessions}
-        max={sessionsPerSchool}
-        aria-label={`${name}: ${deliveredSessions} dari ${sessionsPerSchool} Sesi terlaksana`}
+        value={school.deliveredSessions}
+        max={TOTAL_SESSIONS_PER_SCHOOL}
+        aria-label={`${school.name}: ${school.deliveredSessions} dari ${TOTAL_SESSIONS_PER_SCHOOL} Sesi terlaksana`}
       />
     </div>
   );
 }
 
 /**
- * The two actions, and they **stay unavailable until something is selected** — this
- * bar is absent otherwise. Coverage is where trip planning starts: the delivered
+ * What a selection offers, and it **stays unavailable until something is selected** —
+ * this bar is absent otherwise. Coverage is where trip planning starts: the delivered
  * counts are what decides where a Group goes next, so the decision gets made in front
  * of them rather than from memory.
  *
- * Both buttons are disabled because neither destination exists yet. They are buttons
- * rather than links deliberately: `typedRoutes` is on, so a `Link` to a route nobody
- * has built does not typecheck — which is the same guard that gave every sidebar
- * destination a placeholder page.
+ * A Teaching Team member sees the count and Batal. The two actions are Staff-only
+ * surfaces, and a Staff-only surface is absent rather than shown and refused.
+ *
+ * Both are disabled because neither destination exists yet. They are buttons rather
+ * than links deliberately: `typedRoutes` is on, so a `Link` to a route nobody has
+ * built does not typecheck — the same guard that gave every sidebar destination a
+ * placeholder page.
  */
-function SelectionBar({ count, onClear }: { count: number; onClear: () => void }) {
+function SelectionBar({
+  count,
+  canPlan,
+  onClear,
+}: {
+  count: number;
+  canPlan: boolean;
+  onClear: () => void;
+}) {
   return (
     <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-7 py-3.5 shadow-lg">
       <div>
         <span className="text-sm">
           <b>{count}</b> Sekolah dipilih
         </span>
-        <p className="text-xs text-muted-foreground">
-          Kedua tindakan ini belum dibangun — lihat issue #29 dan #27.
-        </p>
+        {canPlan && (
+          <p className="text-xs text-muted-foreground">
+            Kedua tindakan ini belum dibangun — lihat issue #29 dan #27.
+          </p>
+        )}
       </div>
 
       <div className="flex gap-2.5">
@@ -185,19 +185,23 @@ function SelectionBar({ count, onClear }: { count: number; onClear: () => void }
         >
           Batal
         </Button>
-        <Button
-          variant="outline"
-          disabled
-          title="Jadwalkan Sesi daring — issue #27"
-        >
-          Jadwalkan Sesi daring
-        </Button>
-        <Button
-          disabled
-          title="Rencanakan Perjadin — issue #29"
-        >
-          Rencanakan Perjadin
-        </Button>
+        {canPlan && (
+          <>
+            <Button
+              variant="outline"
+              disabled
+              title="Jadwalkan Sesi daring — issue #27"
+            >
+              Jadwalkan Sesi daring
+            </Button>
+            <Button
+              disabled
+              title="Rencanakan Perjadin — issue #29"
+            >
+              Rencanakan Perjadin
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

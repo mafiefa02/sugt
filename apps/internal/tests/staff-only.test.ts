@@ -1,11 +1,9 @@
-import { resolvePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import { isNotStaffError, perjadinAcquittal } from "@sugt/db/queries";
-import type { Role } from "@sugt/domain";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { addPerjadin, addPerson, addTransaction, resetDatabase } from "./support/fixtures";
-import { signInWithGoogle } from "./support/sign-in";
+import { addPerjadin, addTransaction, resetDatabase } from "./support/fixtures";
+import { signInAsPerson } from "./support/sign-in";
 
 /**
  * **The Staff-only choke point**, driven at the seam
@@ -25,20 +23,9 @@ describe("money is Staff-only", () => {
     vi.unstubAllEnvs();
   });
 
-  /** Sign in for real, and resolve the cookie the way a request does. */
-  async function signIn(role: Role, email: string, fullName: string) {
-    await addPerson({ fullName, email, role });
-    const result = await signInWithGoogle({ googleId: `google-${email}`, email, name: fullName });
-    if (!result.sessionCookie) throw new Error("Expected the sign-in to issue a session cookie");
-
-    const person = await resolvePerson(new Headers({ cookie: result.sessionCookie }));
-    if (!person) throw new Error("Expected the cookie to resolve to a Person");
-    return person;
-  }
-
-  /** A trip with an Advance and one line item against it. */
+  /** A Perjadin with an Advance and one line item against it. */
   async function aPerjadinWithSpending() {
-    const pic = await signIn("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
+    const pic = await signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
     const perjadin = await addPerjadin({ advanceIdr: 5_000_000, picPersonId: pic.id });
     await addTransaction({
       perjadinId: perjadin.id,
@@ -50,7 +37,7 @@ describe("money is Staff-only", () => {
 
   it("refuses a Teaching Team Person with a distinguishable typed error", async () => {
     const { perjadin } = await aPerjadinWithSpending();
-    const teacher = await signIn("Teaching Team", "budi@gmail.com", "Budi Santoso");
+    const teacher = await signInAsPerson("Teaching Team", "budi@gmail.com", "Budi Santoso");
 
     const refusal = await perjadinAcquittal(teacher, perjadin.id).catch((error: unknown) => error);
 
@@ -59,12 +46,12 @@ describe("money is Staff-only", () => {
 
   it("refuses rather than returning an empty result", async () => {
     /**
-     * An empty return would make a mis-passed caller indistinguishable from a trip
+     * An empty return would make a mis-passed caller indistinguishable from a Perjadin
      * that genuinely has no transactions yet, with nothing in the logs to separate
      * them. So the refusal is a throw, and this asserts it is not quietly a `null`.
      */
     const { perjadin } = await aPerjadinWithSpending();
-    const teacher = await signIn("Teaching Team", "ratna@gmail.com", "Ratna Dewi");
+    const teacher = await signInAsPerson("Teaching Team", "ratna@gmail.com", "Ratna Dewi");
 
     await expect(perjadinAcquittal(teacher, perjadin.id)).rejects.toThrow();
   });
@@ -81,8 +68,8 @@ describe("money is Staff-only", () => {
     });
   });
 
-  it("reads a trip that has spent nothing as zero, not as unknown", async () => {
-    const pic = await signIn("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
+  it("reads a Perjadin that has spent nothing as zero, not as unknown", async () => {
+    const pic = await signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
     const perjadin = await addPerjadin({ advanceIdr: 2_000_000, picPersonId: pic.id });
 
     await expect(perjadinAcquittal(pic, perjadin.id)).resolves.toMatchObject({
@@ -109,7 +96,7 @@ describe("money is Staff-only", () => {
      */
     vi.stubEnv("__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS", "1");
     const { perjadin } = await aPerjadinWithSpending();
-    const teacher = await signIn("Teaching Team", "budi@gmail.com", "Budi Santoso");
+    const teacher = await signInAsPerson("Teaching Team", "budi@gmail.com", "Budi Santoso");
 
     const thrown = await staffSurface(() => perjadinAcquittal(teacher, perjadin.id)).catch(
       (error: unknown) => error,
@@ -118,12 +105,25 @@ describe("money is Staff-only", () => {
     expect((thrown as { digest?: string }).digest).toBe("NEXT_HTTP_ERROR_FALLBACK;403");
   });
 
+  it("lets every other failure through untouched", async () => {
+    /**
+     * The other half of the translation, and the one a bug would silently break: only
+     * the Staff-only refusal becomes a 403. A connection failure or a programming
+     * error must reach the error boundary as itself, not be dressed up as an
+     * authorisation problem nobody can then diagnose.
+     */
+    vi.stubEnv("__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS", "1");
+    const boom = new Error("the database went away");
+
+    await expect(staffSurface(() => Promise.reject(boom))).rejects.toBe(boom);
+  });
+
   it("tells a missing Perjadin apart from a refusal", async () => {
     /**
-     * Both are absences and only one is a bug. A stale link to a deleted trip is a
+     * Both are absences and only one is a bug. A stale link to a deleted Perjadin is a
      * state a Staff member genuinely reaches, so it is a `null` rather than a throw.
      */
-    const pic = await signIn("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
+    const pic = await signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
 
     await expect(
       perjadinAcquittal(pic, "00000000-0000-0000-0000-000000000000"),

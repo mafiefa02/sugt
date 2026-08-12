@@ -105,7 +105,7 @@ export type SessionFixture = {
  * An **online** Session, which is the cheap one to build: `mode = 'online'` means no
  * Perjadin, so it needs nothing but a School and a Staff PIC. The two CHECKs are
  * exact mirrors — an offline Session has a Perjadin and an online one has none — so
- * an offline fixture would have to build a whole trip first.
+ * an offline fixture would have to build a whole Perjadin first.
  *
  * A cancelled Session needs its reason in the same statement, by CHECK.
  */
@@ -198,10 +198,15 @@ export async function addTransaction(fixture: TransactionFixture) {
 /**
  * Each test starts from a known set of rows and leaves none behind.
  *
- * The list names the **roots** — the tables a fixture writes directly. `cascade`
- * reaches everything hanging off them, which is every evaluation table, the feedback
- * token and `transaction_evidence`, so a new table that references one of these needs
- * no entry here. A new *root* does.
+ * The list names the tables a fixture writes directly. Several of them are already
+ * reachable by `cascade` from another entry — `school` from `cluster`, `transaction`
+ * from `perjadin` — and they are named anyway, because a truncate list that reads as
+ * "what the tests populate" survives a fixture being deleted, while one pruned to the
+ * cascade minimum quietly stops covering a table the day its parent leaves.
+ *
+ * `cascade` is what reaches everything **no** fixture writes: every evaluation table,
+ * the feedback token and `transaction_evidence`. A new table referencing one of these
+ * therefore needs no entry; a new table nothing references does.
  *
  * `public."session"` and `better_auth."session"` are both here and both qualified.
  * That collision is the whole reason Better Auth was given a Postgres schema of its

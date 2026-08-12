@@ -1,16 +1,8 @@
-import { resolvePerson } from "-/lib/person";
 import { coverage } from "@sugt/db/queries";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  addCluster,
-  addPerson,
-  addProvince,
-  addSchool,
-  addSession,
-  resetDatabase,
-} from "./support/fixtures";
-import { signInWithGoogle } from "./support/sign-in";
+import { addCluster, addProvince, addSchool, addSession, resetDatabase } from "./support/fixtures";
+import { signInAsPerson } from "./support/sign-in";
 
 /**
  * **Coverage** — the first real read through the query layer.
@@ -27,23 +19,7 @@ describe("the Coverage payload", () => {
   beforeEach(resetDatabase);
 
   /** A Staff Person, signed in for real. Online Sessions need one as their PIC. */
-  async function signInAsStaff() {
-    await addPerson({
-      fullName: "Rina Nurhayati",
-      email: "rina@ditsama.itb.ac.id",
-      role: "Staff",
-    });
-    const result = await signInWithGoogle({
-      googleId: "google-rina",
-      email: "rina@ditsama.itb.ac.id",
-      name: "Rina Nurhayati",
-    });
-    if (!result.sessionCookie) throw new Error("Expected the sign-in to issue a session cookie");
-
-    const person = await resolvePerson(new Headers({ cookie: result.sessionCookie }));
-    if (!person) throw new Error("Expected the cookie to resolve to a Person");
-    return person;
-  }
+  const signInAsStaff = () => signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
 
   /**
    * Two Clusters, three Schools, and one School carrying a Session of every status.
@@ -171,15 +147,9 @@ describe("the Coverage payload", () => {
     const staff = await signInAsStaff();
     await seedTwoClusters(staff.id);
 
-    await addPerson({ fullName: "Budi Santoso", email: "budi@gmail.com", role: "Teaching Team" });
-    const signedIn = await signInWithGoogle({
-      googleId: "google-budi",
-      email: "budi@gmail.com",
-      name: "Budi Santoso",
-    });
-    const teacher = await resolvePerson(new Headers({ cookie: signedIn.sessionCookie! }));
+    const teacher = await signInAsPerson("Teaching Team", "budi@gmail.com", "Budi Santoso");
 
-    expect(teacher?.role).toBe("Teaching Team");
-    await expect(coverage(teacher!)).resolves.toEqual(await coverage(staff));
+    expect(teacher.role).toBe("Teaching Team");
+    await expect(coverage(teacher)).resolves.toEqual(await coverage(staff));
   });
 });

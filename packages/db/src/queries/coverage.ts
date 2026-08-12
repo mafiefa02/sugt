@@ -15,10 +15,17 @@ import type { Person } from "./caller";
  * screen's rule rather than this query's — neither writes anything here.
  */
 
-/** One School's row: its name, where it is, and how much teaching has happened. */
+/**
+ * One School's row: its name, where it is, and how much teaching has happened.
+ *
+ * No `slug`, though the column exists and public URLs are keyed on it. Nothing this
+ * screen renders needs one, and the convention beside these modules is that nothing is
+ * exported that a surface does not render. Detail Sekolah
+ * ([#26](https://github.com/mafiefa02/sugt/issues/26)) is what adds it, if a link from
+ * here is what it wants.
+ */
 export type CoverageSchool = {
   id: string;
-  slug: string;
   name: string;
   kabupatenKota: string;
   /**
@@ -35,7 +42,6 @@ export type CoverageSchool = {
 /** One Cluster and the Schools in it. Between six and seventeen; the sizes are lopsided. */
 export type CoverageCluster = {
   id: string;
-  slug: string;
   name: string;
   topic: string;
   schools: CoverageSchool[];
@@ -58,11 +64,9 @@ export async function coverage(_caller: Person): Promise<CoverageCluster[]> {
   const rows = await db
     .select({
       clusterId: cluster.id,
-      clusterSlug: cluster.slug,
       clusterName: cluster.name,
       clusterTopic: cluster.topic,
       schoolId: school.id,
-      schoolSlug: school.slug,
       schoolName: school.name,
       kabupatenKota: school.kabupatenKota,
       deliveredSessions: sql<number>`count(${session.id})`.mapWith(Number),
@@ -88,7 +92,6 @@ export async function coverage(_caller: Person): Promise<CoverageCluster[]> {
     if (current?.id !== row.clusterId) {
       current = {
         id: row.clusterId,
-        slug: row.clusterSlug,
         name: row.clusterName,
         topic: row.clusterTopic,
         schools: [],
@@ -97,7 +100,6 @@ export async function coverage(_caller: Person): Promise<CoverageCluster[]> {
     }
     current.schools.push({
       id: row.schoolId,
-      slug: row.schoolSlug,
       name: row.schoolName,
       kabupatenKota: row.kabupatenKota,
       deliveredSessions: row.deliveredSessions,

@@ -38,4 +38,4 @@
 export type { Caller, ParticipantToken, Person, ServiceCaller } from "./caller";
 export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage";
 export { perjadinAcquittal, type PerjadinAcquittal } from "./perjadin-report";
-export { isNotStaffError, NotStaffError, requireStaff, type StaffPerson } from "./staff-only";
+export { isNotStaffError, NotStaffError, requireStaff } from "./staff-only";
