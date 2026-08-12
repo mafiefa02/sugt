@@ -62,4 +62,21 @@ export {
   type SessionConcern,
 } from "./school-detail";
 export { schoolDirectory, type DirectorySchool } from "./school-directory";
+export {
+  cancelSession,
+  correctSessionTeachers,
+  markSessionDelivered,
+  moveSessionDate,
+  sessionDetail,
+  type CancelSessionResult,
+  type CorrectTeachersResult,
+  type MarkDeliveredResult,
+  type MoveSessionDateResult,
+  type OwedRecord,
+  type PastArranged,
+  type SessionDetail,
+  type SessionDetailTeacher,
+  type SessionPerjadin,
+  type TaughtBy,
+} from "./session-detail";
 export { isNotStaffError, NotStaffError, requireStaff } from "./staff-only";
