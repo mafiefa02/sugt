@@ -22,11 +22,11 @@ separate ticket does that. Where a choice exists, the trade-off is stated and le
 Nothing here is from memory. Three primary sources, all pinned to the commit read on
 **12 August 2026**, because two of them move:
 
-| Source                | Pinned at                                                                                                   |
-| --------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Client (`storage-js`) | [`supabase-js@6653465`](https://github.com/supabase/supabase-js/tree/6653465c2a35f233ae43d689cbec4c822aaf49de/packages/core/storage-js) |
-| Server (`storage-api`) | [`supabase/storage@1ddcf30`](https://github.com/supabase/storage/tree/1ddcf30bc142707826d2d22f4742521cb2b33907) |
-| Docs                  | [`supabase/supabase@6bda113`](https://github.com/supabase/supabase/tree/6bda113bf076be26600f4c237a2a755500b0a353/apps/docs/content/guides/storage) |
+| Source                 | Pinned at                                                                                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client (`storage-js`)  | [`supabase-js@6653465`](https://github.com/supabase/supabase-js/tree/6653465c2a35f233ae43d689cbec4c822aaf49de/packages/core/storage-js)            |
+| Server (`storage-api`) | [`supabase/storage@1ddcf30`](https://github.com/supabase/storage/tree/1ddcf30bc142707826d2d22f4742521cb2b33907)                                    |
+| Docs                   | [`supabase/supabase@6bda113`](https://github.com/supabase/supabase/tree/6bda113bf076be26600f4c237a2a755500b0a353/apps/docs/content/guides/storage) |
 
 **`github.com/supabase/storage-js` is archived and stale.** Its own repository metadata says "The
 storage-js repo now has a new home: <https://github.com/supabase/supabase-js/tree/master/packages/core/storage-js>",
@@ -43,8 +43,8 @@ not have. Read the monorepo path, not the old repo.
 
 ```js
 const { data, error } = await supabase.storage
-  .from('bucket')
-  .createSignedUrl('private-document.pdf', 3600)
+  .from("bucket")
+  .createSignedUrl("private-document.pdf", 3600);
 ```
 
 That example is the documentation's own
@@ -78,7 +78,7 @@ not softened by anything:
   `required: ['token']` and no `authorization` header at all, verifies the token, and then reads
   the row `asSuperUser()`
   ([`getSignedObject.ts`](https://github.com/supabase/storage/blob/1ddcf30bc142707826d2d22f4742521cb2b33907/src/http/routes/object/getSignedObject.ts)).
-  The URL *is* the credential. Whoever holds it is Staff for that object.
+  The URL _is_ the credential. Whoever holds it is Staff for that object.
 - **The object path, in clear.** The token payload is `{ url: '<bucket>/<path>', scope, iat, exp }`
   ([`object.ts#L730`](https://github.com/supabase/storage/blob/1ddcf30bc142707826d2d22f4742521cb2b33907/src/storage/object.ts#L730)),
   and a JWT payload is base64url, not encrypted. The docs' own worked example decodes to
@@ -113,11 +113,11 @@ Vercel function**.
 ```js
 // Server Action or route handler, service-role client
 const { data, error } = await supabase.storage
-  .from('receipts')
+  .from("receipts")
   .upload(`perjadin/${perjadinId}/${transactionId}/${crypto.randomUUID()}`, file, {
-    contentType: 'image/jpeg',
+    contentType: "image/jpeg",
     upsert: false,
-  })
+  });
 ```
 
 `upload(path, fileBody, fileOptions?)` resolves to `{ data: { id, path, fullPath }, error }`
@@ -156,14 +156,14 @@ are not larger than 6MB… we recommend using TUS Resumable Upload for uploading
 ```js
 // server: after the Staff check
 const { data } = await supabase.storage
-  .from('receipts')
-  .createSignedUploadUrl(`perjadin/${perjadinId}/${transactionId}/${crypto.randomUUID()}`)
+  .from("receipts")
+  .createSignedUploadUrl(`perjadin/${perjadinId}/${transactionId}/${crypto.randomUUID()}`);
 // -> { signedUrl, token, path }
 
 // browser:
 const { data, error } = await supabase.storage
-  .from('receipts')
-  .uploadToSignedUrl(path, token, file)
+  .from("receipts")
+  .uploadToSignedUrl(path, token, file);
 ```
 
 Both signatures are from the client
@@ -191,14 +191,14 @@ Three things worth knowing before this looks strictly better:
 
 ### The trade-off, stated and left open
 
-|                                | Server-side `upload()`                        | `createSignedUploadUrl` + `uploadToSignedUrl`     |
-| ------------------------------ | --------------------------------------------- | ------------------------------------------------- |
-| Service-role key on the client | No                                            | No                                                |
-| Bytes through a Vercel function | Yes — 4.5 MB hard, 1 MB default via a Server Action | No — browser talks to Storage directly       |
-| Key chosen by                  | Server                                        | Server (the token is bound to that exact path)     |
-| Window the browser holds       | none                                          | fixed 2 hours, not configurable per call           |
-| Server can inspect the bytes   | Yes                                           | No                                                |
-| `content_type` / `byte_size`   | Server can measure                            | Must be read back (§5)                             |
+|                                 | Server-side `upload()`                              | `createSignedUploadUrl` + `uploadToSignedUrl`  |
+| ------------------------------- | --------------------------------------------------- | ---------------------------------------------- |
+| Service-role key on the client  | No                                                  | No                                             |
+| Bytes through a Vercel function | Yes — 4.5 MB hard, 1 MB default via a Server Action | No — browser talks to Storage directly         |
+| Key chosen by                   | Server                                              | Server (the token is bound to that exact path) |
+| Window the browser holds        | none                                                | fixed 2 hours, not configurable per call       |
+| Server can inspect the bytes    | Yes                                                 | No                                             |
+| `content_type` / `byte_size`    | Server can measure                                  | Must be read back (§5)                         |
 
 Neither column is recommended here.
 
@@ -271,7 +271,7 @@ objects. This leads to a better cache hit rate compared to private buckets"
 
 **`next/image` can optimise from it,** because the URL needs no headers — and headers are precisely
 what the optimiser will not send: "For security reasons, the Image Optimization API using the
-default loader will *not* forward headers when fetching the `src` image. If the `src` image
+default loader will _not_ forward headers when fetching the `src` image. If the `src` image
 requires authentication, consider using the `unoptimized` property"
 ([Image](https://nextjs.org/docs/app/api-reference/components/image)). A public-bucket URL needs
 none. A **signed** URL would also technically fetch, but see the caveat below.
@@ -284,15 +284,15 @@ module.exports = {
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: '<project-ref>.supabase.co',
-        port: '',
-        pathname: '/storage/v1/object/public/public-media/**',
-        search: '',
+        protocol: "https",
+        hostname: "<project-ref>.supabase.co",
+        port: "",
+        pathname: "/storage/v1/object/public/public-media/**",
+        search: "",
       },
     ],
   },
-}
+};
 ```
 
 The docs give this object shape verbatim and describe the semantics: the `src` "must start with
@@ -310,7 +310,7 @@ accident:
 - A pattern anchored at `/storage/v1/object/public/public-media/` cannot match
   `/storage/v1/object/sign/receipts/…` or `/storage/v1/object/authenticated/…` — different path
   prefixes, and `**` only extends the end. Private objects stay unreachable through `/_next/image`.
-- What it *does* create is a **proxy**: your own `/_next/image` endpoint will fetch and re-serve
+- What it _does_ create is a **proxy**: your own `/_next/image` endpoint will fetch and re-serve
   anything matching the pattern, for anyone who can construct the query string. Narrowed to that
   one bucket prefix, "anything" is exactly the set of objects that are already world-readable by
   design — which is the whole point of `public-media` per ADR-0001. Left as a bare `hostname`, it
@@ -333,7 +333,7 @@ by any of this: a `remotePatterns` entry is a string in a config file, not a dep
 **Limits are set in two places, and both are enforced server-side on every upload path.**
 
 - **Global**, per project: "You can set the maximum file size across all your buckets by setting
-  the *Global file size limit* value in your Storage Settings. For Free projects, the limit can't
+  the _Global file size limit_ value in your Storage Settings. For Free projects, the limit can't
   exceed 50 MB. On the Pro Plan and up, you can set this value to up to 500 GB"
   ([limits](https://supabase.com/docs/guides/storage/uploads/file-limits)).
 - **Per bucket**: `file_size_limit` (bytes) and `allowed_mime_types` (a `text[]`), columns on
@@ -357,14 +357,14 @@ server never sees the file.
 **What a rejection returns.** JSON `{ "code": "…", "message": "…" }` with these statuses
 ([error codes](https://supabase.com/docs/guides/storage/debugging/error-codes)):
 
-| Code                    | HTTP | When                                                        |
-| ----------------------- | ---- | ----------------------------------------------------------- |
-| `EntityTooLarge`        | 413  | over the bucket or global size limit                         |
-| `InvalidMimeType`       | 400  | not in the bucket's `allowed_mime_types`                     |
-| `InvalidKey`            | 400  | key fails `isValidKey` (see §6)                              |
-| `KeyAlreadyExists` / `ResourceAlreadyExists` | 409 | path taken and `upsert` is false        |
-| `AccessDenied`          | 403  | no policy permits it (not reachable with the service role)   |
-| `NoSuchBucket` / `NoSuchKey` | 404 | bucket or object missing                                |
+| Code                                         | HTTP | When                                                       |
+| -------------------------------------------- | ---- | ---------------------------------------------------------- |
+| `EntityTooLarge`                             | 413  | over the bucket or global size limit                       |
+| `InvalidMimeType`                            | 400  | not in the bucket's `allowed_mime_types`                   |
+| `InvalidKey`                                 | 400  | key fails `isValidKey` (see §6)                            |
+| `KeyAlreadyExists` / `ResourceAlreadyExists` | 409  | path taken and `upsert` is false                           |
+| `AccessDenied`                               | 403  | no policy permits it (not reachable with the service role) |
+| `NoSuchBucket` / `NoSuchKey`                 | 404  | bucket or object missing                                   |
 
 Through the JS client these surface as `{ data: null, error }` rather than a throw, unless
 `throwOnError()` is set.
@@ -420,7 +420,7 @@ programme's write volume — a handful of receipts per Perjadin — that is theo
 mechanical argument a wider first segment (say `{perjadin_id}/…`) would answer, and it is worth
 knowing exists rather than discovering it later.
 
-**Three things that do *not* argue for a change:**
+**Three things that do _not_ argue for a change:**
 
 - **Listing performance is irrelevant here.** `storage_path` is `unique` in `transaction_evidence`
   and `story_photo`, so our own tables are the index; the app never needs `list()`. The prefix
@@ -451,7 +451,7 @@ document does not pick.
 .replace(/\/+/g, '/')` before upload
 ([#L1506](https://github.com/supabase/supabase-js/blob/6653465c2a35f233ae43d689cbec4c822aaf49de/packages/core/storage-js/src/packages/StorageFileApi.ts#L1506)).
 An `undefined` or empty id interpolated into the template collapses `//` into `/` and silently
-produces a *shorter, different, still-valid* key rather than an error. Keys must be assembled from
+produces a _shorter, different, still-valid_ key rather than an error. Keys must be assembled from
 ids already known to be non-empty.
 
 ---

@@ -12,13 +12,13 @@ establishes what is possible; it decides nothing. The auth architecture is a sep
 
 ## What was read, and at which version
 
-| Package                        | Version    | Note                                                       |
-| ------------------------------ | ---------- | ---------------------------------------------------------- |
-| `better-auth`                  | **1.6.27** | `latest` on npm at the time of writing                     |
-| `@better-auth/core`            | 1.6.27     | holds the option types and the Google provider             |
-| `@better-auth/drizzle-adapter` | 1.6.27     | pulled in by `better-auth`, not installed directly         |
-| `auth` (the CLI)               | **1.6.27** | the CLI package; see the naming note below                 |
-| `@better-auth/cli` (old name)  | 1.4.21     | `latest` tag is stale — do not use this package            |
+| Package                        | Version    | Note                                               |
+| ------------------------------ | ---------- | -------------------------------------------------- |
+| `better-auth`                  | **1.6.27** | `latest` on npm at the time of writing             |
+| `@better-auth/core`            | 1.6.27     | holds the option types and the Google provider     |
+| `@better-auth/drizzle-adapter` | 1.6.27     | pulled in by `better-auth`, not installed directly |
+| `auth` (the CLI)               | **1.6.27** | the CLI package; see the naming note below         |
+| `@better-auth/cli` (old name)  | 1.4.21     | `latest` tag is stale — do not use this package    |
 
 **Better Auth is not in this repo.** `pnpm-workspace.yaml`'s catalog has no `better-auth`,
 no `auth`, no `@better-auth/*` entry, and nothing in the workspace imports it. Every version
@@ -103,7 +103,7 @@ achievable. It is achievable by **hand-editing or hand-writing the Drizzle table
 which is exactly what `data-model.md` says will not happen.
 
 `DrizzleAdapterConfig` in full (`@better-auth/drizzle-adapter@1.6.27 → dist/index.d.mts`):
-`schema?` (the Drizzle schema *object*, not a Postgres schema name), `provider` (required,
+`schema?` (the Drizzle schema _object_, not a Postgres schema name), `provider` (required,
 `"pg"` here), `usePlural?`, `debugLogs?`, `camelCase?` (default `false`, snake_case names),
 `transaction?` (**default `false`**). There is no schema-name option and no per-table schema
 option.
@@ -118,13 +118,13 @@ Drizzle adapter a model name is a **key into the schema object**, not SQL, so
 ADR-0013's consequences list budgets for "a `banned` column on `better_auth.user`". The
 plugin's schema is (`better-auth@1.6.27 → dist/plugins/admin/schema.mjs`, verbatim):
 
-| Table     | Column          | Type      | Attributes                                    |
-| --------- | --------------- | --------- | --------------------------------------------- |
-| `user`    | `role`          | `string`  | `required: false`, `input: false`             |
-| `user`    | `banned`        | `boolean` | `defaultValue: false`, `required: false`, `input: false` |
-| `user`    | `banReason`     | `string`  | `required: false`, `input: false`             |
-| `user`    | `banExpires`    | `date`    | `required: false`, `input: false`             |
-| `session` | `impersonatedBy`| `string`  | `required: false`, `input: false`             |
+| Table     | Column           | Type      | Attributes                                               |
+| --------- | ---------------- | --------- | -------------------------------------------------------- |
+| `user`    | `role`           | `string`  | `required: false`, `input: false`                        |
+| `user`    | `banned`         | `boolean` | `defaultValue: false`, `required: false`, `input: false` |
+| `user`    | `banReason`      | `string`  | `required: false`, `input: false`                        |
+| `user`    | `banExpires`     | `date`    | `required: false`, `input: false`                        |
+| `session` | `impersonatedBy` | `string`  | `required: false`, `input: false`                        |
 
 Confirmed by `https://www.better-auth.com/docs/plugins/admin`.
 
@@ -188,8 +188,7 @@ whole-schema decision, not a per-column one.
 (`auth@1.6.27 → dist/index.mjs`, the field-emission branch). `getModelName("person")` returns
 `"person"` unchanged, because `person` is not in Better Auth's table registry
 (`@better-auth/core@1.6.27 → dist/db/adapter/get-model-name.mjs` — unknown models fall through
-to `return usePlural ? \`${model}s\` : model`). The output references an identifier `person`
-that `auth-schema.ts` never defines. TypeScript will not compile it. The generated file is
+to `return usePlural ? \`${model}s\` : model`). The output references an identifier `person`that`auth-schema.ts` never defines. TypeScript will not compile it. The generated file is
 hand-edited or it is broken — a third independent reason the "never hand-edited" claim cannot
 stand.
 
@@ -197,7 +196,7 @@ stand.
 says drizzle-kit leaves `better_auth.user.person_id` alone "because neither is in its
 snapshot". But the Drizzle adapter reads columns off the table object you give it (finding A), so
 `person_id` has to be present in the Drizzle table for Better Auth to read or write it — at
-which point it *is* in drizzle-kit's snapshot and the stated reason stops applying. Whether
+which point it _is_ in drizzle-kit's snapshot and the stated reason stops applying. Whether
 `person_id` should be Drizzle-managed or hand-managed is an architecture decision; this note
 only records that the current reasoning assumes both.
 
@@ -243,13 +242,13 @@ Four contradictions, above. These claims were tested the same way and are **true
 
 - **ADR-0013 line 13: "an uninvited Google account cannot create a `user` row at all."**
   Holds, and holds even with the adapter's `transaction: false` default, because
-  `createWithHooks` runs every `create.before` hook *before* it calls `adapter.create` — a
+  `createWithHooks` runs every `create.before` hook _before_ it calls `adapter.create` — a
   throw never reaches an insert. Mechanism in question 3 below.
 - **`data-model.md` line 155: the hook "looks up `person` by lowercased email."** Matches the
   library exactly: Better Auth lowercases the address before the hook sees it, so
   `where lower(email) = $1 and active` is the correct query.
 - **ADR-0013 line 40: the hook "fires before a user row is created … a returning sign-in
-  creates a *session*, not a user, so the hook never runs again."** Correct, and it is exactly
+  creates a _session_, not a user, so the hook never runs again."** Correct, and it is exactly
   why the ban path is needed. `data-model.md` line 118 says the same thing.
 - **ADR-0011 line 62-64 and ADR-0013's premise that the invite list gates every account.** No
   code path in the package creates a `user` row without passing through the hook — verified
@@ -266,7 +265,7 @@ Four contradictions, above. These claims were tested the same way and are **true
 Covered in full above. In short, for 1.6.27:
 
 - **Runtime: yes.** Pass `pgSchema("better_auth").table(...)` objects in `drizzleAdapter(db, {
-  provider: "pg", schema })`. The adapter is schema-agnostic by construction.
+provider: "pg", schema })`. The adapter is schema-agnostic by construction.
 - **`auth generate`: no.** It emits `pgTable` only, and knows nothing about `pgSchema`.
 - **`auth migrate`: not applicable.** It refuses any non-Kysely adapter.
 
@@ -299,7 +298,7 @@ Covered in finding C. What is true regardless of the generator:
 
 Better Auth itself never issues DDL on the Drizzle path, so a hand-written
 `alter table better_auth."user" add constraint … references public.person (id)` is invisible
-to it. What it is *not* invisible to is drizzle-kit — see the tension noted in finding C.
+to it. What it is _not_ invisible to is drizzle-kit — see the tension noted in finding C.
 
 ## 3. `databaseHooks.user.create.before`
 
@@ -332,7 +331,7 @@ matches the library exactly, and `where lower(email) = $1 and active` is the rig
 
 **No user row is created, and the mechanism is order, not rollback.** `createWithHooks`
 (`better-auth@1.6.27 → dist/db/with-hooks.mjs`) runs every registered `create.before` hook
-*first* and only then calls `adapter.create`. A throw never reaches the insert. ADR-0013's
+_first_ and only then calls `adapter.create`. A throw never reaches the insert. ADR-0013's
 central claim — "an uninvited Google account cannot create a user row at all" — **holds**, and
 holds even with `transaction: false`.
 
@@ -360,10 +359,10 @@ unusable error. The documented rejection mechanism is throwing:
 
 So it is **a redirect, not a 500, and no stack trace reaches the browser**. Concretely:
 
-| Hook throws                                                     | Browser lands at                                    |
-| --------------------------------------------------------------- | --------------------------------------------------- |
-| `new APIError("FORBIDDEN", { message: "Not on the invite list" })` | `<errorURL>?error=Not_on_the_invite_list`            |
-| `new Error("whatever")`                                          | `<errorURL>?error=unable_to_create_user`             |
+| Hook throws                                                        | Browser lands at                          |
+| ------------------------------------------------------------------ | ----------------------------------------- |
+| `new APIError("FORBIDDEN", { message: "Not on the invite list" })` | `<errorURL>?error=Not_on_the_invite_list` |
+| `new Error("whatever")`                                            | `<errorURL>?error=unable_to_create_user`  |
 
 `errorURL` resolves to, in order: the `errorCallbackURL` passed to `signIn.social`
 (`dist/api/routes/sign-in.mjs:33`), else `options.onAPIError.errorURL`, else
@@ -478,17 +477,17 @@ Also available per provider: `disableSignUp`, `disableImplicitSignUp` (requires
 `createWithHooks` (`better-auth@1.6.27 → dist/db/internal-adapter.mjs:75-100`). The complete
 list of call sites, from a grep over `better-auth@1.6.27 → dist/`:
 
-| Path                                | Call site                                  | Reachable here?                                        |
-| ----------------------------------- | ------------------------------------------ | ------------------------------------------------------ |
-| OAuth sign-in (Google)              | `oauth2/link-account.mjs:97` `createOAuthUser` | yes                                                |
-| Email/password sign-up              | `api/routes/sign-up.mjs:221`               | route is mounted but 400s unless `emailAndPassword.enabled`, which defaults to `false` |
-| Admin plugin `/admin/create-user`   | `plugins/admin/routes.mjs:194`             | only if the admin plugin is added                      |
-| Magic link                          | `plugins/magic-link/index.mjs:160`         | plugin not planned                                     |
-| Email OTP                           | `plugins/email-otp/routes.mjs:414`         | plugin not planned                                     |
-| Phone number                        | `plugins/phone-number/routes.mjs:335`      | plugin not planned                                     |
-| Anonymous                           | `plugins/anonymous/index.mjs:47`           | plugin not planned                                     |
-| SIWE                                | `plugins/siwe/index.mjs:175`               | plugin not planned                                     |
-| Test helper                         | `plugins/test-utils/db-helpers.mjs:5`      | tests only                                             |
+| Path                              | Call site                                      | Reachable here?                                                                        |
+| --------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
+| OAuth sign-in (Google)            | `oauth2/link-account.mjs:97` `createOAuthUser` | yes                                                                                    |
+| Email/password sign-up            | `api/routes/sign-up.mjs:221`                   | route is mounted but 400s unless `emailAndPassword.enabled`, which defaults to `false` |
+| Admin plugin `/admin/create-user` | `plugins/admin/routes.mjs:194`                 | only if the admin plugin is added                                                      |
+| Magic link                        | `plugins/magic-link/index.mjs:160`             | plugin not planned                                                                     |
+| Email OTP                         | `plugins/email-otp/routes.mjs:414`             | plugin not planned                                                                     |
+| Phone number                      | `plugins/phone-number/routes.mjs:335`          | plugin not planned                                                                     |
+| Anonymous                         | `plugins/anonymous/index.mjs:47`               | plugin not planned                                                                     |
+| SIWE                              | `plugins/siwe/index.mjs:175`                   | plugin not planned                                                                     |
+| Test helper                       | `plugins/test-utils/db-helpers.mjs:5`          | tests only                                                                             |
 
 No code path calls `adapter.create({ model: "user", … })` directly. Every one of the above is
 gated by the same hook, so adding a plugin later does not silently open a door — though each
@@ -511,7 +510,7 @@ victim's OAuth identity linked into the attacker-owned row"; `trustedProviders` 
 empty; `allowDifferentEmails` defaults false.
 
 **Email verification does not create users.** The `emailVerification` path on OAuth sign-up
-runs *after* `createOAuthUser` has returned a user (`dist/oauth2/link-account.mjs:104-112`);
+runs _after_ `createOAuthUser` has returned a user (`dist/oauth2/link-account.mjs:104-112`);
 `/verify-email` updates an existing row. There is no user-creating verification path.
 
 **Where the real hole is, and it is not the library.** The hook gates every route Better Auth
@@ -523,14 +522,14 @@ Better Auth's API.
 
 ## Compatibility summary against this repo
 
-| Constraint                     | Repo has                | `better-auth@1.6.27` wants        | OK  |
-| ------------------------------ | ----------------------- | --------------------------------- | --- |
-| `next`                         | `16.2.12`               | `^14 \|\| ^15 \|\| ^16` (optional)| yes |
-| `react` / `react-dom`          | `19.2.4`                | `^18 \|\| ^19` (optional)         | yes |
-| `drizzle-orm`                  | `^0.45.2`               | `^0.45.2` (optional)              | yes |
-| `drizzle-kit`                  | `^0.31.10`              | `>=0.31.4` (optional)             | yes |
-| Postgres driver                | `postgres` `^3.4.9`     | `pg ^8` only for the Kysely built-in; irrelevant with the Drizzle adapter | yes |
-| `better-auth` in the catalog   | **absent**              | —                                 | n/a |
+| Constraint                   | Repo has            | `better-auth@1.6.27` wants                                                | OK  |
+| ---------------------------- | ------------------- | ------------------------------------------------------------------------- | --- |
+| `next`                       | `16.2.12`           | `^14 \|\| ^15 \|\| ^16` (optional)                                        | yes |
+| `react` / `react-dom`        | `19.2.4`            | `^18 \|\| ^19` (optional)                                                 | yes |
+| `drizzle-orm`                | `^0.45.2`           | `^0.45.2` (optional)                                                      | yes |
+| `drizzle-kit`                | `^0.31.10`          | `>=0.31.4` (optional)                                                     | yes |
+| Postgres driver              | `postgres` `^3.4.9` | `pg ^8` only for the Kysely built-in; irrelevant with the Drizzle adapter | yes |
+| `better-auth` in the catalog | **absent**          | —                                                                         | n/a |
 
 Runtime dependencies `better-auth@1.6.27` pulls in unconditionally: `@better-auth/core`,
 `@better-auth/drizzle-adapter`, `@better-auth/kysely-adapter`, `@better-auth/memory-adapter`,

@@ -20,14 +20,14 @@ and each says so where it appears. Nothing else in this document describes a sch
 not exist, and nothing in this list has been checked against a real Postgres the way the rest
 was:
 
-| Decided, not applied | Where |
-| --- | --- |
-| the partial `person_email_key` | [Identity](#identity) |
-| `transaction.category` and `transaction.incurred_by_person_id` | [Money](#money) |
-| `perjadin_evaluation.lodging` becoming nullable | [Perjadin Evaluation](#perjadin-evaluation) |
-| `session_one_online_per_school_per_day` | [Delivery](#delivery) |
-| the whole of `story` and `story_photo` | [Stories](#stories) |
-| the four `better_auth` tables, now hand-declared | [Two Postgres schemas](#two-postgres-schemas) |
+| Decided, not applied                                           | Where                                         |
+| -------------------------------------------------------------- | --------------------------------------------- |
+| the partial `person_email_key`                                 | [Identity](#identity)                         |
+| `transaction.category` and `transaction.incurred_by_person_id` | [Money](#money)                               |
+| `perjadin_evaluation.lodging` becoming nullable                | [Perjadin Evaluation](#perjadin-evaluation)   |
+| `session_one_online_per_school_per_day`                        | [Delivery](#delivery)                         |
+| the whole of `story` and `story_photo`                         | [Stories](#stories)                           |
+| the four `better_auth` tables, now hand-declared               | [Two Postgres schemas](#two-postgres-schemas) |
 
 Two of these carry claims worth verifying rather than assuming when the migration lands:
 `least()` ignoring NULLs, which is what lets a nullable `lodging` leave the elaboration rule
@@ -60,8 +60,8 @@ list below exists so nobody later "completes" the schema by adding the rest.
 | Report deadline                                              | Not a column. Two days after the Group returns, derived from `perjadin.ends_on` and a constant.                                                            |
 | Aspect                                                       | Not a table and not a value. Every Aspect on all four evaluations is a **column**; `@sugt/domain` names each rubric.                                       |
 | Rating                                                       | Not a table. A Rating is one Aspect column on one row of an evaluation.                                                                                    |
-| Transaction category                                         | Not a table. A `text` column on `transaction`, CHECKed against a closed set — see [Money](#money).                                                          |
-| Story kind                                                   | Not a table. A `text` column on `story`; field narrative or a Final Project piece, and nothing else differs between them.                                   |
+| Transaction category                                         | Not a table. A `text` column on `transaction`, CHECKed against a closed set — see [Money](#money).                                                         |
+| Story kind                                                   | Not a table. A `text` column on `story`; field narrative or a Final Project piece, and nothing else differs between them.                                  |
 
 Every CHECK constraint value list in this document is **character-for-character** an
 `as const` array in `packages/domain/src/index.ts` — `STREAMS`, `CLASS_KINDS`,
@@ -101,8 +101,8 @@ which exits before doing anything here.
 What makes the hand-written version work is that **the adapter never builds a table-name
 string**: it looks each model up as a key in the schema object you pass, so a table built with
 `pgSchema("better_auth").table("user", …)` emits `better_auth."user"` by itself. This is the
-path Better Auth's own Drizzle documentation sanctions — *"modifying the Drizzle schema
-directly"*. `auth generate` is run once for the column list and thereafter is a reference to
+path Better Auth's own Drizzle documentation sanctions — _"modifying the Drizzle schema
+directly"_. `auth generate` is run once for the column list and thereafter is a reference to
 diff against on upgrade, not a step in any workflow.
 
 Verified against `better-auth@1.6.27`; see
@@ -1273,11 +1273,11 @@ point needed a sibling for "no Person at all, but a valid secret". It does, and 
 a type rather than a second guard. Three kinds of caller now reach `@sugt/db`, and they are
 three named types rather than one with optional fields:
 
-| Caller | Is | May read | May write |
-| ---------------------- | ------------------------------------------ | ------------------------- | ------------------------------ |
-| `Person` | somebody signed in whose `person` row is still `active` | delivery; money only if Staff | their own records |
-| `ServiceCaller` | `@sugt/public`, holding `AGGREGATES_SECRET` | the three aggregate payloads | nothing |
-| `ParticipantToken` | a live Session feedback token | nothing | `participant_feedback` only |
+| Caller             | Is                                                      | May read                      | May write                   |
+| ------------------ | ------------------------------------------------------- | ----------------------------- | --------------------------- |
+| `Person`           | somebody signed in whose `person` row is still `active` | delivery; money only if Staff | their own records           |
+| `ServiceCaller`    | `@sugt/public`, holding `AGGREGATES_SECRET`             | the three aggregate payloads  | nothing                     |
+| `ParticipantToken` | a live Session feedback token                           | nothing                       | `participant_feedback` only |
 
 Every query takes one, and the money queries accept only `Person`. A single type carrying
 optional fields would turn "is this a Staff caller" into a runtime shape check — which is
