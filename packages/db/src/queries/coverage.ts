@@ -1,9 +1,10 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { cluster, school } from "../schema/reference";
 import type { Person } from "./caller";
+import { deliveredSessionCount, onDeliveredSessions } from "./delivered-sessions";
 
 /**
  * **Coverage** — the landing screen. Every School with its delivered Session count,
@@ -20,9 +21,13 @@ import type { Person } from "./caller";
  *
  * No `slug`, though the column exists and public URLs are keyed on it. Nothing this
  * screen renders needs one, and the convention beside these modules is that nothing is
- * exported that a surface does not render. Detail Sekolah
- * ([#26](https://github.com/mafiefa02/sugt/issues/26)) is what adds it, if a link from
- * here is what it wants.
+ * exported that a surface does not render.
+ *
+ * **[#26](https://github.com/mafiefa02/sugt/issues/26) settled the open half of that:
+ * it wanted no link from here, so no `slug` was added.** A Coverage row's control is
+ * its Checkbox, and the row is deliberately not clickable — putting a second target in
+ * it would make one click ambiguous between selecting a School and leaving the screen.
+ * Direktori Sekolah is the way to one School's Sessions, and it carries its own slug.
  */
 export type CoverageSchool = {
   id: string;
@@ -56,9 +61,10 @@ export type CoverageCluster = {
  * application per function, and no screen ever assembles its own joins.
  *
  * SQL shared between two of these modules belongs in an unexported helper beneath
- * them. There is one module today, so there is nothing shared yet — the second one
- * that wants the same expression is what earns the helper, and writing it now would
- * be a helper with one caller.
+ * them. Direktori Sekolah ([#26](https://github.com/mafiefa02/sugt/issues/26)) is the
+ * second module wanting a School's delivered count, so the expression moved to
+ * `./delivered-sessions.ts` rather than being copied. Nothing else about this query
+ * changed with it.
  */
 export async function coverage(_caller: Person): Promise<CoverageCluster[]> {
   const rows = await db
@@ -69,16 +75,16 @@ export async function coverage(_caller: Person): Promise<CoverageCluster[]> {
       schoolId: school.id,
       schoolName: school.name,
       kabupatenKota: school.kabupatenKota,
-      deliveredSessions: sql<number>`count(${session.id})`.mapWith(Number),
+      deliveredSessions: deliveredSessionCount,
     })
     .from(cluster)
     // Inner, never outer: `school.cluster_id` is NOT NULL, so "a School with no
     // Cluster" is not a state this screen ever has to render.
     .innerJoin(school, eq(school.clusterId, cluster.id))
-    // The delivered filter sits in the JOIN rather than in a WHERE, and that is
-    // load-bearing: in a WHERE it would drop every School that has delivered
-    // nothing, which is exactly the School a reader of this screen is looking for.
-    .leftJoin(session, and(eq(session.schoolId, school.id), eq(session.status, "delivered")))
+    // Both the join condition and the count come from `./delivered-sessions.ts`, which
+    // Direktori Sekolah reads too. Why the delivered filter sits in the JOIN rather
+    // than in a WHERE is documented there, beside the condition it applies to.
+    .leftJoin(session, onDeliveredSessions)
     .groupBy(cluster.id, school.id)
     // `cluster.id` is in the ordering so a Cluster's Schools are guaranteed
     // contiguous, which the fold below depends on. Names alone would interleave two

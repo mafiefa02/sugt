@@ -1,5 +1,5 @@
 import { db, schema } from "@sugt/db";
-import type { SessionMode, SessionStatus, Stream, Role } from "@sugt/domain";
+import type { ClassKind, SessionMode, SessionStatus, Stream, Role } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 
 export type PersonFixture = {
@@ -126,6 +126,161 @@ export async function addSession(fixture: SessionFixture) {
   return session!;
 }
 
+export type OfflineSessionFixture = {
+  schoolId: string;
+  heldOn: string;
+  status?: SessionStatus;
+  /** The Perjadin the Session happens on. `addPerjadin` builds one. */
+  perjadinId: string;
+};
+
+/**
+ * An **offline** Session, which needs a Perjadin first — the two CHECKs are exact
+ * mirrors, so `mode = 'offline'` and a null `perjadin_id` cannot coexist.
+ *
+ * A sibling of `addSession` rather than an option on it. The two differ in every
+ * column that is not the School and the date, and a fixture that took either shape
+ * would spend its body deciding which one it was.
+ *
+ * Keep `heldOn` inside the Perjadin's date range. Nothing enforces that here — the
+ * rule is the application's, and `docs/data-model.md` lists it under what the database
+ * does not hold — so a fixture outside the range would model a state the app exists to
+ * prevent.
+ */
+export async function addOfflineSession(fixture: OfflineSessionFixture) {
+  const status: SessionStatus = fixture.status ?? "arranged";
+  const [session] = await db
+    .insert(schema.session)
+    .values({
+      schoolId: fixture.schoolId,
+      mode: "offline" satisfies SessionMode,
+      heldOn: fixture.heldOn,
+      status,
+      cancelledReason: status === "cancelled" ? "Sekolah meminta penjadwalan ulang" : null,
+      perjadinId: fixture.perjadinId,
+    })
+    .returning();
+  return session!;
+}
+
+/**
+ * A Rating that is comfortably above `CONCERN_AT_OR_BELOW`, so a fixture reaches the
+ * concerns list only where it says so. Every Rating column is NOT NULL, so each of the
+ * three record fixtures below fills its whole rubric and takes overrides for the
+ * Aspects a test is actually about.
+ */
+const FINE = 9;
+
+/** Whether a filed record owes an explanation, which is a CHECK on two of the three tables. */
+const needsProse = (ratings: number[]) => Math.min(...ratings) <= 7;
+
+const WENT_WRONG = "Proyektor mati sepanjang sesi";
+
+export type ClassRecordFixture = {
+  sessionId: string;
+  classKind: ClassKind;
+  /** Teaching Team. A composite foreign key into `person (id, role)` refuses anyone else. */
+  filedByPersonId: string;
+  ratings?: Partial<
+    Record<
+      | "comprehension"
+      | "participation"
+      | "readiness"
+      | "materials"
+      | "delivery"
+      | "facilities"
+      | "timing",
+      number
+    >
+  >;
+};
+
+/** What a Teaching Team member says about one Class they taught. Seven Aspects. */
+export async function addClassRecord(fixture: ClassRecordFixture) {
+  const ratings = {
+    comprehension: FINE,
+    participation: FINE,
+    readiness: FINE,
+    materials: FINE,
+    delivery: FINE,
+    facilities: FINE,
+    timing: FINE,
+    ...fixture.ratings,
+  };
+  const [record] = await db
+    .insert(schema.classRecord)
+    .values({
+      sessionId: fixture.sessionId,
+      classKind: fixture.classKind,
+      filedByPersonId: fixture.filedByPersonId,
+      filedByRole: "Teaching Team",
+      ...ratings,
+      problems: needsProse(Object.values(ratings)) ? WENT_WRONG : null,
+    })
+    .returning();
+  return record!;
+}
+
+export type SessionRecordFixture = {
+  sessionId: string;
+  /** The PIC, who is Staff. The mirror composite foreign key refuses a professor. */
+  filedByPersonId: string;
+  ratings?: Partial<
+    Record<"facilities" | "turnout" | "schoolSupport" | "timing" | "coordination", number>
+  >;
+};
+
+/** What the PIC says about the visit as a whole. Five Aspects, none about teaching. */
+export async function addSessionRecord(fixture: SessionRecordFixture) {
+  const ratings = {
+    facilities: FINE,
+    turnout: FINE,
+    schoolSupport: FINE,
+    timing: FINE,
+    coordination: FINE,
+    ...fixture.ratings,
+  };
+  const [record] = await db
+    .insert(schema.sessionRecord)
+    .values({
+      sessionId: fixture.sessionId,
+      filedByPersonId: fixture.filedByPersonId,
+      filedByRole: "Staff",
+      ...ratings,
+      problems: needsProse(Object.values(ratings)) ? WENT_WRONG : null,
+    })
+    .returning();
+  return record!;
+}
+
+export type ParticipantFeedbackFixture = {
+  sessionId: string;
+  classKind: ClassKind;
+  name?: string;
+  ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>>;
+};
+
+/**
+ * What one Participant says about the Class they sat in. Three Aspects, no Person and
+ * **no elaboration rule** — a Participant owes nothing — which makes this the cheapest
+ * way to put a low Rating on a Session.
+ */
+export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture) {
+  const [feedback] = await db
+    .insert(schema.participantFeedback)
+    .values({
+      sessionId: fixture.sessionId,
+      classKind: fixture.classKind,
+      name: fixture.name ?? "Siti",
+      materials: FINE,
+      instructor: FINE,
+      relevance: FINE,
+      ...fixture.ratings,
+    })
+    .returning();
+  return feedback!;
+}
+
 export type PerjadinFixture = {
   destination?: string;
   startsOn?: string;
@@ -204,9 +359,10 @@ export async function addTransaction(fixture: TransactionFixture) {
  * "what the tests populate" survives a fixture being deleted, while one pruned to the
  * cascade minimum quietly stops covering a table the day its parent leaves.
  *
- * `cascade` is what reaches everything **no** fixture writes: every evaluation table,
- * the feedback token and `transaction_evidence`. A new table referencing one of these
- * therefore needs no entry; a new table nothing references does.
+ * `cascade` is what reaches everything **no** fixture writes: `perjadin_evaluation`,
+ * `session_feedback_token` and `transaction_evidence`. A new table referencing one of
+ * these therefore needs no entry; a new table nothing references does. The other three
+ * evaluation tables are named below, because fixtures now write them directly.
  *
  * `public."session"` and `better_auth."session"` are both here and both qualified.
  * That collision is the whole reason Better Auth was given a Postgres schema of its
@@ -224,6 +380,9 @@ export async function resetDatabase() {
       public."cluster",
       public."school",
       public."session",
+      public."class_record",
+      public."session_record",
+      public."participant_feedback",
       public."perjadin",
       public."group_member",
       public."transaction"
