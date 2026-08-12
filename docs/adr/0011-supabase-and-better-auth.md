@@ -71,3 +71,20 @@ unauthenticated ever touches the database.
 - Two vendors to keep working rather than one, and the auth tables are ours to migrate.
 
 The full schema is in [`docs/data-model.md`](../data-model.md).
+
+## Amendment: the second mechanism is `person.active`, not the admin plugin
+
+**The sign-in Consequence above reads the way this amendment records; this notes why, so
+the change is not silent.** When first written, that bullet ended by routing revocation
+through Better Auth's **admin plugin** — the library's supported ban call. It now reads that
+revocation is enforced by reading `person.active` on `session.create.before` and again on
+every request, with no plugin. The bullet was brought into line rather than left contradicting
+[ADR-0013](./0013-people-are-added-in-the-tool-and-their-role-is-write-once.md), whose own
+amendment dropped the plugin for **one write to `person.active`, checked across three
+enforcement points**.
+
+**Only the named mechanism changed.** `databaseHooks.user.create.before` still gates
+**signup only** and still does not fire on a returning sign-in — which is exactly why a second
+mechanism is needed at all. What that second mechanism _is_ moved from the plugin to a
+per-request `person.active` read; that it is _needed_ did not change. The argument for it
+lives in ADR-0013's amendment, and this Consequence now rests on it.
