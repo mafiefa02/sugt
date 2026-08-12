@@ -21,9 +21,13 @@ import { deliveredSessionCount, onDeliveredSessions } from "./delivered-sessions
  *
  * No `slug`, though the column exists and public URLs are keyed on it. Nothing this
  * screen renders needs one, and the convention beside these modules is that nothing is
- * exported that a surface does not render. Detail Sekolah
- * ([#26](https://github.com/mafiefa02/sugt/issues/26)) is what adds it, if a link from
- * here is what it wants.
+ * exported that a surface does not render.
+ *
+ * **[#26](https://github.com/mafiefa02/sugt/issues/26) settled the open half of that:
+ * it wanted no link from here, so no `slug` was added.** A Coverage row's control is
+ * its Checkbox, and the row is deliberately not clickable — putting a second target in
+ * it would make one click ambiguous between selecting a School and leaving the screen.
+ * Direktori Sekolah is the way to one School's Sessions, and it carries its own slug.
  */
 export type CoverageSchool = {
   id: string;

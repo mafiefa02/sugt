@@ -65,8 +65,12 @@ function SchoolSessions({ sessions }: { sessions: SchoolSession[] }) {
  * concern"* on one would report a verdict nobody gave. The absence of Ratings is
  * therefore said out loud rather than read as approval.
  *
- * A Session that has not happened yet gets neither: an arranged or cancelled Session
- * has nothing to judge, so the chip is simply absent.
+ * **A Rating is shown wherever one exists, whatever the Session's status**, and only
+ * the two wordings below are held to `delivered`. An arranged or cancelled Session
+ * should carry no Ratings at all — a Session may only be cancelled while arranged, so
+ * neither ever happened — but if one does, that is worth seeing rather than a reason to
+ * hide it. What would be wrong is saying *"Tanpa concern"* about a Session nobody has
+ * sat in yet, so those two are absent instead.
  */
 function ConcernChip({ session }: { session: SchoolSession }) {
   if (session.concern !== null) {

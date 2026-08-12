@@ -29,8 +29,11 @@ export type DirectorySchool = {
   id: string;
   /**
    * The School's URL. Detail Sekolah is keyed on it rather than on `id`: `slug` is
-   * unique, is what the public site already addresses a School by, and reads in a
-   * link. This is the `slug` Coverage deliberately left out for this ticket to add.
+   * unique, is what the public site already addresses a School by, and reads in a link.
+   *
+   * This is the directory's own slug for the directory's own link, and not the one
+   * Coverage left an opening for — that one was for a link out of Coverage, and there
+   * is none.
    */
   slug: string;
   name: string;
