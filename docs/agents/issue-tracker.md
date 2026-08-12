@@ -100,6 +100,45 @@ query($owner:String!,$repo:String!,$map:Int!){
 Filtering `blockedBy` on `state=="OPEN"` is what makes a ticket unblock when its blocker
 closes — the edge persists after closure.
 
+### Build tickets
+
+A map plans; it does not build. Build tickets therefore sit **outside** the map, in a
+**GitHub Milestone**, with the same native `blocked_by` edges between them. The first
+milestone is `First iteration — build` (number `1`).
+
+- **Create**: `gh issue create --title "…" --label "ready-for-agent" --milestone "First iteration — build" --body-file body.md`
+- **Attach an existing issue**: `gh issue edit <number> --milestone "First iteration — build"`
+
+The frontier is the same idea against a different container — open, unassigned, no **open**
+blocker. Milestones expose no `subIssues`, so the query walks `issues` instead. Run and read
+back against this repo:
+
+```sh
+gh api graphql -f query='
+query($owner:String!,$repo:String!,$ms:Int!){
+  repository(owner:$owner,name:$repo){
+    milestone(number:$ms){
+      title
+      issues(first:100){
+        nodes{
+          number title state
+          assignees(first:5){nodes{login}}
+          blockedBy(first:20){nodes{number state}}
+        }
+      }
+    }
+  }
+}' -f owner=<owner> -f repo=<repo> -F ms=<milestone number> --jq '
+  .data.repository.milestone.issues.nodes[]
+  | select(.state=="OPEN")
+  | select((.assignees.nodes|length)==0)
+  | select([.blockedBy.nodes[]|select(.state=="OPEN")]|length==0)
+  | "#\(.number)  \(.title)"'
+```
+
+Note the milestone is addressed by its **number**, not its title, and that number is not an
+issue number. `gh issue edit --milestone` is the one place the title is used.
+
 ### Resolving
 
 Post the answer as a comment, close the issue, then append a one-line pointer to the map's
