@@ -1,3 +1,4 @@
+import { REPORT_DEADLINE_DAYS_AFTER_RETURN } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
@@ -36,6 +37,14 @@ export type PerjadinAcquittal = {
   spentIdr: number;
   /** What is left of the Advance to hand back. Negative means the Group overspent. */
   remainderIdr: number;
+  /**
+   * **Derived, never stored.** Two days after the Group gets back, so it cannot be typed
+   * wrong and it moves by itself if the trip's dates are corrected. Nothing is gated on it.
+   *
+   * It sits on this payload rather than on `perjadinDetail` because the Perjadin Report is
+   * the acquittal state on this row, and the acquittal is Staff-only.
+   */
+  reportDueOn: string;
   returnedToTreasurerIdr: number | null;
   returnedAt: Date | null;
   reportFiledAt: Date | null;
@@ -63,6 +72,12 @@ export async function perjadinAcquittal(
       perjadinId: perjadin.id,
       destination: perjadin.destination,
       advanceIdr: perjadin.advanceIdr,
+      // Computed in Postgres rather than in JavaScript, so the arithmetic happens in the
+      // same calendar the dates are stored in. A `Date` here would introduce a time zone the
+      // domain does not have — a Session is a calendar day, and so is a deadline.
+      reportDueOn: sql<string>`to_char(
+        ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}, 'YYYY-MM-DD'
+      )`,
       // `coalesce` because the left join finds nothing at all on a Perjadin with no
       // transactions, and "spent nothing" is 0 rather than unknown.
       spentIdr: sql<number>`coalesce(sum(${transaction.amountIdr}), 0)`.mapWith(Number),

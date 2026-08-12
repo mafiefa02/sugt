@@ -1,11 +1,9 @@
 import type { Role, Stream } from "@sugt/domain";
-import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
 import { ONLINE_SESSION_STILL_STANDS, session, sessionTeacher } from "../schema/delivery";
-import { person } from "../schema/people";
-import { school } from "../schema/reference";
 import type { Person } from "./caller";
+import { activeRosters, selectedSchools, type RosterPerson, type SelectedSchool } from "./rosters";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -26,27 +24,13 @@ import { requireStaff } from "./staff-only";
  */
 
 /** One School in the selection, as a row of the form names it. */
-export type BatchSchool = {
-  id: string;
-  name: string;
-  /** Shown for the same reason Coverage shows it: to confirm this is the right School. */
-  kabupatenKota: string;
-};
+export type BatchSchool = SelectedSchool;
 
 /**
- * Somebody a picker on this screen can name — the shared PIC, or a Teaching Team member
- * on one row.
- *
- * **Revoked People are not here.** `person.active = false` is the whole revocation
- * mechanism ([ADR-0013](../../../../docs/adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md)),
- * and naming a revoked Person as the PIC of a Session nobody has taught yet would
- * commit them to filing its Session Record. Historical references to them stay intact;
- * this is a picker, and a picker is about what happens next.
+ * Somebody a picker on this screen can name — the shared PIC, or a Teaching Team member on
+ * one row. Revoked People are not among them; `./rosters.ts` says why.
  */
-export type BatchPerson = {
-  id: string;
-  fullName: string;
-};
+export type BatchPerson = RosterPerson;
 
 /**
  * What the screen renders before anything is written: the Schools that were selected,
@@ -59,10 +43,10 @@ export type BatchPerson = {
  * screen still makes exactly one call and still assembles nothing. `Promise.all` keeps
  * the two concurrent.
  *
- * The rosters will want an unexported helper the moment
- * [#29](https://github.com/mafiefa02/sugt/issues/29) picks a Group from the same two
- * lists. The convention beside this module is that the **second** module wanting an
- * expression is what earns the helper, so it stays inline here and moves down then.
+ * The rosters are `./rosters.ts`'s now. They were inline here until Rencanakan Perjadin
+ * ([#29](https://github.com/mafiefa02/sugt/issues/29)) picked a Group from the same two
+ * lists — the convention beside this module is that the **second** module wanting an
+ * expression is what earns the helper, and that is what happened.
  */
 export type OnlineSessionBatch = {
   /**
@@ -94,38 +78,9 @@ export async function onlineSessionBatch(
 ): Promise<OnlineSessionBatch> {
   requireStaff(caller);
 
-  const [schools, people] = await Promise.all([
-    // `inArray` on an empty list is a query with no possible answer, so it is skipped
-    // rather than sent.
-    schoolIds.length === 0
-      ? []
-      : db
-          .select({ id: school.id, name: school.name, kabupatenKota: school.kabupatenKota })
-          .from(school)
-          .where(inArray(school.id, schoolIds))
-          .orderBy(asc(school.name)),
-    db
-      .select({ id: person.id, fullName: person.fullName, role: person.role })
-      .from(person)
-      .where(eq(person.active, true))
-      .orderBy(asc(person.fullName)),
-  ]);
+  const [schools, rosters] = await Promise.all([selectedSchools(schoolIds), activeRosters()]);
 
-  // Split in TypeScript rather than by two queries: `role` is one column of one table and
-  // the rows are already in hand. The comparison needs no assertion — the column carries
-  // `Role` from the schema, off `person_role_check`.
-  const withRole = (role: Role): BatchPerson[] =>
-    people
-      .filter((entry) => entry.role === role)
-      // `role` itself does not travel: nothing on this screen renders it, and the list a
-      // picker was handed is what says which role it is asking for.
-      .map((entry) => ({ id: entry.id, fullName: entry.fullName }));
-
-  return {
-    schools,
-    staff: withRole("Staff"),
-    teachingTeam: withRole("Teaching Team"),
-  };
+  return { schools, ...rosters };
 }
 
 /** Who taught one Stream at one Session. At most one per Stream, by primary key. */

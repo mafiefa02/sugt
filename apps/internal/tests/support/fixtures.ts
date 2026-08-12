@@ -399,3 +399,26 @@ export async function resetDatabase() {
     restart identity cascade
   `);
 }
+
+/**
+ * Which constraint refused a write, or `null` if nothing did.
+ *
+ * **Named rather than asserted as "it threw"**, because *some* constraint firing proves
+ * nothing: the rows these tests insert satisfy several CHECKs and a composite foreign key
+ * each, so a test that only knew it was rejected would pass against the wrong rule.
+ *
+ * **Two places to look, and both are needed.** Drizzle wraps a failed *statement*, so the
+ * driver's error sits one level down under `cause`. A DEFERRED constraint fails at
+ * **COMMIT** instead — which is not a statement — so that error arrives unwrapped. Reading
+ * only `cause` makes a deferred refusal indistinguishable from no refusal at all, which is
+ * a test that passes while proving the opposite of what it claims.
+ */
+export function constraintOf(error: unknown): string | null {
+  const wrapped = error as { constraint_name?: string; cause?: { constraint_name?: string } };
+  return wrapped.cause?.constraint_name ?? wrapped.constraint_name ?? null;
+}
+
+/** `constraintOf` against a write in flight: the name that refused it, or `null`. */
+export async function refusedBy(write: Promise<unknown>): Promise<string | null> {
+  return write.then(() => null, constraintOf);
+}

@@ -6,6 +6,7 @@ import {
   markSessionDeliveredAction,
   moveSessionDateAction,
 } from "-/app/(app)/sesi/[id]/actions";
+import { PersonSelect } from "-/components/person-select";
 import type {
   CorrectTeachersResult,
   MarkDeliveredResult,
@@ -26,13 +27,6 @@ import {
 } from "@sugt/ui/components/dialog";
 import { Input } from "@sugt/ui/components/input";
 import { Label } from "@sugt/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@sugt/ui/components/select";
 import { Textarea } from "@sugt/ui/components/textarea";
 import { useId, useState, useTransition } from "react";
 
@@ -412,30 +406,14 @@ function TeacherField({
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={id}>{stream}</Label>
-      <Select
-        items={Object.fromEntries(session.teachingTeam.map((entry) => [entry.id, entry.fullName]))}
-        value={value === "" ? null : value}
-        onValueChange={(selected) => {
-          onSelect((selected as string | null) ?? "");
-        }}
-      >
-        <SelectTrigger
-          id={id}
-          aria-invalid={invalid}
-        >
-          <SelectValue placeholder="Pilih pengajar" />
-        </SelectTrigger>
-        <SelectContent>
-          {session.teachingTeam.map((entry) => (
-            <SelectItem
-              key={entry.id}
-              value={entry.id}
-            >
-              {entry.fullName}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <PersonSelect
+        id={id}
+        people={session.teachingTeam}
+        value={value}
+        invalid={invalid}
+        placeholder="Pilih pengajar"
+        onSelect={onSelect}
+      />
       {invalid && <p className="text-sm text-destructive">Pengajar {stream} wajib disebut.</p>}
     </div>
   );
