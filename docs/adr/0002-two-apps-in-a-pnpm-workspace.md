@@ -1,6 +1,6 @@
 # Two apps in a pnpm workspace, not one app routed by hostname
 
-The public site and the internal tool are separate applications in this repo's pnpm workspace, sharing packages for domain types and data access, and deployed independently to `sugt.itb.ac.id` and `internal.sugt.itb.ac.id`.
+The public site and the internal tool are separate applications in this repo's pnpm workspace, sharing packages for domain types and data access, and deployed independently to `sugtitb.com` and `internal.sugtitb.com`.
 
 ## Why
 
@@ -18,4 +18,9 @@ Secondarily, the public site is the portfolio DITSAMA ITB is judged on and the i
 - `src/` moves under `apps/` before feature work starts. Doing this later means rewriting import paths across a real codebase.
 - Two builds and two deployment targets to configure and keep working.
 - Both deploy to Vercel, on a domain DITSAMA controls rather than an `itb.ac.id` subdomain. Nothing here depends on ITB IT: no institutional DNS, no identity mandate (see [ADR-0003](./0003-google-sign-in-with-an-invite-list.md)), and no restriction on hosting data with a third party (see [ADR-0005](./0005-postgres-for-the-invariants-not-the-scale.md)).
+
+  **The domains are `sugtitb.com` and `internal.sugtitb.com`.** The opening line of this ADR named `sugt.itb.ac.id` and `internal.sugt.itb.ac.id` until they were settled — contradicting this rule two paragraphs above it, inside one document. The rule was right and the sentence was wrong, so the sentence is corrected and the rule stands unweakened. This is a correction rather than an amendment: the decision never changed, only a sentence that misreported it.
+
+  [ADR-0003](./0003-google-sign-in-with-an-invite-list.md) needed no change and already agreed — _"the site runs on a domain we own rather than an `itb.ac.id` subdomain, so no institutional identity policy applies"_ is a load-bearing premise for choosing Google sign-in over ITB SSO, and `sugtitb.com` is what makes it true.
+
 - The public app holds no database credentials. It fetches the figures [ADR-0001](./0001-public-site-reads-aggregates-only.md) permits from an aggregates endpoint served by the internal app, and caches them. This is what makes the boundary a fact about access rather than about discipline — with direct database access, both ADRs would reduce to conventions.
