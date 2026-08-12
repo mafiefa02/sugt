@@ -81,6 +81,18 @@ export const session = pgTable(
     uniqueIndex("session_one_per_school_per_perjadin")
       .on(t.perjadinId, t.schoolId)
       .where(sql`status <> 'cancelled'`),
+    // The gap the index above cannot close. It keys on `perjadin_id`, which is NULL for
+    // every online Session, and Postgres treats NULLs in a unique index as distinct — so
+    // nothing stopped two online Sessions for one School on one day. Jadwalkan Sesi
+    // daring arranges them from Coverage in a batch, one date across a multi-selection,
+    // which moves that from theoretical to one mis-click away.
+    //
+    // Partial in both the ways the first index is, and for the same two reasons:
+    // cancelled rows accumulate and must not collide with the Session that replaced
+    // them, and offline Sessions are untouched because their `perjadin_id` is not null.
+    uniqueIndex("session_one_online_per_school_per_day")
+      .on(t.schoolId, t.heldOn)
+      .where(sql`perjadin_id is null and status <> 'cancelled'`),
   ],
 );
 

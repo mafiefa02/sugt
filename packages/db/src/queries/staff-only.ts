@@ -4,6 +4,15 @@ import type { Person } from "./caller";
  * The Staff-only choke point. **Delivery data is open to everyone signed in;
  * financial data is not** — [ADR-0004](../../../../docs/adr/0004-delivery-data-is-open-internally-money-is-not.md).
  *
+ * **Two kinds of surface pass through here, and ADR-0004 only argues for one of them.**
+ * Reading money is Staff-only by that ADR. *Arranging* delivery — Jadwalkan Sesi daring
+ * and Rencanakan Perjadin — is Staff-only because
+ * [#9](https://github.com/mafiefa02/sugt/issues/9) says so, and ADR-0004 is silent on
+ * it: that ADR opens delivery data to both roles for **reading** and leaves writes with
+ * "the record's owner", which a Session nobody has arranged yet does not have. So the
+ * guard is one guard and the reasons are two, and neither of them is "this function
+ * touches money".
+ *
  * That rule is application code rather than RLS, because Better Auth means there is
  * no `auth.uid()` in Postgres and a policy would need `SET LOCAL` on every
  * transaction plus a non-superuser role with `FORCE ROW LEVEL SECURITY` — a great
@@ -15,7 +24,7 @@ import type { Person } from "./caller";
 const NOT_STAFF_ERROR_CODE = "sugt/not-staff";
 
 /**
- * A non-Staff `Person` reached a money query.
+ * A non-Staff `Person` reached a Staff-only query.
  *
  * **Reaching this is a bug or an attack, never a user state.**
  * [#9](https://github.com/mafiefa02/sugt/issues/9) specifies the money-free Perjadin
@@ -42,10 +51,11 @@ export class NotStaffError extends Error {
 
   constructor(person: Person) {
     super(
-      `A money query was handed ${person.role} caller ${person.id}. Money is Staff-only ` +
-        `(ADR-0004), and the surfaces that read it are absent for Teaching Team rather ` +
-        `than disabled — so this is a bug in whoever offered the surface, not a state a ` +
-        `user can reach.`,
+      `A Staff-only query was handed ${person.role} caller ${person.id}. Reading money is ` +
+        `Staff-only by ADR-0004 and arranging delivery is Staff-only by the surface list; ` +
+        `either way the surfaces that reach one are absent for Teaching Team rather than ` +
+        `disabled — so this is a bug in whoever offered the surface, not a state a user ` +
+        `can reach.`,
     );
   }
 }
@@ -69,8 +79,15 @@ export function isNotStaffError(error: unknown): error is NotStaffError {
 }
 
 /**
- * The choke point itself. Every money-reading query opens with it, and it is the only
- * thing standing between Teaching Team and a receipt.
+ * The choke point itself. Every Staff-only query opens with it — it is the only thing
+ * standing between Teaching Team and a receipt, and now also the only thing standing
+ * between them and a Session they arranged for a School themselves.
+ *
+ * **On a write it is load-bearing in a way it is not on a read.** A Next.js layout does
+ * not run before a Server Action, so the signed-in layout's `requirePerson()` protects
+ * reads and leaves every write open; a write query that opens with this line is what
+ * closes it. See the amendment on
+ * [#24](https://github.com/mafiefa02/sugt/issues/24).
  *
  * It takes a `Person` rather than a `Caller` because the union's other two arms are
  * refused by the signature: `ServiceCaller` reads the three aggregate payloads and

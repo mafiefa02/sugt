@@ -13,17 +13,22 @@
  * 3. **One function per screen, returning what that screen renders in one round
  *    trip.** SQL shared between two modules goes in an unexported helper beneath
  *    them; nothing is exported that a surface does not render.
- * 4. **Money opens with the Staff-only choke point** (`./staff-only.ts`), which
- *    throws a distinguishable typed error. The app translates it into a 403 —
- *    server-side, at the call site.
+ * 4. **A Staff-only surface opens with the Staff-only choke point**
+ *    (`./staff-only.ts`), which throws a distinguishable typed error. The app
+ *    translates it into a 403 — server-side, at the call site. This convention read
+ *    *"Money opens with…"* until Jadwalkan Sesi daring, which is Staff-only and is not
+ *    money: reading money is Staff-only by ADR-0004, and **arranging delivery** is
+ *    Staff-only by the surface list. One guard, two reasons — see `./staff-only.ts`.
  * 5. **A write function owns its own transaction.** Several writes are
  *    multi-statement: Rencanakan Perjadin writes `perjadin`, `group_member` and N
  *    `session` rows; Tandai terlaksana writes `session.status` and `session_teacher`;
  *    a Group is replaced wholesale. The boundary belongs in the function here, never
  *    in the Server Action calling it — a Server Action that opens one has put the
- *    boundary somewhere a second caller cannot reuse. **Nothing in this package
- *    writes yet**, so this convention is stated and not yet exercised; the first
- *    write ticket is what proves it.
+ *    boundary somewhere a second caller cannot reuse. **`arrangeOnlineSessions` in
+ *    `./online-session-batch.ts` is the first write in this package**, so it is where
+ *    the convention stopped being stated and started being exercised: N Sessions and
+ *    their `session_teacher` rows commit together, and one collision rolls the whole
+ *    batch back.
  *
  * Validation belongs beside the write, in this package, for the rules
  * `docs/data-model.md` describes as *enforced twice by design* — chief among them
@@ -37,6 +42,17 @@
  */
 export type { Caller, ParticipantToken, Person, ServiceCaller } from "./caller";
 export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage";
+export {
+  arrangeOnlineSessions,
+  onlineSessionBatch,
+  type ArrangeOnlineSessionsResult,
+  type BatchPerson,
+  type BatchSchool,
+  type OnlineSessionBatch,
+  type OnlineSessionCollision,
+  type OnlineSessionRow,
+  type OnlineSessionTeacher,
+} from "./online-session-batch";
 export { perjadinAcquittal, type PerjadinAcquittal } from "./perjadin-report";
 export {
   schoolDetail,

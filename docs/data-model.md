@@ -24,17 +24,21 @@ was:
 | -------------------------------------------------------------- | ------------------------------------------- |
 | `transaction.category` and `transaction.incurred_by_person_id` | [Money](#money)                             |
 | `perjadin_evaluation.lodging` becoming nullable                | [Perjadin Evaluation](#perjadin-evaluation) |
-| `session_one_online_per_school_per_day`                        | [Delivery](#delivery)                       |
 | the whole of `story` and `story_photo`                         | [Stories](#stories)                         |
 
-Two of these carry claims worth verifying rather than assuming when the migration lands:
+One of these carries a claim worth verifying rather than assuming when the migration lands:
 `least()` ignoring NULLs, which is what lets a nullable `lodging` leave the elaboration rule
-intact, and the new partial index actually rejecting a second online Session for one School on
-one day.
+intact.
 
-**Two rows left this list.** The partial `person_email_key` and the four hand-declared
-`better_auth` tables are applied, by migrations `0002` and `0003`, and were checked against a
-real Postgres the way the rest of this document was.
+**Three rows left this list.** The partial `person_email_key` and the four hand-declared
+`better_auth` tables are applied, by migrations `0002` and `0003`. So is
+`session_one_online_per_school_per_day`, by migration `0004`, which
+[#27](https://github.com/mafiefa02/sugt/issues/27) wrote because Jadwalkan Sesi daring is the
+screen that makes it necessary. The claim this list held against that index — *"the new partial
+index actually rejecting a second online Session for one School on one day"* — was checked
+rather than assumed: `apps/internal/tests/online-session-batch.test.ts` drives it at the
+database, in both the ways it is partial and in both directions. All three were checked against
+a real Postgres the way the rest of this document was.
 
 The blocks are ordered for reading, by topic, **not** in dependency order — `session`
 appears before the `perjadin` it references. Migrations need reordering: reference data,
