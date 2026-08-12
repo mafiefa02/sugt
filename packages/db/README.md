@@ -60,7 +60,7 @@ unchanged and getting _"No schema changes, nothing to migrate"_.
 ## Better Auth's four tables are declared here
 
 `user`, `session`, `account` and `verification`, by hand, inside the
-`pgSchema("better_auth")` object in `src/schema/people.ts`, and created by `0002`. They
+`pgSchema("better_auth")` object in `src/schema/auth.ts`, and created by `0002`. They
 cannot be generated: the Better Auth CLI emits `pgTable` and only `pgTable`, and
 `auth migrate` refuses the Drizzle adapter outright. Hand-declaring them is the path the
 library's own Drizzle documentation sanctions, because the adapter looks each model up as

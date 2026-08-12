@@ -191,7 +191,7 @@ alter table better_auth."user"
 
 **The column and the foreign key come from two different places, and that is not an
 accident.** The column is declared on the Drizzle table beside the other four in
-`packages/db/src/schema/people.ts` — as a real `uuid`, because `user.additionalFields` has no
+`packages/db/src/schema/auth.ts` — as a real `uuid`, because `user.additionalFields` has no
 `uuid` in its vocabulary and would emit `text`, which cannot foreign-key to `person.id`. The
 **foreign key** is the one piece still hand-written (`0003`), because drizzle-kit will not
 write a cross-schema reference. `additionalFields` still carries a `personId` entry, doing a
