@@ -124,13 +124,14 @@ export type SessionDetail = {
  * the day it arrives and on the day it leaves.
  *
  * **Exported from this module and deliberately not from `./index.ts`.** `docs/data-model.md`
- * says the rule belongs *wherever the date is written*, and this ticket owns one of the
- * three such places: Rencanakan Perjadin
- * ([#29](https://github.com/mafiefa02/sugt/issues/29)) and the trip-date move
- * ([#55](https://github.com/mafiefa02/sugt/issues/55)) must both call it. Both are modules
- * *inside* this package and can import it from here directly — putting it on the package's
- * public surface would break convention 3, which says nothing is exported that a surface
- * renders, and no surface renders this.
+ * says the rule belongs *wherever the date is written*, and there are three such places.
+ * Two now call this: the date edit below, and `./perjadin-planning.ts`, which checks every
+ * Session on a trip before it writes one. The third is the trip-date move
+ * ([#55](https://github.com/mafiefa02/sugt/issues/55)), which has no surface yet.
+ *
+ * They are modules *inside* this package and import it from here directly. Putting it on
+ * the package's public surface would break convention 3 — nothing is exported that a
+ * surface renders, and no surface renders this.
  *
  * A plain string comparison, which is exact rather than lucky: `date` comes back from
  * Postgres as `YYYY-MM-DD`, and that format sorts lexicographically in calendar order.

@@ -1,6 +1,7 @@
 "use client";
 
 import { arrangeOnlineSessionsAction } from "-/app/(app)/jadwalkan-sesi-daring/actions";
+import { PersonSelect } from "-/components/person-select";
 import type {
   ArrangeOnlineSessionsResult,
   BatchPerson,
@@ -13,13 +14,6 @@ import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
 import { Label } from "@sugt/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@sugt/ui/components/select";
 import { cn } from "@sugt/ui/lib/utils";
 import Link from "next/link";
 import { useId, useState, useTransition } from "react";
@@ -164,6 +158,7 @@ function OnlineSessionBatchForm({
         <div className="grid gap-1.5">
           <Label htmlFor={sharedPicId}>PIC untuk semua baris</Label>
           <PersonSelect
+            className="w-44"
             id={sharedPicId}
             people={staff}
             value={shared.picPersonId}
@@ -211,6 +206,7 @@ function OnlineSessionBatchForm({
 
             <RowField label="PIC">
               <PersonSelect
+                className="w-44"
                 people={staff}
                 value={drafts[school.id]!.picPersonId}
                 placeholder="Pilih PIC"
@@ -227,6 +223,7 @@ function OnlineSessionBatchForm({
                 label={stream}
               >
                 <PersonSelect
+                  className="w-44"
                   people={teachingTeam}
                   value={drafts[school.id]!.teachers[stream]}
                   unassignedLabel={UNASSIGNED_LABEL}
@@ -314,68 +311,6 @@ function rowFrom(schoolId: string, draft: Draft): OnlineSessionRow {
       personId: draft.teachers[stream],
     })),
   };
-}
-
-/**
- * A picker over one roster.
- *
- * `unassignedLabel` is what makes it serve both jobs. The PIC is required, so its picker
- * has no way back to nothing and shows a placeholder until one is chosen; a Stream may
- * be left unnamed, so its picker carries an explicit option saying so. An option a
- * reader can see beats a control that has to be cleared some other way.
- */
-function PersonSelect({
-  people,
-  value,
-  onSelect,
-  placeholder,
-  unassignedLabel,
-  id,
-  "aria-label": ariaLabel,
-}: {
-  people: BatchPerson[];
-  value: string;
-  onSelect: (personId: string) => void;
-  placeholder?: string;
-  unassignedLabel?: string;
-  id?: string;
-  "aria-label"?: string;
-}) {
-  const items: Record<string, string> = Object.fromEntries([
-    ...(unassignedLabel === undefined ? [] : [[UNASSIGNED, unassignedLabel]]),
-    ...people.map((entry) => [entry.id, entry.fullName]),
-  ]);
-
-  return (
-    <Select
-      items={items}
-      value={value === UNASSIGNED && unassignedLabel === undefined ? null : value}
-      onValueChange={(selected) => {
-        onSelect((selected as string | null) ?? UNASSIGNED);
-      }}
-    >
-      <SelectTrigger
-        id={id}
-        aria-label={ariaLabel}
-        className="w-44"
-      >
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {unassignedLabel !== undefined && (
-          <SelectItem value={UNASSIGNED}>{unassignedLabel}</SelectItem>
-        )}
-        {people.map((entry) => (
-          <SelectItem
-            key={entry.id}
-            value={entry.id}
-          >
-            {entry.fullName}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
 }
 
 function RowField({ label, children }: { label: string; children: React.ReactNode }) {

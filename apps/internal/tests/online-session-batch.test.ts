@@ -16,6 +16,7 @@ import {
   addProvince,
   addSchool,
   addSession,
+  refusedBy,
   resetDatabase,
   revokePerson,
 } from "./support/fixtures";
@@ -38,21 +39,6 @@ const signInAsStaff = () => signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "R
  */
 describe("one online Session per School per day", () => {
   beforeEach(resetDatabase);
-
-  /**
-   * Which constraint refused a write, or `null` if nothing did.
-   *
-   * Named rather than asserted as "it threw", because *some* constraint firing proves
-   * nothing here — the row these tests insert satisfies five CHECKs and a composite
-   * foreign key, so a test that only knew it was rejected would pass against the wrong
-   * rule. Drizzle wraps the driver error, so the name is one level down under `cause`.
-   */
-  async function refusedBy(write: Promise<unknown>): Promise<string | null> {
-    return write.then(
-      () => null,
-      (error: { cause?: { constraint_name?: string } }) => error.cause?.constraint_name ?? null,
-    );
-  }
 
   /** One School to collide against, and a second to prove the index is not over-broad. */
   async function twoSchools() {

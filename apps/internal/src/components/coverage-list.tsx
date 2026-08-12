@@ -153,9 +153,9 @@ function SchoolRow({
  * A Teaching Team member sees the count and Batal. The two actions are Staff-only
  * surfaces, and a Staff-only surface is absent rather than shown and refused.
  *
- * **Jadwalkan Sesi daring is a link and Rencanakan Perjadin is still a disabled
- * button**, and the difference is not stylistic: `typedRoutes` is on, so a `Link` to a
- * route nobody has built does not typecheck. One of the two destinations now exists.
+ * **Both actions are links now**, which they could not be until their routes existed:
+ * `typedRoutes` is on, so a `Link` to a route nobody has built does not typecheck. That
+ * is what kept Rencanakan Perjadin a disabled button until this point.
  *
  * The selection travels in the URL rather than in a store, because it is transient —
  * thrown away on navigation, and an argument to the next screen rather than anything
@@ -171,7 +171,9 @@ function SelectionBar({
   canPlan: boolean;
   onClear: () => void;
 }) {
-  const arrangeOnline = `/jadwalkan-sesi-daring?sekolah=${[...selected].join(",")}` as Route;
+  const selection = [...selected].join(",");
+  const arrangeOnline = `/jadwalkan-sesi-daring?sekolah=${selection}` as Route;
+  const planPerjadin = `/rencanakan-perjadin?sekolah=${selection}` as Route;
 
   return (
     <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-7 py-3.5 shadow-lg">
@@ -179,11 +181,6 @@ function SelectionBar({
         <span className="text-sm">
           <b>{selected.size}</b> Sekolah dipilih
         </span>
-        {canPlan && (
-          <p className="text-xs text-muted-foreground">
-            Rencanakan Perjadin belum dibangun — lihat issue #29.
-          </p>
-        )}
       </div>
 
       <div className="flex gap-2.5">
@@ -201,12 +198,7 @@ function SelectionBar({
             >
               Jadwalkan Sesi daring
             </Button>
-            <Button
-              disabled
-              title="Rencanakan Perjadin — issue #29"
-            >
-              Rencanakan Perjadin
-            </Button>
+            <Button render={<Link href={planPerjadin} />}>Rencanakan Perjadin</Button>
           </>
         )}
       </div>

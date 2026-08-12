@@ -1270,20 +1270,19 @@ trigger was the alternative and is still the upgrade if raw SQL ever produces a 
 refuses; it was not taken here for the reason the two rules above were not, which is that
 every write path this schema has goes through one package.
 
-**The rule reaches one of its three write paths.** A Session's date is written in three
-places, and only the first exists:
+**The rule reaches two of its three write paths.** A Session's date is written in three
+places:
 
-1. **Moving one Session's date** — Detail Sesi, which calls the validator and refuses.
-2. **Arranging an offline Session** — Rencanakan Perjadin
-   ([#29](https://github.com/mafiefa02/sugt/issues/29)) writes one `session` row per School
-   on the trip and has not been built. It has to call the validator too, or a Session can
-   still be _born_ outside the trip it is on.
-3. **Moving the trip** — nothing edits `perjadin.starts_on`/`ends_on` at all, in either
-   ticket, so the rule that a trip's **arranged** Sessions move with it has nothing to hang
-   from. [#55](https://github.com/mafiefa02/sugt/issues/55) carries it.
+1. **Moving one Session's date** — Detail Sesi calls the validator and refuses.
+2. **Arranging an offline Session** — Rencanakan Perjadin calls it against every Session on
+   the trip, before the transaction opens, and refuses the whole plan naming the Schools
+   whose dates fall outside.
+3. **Moving the trip** — nothing edits `perjadin.starts_on`/`ends_on` at all, so the rule
+   that a trip's **arranged** Sessions move with it has nothing to hang from.
+   [#55](https://github.com/mafiefa02/sugt/issues/55) carries it.
 
-So an arranged offline Session can no longer be _moved_ outside its window, and can still
-arrive outside one by either of the other two routes.
+So an arranged offline Session can no longer be born outside its trip, nor moved outside
+it. What stays open is the trip moving out from under a Session that stayed still.
 
 **That `delivered` is terminal.** `session_status_check` permits all three values with no
 regard to what a row already holds, so nothing in the database stops `delivered` being written

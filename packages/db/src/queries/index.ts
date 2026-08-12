@@ -53,6 +53,26 @@ export {
   type OnlineSessionRow,
   type OnlineSessionTeacher,
 } from "./online-session-batch";
+export {
+  perjadinDetail,
+  replacePerjadinGroup,
+  type GroupMemberEntry,
+  type PerjadinDetail,
+  type PerjadinSession,
+  type ReplaceGroupResult,
+} from "./perjadin-detail";
+export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
+export {
+  perjadinPlan,
+  planPerjadin,
+  type PerjadinPlan,
+  type PlannablePerson,
+  type PlannableSchool,
+  type PlannedSession,
+  type PlannedTeacher,
+  type PlanPerjadinInput,
+  type PlanPerjadinResult,
+} from "./perjadin-planning";
 export { perjadinAcquittal, type PerjadinAcquittal } from "./perjadin-report";
 export {
   schoolDetail,
