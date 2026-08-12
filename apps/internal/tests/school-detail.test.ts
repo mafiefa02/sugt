@@ -1,4 +1,5 @@
 import { schoolDetail } from "@sugt/db/queries";
+import { CONCERN_AT_OR_BELOW } from "@sugt/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -55,10 +56,10 @@ describe("the Detail Sekolah payload", () => {
     });
 
     // Offline Sessions need a Perjadin: an offline Session has one and an online
-    // Session has none, in both directions, by CHECK. `heldOn` sits inside the trip's
+    // Session has none, in both directions, by CHECK. `heldOn` sits inside the Perjadin's
     // dates, which is the application's rule rather than the schema's.
     const perjadin = await addPerjadin({ advanceIdr: 5_000_000, picPersonId });
-    const visited = await addOfflineSession({
+    const onSite = await addOfflineSession({
       schoolId: school.id,
       heldOn: "2026-09-02",
       status: "delivered",
@@ -84,20 +85,17 @@ describe("the Detail Sekolah payload", () => {
       onlinePicPersonId: picPersonId,
     });
 
-    return { cluster, school, neighbour, visited, online, upcoming, calledOff };
+    return { cluster, school, neighbour, onSite, online, upcoming, calledOff };
   }
 
   it("returns the School, where it sits, and its Cluster", async () => {
     const person = await signInAsStaff();
-    const { school } = await seedOneSchool(person.id);
+    await seedOneSchool(person.id);
 
     await expect(schoolDetail(person, "sman-1-bandung")).resolves.toMatchObject({
-      id: school.id,
-      slug: "sman-1-bandung",
       name: "SMAN 1 Bandung",
       kabupatenKota: "Kota Bandung",
       clusterName: "Cluster Alpha",
-      clusterTopic: "Mitigasi Bencana",
     });
   });
 
@@ -234,6 +232,35 @@ describe("the Detail Sekolah payload", () => {
     expect(flagged?.concern).toEqual({ aspect: "school_support", rating: 6 });
   });
 
+  it("flags a Rating of exactly the threshold, and leaves the one above it alone", async () => {
+    /**
+     * The criterion is *"a Rating of 7 or below"*, so the threshold itself is inside the
+     * net. Both sides are asserted in one test because it is the pair that pins the
+     * comparison down: a `<` where the code says `<=` passes every other assertion in
+     * this file, which uses 3, 4, 5, 6 and 9 and never touches the boundary.
+     */
+    const person = await signInAsStaff();
+    const { onSite, online } = await seedOneSchool(person.id);
+
+    await addParticipantFeedback({
+      sessionId: onSite.id,
+      classKind: "Student",
+      ratings: { relevance: CONCERN_AT_OR_BELOW },
+    });
+    await addParticipantFeedback({
+      sessionId: online.id,
+      classKind: "Student",
+      ratings: { relevance: CONCERN_AT_OR_BELOW + 1 },
+    });
+
+    const detail = await schoolDetail(person, "sman-1-bandung");
+    const atTheThreshold = detail?.sessions.find((session) => session.id === onSite.id);
+    const justAbove = detail?.sessions.find((session) => session.id === online.id);
+
+    expect(atTheThreshold?.concern).toEqual({ aspect: "relevance", rating: CONCERN_AT_OR_BELOW });
+    expect(justAbove).toMatchObject({ ratingsFiled: 3, concern: null });
+  });
+
   it("takes the lowest Rating on a Session, whichever of the three sources it came from", async () => {
     /**
      * One low Rating is the signal and is never averaged away, so what a reader is
@@ -273,11 +300,11 @@ describe("the Detail Sekolah payload", () => {
      * and saying "no concern" about it would report a judgement nobody made.
      */
     const person = await signInAsStaff();
-    const { visited, online } = await seedOneSchool(person.id);
-    await addSessionRecord({ sessionId: visited.id, filedByPersonId: person.id });
+    const { onSite, online } = await seedOneSchool(person.id);
+    await addSessionRecord({ sessionId: onSite.id, filedByPersonId: person.id });
 
     const detail = await schoolDetail(person, "sman-1-bandung");
-    const rated = detail?.sessions.find((session) => session.id === visited.id);
+    const rated = detail?.sessions.find((session) => session.id === onSite.id);
     const silent = detail?.sessions.find((session) => session.id === online.id);
 
     expect(rated).toMatchObject({ ratingsFiled: 5, concern: null });

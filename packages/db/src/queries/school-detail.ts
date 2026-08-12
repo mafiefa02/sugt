@@ -17,6 +17,7 @@ import { session } from "../schema/delivery";
 import { classRecord, participantFeedback, sessionRecord } from "../schema/evaluations";
 import { cluster, school } from "../schema/reference";
 import type { Person } from "./caller";
+import { countsTowardsProgress } from "./delivered-sessions";
 
 /**
  * **Detail Sekolah** — one School's Sessions: how many are delivered against the ten
@@ -35,16 +36,17 @@ import type { Person } from "./caller";
  */
 
 /**
- * An Aspect any of the three Session-scoped rubrics can name.
+ * An Aspect any of the three Session-scoped rubrics can name. Most of them are never
+ * a concern, which is why this is not called one.
  *
  * **Three sources, not the concerns list's four.** A Perjadin Evaluation is about the
  * journey rather than the teaching, and `docs/data-model.md` § *The concerns list in
  * full* shows what that costs it here: its branch of that query reports
  * `pj.destination` as its subject, because it has no Session and no School to report.
- * One trip may carry several Schools, so attributing a bad hotel to each of their
+ * One Perjadin may carry several Schools, so attributing a bad hotel to each of their
  * Sessions would flag teaching nobody complained about.
  */
-export type ConcernAspect = ClassRecordAspect | SessionRecordAspect | ParticipantFeedbackAspect;
+export type SessionAspect = ClassRecordAspect | SessionRecordAspect | ParticipantFeedbackAspect;
 
 /**
  * The worst thing anybody said about one Session, when that is at or below
@@ -60,7 +62,7 @@ export type ConcernAspect = ClassRecordAspect | SessionRecordAspect | Participan
  * one chip per Session and offers the Session as the way to read the rest.
  */
 export type SessionConcern = {
-  aspect: ConcernAspect;
+  aspect: SessionAspect;
   rating: number;
 };
 
@@ -88,15 +90,20 @@ export type SchoolSession = {
   concern: SessionConcern | null;
 };
 
-/** What the Detail Sekolah screen renders. */
+/**
+ * What the Detail Sekolah screen renders — and nothing besides.
+ *
+ * No `id` and no `slug`: the screen renders neither, and the slug is this function's
+ * own argument handed back. No `clusterTopic` either — the Cluster's Topic is what
+ * Cluster detail is about, and this surface's row on
+ * [#9](https://github.com/mafiefa02/sugt/issues/9) reads *"Ten Sessions, delivered
+ * count, flagged Sessions"*. The Cluster's **name** stays, because it says where this
+ * School sits.
+ */
 export type SchoolDetail = {
-  id: string;
-  slug: string;
   name: string;
   kabupatenKota: string;
   clusterName: string;
-  /** The subject matter this School's teaching is drawn from. One per Cluster. */
-  clusterTopic: string;
   /** Delivered Sessions. **Arranged and cancelled count for nothing.** */
   deliveredSessions: number;
   /** Every Session that exists, oldest first. A cancelled one stays in the list. */
@@ -119,7 +126,7 @@ export type SchoolDetail = {
  * cost is that a name which drifts from its column fails at runtime, so every source
  * is exercised by a test, `school_support` most of all.
  */
-function ratingsFiledOn(table: PgTable, aspects: readonly string[]): SQL {
+function ratingsFrom(table: PgTable, aspects: readonly string[]): SQL {
   const unpivot = sql.raw(aspects.map((aspect) => `('${aspect}', src.${aspect})`).join(", "));
 
   return sql`
@@ -141,22 +148,25 @@ function ratingsFiledOn(table: PgTable, aspects: readonly string[]): SQL {
  * `order by` inside `array_agg` carries a tie-break on the Aspect name, so two equally
  * low Ratings pick the same one every time instead of whichever the plan reached first.
  */
-const LOWEST_RATING_FILED = sql`(
+const RATINGS_ON_THIS_SESSION = sql`(
   select count(*)::int as ratings_filed,
          min(r.rating) as lowest_rating,
          (array_agg(r.aspect order by r.rating asc, r.aspect asc))[1] as lowest_aspect
     from (
-      ${ratingsFiledOn(classRecord, CLASS_RECORD_ASPECTS)}
+      ${ratingsFrom(classRecord, CLASS_RECORD_ASPECTS)}
       union all
-      ${ratingsFiledOn(sessionRecord, SESSION_RECORD_ASPECTS)}
+      ${ratingsFrom(sessionRecord, SESSION_RECORD_ASPECTS)}
       union all
-      ${ratingsFiledOn(participantFeedback, PARTICIPANT_FEEDBACK_ASPECTS)}
+      ${ratingsFrom(participantFeedback, PARTICIPANT_FEEDBACK_ASPECTS)}
     ) as r
    where r.session_id = ${session.id}
 ) as concern`;
 
-/** The threshold applies to the lowest Rating; anything above it is not a concern. */
-function concernOf(aspect: ConcernAspect | null, rating: number | null): SessionConcern | null {
+/**
+ * The threshold applies to the lowest Rating, and it is *at or below* — a Rating of
+ * exactly `CONCERN_AT_OR_BELOW` is a concern, and one above it is not.
+ */
+function concernOf(aspect: SessionAspect | null, rating: number | null): SessionConcern | null {
   if (aspect === null || rating === null || rating > CONCERN_AT_OR_BELOW) return null;
   return { aspect, rating };
 }
@@ -171,12 +181,9 @@ function concernOf(aspect: ConcernAspect | null, rating: number | null): Session
 export async function schoolDetail(_caller: Person, slug: string): Promise<SchoolDetail | null> {
   const rows = await db
     .select({
-      id: school.id,
-      slug: school.slug,
       name: school.name,
       kabupatenKota: school.kabupatenKota,
       clusterName: cluster.name,
-      clusterTopic: cluster.topic,
 
       sessionId: session.id,
       mode: session.mode,
@@ -186,7 +193,7 @@ export async function schoolDetail(_caller: Person, slug: string): Promise<Schoo
 
       ratingsFiled: sql<number>`concern.ratings_filed`.mapWith(Number),
       lowestRating: sql<number | null>`concern.lowest_rating`,
-      lowestAspect: sql<ConcernAspect | null>`concern.lowest_aspect`,
+      lowestAspect: sql<SessionAspect | null>`concern.lowest_aspect`,
     })
     .from(school)
     // Inner, never outer: `school.cluster_id` is NOT NULL.
@@ -197,7 +204,7 @@ export async function schoolDetail(_caller: Person, slug: string): Promise<Schoo
     .leftJoin(session, eq(session.schoolId, school.id))
     // After the Session join, never before: a LATERAL may only reference what precedes
     // it in the FROM clause, and this one reads `session.id`.
-    .leftJoinLateral(LOWEST_RATING_FILED, sql`true`)
+    .leftJoinLateral(RATINGS_ON_THIS_SESSION, sql`true`)
     .where(eq(school.slug, slug))
     // Oldest first — this reads as the School's history. `session.id` breaks the tie,
     // since two Sessions may share a date.
@@ -228,17 +235,15 @@ export async function schoolDetail(_caller: Person, slug: string): Promise<Schoo
   }
 
   return {
-    id: first.id,
-    slug: first.slug,
     name: first.name,
     kabupatenKota: first.kabupatenKota,
     clusterName: first.clusterName,
-    clusterTopic: first.clusterTopic,
-    // Counted from the rows already in hand rather than by a second aggregate. The list
+    // Counted from the rows already in hand rather than by a second aggregate: the list
     // is every Session this School has, so asking the database to recount it would buy
-    // nothing — but the count belongs here and not on the screen, because *which
-    // statuses count* is a domain rule and not a rendering choice.
-    deliveredSessions: sessions.filter((entry) => entry.status === "delivered").length,
+    // nothing. **Which statuses count** is still not decided here — that rule lives in
+    // `./delivered-sessions.ts` with the SQL saying the same thing, so the two cannot
+    // drift apart.
+    deliveredSessions: sessions.filter((entry) => countsTowardsProgress(entry.status)).length,
     sessions,
   };
 }

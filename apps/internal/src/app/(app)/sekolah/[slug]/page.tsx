@@ -28,7 +28,7 @@ export default async function Page({ params }: PageProps<"/sekolah/[slug]">) {
       <header className="border-b border-border px-7 py-5">
         <h1 className="font-heading text-lg font-medium">{school.name}</h1>
         <p className="text-sm text-muted-foreground">
-          {school.clusterName} · {school.kabupatenKota} · Topik: {school.clusterTopic}
+          {school.clusterName} · {school.kabupatenKota}
         </p>
 
         <div className="mt-3.5 flex max-w-sm items-center gap-3">

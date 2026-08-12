@@ -1,4 +1,4 @@
-import type { ConcernAspect, SchoolSession } from "@sugt/db/queries";
+import type { SchoolSession, SessionAspect } from "@sugt/db/queries";
 import {
   CONCERN_AT_OR_BELOW,
   RATING_MAX,
@@ -117,7 +117,7 @@ const STATUS_LABELS: Record<SessionStatus, string> = {
   cancelled: "Dibatalkan",
 };
 
-const ASPECT_LABELS: Record<ConcernAspect, string> = {
+const ASPECT_LABELS: Record<SessionAspect, string> = {
   comprehension: "Pemahaman",
   participation: "Partisipasi",
   readiness: "Kesiapan",

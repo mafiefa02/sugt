@@ -40,9 +40,9 @@ export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage"
 export { perjadinAcquittal, type PerjadinAcquittal } from "./perjadin-report";
 export {
   schoolDetail,
-  type ConcernAspect,
   type SchoolDetail,
   type SchoolSession,
+  type SessionAspect,
   type SessionConcern,
 } from "./school-detail";
 export { schoolDirectory, type DirectorySchool } from "./school-directory";

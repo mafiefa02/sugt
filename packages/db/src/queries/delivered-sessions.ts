@@ -1,3 +1,4 @@
+import type { SessionStatus } from "@sugt/domain";
 import { and, eq, sql } from "drizzle-orm";
 
 import { session } from "../schema/delivery";
@@ -41,3 +42,15 @@ export const onDeliveredSessions = and(
  * second source of truth for a constant.
  */
 export const deliveredSessionCount = sql<number>`count(${session.id})`.mapWith(Number);
+
+/**
+ * The same rule again, for a caller that already has the Sessions in hand and would
+ * otherwise ask the database to count what it just read.
+ *
+ * It is here rather than beside that caller so the rule has one home in both languages:
+ * the SQL above and this predicate say the same thing, and a screen that decided for
+ * itself which statuses count is exactly what the module exists to prevent.
+ */
+export function countsTowardsProgress(status: SessionStatus): boolean {
+  return status === "delivered";
+}

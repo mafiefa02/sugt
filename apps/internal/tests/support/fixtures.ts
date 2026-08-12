@@ -130,7 +130,7 @@ export type OfflineSessionFixture = {
   schoolId: string;
   heldOn: string;
   status?: SessionStatus;
-  /** The Perjadin the visit happens on. `addPerjadin` builds one. */
+  /** The Perjadin the Session happens on. `addPerjadin` builds one. */
   perjadinId: string;
 };
 
@@ -171,7 +171,7 @@ export async function addOfflineSession(fixture: OfflineSessionFixture) {
  */
 const FINE = 9;
 
-/** Whether a filed record trips the elaboration rule, which is a CHECK on two of the three tables. */
+/** Whether a filed record owes an explanation, which is a CHECK on two of the three tables. */
 const needsProse = (ratings: number[]) => Math.min(...ratings) <= 7;
 
 const WENT_WRONG = "Proyektor mati sepanjang sesi";
@@ -181,8 +181,18 @@ export type ClassRecordFixture = {
   classKind: ClassKind;
   /** Teaching Team. A composite foreign key into `person (id, role)` refuses anyone else. */
   filedByPersonId: string;
-  ratings?: Partial<Record<"comprehension" | "participation" | "readiness", number>> &
-    Partial<Record<"materials" | "delivery" | "facilities" | "timing", number>>;
+  ratings?: Partial<
+    Record<
+      | "comprehension"
+      | "participation"
+      | "readiness"
+      | "materials"
+      | "delivery"
+      | "facilities"
+      | "timing",
+      number
+    >
+  >;
 };
 
 /** What a Teaching Team member says about one Class they taught. Seven Aspects. */
