@@ -969,7 +969,7 @@ Evidence is many-per-transaction. `storage_path` is the object key in the privat
 ## Stories
 
 The public narrative, authored in the internal app by Staff and read by `@sugt/public`
-through the published-Stories route. Decided, not yet written as Drizzle — the shape below
+through the published-Stories routes. Decided, not yet written as Drizzle — the shape below
 is the contract, and it is the largest thing on the critical path now that
 [ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md)'s second
 amendment puts the authoring UI in the first release.
@@ -1233,7 +1233,7 @@ wholesale replacement made it unnecessary.
 **"Both Streams were taught."** Same shape: `session_teacher` guarantees at most one teacher
 per Stream, not that both rows exist. Required at the point a Session is marked delivered.
 
-**That an arranged offline Session falls inside its trip.** `session.held_on` and
+**That an arranged offline Session falls inside its Perjadin.** `session.held_on` and
 `perjadin.starts_on`/`ends_on` are unrelated columns as far as the database is concerned. The
 rule and why a CHECK cannot carry it are in [Delivery](#delivery); what belongs here is that
 nothing enforces it today, so an arranged Session can be dated outside the Perjadin it is on.
@@ -1331,6 +1331,22 @@ Rate limiting belongs at the edge, not in a constraint.
 gate; nothing stops a direct insert after it has passed. The handler that resolves the token
 is what enforces it.
 
+**That a Story's cover is one of its own photographs.** `story.cover_photo_id` references
+`story_photo (id)` alone, so nothing prevents one Story carrying another Story's photograph as
+its cover. The device that would hold it is the one this schema reaches for everywhere else — a
+`unique (id, story_id)` on `story_photo` and a composite foreign key into that pair — and it is
+not added today because the editor only ever offers a Story the photographs uploaded to it. If
+that proves optimistic, that is the upgrade: a `unique (id, story_id)` on `story_photo`, and
+`story`'s single-column foreign key replaced by `(cover_photo_id, id)` referencing it. A null
+cover still passes, under the same `MATCH SIMPLE` rule that lets offline Sessions carry no PIC
+columns.
+
+**That a Story with photographs has a cover before it is published.** This is the only gate in
+the product and the database holds no part of it: `published_at` is a nullable timestamp and
+nothing ties it to `cover_photo_id`. The editor withholds the control, so a direct `update`
+would publish an uncovered Story without complaint. See [Stories](#stories) for why the gate
+exists at all.
+
 ### What deleting a Perjadin does
 
 `group_member` cascades. `transaction` cascades, and `transaction_evidence` cascades from
@@ -1376,8 +1392,9 @@ cascade and the deferred PIC foreign key resolve against each other rather than 
 - **The founding-Staff seed.** A separate artefact from `reference-data.sql`, holding the
   rows that break the sign-in bootstrap and nothing else. See
   [ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
-- **The aggregates endpoints.** Three routes on `@sugt/internal` — scope, delivery,
-  published Stories — read server-side by `@sugt/public` with a shared secret, cached per
+- **The aggregates endpoints.** Four routes on `@sugt/internal` across three lifetimes — scope,
+  delivery, the published-Stories list and Story detail — read server-side by `@sugt/public`
+  with a shared secret, cached per
   [ADR-0014](./adr/0014-the-public-site-uses-the-pre-cache-components-caching-model.md) and
   versioned per [ADR-0008](./adr/0008-public-narrative-is-authored-in-the-internal-app.md).
   Whether the choke point needed a sibling is settled — it did, and it is a type; see
