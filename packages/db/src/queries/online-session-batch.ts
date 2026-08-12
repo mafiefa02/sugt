@@ -1,4 +1,4 @@
-import type { Role, SessionMode, Stream } from "@sugt/domain";
+import type { Role, Stream } from "@sugt/domain";
 import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
@@ -112,11 +112,11 @@ export async function onlineSessionBatch(
   ]);
 
   // Split in TypeScript rather than by two queries: `role` is one column of one table and
-  // the rows are already in hand. The cast is the CHECK constraint's guarantee —
-  // `person_role_check` names exactly the values `ROLES` holds.
+  // the rows are already in hand. The comparison needs no assertion — the column carries
+  // `Role` from the schema, off `person_role_check`.
   const withRole = (role: Role): BatchPerson[] =>
     people
-      .filter((entry) => (entry.role as Role) === role)
+      .filter((entry) => entry.role === role)
       // `role` itself does not travel: nothing on this screen renders it, and the list a
       // picker was handed is what says which role it is asking for.
       .map((entry) => ({ id: entry.id, fullName: entry.fullName }));
@@ -258,9 +258,13 @@ export async function arrangeOnlineSessions(
           .insert(session)
           .values({
             schoolId: row.schoolId,
-            mode: "online" satisfies SessionMode,
+            mode: "online",
             heldOn: row.heldOn,
             onlinePicPersonId: row.picPersonId,
+            // `satisfies` where `mode` needs none: `online_pic_role` is pinned to a single
+            // literal by CHECK rather than to a set, and whether those columns carry a
+            // type is open — see
+            // [#52](https://github.com/mafiefa02/sugt/issues/52).
             onlinePicRole: "Staff" satisfies Role,
           })
           .onConflictDoNothing({

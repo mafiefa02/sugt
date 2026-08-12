@@ -1,3 +1,4 @@
+import type { ClassKind } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -64,7 +65,9 @@ export const classRecord = pgTable(
     sessionId: uuid("session_id")
       .notNull()
       .references(() => session.id, { onDelete: "cascade" }),
-    classKind: text("class_kind").notNull(),
+    // `class_record_class_kind_check` names exactly the values `CLASS_KINDS` holds, as
+    // does its twin on `participant_feedback` below.
+    classKind: text("class_kind").$type<ClassKind>().notNull(),
     filedByPersonId: uuid("filed_by_person_id").notNull(),
     filedByRole: text("filed_by_role").notNull().default("Teaching Team"),
 
@@ -227,7 +230,7 @@ export const participantFeedback = pgTable(
     sessionId: uuid("session_id")
       .notNull()
       .references(() => session.id, { onDelete: "cascade" }),
-    classKind: text("class_kind").notNull(),
+    classKind: text("class_kind").$type<ClassKind>().notNull(),
     name: text("name").notNull(),
 
     materials: rating("materials"),

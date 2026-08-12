@@ -14,6 +14,21 @@
  *
  * Both are in `migrations/`, and drizzle-kit leaves them alone because they are not
  * in its snapshot.
+ *
+ * ## These files may import `@sugt/domain`, for types only
+ *
+ * Eight `text` columns carry a CHECK naming a fixed set that `@sugt/domain` already
+ * declares. Each one carries `$type<>()` off that declaration, so a reader of a Session
+ * gets `SessionMode` rather than `string` and no caller has to assert the difference.
+ * `packages/db` already depends on the package and `src/queries/` imports it freely, so
+ * the arrow is one that exists — this only extends it to the layer under the queries.
+ *
+ * **The import is `import type`, and value imports stay out of these files.** Building a
+ * `check()` out of `SESSION_MODES` would compose a different constraint string from the
+ * literal one the snapshot holds, and drizzle-kit would emit DDL to reconcile the two.
+ * The CHECK lists therefore stay written out, character for character, exactly as
+ * `docs/data-model.md` describes them — the drift between a fixed set and the constraint
+ * that pins it is meant to be visible by reading the two side by side.
  */
 export * from "./reference";
 export * from "./people";

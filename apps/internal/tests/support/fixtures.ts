@@ -1,5 +1,5 @@
 import { db, schema } from "@sugt/db";
-import type { ClassKind, SessionMode, SessionStatus, Stream, Role } from "@sugt/domain";
+import type { ClassKind, SessionStatus, Stream, Role } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 
 export type PersonFixture = {
@@ -115,7 +115,7 @@ export async function addSession(fixture: SessionFixture) {
     .insert(schema.session)
     .values({
       schoolId: fixture.schoolId,
-      mode: "online" satisfies SessionMode,
+      mode: "online",
       heldOn: fixture.heldOn,
       status,
       cancelledReason: status === "cancelled" ? "Sekolah meminta penjadwalan ulang" : null,
@@ -153,7 +153,7 @@ export async function addOfflineSession(fixture: OfflineSessionFixture) {
     .insert(schema.session)
     .values({
       schoolId: fixture.schoolId,
-      mode: "offline" satisfies SessionMode,
+      mode: "offline",
       heldOn: fixture.heldOn,
       status,
       cancelledReason: status === "cancelled" ? "Sekolah meminta penjadwalan ulang" : null,
@@ -318,7 +318,10 @@ export async function addPerjadin(fixture: PerjadinFixture) {
       ...(fixture.teachers ?? []).map((teacher) => ({
         perjadinId: perjadin!.id,
         personId: teacher.personId,
-        role: "Teaching Team",
+        // `as const`, where the row above needs nothing: a `.map` callback has no
+        // contextual type, so its object literal widens `role` to `string` — which the
+        // column's `Role` refuses. The row above is checked against `values()` directly.
+        role: "Teaching Team" as const,
         stream: teacher.stream,
       })),
     ]);

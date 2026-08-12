@@ -222,12 +222,9 @@ export async function schoolDetail(_caller: Person, slug: string): Promise<Schoo
 
     sessions.push({
       id: sessionId,
-      // `mode` and `status` are `text` columns carrying a CHECK that names exactly the
-      // values `SESSION_MODES` and `SESSION_STATUSES` hold, so this narrowing is the
-      // database's guarantee rather than this module's hope.
-      mode: mode as SessionMode,
+      mode,
       heldOn,
-      status: status as SessionStatus,
+      status,
       cancelledReason: row.cancelledReason,
       ratingsFiled: row.ratingsFiled,
       concern: concernOf(row.lowestAspect, row.lowestRating),
