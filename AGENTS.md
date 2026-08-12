@@ -178,8 +178,10 @@ Three things here are load-bearing:
 `mattpocock/skills`, plus `shadcn` from `shadcn/ui` — hash-checked by
 `skills-lock.json`; the formatter ignores it and so should you. Re-add a vendored
 skill with `pnpm dlx skills add <owner>/<repo> --skill <name>` rather than editing it
-in place, since an edit breaks its hash. `shadcn-sugt` is the exception: it is
-hand-written, has no lock entry, and is the right place for anything repo-specific.
+in place, since an edit breaks its hash. The `*-sugt` skills are the exception:
+`shadcn-sugt` and `code-review-sugt` are hand-written, have no lock entry, and are the
+right place for anything repo-specific — each an override read beside the vendored
+skill it names.
 `.claude/skills/` is symlinks into `.agents/skills/` and holds no content of its own
 — it exists because Claude Code only discovers skills under `.claude/skills/`, so
 deleting it would make them invisible. Don't try to collapse the two.
@@ -193,6 +195,20 @@ Issues and PRDs are tracked as GitHub issues via the `gh` CLI. See `docs/agents/
 ### Triage labels
 
 The canonical five-label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Code review
+
+`/code-review`'s sub-agents verify by ablation, so they modify the working tree. Run
+them isolated — spawn each with `isolation: "worktree"`, review only committed work,
+and diff the branch by name — so an ablation can never reach the tree you stage from.
+The `code-review-sugt` skill carries the contract, the two preconditions isolation
+forces, and the failure it prevents; read it beside the vendored `code-review` skill.
+
+**Before you stage, never `git add -A` — stage explicit paths.** A review sub-agent
+may hold an ablation on disk at that instant, and `-A` commits it — in the worst case
+a `db:generate` migration for a schema nobody meant to change, indistinguishable from
+an intentional one. This is the companion rule to isolation, not a replacement for it.
+See [#54](https://github.com/mafiefa02/sugt/issues/54) and `code-review-sugt`.
 
 ### Domain docs
 
