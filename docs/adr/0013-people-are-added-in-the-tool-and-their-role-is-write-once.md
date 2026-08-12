@@ -55,6 +55,10 @@ They are not two different states. `active = false` does not mean "off the Progr
 
 ## Consequences
 
+> **The first three stand; the last three do not.** The plugin no longer joins the stack and
+> brings no columns, and the cookie-cache bullet keeps its advice while losing its reason. See
+> [Amendment: revocation is one write, checked on every request](#amendment-revocation-is-one-write-checked-on-every-request).
+
 - One more screen in the internal tool, Staff-only for writes. Reads follow [ADR-0004](./0004-delivery-data-is-open-internally-money-is-not.md)'s open-delivery rule: anyone signed in can see the roster, because a Group is assembled from it.
 - A migration to make `person_email_key` partial.
 - The founding-Staff seed is a real artefact someone has to write and keep out of the reference-data seed, which is about fixed facts and re-run freely.
