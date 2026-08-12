@@ -16,6 +16,22 @@ import { school } from "./reference";
 import { perjadin } from "./travel";
 
 /**
+ * Which rows `session_one_online_per_school_per_day` covers: an online Session that has
+ * not been cancelled.
+ *
+ * **Exported because a second place has to say the same thing, character for character.**
+ * `arrangeOnlineSessions` names this index as its `on conflict` arbiter and has to repeat
+ * the predicate to do so — and Postgres refuses to infer an index whose predicate does not
+ * match, which fails at runtime rather than at typecheck. Two copies of it are two chances
+ * to find that out in production.
+ *
+ * Column names are unqualified deliberately. A `create index … where` clause may not carry
+ * a qualified reference, so the form that works in the index is the form that has to be
+ * shared.
+ */
+export const ONLINE_SESSION_STILL_STANDS = sql`perjadin_id is null and status <> 'cancelled'`;
+
+/**
  * Delivery: Sessions, and who taught which Stream at them.
  *
  * A Session exists only once **arranged** — never before — so there are no planned
@@ -92,7 +108,7 @@ export const session = pgTable(
     // them, and offline Sessions are untouched because their `perjadin_id` is not null.
     uniqueIndex("session_one_online_per_school_per_day")
       .on(t.schoolId, t.heldOn)
-      .where(sql`perjadin_id is null and status <> 'cancelled'`),
+      .where(ONLINE_SESSION_STILL_STANDS),
   ],
 );
 

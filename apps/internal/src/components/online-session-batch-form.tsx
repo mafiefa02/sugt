@@ -5,6 +5,7 @@ import type {
   ArrangeOnlineSessionsResult,
   BatchPerson,
   BatchSchool,
+  OnlineSessionCollision,
   OnlineSessionRow,
 } from "@sugt/db/queries";
 import { STREAMS, type Stream } from "@sugt/domain";
@@ -34,11 +35,17 @@ import { useId, useState, useTransition } from "react";
  * `FormData` would mean flattening it on the way out and parsing it back on the way in,
  * with the type checker helping at neither end.
  *
- * **The shared controls write through to every row.** That is what "applies a shared
- * date and a shared Staff PIC" means here: setting one fills the whole selection, and a
- * row is then edited on top of it. Setting a shared value again overwrites the edits,
- * which is the honest reading of a control labelled *for all rows* — and the reason each
- * row shows its own value rather than inheriting one invisibly.
+ * **The shared controls are defaults, and a default does not overwrite an edit.** The
+ * ticket asks for *"a shared **default** date and a shared Staff PIC applied across the
+ * selection, every row still editable before submit"*, and the word **default** is the
+ * whole of it: setting a shared value fills every row that has not been edited by hand,
+ * and leaves the ones that have. Write-through would satisfy the checklist and break the
+ * prose — set the shared date, change one School because it only takes Wednesdays, then
+ * correct the shared date, and that deliberate edit would be reverted with nothing said.
+ *
+ * That is why `pinned` exists rather than a value comparison. Once a shared value has
+ * been applied, every row holds it, so "has this row been edited" cannot be read off the
+ * values — it has to be remembered.
  */
 function OnlineSessionBatchForm({
   schools,
@@ -57,24 +64,51 @@ function OnlineSessionBatchForm({
     picPersonId: "",
   });
   const [result, setResult] = useState<ArrangeOnlineSessionsResult | null>(null);
+  const [pinned, setPinned] = useState<ReadonlySet<string>>(new Set());
   const [saving, startSaving] = useTransition();
 
   const sharedDateId = useId();
   const sharedPicId = useId();
 
-  function editRow(schoolId: string, change: Partial<Draft>) {
-    setDrafts((previous) => ({ ...previous, [schoolId]: { ...previous[schoolId]!, ...change } }));
+  /**
+   * Edit one row's field, and **pin it** so a later shared value leaves it alone.
+   *
+   * A row is pinned per field rather than as a whole: a School whose date is fixed but
+   * whose PIC is not should still take a shared PIC.
+   */
+  function editRow(schoolId: string, field: SharedField, value: string) {
+    setDrafts((previous) => ({
+      ...previous,
+      [schoolId]: { ...previous[schoolId]!, [field]: value },
+    }));
+    setPinned((previous) => new Set(previous).add(pinOf(schoolId, field)));
     // A row that has just been edited is no longer the row that collided. Clearing the
     // whole result rather than the one row is deliberate: the batch is refused whole, so
     // a stale "this failed" beside a row nobody has fixed would be worse than none.
     setResult(null);
   }
 
-  function applyShared(change: Partial<Draft>) {
-    setShared((previous) => ({ ...previous, ...change }));
+  /** Naming a teacher is not one of the two shared fields, so it pins nothing. */
+  function editTeacher(schoolId: string, stream: Stream, personId: string) {
+    setDrafts((previous) => ({
+      ...previous,
+      [schoolId]: {
+        ...previous[schoolId]!,
+        teachers: { ...previous[schoolId]!.teachers, [stream]: personId },
+      },
+    }));
+    setResult(null);
+  }
+
+  /** Seed every row that has not been edited by hand. See the note on this component. */
+  function applyShared(field: SharedField, value: string) {
+    setShared((previous) => ({ ...previous, [field]: value }));
     setDrafts((previous) =>
       Object.fromEntries(
-        Object.entries(previous).map(([schoolId, draft]) => [schoolId, { ...draft, ...change }]),
+        Object.entries(previous).map(([schoolId, draft]) => [
+          schoolId,
+          pinned.has(pinOf(schoolId, field)) ? draft : { ...draft, [field]: value },
+        ]),
       ),
     );
     setResult(null);
@@ -122,7 +156,7 @@ function OnlineSessionBatchForm({
             className="w-44"
             value={shared.heldOn}
             onChange={(event) => {
-              applyShared({ heldOn: event.target.value });
+              applyShared("heldOn", event.target.value);
             }}
           />
         </div>
@@ -135,7 +169,7 @@ function OnlineSessionBatchForm({
             value={shared.picPersonId}
             placeholder="Pilih PIC"
             onSelect={(picPersonId) => {
-              applyShared({ picPersonId });
+              applyShared("picPersonId", picPersonId);
             }}
           />
         </div>
@@ -170,7 +204,7 @@ function OnlineSessionBatchForm({
                 aria-invalid={collidedSchoolIds.has(school.id)}
                 value={drafts[school.id]!.heldOn}
                 onChange={(event) => {
-                  editRow(school.id, { heldOn: event.target.value });
+                  editRow(school.id, "heldOn", event.target.value);
                 }}
               />
             </RowField>
@@ -182,7 +216,7 @@ function OnlineSessionBatchForm({
                 placeholder="Pilih PIC"
                 aria-label={`PIC Sesi daring untuk ${school.name}`}
                 onSelect={(picPersonId) => {
-                  editRow(school.id, { picPersonId });
+                  editRow(school.id, "picPersonId", picPersonId);
                 }}
               />
             </RowField>
@@ -198,9 +232,7 @@ function OnlineSessionBatchForm({
                   unassignedLabel={UNASSIGNED_LABEL}
                   aria-label={`Pengajar ${stream} untuk ${school.name}`}
                   onSelect={(personId) => {
-                    editRow(school.id, {
-                      teachers: { ...drafts[school.id]!.teachers, [stream]: personId },
-                    });
+                    editTeacher(school.id, stream, personId);
                   }}
                 />
               </RowField>
@@ -251,6 +283,12 @@ type Draft = {
   picPersonId: string;
   teachers: Record<Stream, string>;
 };
+
+/** The two fields a shared control seeds, and so the two a row can pin against one. */
+type SharedField = "heldOn" | "picPersonId";
+
+/** One row's pin on one field. A `Set` of these is the whole "do not overwrite" record. */
+const pinOf = (schoolId: string, field: SharedField) => `${schoolId} ${field}`;
 
 const UNASSIGNED = "";
 const UNASSIGNED_LABEL = "Belum ditentukan";
@@ -361,7 +399,7 @@ function Collided({
   collisions,
   schools,
 }: {
-  collisions: { schoolId: string; heldOn: string }[];
+  collisions: OnlineSessionCollision[];
   schools: BatchSchool[];
 }) {
   const nameOf = (schoolId: string) =>

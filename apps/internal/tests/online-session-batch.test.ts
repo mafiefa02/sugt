@@ -1,3 +1,4 @@
+import { staffSurface } from "-/lib/staff-surface";
 import { db, schema } from "@sugt/db";
 import {
   arrangeOnlineSessions,
@@ -5,7 +6,7 @@ import {
   onlineSessionBatch,
   type OnlineSessionRow,
 } from "@sugt/db/queries";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   addCluster,
@@ -19,6 +20,9 @@ import {
   revokePerson,
 } from "./support/fixtures";
 import { signInAsPerson } from "./support/sign-in";
+
+/** The Staff Person every block here signs in as. Online Sessions need one as their PIC. */
+const signInAsStaff = () => signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
 
 /**
  * **Jadwalkan Sesi daring** — the batch that arranges an online Session for each School
@@ -34,8 +38,6 @@ import { signInAsPerson } from "./support/sign-in";
  */
 describe("one online Session per School per day", () => {
   beforeEach(resetDatabase);
-
-  const signInAsStaff = () => signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
 
   /**
    * Which constraint refused a write, or `null` if nothing did.
@@ -189,8 +191,9 @@ describe("one online Session per School per day", () => {
  */
 describe("arranging online Sessions in a batch", () => {
   beforeEach(resetDatabase);
-
-  const signInAsStaff = () => signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   /** Three Schools in one Cluster, which is the shape a Coverage selection arrives in. */
   async function threeSchools() {
@@ -482,6 +485,30 @@ describe("arranging online Sessions in a batch", () => {
     expect(await allSessions()).toHaveLength(2);
   });
 
+  it("reaches the browser as a 403 when the Server Action wraps it", async () => {
+    /**
+     * The claim `actions.ts` makes, asserted rather than written down. `staffSurface` was
+     * built for a **read** — its doc reasoned entirely about a rendering pass — and this
+     * ticket is the first to put a **write** behind it, so "it should read as a 403" was
+     * prose nothing checked.
+     *
+     * The environment variable is what `experimental.authInterrupts` sets during a build.
+     * `forbidden()` checks it at runtime and throws something else entirely when it is
+     * off, so asserting under the deployed condition is the point.
+     */
+    vi.stubEnv("__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS", "1");
+    const teacher = await signInAsPerson("Teaching Team", "budi@gmail.com", "Budi Santoso");
+    const staff = await signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
+    const [first] = await threeSchools();
+
+    const thrown = await staffSurface(() =>
+      arrangeOnlineSessions(teacher, [row(staff.id, first!.id, "2026-09-10")]),
+    ).catch((error: unknown) => error);
+
+    expect((thrown as { digest?: string }).digest).toBe("NEXT_HTTP_ERROR_FALLBACK;403");
+    expect(await allSessions()).toEqual([]);
+  });
+
   it("refuses a Teaching Team caller, and writes nothing", async () => {
     /**
      * Criterion 6. Staff-only is enforced here rather than only by the screen, because a
@@ -504,9 +531,8 @@ describe("arranging online Sessions in a batch", () => {
 describe("the Jadwalkan Sesi daring payload", () => {
   beforeEach(resetDatabase);
 
-  const signInAsStaff = () => signInAsPerson("Staff", "rina@ditsama.itb.ac.id", "Rina Nurhayati");
-
-  async function twoSchools() {
+  /** Two Schools whose names sort the opposite way round from their creation order. */
+  async function twoSchoolsOutOfNameOrder() {
     await addProvince("JB", "Jawa Barat");
     const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
     const first = await addSchool({
@@ -528,7 +554,7 @@ describe("the Jadwalkan Sesi daring payload", () => {
 
   it("returns the selected Schools in name order, with where they are", async () => {
     const person = await signInAsStaff();
-    const { first, second } = await twoSchools();
+    const { first, second } = await twoSchoolsOutOfNameOrder();
 
     const batch = await onlineSessionBatch(person, [first.id, second.id]);
 
@@ -545,7 +571,7 @@ describe("the Jadwalkan Sesi daring payload", () => {
      * which is a better answer than an error page for a selection that is mostly valid.
      */
     const person = await signInAsStaff();
-    const { first } = await twoSchools();
+    const { first } = await twoSchoolsOutOfNameOrder();
 
     const batch = await onlineSessionBatch(person, [
       first.id,
@@ -557,7 +583,7 @@ describe("the Jadwalkan Sesi daring payload", () => {
 
   it("offers Staff for the PIC and Teaching Team for the Streams, split by role", async () => {
     const person = await signInAsStaff();
-    await twoSchools();
+    await twoSchoolsOutOfNameOrder();
     const teacher = await addPerson({
       fullName: "Budi Santoso",
       email: "budi@gmail.com",

@@ -1,8 +1,8 @@
 import type { Role, SessionMode, Stream } from "@sugt/domain";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
-import { session, sessionTeacher } from "../schema/delivery";
+import { ONLINE_SESSION_STILL_STANDS, session, sessionTeacher } from "../schema/delivery";
 import { person } from "../schema/people";
 import { school } from "../schema/reference";
 import type { Person } from "./caller";
@@ -265,7 +265,9 @@ export async function arrangeOnlineSessions(
           })
           .onConflictDoNothing({
             target: [session.schoolId, session.heldOn],
-            where: sql`${session.perjadinId} is null and ${session.status} <> 'cancelled'`,
+            // The index's own predicate, imported rather than retyped. Postgres refuses to
+            // infer an index whose predicate does not match, and that is a runtime failure.
+            where: ONLINE_SESSION_STILL_STANDS,
           })
           .returning({ id: session.id });
 

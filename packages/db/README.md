@@ -13,8 +13,12 @@ one** — it carries the five conventions every query follows, and they are the 
 answer to [#12](https://github.com/mafiefa02/sugt/issues/12) rather than one module's
 house style. In short: every exported function takes a caller and takes it first, the
 caller is three named types rather than one with optional fields, each function returns
-what one screen renders in one round trip, money opens with the Staff-only choke point,
-and a write owns its own transaction.
+what one screen renders in one round trip, a Staff-only surface opens with the Staff-only
+choke point, and a write owns its own transaction.
+
+The fourth of those read _"money opens with…"_ until Jadwalkan Sesi daring, which is
+Staff-only and is not money: reading money is Staff-only by ADR-0004, and **arranging
+delivery** is Staff-only by the surface list. One guard, two reasons.
 
 **This package resolves nobody.** It takes a `Person` it is given; `@sugt/internal`
 produces one, because resolving is React-aware and this package is not.
@@ -96,10 +100,13 @@ Worth keeping that habit: this schema's rules live in composite foreign keys and
 constraints, and a silently-dropped one looks exactly like a working schema until the day
 it doesn't.
 
-## No queries yet
+## The choke point is here, and so is the first write
 
-[ADR-0011](../../docs/adr/0011-supabase-and-better-auth.md) puts the money choke point
-here — every money-reading query taking the authenticated Person and refusing a non-Staff
-caller. `@sugt/internal` now resolves a Person, so the caller and the signature exist; the
-choke point and the `Caller` union that goes with it are still the query layer's own work
-and are not here.
+[ADR-0011](../../docs/adr/0011-supabase-and-better-auth.md) puts the Staff-only choke point
+in this package — every Staff-only query taking the authenticated Person and refusing a
+non-Staff caller. It and the `Caller` union arrived with the query layer; this section said
+they were still to come until then.
+
+That matters most on a **write**, and `arrangeOnlineSessions` is the first. A Next.js layout
+does not run before a Server Action, so the app's own signed-in check protects pages and
+leaves every write open — the guard in this package is the one that closes it.
