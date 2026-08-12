@@ -28,6 +28,11 @@ import { perjadin } from "./travel";
  * Column names are unqualified deliberately. A `create index … where` clause may not carry
  * a qualified reference, so the form that works in the index is the form that has to be
  * shared.
+ *
+ * `./index.ts` re-exports this file with `export *`, so this is on the public
+ * `@sugt/db/schema` surface rather than schema-internal. That is intended — the query
+ * layer is its one consumer and is a separate subpath — but it does mean the fragment is
+ * as public as the table it belongs to.
  */
 export const ONLINE_SESSION_STILL_STANDS = sql`perjadin_id is null and status <> 'cancelled'`;
 

@@ -364,6 +364,12 @@ export async function addTransaction(fixture: TransactionFixture) {
  * these therefore needs no entry; a new table nothing references does. The other three
  * evaluation tables are named below, because fixtures now write them directly.
  *
+ * `session_teacher` is the first table here that **no fixture writes and the tests
+ * populate anyway** — `arrangeOnlineSessions` writes it, and the batch tests assert on
+ * it. `cascade` from `public."session"` already reaches it, so naming it changes nothing
+ * today; it is named for the reason above, which is that a list pruned to the cascade
+ * minimum stops covering a table the day its parent leaves.
+ *
  * `public."session"` and `better_auth."session"` are both here and both qualified.
  * That collision is the whole reason Better Auth was given a Postgres schema of its
  * own — `session` is a teaching occasion at one School.
@@ -380,6 +386,7 @@ export async function resetDatabase() {
       public."cluster",
       public."school",
       public."session",
+      public."session_teacher",
       public."class_record",
       public."session_record",
       public."participant_feedback",
