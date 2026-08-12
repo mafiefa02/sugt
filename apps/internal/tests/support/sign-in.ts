@@ -1,5 +1,8 @@
 import { auth } from "-/lib/auth";
+import { resolvePerson, type Person } from "-/lib/person";
+import type { Role } from "@sugt/domain";
 
+import { addPerson } from "./fixtures";
 import { stubGoogle, type GoogleProfile } from "./google";
 
 const ORIGIN = "http://localhost:3001";
@@ -61,6 +64,25 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<SignInRe
     sessionCookie: sessionCookie(response),
     tokenExchanges: google.tokenExchanges,
   };
+}
+
+/**
+ * Both seams end to end: put a Person on the invite list, sign them in through the
+ * handler, and resolve the cookie it issued the way a request does.
+ *
+ * This is the one way to obtain a real `Person`, so it is what any test needing a
+ * caller for `@sugt/db` uses. Fabricating an object of the right shape would prove
+ * nothing about the query layer's caller, which is the whole point of it being one.
+ */
+export async function signInAsPerson(role: Role, email: string, fullName: string): Promise<Person> {
+  await addPerson({ fullName, email, role });
+
+  const result = await signInWithGoogle({ googleId: `google-${email}`, email, name: fullName });
+  if (!result.sessionCookie) throw new Error(`No session cookie issued signing in ${email}`);
+
+  const person = await resolvePerson(new Headers({ cookie: result.sessionCookie }));
+  if (!person) throw new Error(`The cookie issued for ${email} resolved to no Person`);
+  return person;
 }
 
 /** Every `Set-Cookie` on a response, as the `name=value` pairs a browser would send back. */

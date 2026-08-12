@@ -1,5 +1,5 @@
 import { db, schema } from "@sugt/db";
-import type { Role } from "@sugt/domain";
+import type { Person } from "@sugt/db/queries";
 import { and, eq, sql } from "drizzle-orm";
 
 /**
@@ -19,17 +19,18 @@ import { and, eq, sql } from "drizzle-orm";
  * query layer takes a `Person` it is given and never resolves one — resolving is what
  * produces the caller its queries are checked against, so it cannot itself be one of
  * them. The two Better Auth hooks are the other reason: they run inside the library's
- * request handling, before anything has a `Person` to be given. When the query layer
- * lands it will import this `Person`, not redefine it.
+ * request handling, before anything has a `Person` to be given.
+ *
+ * **The `Person` type itself is `@sugt/db`'s**, imported below rather than declared
+ * here. It has to be: it is the argument every query in that package takes, so a
+ * second declaration on this side would be two types that are only equal by accident.
+ * The lookup stays here; the shape belongs beside its consumers. This function is the
+ * one thing in either app that produces one, which is what makes
+ * [#25](https://github.com/mafiefa02/sugt/issues/25)'s *"constructing a `Person`
+ * caller requires an active Person"* true.
  */
 
-/** Who a request resolves to. `role` is write-once, so nothing re-reads it within a session. */
-export type Person = {
-  id: string;
-  fullName: string;
-  email: string;
-  role: Role;
-};
+export type { Person };
 
 /** Staff must additionally hold a Google account on this domain. */
 export const STAFF_EMAIL_DOMAIN = "@ditsama.itb.ac.id";

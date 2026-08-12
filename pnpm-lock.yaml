@@ -395,6 +395,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@sugt/domain':
+        specifier: workspace:*
+        version: link:../domain
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(kysely@0.29.5)(postgres@3.4.9)

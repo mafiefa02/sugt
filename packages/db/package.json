@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
+    "./queries": "./src/queries/index.ts",
     "./migrations": "./src/migrations.ts"
   },
   "scripts": {
@@ -16,6 +17,7 @@
     "db:seed:people": "psql \"$DIRECT_URL\" -v ON_ERROR_STOP=1 -f seed/founding-staff.sql"
   },
   "dependencies": {
+    "@sugt/domain": "workspace:*",
     "drizzle-orm": "catalog:",
     "postgres": "catalog:"
   },

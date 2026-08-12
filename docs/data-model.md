@@ -1157,7 +1157,9 @@ receipt, so it belongs at one choke point, not at each call site.
 
 ## Where the code lives
 
-`packages/db` (`@sugt/db`) holds the Drizzle schema, the migrations and the connection —
+`packages/db` (`@sugt/db`) holds the Drizzle schema, the migrations, the connection and
+the queries — the last of these at `@sugt/db/queries`, a subpath of its own, where the
+`Caller` union and the Staff-only choke point live —
 a Just-in-Time package like `@sugt/domain` and `@sugt/ui`, with `exports` pointing straight
 at `./src` and no build step. Its own README covers running it.
 
