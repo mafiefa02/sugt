@@ -57,21 +57,23 @@ export type DirectorySchool = {
  * whatever order the plan happened to produce.
  */
 export async function schoolDirectory(_caller: Person): Promise<DirectorySchool[]> {
-  return db
-    .select({
-      id: school.id,
-      slug: school.slug,
-      name: school.name,
-      kabupatenKota: school.kabupatenKota,
-      clusterId: cluster.id,
-      clusterName: cluster.name,
-      deliveredSessions: deliveredSessionCount,
-    })
-    .from(school)
-    // Inner, never outer: `school.cluster_id` is NOT NULL, so "a School with no
-    // Cluster" is not a state this screen ever has to render.
-    .innerJoin(cluster, eq(cluster.id, school.clusterId))
-    .leftJoin(session, onDeliveredSessions)
-    .groupBy(school.id, cluster.id)
-    .orderBy(asc(school.name), asc(school.id));
+  return (
+    db
+      .select({
+        id: school.id,
+        slug: school.slug,
+        name: school.name,
+        kabupatenKota: school.kabupatenKota,
+        clusterId: cluster.id,
+        clusterName: cluster.name,
+        deliveredSessions: deliveredSessionCount,
+      })
+      .from(school)
+      // Inner, never outer: `school.cluster_id` is NOT NULL, so "a School with no
+      // Cluster" is not a state this screen ever has to render.
+      .innerJoin(cluster, eq(cluster.id, school.clusterId))
+      .leftJoin(session, onDeliveredSessions)
+      .groupBy(school.id, cluster.id)
+      .orderBy(asc(school.name), asc(school.id))
+  );
 }

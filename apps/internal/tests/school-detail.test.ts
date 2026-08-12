@@ -105,14 +105,14 @@ describe("the Detail Sekolah payload", () => {
 
     const detail = await schoolDetail(person, "sman-1-bandung");
 
-    expect(detail?.sessions.map((session) => [session.heldOn, session.mode, session.status])).toEqual(
-      [
-        ["2026-09-02", "offline", "delivered"],
-        ["2026-09-10", "online", "delivered"],
-        ["2026-09-17", "online", "arranged"],
-        ["2026-09-24", "online", "cancelled"],
-      ],
-    );
+    expect(
+      detail?.sessions.map((session) => [session.heldOn, session.mode, session.status]),
+    ).toEqual([
+      ["2026-09-02", "offline", "delivered"],
+      ["2026-09-10", "online", "delivered"],
+      ["2026-09-17", "online", "arranged"],
+      ["2026-09-24", "online", "cancelled"],
+    ]);
   });
 
   it("counts delivered Sessions only — arranged and cancelled count for nothing", async () => {

@@ -37,7 +37,9 @@ function SchoolDirectoryTable({ schools }: { schools: DirectorySchool[] }) {
   const clusters = useMemo(() => {
     const byId = new Map<string, string>();
     for (const school of schools) byId.set(school.clusterId, school.clusterName);
-    return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    return [...byId]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [schools]);
 
   const shown = useMemo(() => {

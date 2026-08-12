@@ -47,6 +47,16 @@ supports root tasks (`"//#lint"`), but a root task hashes only root-level files,
 editing `apps/public/src/**` leaves it a cache hit and the changed code goes
 unlinted. Verified, not assumed. Keep whole-repo scanners as plain root scripts.
 
+`fmt` writes; `fmt:check` reads. `fmt:check` (`oxfmt --check`) is the formatting
+gate, a peer to `lint`. Run both on the branch before a pull request, and treat a
+failure the same way. `fmt` stays advisory on purpose: it rewrites files, so it
+cannot be a gate that only reports. Making the writer the gate is what let three
+files drift onto `main` unnoticed ([#56](https://github.com/mafiefa02/sugt/issues/56)) —
+whoever ran `fmt` next swept the churn into their own ticket's diff. `fmt:check`
+catches that drift and exits non-zero without changing anything. It is not a turbo
+task either, for the reason above: it scans the whole repo, so it stays a plain root
+script.
+
 `envMode` defaults to `strict`: a task only sees environment variables declared in
 its `env` (or `globalEnv`). `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
 `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are declared on `build`, `typecheck` and
