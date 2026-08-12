@@ -60,7 +60,8 @@ unauthenticated ever touches the database.
   [ADR-0003](./0003-google-sign-in-with-an-invite-list.md) unchanged. The invite list is the
   `person` table; a `databaseHooks.user.create.before` hook rejects an email with no row, so an
   uninvited account cannot be created at all. That hook gates **signup only** — it does not
-  fire on a returning sign-in — so revoking access additionally uses the admin plugin. See
+  fire on a returning sign-in — so revocation is enforced separately, by reading `person.active`
+  on `session.create.before` and again on every request. No plugin. See
   [ADR-0013](./0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
 - Storage policies cannot identify the caller either, for the same reason RLS cannot. Receipts sit
   in a private bucket and are reached only through signed URLs the internal app mints after

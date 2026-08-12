@@ -15,16 +15,19 @@ import logoSekolahGaruda from "../../public/logo-sekolah-garuda.png";
  * (AGENTS.md rule 4), because both apps depend on it and the public one holds no
  * credentials.
  *
- * `role` is a prop rather than a session read, so the shell stays a plain component and
- * the session stays with issue #24.
+ * `role` is a prop rather than a session read, so the shell stays a plain component —
+ * the signed-in layout does the reading and passes it down.
  */
 function AppShell({
   role,
   personName,
+  footerAction,
   children,
 }: {
   role: Role;
   personName: string;
+  /** Sits beside the avatar block. Sign-out, once there is a session to end. */
+  footerAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -54,6 +57,7 @@ function AppShell({
             <div className="text-sm font-medium">{personName}</div>
             <div className="text-xs text-muted-foreground">{role}</div>
           </div>
+          {footerAction ? <div className="ml-auto">{footerAction}</div> : null}
         </div>
       </aside>
 

@@ -8,9 +8,13 @@
  *
  * Query functions are not here yet. ADR-0011 puts the money choke point in this
  * package — every money-reading query taking the authenticated Person and refusing a
- * non-Staff caller — but there is no Person-resolution layer until the internal app
- * exists, so a guard written now would have no caller and an invented signature.
- * It arrives with the app.
+ * non-Staff caller. `@sugt/internal` now resolves that Person, so the signature is no
+ * longer invented; the choke point and the `Caller` union around it are still the
+ * query layer's own work.
+ *
+ * **This package resolves nobody.** Person resolution is React-aware — it is memoised
+ * with React's `cache()` and reads `next/headers` — which this package is not and
+ * should not become. It takes a Person it is given.
  */
 export { db, type Db } from "./client";
 export * as schema from "./schema";

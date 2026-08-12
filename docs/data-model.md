@@ -20,19 +20,21 @@ and each says so where it appears. Nothing else in this document describes a sch
 not exist, and nothing in this list has been checked against a real Postgres the way the rest
 was:
 
-| Decided, not applied                                           | Where                                         |
-| -------------------------------------------------------------- | --------------------------------------------- |
-| the partial `person_email_key`                                 | [Identity](#identity)                         |
-| `transaction.category` and `transaction.incurred_by_person_id` | [Money](#money)                               |
-| `perjadin_evaluation.lodging` becoming nullable                | [Perjadin Evaluation](#perjadin-evaluation)   |
-| `session_one_online_per_school_per_day`                        | [Delivery](#delivery)                         |
-| the whole of `story` and `story_photo`                         | [Stories](#stories)                           |
-| the four `better_auth` tables, now hand-declared               | [Two Postgres schemas](#two-postgres-schemas) |
+| Decided, not applied                                           | Where                                       |
+| -------------------------------------------------------------- | ------------------------------------------- |
+| `transaction.category` and `transaction.incurred_by_person_id` | [Money](#money)                             |
+| `perjadin_evaluation.lodging` becoming nullable                | [Perjadin Evaluation](#perjadin-evaluation) |
+| `session_one_online_per_school_per_day`                        | [Delivery](#delivery)                       |
+| the whole of `story` and `story_photo`                         | [Stories](#stories)                         |
 
 Two of these carry claims worth verifying rather than assuming when the migration lands:
 `least()` ignoring NULLs, which is what lets a nullable `lodging` leave the elaboration rule
 intact, and the new partial index actually rejecting a second online Session for one School on
 one day.
+
+**Two rows left this list.** The partial `person_email_key` and the four hand-declared
+`better_auth` tables are applied, by migrations `0002` and `0003`, and were checked against a
+real Postgres the way the rest of this document was.
 
 The blocks are ordered for reading, by topic, **not** in dependency order — `session`
 appears before the `perjadin` it references. Migrations need reordering: reference data,
@@ -103,7 +105,11 @@ string**: it looks each model up as a key in the schema object you pass, so a ta
 `pgSchema("better_auth").table("user", …)` emits `better_auth."user"` by itself. This is the
 path Better Auth's own Drizzle documentation sanctions — _"modifying the Drizzle schema
 directly"_. `auth generate` is run once for the column list and thereafter is a reference to
-diff against on upgrade, not a step in any workflow.
+diff against on upgrade, not a step in any workflow. Its output is kept verbatim at
+`packages/db/reference/better-auth-1.6.27.generated.ts` so there is something to diff against.
+**The Drizzle property keys in the hand-written tables are the library's field names**, because
+the adapter resolves a field by key lookup — renaming one breaks it at runtime and not at
+typecheck.
 
 Verified against `better-auth@1.6.27`; see
 [`docs/research/better-auth-capabilities.md`](./research/better-auth-capabilities.md), which is
@@ -134,23 +140,17 @@ create table person (
   unique (id, role)                    -- not redundant; see below
 );
 
-create unique index person_email_key on person (lower(email));   -- becomes partial, below
-```
-
-**The email index has to become partial** — decided, not yet migrated. This is one of the two
-exceptions the header names; [Stories](#stories) is the other:
-
-```sql
-drop index person_email_key;
 create unique index person_email_key on person (lower(email)) where active;
 ```
 
-At most one _active_ Person per email, any number of revoked ones — the same trick as
-`session_one_per_school_per_perjadin`. It has to be partial because a wrong `role` is corrected by revoking the row and creating a new Person
+**The email index is partial**, applied by migration `0002`. At most one _active_ Person per
+email, any number of revoked ones — the same trick as
+`session_one_per_school_per_perjadin`. It has to be partial because a wrong `role` is corrected
+by revoking the row and creating a new Person
 ([ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md)),
-which means the same email legitimately appears twice. It also makes the sign-up hook's
-lookup — `where lower(email) = $1 and active` — unambiguous by construction rather than
-by convention.
+which means the same email legitimately appears twice. It also makes the lookup all three
+enforcement points share — `where lower(email) = $1 and active` — unambiguous by construction
+rather than by convention.
 
 **`active = false` does not by itself stop anyone signing in.** The hook below fires when a
 `user` row is _created_, so it gates signup only; a returning sign-in creates a session and
@@ -194,14 +194,29 @@ alter table better_auth."user"
   add column person_id uuid unique references public.person (id);
 ```
 
-Declared to Better Auth via `user.additionalFields`; the foreign key itself is added by a
-follow-up migration, since the generated schema will not write a cross-schema reference.
+**The column and the foreign key come from two different places, and that is not an
+accident.** The column is declared on the Drizzle table beside the other four in
+`packages/db/src/schema/auth.ts` — as a real `uuid`, because `user.additionalFields` has no
+`uuid` in its vocabulary and would emit `text`, which cannot foreign-key to `person.id`. The
+**foreign key** is the one piece still hand-written (`0003`), because drizzle-kit will not
+write a cross-schema reference. `additionalFields` still carries a `personId` entry, doing a
+third job: registering the field with the library, which builds its inserts from its own field
+registry and silently drops anything not in it.
+
+The single edge that crosses the library boundary sits on the library's side of it, so
+`person` references nothing it does not own and a Better Auth major version cannot ripple into
+the Perjadin foreign key graph.
 
 A `databaseHooks.user.create.before` hook looks up `person` by lowercased email. No match
 means it throws, so **an uninvited Google account cannot create a user row at all** — the
-invite list gates signup, not merely authorisation. The single edge that crosses the
-library boundary sits on the library's side of it, so `person` references nothing it does
-not own.
+invite list gates signup, not merely authorisation.
+
+**`person_id` records which Person the identity was created for; it is not what a request
+resolves through.** The column is written once, when the `user` row is created. After a
+revoke-and-re-add the correcting Person is a _new_ row with a new `id`, so `person_id` names
+the dead one — which is why all three enforcement points join on `lower(email)` and `active`
+instead. What the column carries is the invariant that a signed-in user maps to at most one
+Person, and only ever to one that exists.
 
 ---
 

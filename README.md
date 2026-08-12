@@ -28,8 +28,9 @@ records or Perjadin Reports — see
 `node_modules` is what makes that a fact about the dependency graph rather than a
 convention.
 
-Both apps are still placeholders. The public site was originally to ship first and
-alone; it now ships last. Neither its figures nor its Stories are authored in this
+The public app is still a placeholder. The internal one has sign-in — Google, gated by
+the invite list — and nothing on top of it yet. The public site was originally to ship
+first and alone; it now ships last. Neither its figures nor its Stories are authored in this
 repo — both come from the database — so it waits on the internal app, the
 aggregates endpoints, sign-in, the invite list and the Story editor. See the two
 amendments to
@@ -48,7 +49,13 @@ pnpm build          # both apps, in dependency order
 pnpm typecheck      # next typegen && tsc --noEmit, per package
 pnpm lint           # oxlint, type-aware
 pnpm fmt            # oxfmt
+
+pnpm --filter @sugt/internal test   # vitest, against a real local Postgres
 ```
+
+The tests **drop and rebuild** the database `TEST_DATABASE_URL` names (default
+`sugt_test` on the local cluster) and apply every migration from empty, which doubles
+as the check that they apply in one pass on a new environment.
 
 ## The database
 
@@ -58,13 +65,19 @@ URLs, and they are not interchangeable: `DATABASE_URL` is the transaction pooler
 (port 6543) for the apps, `DIRECT_URL` is session mode (5432) for migrations.
 
 ```bash
-pnpm --filter @sugt/db db:migrate   # apply pending migrations
-pnpm --filter @sugt/db db:seed      # Provinces, 4 Clusters, 42 Schools
+pnpm --filter @sugt/db db:migrate      # apply pending migrations
+pnpm --filter @sugt/db db:seed         # Provinces, 4 Clusters, 42 Schools
+pnpm --filter @sugt/db db:seed:people  # the founding Staff, once, per environment
 ```
 
 `DATABASE_URL` is declared in `turbo.json` under `build`, `typecheck` and `dev`.
 Turbo runs with `envMode: strict`, so a variable missing from a task's `env` is
 invisible to it even when the shell has it.
+
+Sign-in adds four more, declared on the same three tasks: `BETTER_AUTH_SECRET`,
+`BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Provisioning the
+Google OAuth client and supplying the values is separate work; nothing in this repo
+holds them.
 
 The aggregates endpoints add `INTERNAL_APP_URL`, `PUBLIC_APP_URL`,
 `AGGREGATES_SECRET` and `REVALIDATE_SECRET`, all subject to the same rule — and the

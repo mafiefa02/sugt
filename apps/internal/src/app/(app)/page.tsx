@@ -1,3 +1,4 @@
+import { requirePerson } from "-/lib/person";
 import {
   CONCERN_AT_OR_BELOW,
   RATING_MAX,
@@ -10,9 +11,16 @@ import {
 import { Rating } from "@sugt/ui/components/rating";
 import { RatingInput } from "@sugt/ui/components/rating-input";
 
-// Placeholder. The Dashboard is issue #40 and Coverage is #25; this page exists so the
-// app builds and so the shell has something beside it.
-//
+/**
+ * Placeholder, and deliberately two things at once until the screens that replace it
+ * arrive. **A greeting is not a dashboard** — the two real ones are issue #40, Coverage
+ * is #25, and the rest of the eighteen internal surfaces each belong to their own spec.
+ *
+ * The greeting shows what auth produces: a Person with a name, and a `role` a Staff-only
+ * surface can branch on. The specimens below are the only place `Rating` and
+ * `RatingInput` are currently rendered, so they stay until a real form carries them.
+ */
+
 // The Ratings below are the boundary this app is on the near side of. `RATING_MIN`,
 // `RATING_MAX` and `CONCERN_AT_OR_BELOW` live in `@sugt/domain`, which `@sugt/ui` may
 // not import, so an app reads them and passes them down. There are no defaults to fall
@@ -40,13 +48,20 @@ const ASPECT_SPECIMEN = [
   size: "default" | "sm";
 }[];
 
-export default function Home() {
+export default async function Home() {
+  const person = await requirePerson();
+
   return (
     <div className="p-8">
-      <h1 className="text-lg font-medium">SUGT Internal</h1>
+      <h1 className="font-heading text-lg font-medium">Halo, {person.fullName}.</h1>
       <p className="text-sm text-muted-foreground">
         {STREAMS.join(" · ")} — {TOTAL_SESSIONS_PER_SCHOOL} sesi per sekolah
       </p>
+      {person.role === "Staff" && (
+        <p className="text-sm text-muted-foreground">
+          Anda masuk sebagai Tim DITSAMA, jadi layar khusus Staff terbuka untuk Anda.
+        </p>
+      )}
 
       <div className="mt-8 flex flex-col gap-4">
         {SPECIMEN.map((value) => (

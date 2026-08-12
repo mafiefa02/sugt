@@ -8,14 +8,16 @@
  *
  *   - the DEFERRABLE self-referential foreign key putting the PIC inside their own
  *     Group (Drizzle has no `deferrable` on foreign keys, only on transactions), and
- *   - `better_auth.user.person_id`, which crosses into tables the Better Auth CLI
- *     owns and generates.
+ *   - the **foreign key** from `better_auth.user.person_id` to `public.person`, which
+ *     drizzle-kit will not write because it crosses Postgres schemas. The column
+ *     itself is declared here with everything else.
  *
  * Both are in `migrations/`, and drizzle-kit leaves them alone because they are not
  * in its snapshot.
  */
 export * from "./reference";
 export * from "./people";
+export * from "./auth";
 export * from "./travel";
 export * from "./delivery";
 export * from "./evaluations";

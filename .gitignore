@@ -54,3 +54,7 @@ next-env.d.ts
 # the total contract value). This repository is public; the RAB stays local.
 # `docs/research/` may cite what was inferred from it, never reproduce it.
 docs/RAB_*.xlsx
+
+# the founding Staff — real names and email addresses, on the same reasoning.
+# `founding-staff.example.sql` beside it is the committed template.
+packages/db/seed/founding-staff.sql

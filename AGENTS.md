@@ -48,10 +48,23 @@ editing `apps/public/src/**` leaves it a cache hit and the changed code goes
 unlinted. Verified, not assumed. Keep whole-repo scanners as plain root scripts.
 
 `envMode` defaults to `strict`: a task only sees environment variables declared in
-its `env` (or `globalEnv`). `DATABASE_URL` is declared on `build`, `typecheck` and
-`dev` for exactly that reason — without it the value is invisible even when set in
-the shell. `DIRECT_URL` is deliberately absent: drizzle-kit runs as a package script,
-outside turbo. `NEXT_PUBLIC_*` is handled automatically for Next apps.
+its `env` (or `globalEnv`). `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are declared on `build`, `typecheck` and
+`dev` for exactly that reason — without it a value is invisible even when set in the
+shell. Anything reading one goes through `requireEnv` in `@sugt/internal`, which fails
+with a sentence naming the strict-mode cause rather than with `undefined`. A new
+variable belongs in `turbo.json` in the same commit that first reads it.
+
+`DIRECT_URL` and `TEST_DATABASE_URL` are deliberately absent: drizzle-kit and vitest
+both run as package scripts, outside turbo. `NEXT_PUBLIC_*` is handled automatically
+for Next apps.
+
+Tests are **Vitest, in `@sugt/internal`, against a real local Postgres** —
+`pnpm --filter @sugt/internal test`. There is no `test` turbo task, for the same
+reason `lint` is not one. The run drops and rebuilds the database `TEST_DATABASE_URL`
+names (default `sugt_test`) and applies every migration from empty, which doubles as
+the check that they apply in one pass on a new environment. Point it somewhere else
+before running it anywhere that matters.
 
 Two things in `turbo.json` are load-bearing and easy to break:
 
