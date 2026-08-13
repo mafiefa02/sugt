@@ -93,7 +93,23 @@ export {
   type PlanPerjadinInput,
   type PlanPerjadinResult,
 } from "./perjadin-planning";
-export { perjadinAcquittal, type PerjadinAcquittal } from "./perjadin-report";
+export {
+  attachTransactionEvidence,
+  filePerjadinReport,
+  markReceiptsSettled,
+  perjadinAcquittal,
+  recordTransaction,
+  type AcquittalEvidence,
+  type AcquittalReceipt,
+  type AcquittalTransaction,
+  type AttachEvidenceResult,
+  type FilePerjadinReportResult,
+  type MarkReceiptsSettledResult,
+  type NewEvidence,
+  type NewTransaction,
+  type PerjadinAcquittal,
+  type RecordTransactionResult,
+} from "./perjadin-report";
 export {
   schoolDetail,
   type SchoolDetail,

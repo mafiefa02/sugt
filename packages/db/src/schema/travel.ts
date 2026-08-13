@@ -1,4 +1,4 @@
-import type { Role, Stream } from "@sugt/domain";
+import type { Role, Stream, TransactionCategory } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -119,12 +119,20 @@ export const groupMember = pgTable(
 );
 
 /**
- * The acquittal's line items. **A transaction is not attributed to a person** — the
- * Advance is one pot and the acquittal reconciles the pot.
+ * The acquittal's line items. **The Advance is one pot and the acquittal reconciles the
+ * pot** — a transaction consumes the Advance, not a person's share of it.
  *
- * There is no category column. `CONTEXT.md` records that the real paperwork (Surat
- * Tugas, SPPD, SPJ or otherwise) has not been confirmed against actual documents, and
- * designing columns for a template nobody has read produces fields that do not fit it.
+ * `incurredByPersonId` does not contradict that. It is nullable because the question it
+ * answers is only sometimes meaningful: the budget carries per-diems as `2 orang × N hari`
+ * at different rates per role, so `Uang Harian` and `Honorarium Narasumber` have a person
+ * and a taxi does not. Naming that person changes nothing about how the pot reconciles, so
+ * ADR-0004's Staff-only rule is untouched.
+ *
+ * `category` is a closed set **read off DITSAMA's own approved budget** rather than
+ * invented for a template nobody has read. The CHECK below is written out character for
+ * character rather than composed from `TRANSACTION_CATEGORIES`, for the reason
+ * `./index.ts` gives: a composed constraint string is not the one the drizzle-kit snapshot
+ * holds, and the two would then diff forever.
  */
 export const transaction = pgTable(
   "transaction",
@@ -136,15 +144,30 @@ export const transaction = pgTable(
     spentOn: date("spent_on").notNull(),
     description: text("description").notNull(),
     amountIdr: bigint("amount_idr", { mode: "number" }).notNull(),
+    category: text("category").$type<TransactionCategory>().notNull(),
+    incurredByPersonId: uuid("incurred_by_person_id").references(() => person.id),
     createdByPersonId: uuid("created_by_person_id")
       .notNull()
       .references(() => person.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check("transaction_amount_check", sql`${t.amountIdr} > 0`)],
+  (t) => [
+    check("transaction_amount_check", sql`${t.amountIdr} > 0`),
+    check(
+      "transaction_category_check",
+      sql`${t.category} in ('Tiket Pesawat/Kereta PP', 'Uang Harian', 'Honorarium Narasumber', 'Akomodasi', 'Transport Bandara/Stasiun', 'Transport Lokal Dalam Provinsi', 'Konsumsi', 'Modul', 'ATK', 'Alat dan Bahan Research Project', 'Seminar kit', 'Lainnya')`,
+    ),
+  ],
 );
 
-/** Many per transaction. `storagePath` is the object key in the private `receipts` bucket. */
+/**
+ * Many per transaction. `storagePath` is the object key in the private `receipts` bucket,
+ * and it is **opaque** — a bare UUID naming no Perjadin, no transaction and no person.
+ * A signed URL carries its object path inside the JWT it is signed with, so a structured
+ * key would put the trip's identifiers into every link the screen renders.
+ *
+ * `unique` on it means one uploaded object can be attached exactly once.
+ */
 export const transactionEvidence = pgTable("transaction_evidence", {
   id: uuid("id").primaryKey().defaultRandom(),
   transactionId: uuid("transaction_id")

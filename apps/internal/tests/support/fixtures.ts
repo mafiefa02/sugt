@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 import { db, schema } from "@sugt/db";
-import type { ClassKind, SessionStatus, Stream, Role } from "@sugt/domain";
+import type { ClassKind, SessionStatus, Stream, Role, TransactionCategory } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 
 export type PersonFixture = {
@@ -335,10 +337,19 @@ export type TransactionFixture = {
   amountIdr: number;
   description?: string;
   spentOn?: string;
+  category?: TransactionCategory;
+  /** Only per-diems and honoraria carry one, so the default is the common case: nobody. */
+  incurredByPersonId?: string;
   createdByPersonId: string;
 };
 
-/** One line item against the Advance. A transaction is not attributed to a person. */
+/**
+ * One line item against the Advance.
+ *
+ * The default category matches the default description — a taxi is
+ * `Transport Lokal Dalam Provinsi` — so a test that cares about neither still reads as a
+ * plausible row rather than as `Lainnya` standing in for "unset".
+ */
 export async function addTransaction(fixture: TransactionFixture) {
   const [transaction] = await db
     .insert(schema.transaction)
@@ -347,10 +358,40 @@ export async function addTransaction(fixture: TransactionFixture) {
       spentOn: fixture.spentOn ?? "2026-09-02",
       description: fixture.description ?? "Transport lokal",
       amountIdr: fixture.amountIdr,
+      category: fixture.category ?? "Transport Lokal Dalam Provinsi",
+      incurredByPersonId: fixture.incurredByPersonId ?? null,
       createdByPersonId: fixture.createdByPersonId,
     })
     .returning();
   return transaction!;
+}
+
+export type EvidenceFixture = {
+  transactionId: string;
+  uploadedByPersonId: string;
+  /** Opaque by construction, so a test supplies one only when it asserts on the value. */
+  storagePath?: string;
+};
+
+/**
+ * One receipt against a line item.
+ *
+ * The bytes are not part of this: `storage_path` names an object in the private `receipts`
+ * bucket and the row is the only thing the query layer reads, so a unique string is all a
+ * test of the acquittal needs — the same shape `cerita.test.ts` uses for a Story photograph.
+ */
+export async function addTransactionEvidence(fixture: EvidenceFixture) {
+  const [evidence] = await db
+    .insert(schema.transactionEvidence)
+    .values({
+      transactionId: fixture.transactionId,
+      storagePath: fixture.storagePath ?? randomUUID(),
+      contentType: "image/jpeg",
+      byteSize: 120_000,
+      uploadedByPersonId: fixture.uploadedByPersonId,
+    })
+    .returning();
+  return evidence!;
 }
 
 /**
@@ -362,10 +403,12 @@ export async function addTransaction(fixture: TransactionFixture) {
  * "what the tests populate" survives a fixture being deleted, while one pruned to the
  * cascade minimum quietly stops covering a table the day its parent leaves.
  *
- * `cascade` is what reaches everything **no** fixture writes: `perjadin_evaluation`,
- * `session_feedback_token` and `transaction_evidence`. A new table referencing one of
- * these therefore needs no entry; a new table nothing references does. The other three
- * evaluation tables are named below, because fixtures now write them directly.
+ * `cascade` is what reaches everything **no** fixture writes: `perjadin_evaluation` and
+ * `session_feedback_token`. A new table referencing one of these therefore needs no entry;
+ * a new table nothing references does. The other three evaluation tables are named below,
+ * because fixtures now write them directly, and `transaction_evidence` has joined them for
+ * the same reason — `addTransactionEvidence` writes it, so by the rule above it is named
+ * even though `cascade` from `public."transaction"` already reaches it.
  *
  * `session_teacher` is the first table here that **no fixture writes and the tests
  * populate anyway** — `arrangeOnlineSessions` writes it, and the batch tests assert on
@@ -395,7 +438,8 @@ export async function resetDatabase() {
       public."participant_feedback",
       public."perjadin",
       public."group_member",
-      public."transaction"
+      public."transaction",
+      public."transaction_evidence"
     restart identity cascade
   `);
 }

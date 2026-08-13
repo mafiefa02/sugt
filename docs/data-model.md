@@ -20,17 +20,21 @@ and each says so where it appears. Nothing else in this document describes a sch
 not exist, and nothing in this list has been checked against a real Postgres the way the rest
 was:
 
-| Decided, not applied                                           | Where                                       |
-| -------------------------------------------------------------- | ------------------------------------------- |
-| `transaction.category` and `transaction.incurred_by_person_id` | [Money](#money)                             |
-| `perjadin_evaluation.lodging` becoming nullable                | [Perjadin Evaluation](#perjadin-evaluation) |
-| the whole of `story` and `story_photo`                         | [Stories](#stories)                         |
+| Decided, not applied                            | Where                                       |
+| ----------------------------------------------- | ------------------------------------------- |
+| `perjadin_evaluation.lodging` becoming nullable | [Perjadin Evaluation](#perjadin-evaluation) |
 
 One of these carries a claim worth verifying rather than assuming when the migration lands:
 `least()` ignoring NULLs, which is what lets a nullable `lodging` leave the elaboration rule
 intact.
 
-**Three rows left this list.** The partial `person_email_key` and the four hand-declared
+**Five rows left this list.** `story` and `story_photo` are applied, by migration `0005`.
+`transaction.category` and `transaction.incurred_by_person_id` are applied, by migration `0006`
+— note that it adds `category` as `NOT NULL` with no default and no backfill, which is correct
+only because no Perjadin has been filed and the table is empty everywhere; it fails loudly
+rather than guessing a value if that ever stops being true.
+
+The partial `person_email_key` and the four hand-declared
 `better_auth` tables are applied, by migrations `0002` and `0003`. So is
 `session_one_online_per_school_per_day`, by migration `0004`, which
 [#27](https://github.com/mafiefa02/sugt/issues/27) wrote because Jadwalkan Sesi daring is the
@@ -1081,8 +1085,12 @@ create table transaction_evidence (
 );
 ```
 
-**A transaction is not attributed to a person.** The Advance is one pot and the acquittal
-reconciles the pot. Per-diems appear as unattributed lines like anything else. Worth knowing:
+**The Advance is one pot and the acquittal reconciles the pot** — a transaction consumes the
+Advance rather than a person's share of it. That is the claim, and `incurred_by_person_id` below
+does not weaken it: naming who a per-diem was paid to says nothing about how the pot reconciles.
+This paragraph read _"A transaction is not attributed to a person"_ until that column shipped;
+the sentence is gone rather than corrected in place, because the pot is what it was always about.
+Worth knowing:
 [ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md) justifies hiding money
 from Teaching Team by citing "per-diem amounts and personal travel claims" — the rule still
 holds, its stated reason is just thinner than when it was written. Adding
@@ -1273,10 +1281,24 @@ is the whole difference from a receipt.
 
 Two buckets, and the split is doing real work:
 
-| Bucket         | Visibility | Holds                                                                        |
-| -------------- | ---------- | ---------------------------------------------------------------------------- |
-| `receipts`     | Private    | Transaction evidence. Keys: `perjadin/{perjadin_id}/{transaction_id}/{uuid}` |
-| `public-media` | Public     | Published Story photographs. Keys: `story/{story_id}/{uuid}`                 |
+| Bucket         | Visibility | Holds                                                            |
+| -------------- | ---------- | ---------------------------------------------------------------- |
+| `receipts`     | Private    | Transaction evidence. Keys: an opaque `{uuid}`, and nothing else |
+| `public-media` | Public     | Published Story photographs. Keys: `story/{story_id}/{uuid}`     |
+
+**A receipt key spells nothing out, and that is a change from what this table said.** It read
+`perjadin/{perjadin_id}/{transaction_id}/{uuid}` until the acquittal was built. A private bucket
+is read through a signed URL, and a signed URL carries its object path inside the JWT it is
+signed with, so a structured key puts the trip's identifiers into every link the acquittal screen
+renders. A bare UUID names nothing.
+
+What that gives up is the prefix check `story_photo` relies on — a Story photograph is trusted
+only under `story/{story_id}/`, which is what stops one Story's photograph being attached to
+another. Here it costs nothing: `receipts` holds receipts only, every one is readable by every
+Staff member already, and `storage_path` is `unique`, so there is no object a Staff caller could
+reach by forging a key that they could not reach by asking honestly. The boundary that does the
+work instead is the pair — a line item is checked against its Perjadin before evidence attaches
+to it.
 
 **`public-media` is needed at provisioning time, not at some later one.** This row read
 _"Published photographs (a later release)"_ until

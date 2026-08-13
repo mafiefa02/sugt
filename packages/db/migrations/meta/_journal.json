@@ -43,6 +43,13 @@
       "when": 1786589453262,
       "tag": "0005_spooky_morbius",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786602761013,
+      "tag": "0006_transaction_category_and_incurred_by",
+      "breakpoints": true
     }
   ]
 }

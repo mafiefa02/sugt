@@ -17,15 +17,15 @@
  *
  * ## These files may import `@sugt/domain`, for types only
  *
- * Eight `text` columns carry a CHECK naming a fixed set that `@sugt/domain` already
+ * Eleven `text` columns carry a CHECK naming a fixed set that `@sugt/domain` already
  * declares. Each one carries `$type<>()` off that declaration, so a reader of a Session
  * gets `SessionMode` rather than `string` and no caller has to assert the difference.
  * `packages/db` already depends on the package and `src/queries/` imports it freely, so
  * the arrow is one that exists — this only extends it to the layer under the queries.
  *
- * **Five more carry a single literal, not a set.** `session.online_pic_role`,
- * `perjadin.pic_role`, `session_teacher.person_role` and the two `filed_by_role` columns are
- * each CHECKed against **one** value — `'Staff'` or `'Teaching Team'` — so each reads back as
+ * **Six more carry a single literal, not a set.** `session.online_pic_role`,
+ * `perjadin.pic_role`, `session_teacher.person_role`, `story.written_by_role` and the two
+ * `filed_by_role` columns are each CHECKed against **one** value — `'Staff'` or `'Teaching Team'` — so each reads back as
  * that literal via `$type<"Staff">()` rather than `string`, the guarantee the composite
  * foreign key into `person (id, role)` rests on. These need no `@sugt/domain` import: a single
  * value has no name in the vocabulary, so it is written out here exactly as the CHECK spells

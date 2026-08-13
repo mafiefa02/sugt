@@ -2,6 +2,7 @@ import { PerjadinGroup } from "-/components/perjadin-group";
 import { SessionStatusBadge } from "-/components/session-labels";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
+import { LinkButton } from "@sugt/ui/components/link-button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -52,7 +53,20 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
 
       {acquittal !== null && (
         <div className="border-b border-border px-7 py-5">
-          <h2 className="font-heading text-sm font-medium">Uang muka</h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 className="font-heading text-sm font-medium">Uang muka</h2>
+            {/*
+              The Report is the acquittal state on this row, so it is a child of this page
+              rather than a surface of its own — and Staff-only, like the strip it sits in.
+            */}
+            <LinkButton
+              href={`/perjadin/${trip.id}/laporan`}
+              variant="outline"
+              size="sm"
+            >
+              Laporan Perjadin
+            </LinkButton>
+          </div>
           {/*
             The deadline rides with the money, because the Report *is* the acquittal. Nothing
             is gated on it — DITSAMA sets that deadline itself, and the tool is never stricter

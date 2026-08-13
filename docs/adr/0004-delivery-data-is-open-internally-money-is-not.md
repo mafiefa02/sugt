@@ -20,6 +20,10 @@ Only Staff may publish content to the public site (see [ADR-0008](./0008-public-
 >
 > The stated reason for hiding money also got thinner: transactions are not attributed to a person, so per-diems appear as unattributed lines. The rule stands; its justification is weaker than when it was written.
 
+> **That last sentence is no longer true, and the justification is back.** `transaction` now carries a nullable `incurred_by_person_id`, added with the acquittal because the Programme's approved budget carries per-diems as `2 orang × N hari` at different rates per role — see [#21](https://github.com/mafiefa02/sugt/issues/21). So a Perjadin Report does again show what a named colleague was paid, which is the thing this ADR gave as its reason for hiding one.
+>
+> **The decision itself is untouched**, and was never resting on that sentence: the Advance is one pot and the acquittal reconciles the pot, so attribution is a fact about some line items rather than a change to what a Report is. What changed is only that the reason reads as strongly now as it did when it was written.
+
 ## Consequences
 
 - Session Record authors write knowing colleagues will read them. That is intended — it is what makes them institutional memory — and is a different thing from publication, which [ADR-0001](./0001-public-site-reads-aggregates-only.md) rules out.
