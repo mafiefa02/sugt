@@ -111,9 +111,16 @@ is ever "overdue" either — no Session ever asserted a due date — so a School
 pace shows a low delivered count and noticing that is a human reading the number. See
 [ADR-0006](./adr/0006-sessions-are-created-when-arranged.md).
 
-It is also where trip planning starts: select Schools here and create a Perjadin from
-them. Those counts are what decides where a Group goes next, so the decision gets made
-in front of them rather than from memory.
+**It is a read surface and nothing else.** It used to be where both kinds of arranging
+started, by selecting Schools and acting on the selection. Neither starts here now: a trip
+is planned around a **Sub-Cluster** rather than a hand-assembled set of Schools, and an
+online Session is arranged one School at a time. Nothing is left for a multi-selection to
+mean, so there is no selection.
+
+What that costs is the thing the old design was proudest of — planning in front of the
+delivered counts rather than from memory. It is a real loss and it is accepted: the counts
+decide _which Sub-Cluster is next_, and that reading now happens before you leave this
+screen instead of inside the form you launched from it.
 
 ### Concerns list
 
@@ -149,6 +156,13 @@ of this list before settling it.
 A School receives **ten**: four offline, six online. Each teaches all three of its
 Classes.
 
+**A Session has a date and a start time, and the time is the School's.** 09:00 at a School in
+Papua is not 09:00 to the professor reading the screen in Bandung, so a time is only
+meaningful with its zone attached and is always shown that way — "09:00 WIT". Which zone comes
+from the School's Province, since no Indonesian province straddles a boundary. Screens read
+from Bandung show the WIB equivalent alongside it. This holds for online Sessions too: the
+stored time is the School's, so it means one thing whichever mode a Session is.
+
 A Session comes into existence **when it is arranged** — when a Perjadin is planned or an
 online meeting scheduled — never before. The full ten are not laid out in advance with
 target dates, because those dates would be invented and a schedule nobody maintains
@@ -164,12 +178,16 @@ difference.
 no Perjadin, so scheduling one means naming a Staff member as its PIC — otherwise six of
 every ten Sessions would have nobody to file the Session Record.
 
-**Online Sessions are scheduled from the coverage view, beside trip planning.** Selecting
-Schools there offers two actions rather than one: plan a Perjadin, or schedule an online
-Session across the selection — one date and one PIC applied to all of them, each row editable
-first. Six of every ten Sessions are online, so this is not a secondary path; and it belongs
-where the delivered counts are, because it is the same decision a trip is, made against the
-same numbers.
+**Online Sessions are arranged one School at a time.** Each is held at a moment of its own —
+its own date, its own start time, its own PIC — so there is nothing for a batch to share.
+They were once scheduled across a multi-selection from the coverage view, with one date and
+one PIC stamped across the rows and each editable afterwards; the shared fields were doing
+no work that per-School arranging does not do more plainly, and a screen that can write
+seventeen rows at once fails seventeen rows at once.
+
+The screen stands on its own with a School picker, and the same action appears on a School's
+own page, which is where you already are when you are thinking about one School. Six of every
+ten Sessions are online, so this is not a secondary path.
 
 **Marking a Session delivered is also how it records who taught.** The form asks for the
 Teaching Team member on each Stream — pre-filled from the Group on an offline Session, empty on
@@ -190,16 +208,24 @@ valid Group is always at least three people, around four in practice. Two profes
 genuinely cover all six teaching threads, because each covers their Stream across all
 three Classes.
 
-Creation is a plain validated form — pick Schools, dates and people. It is not a planning
-aid: no ranking, no suggestions, no coverage data inside the form itself.
+Creation is a plain validated form — pick a **Sub-Cluster**, dates and people. It is not a
+planning aid: no ranking, no suggestions, no coverage data inside the form itself.
 
-**It is launched from the coverage view**, by selecting Schools there, rather than from a
-nav menu. The form stays deliberately dumb; the context comes from where you started.
-Delivered counts are the figure that decides where a Group goes next, so whoever plans a
-trip arrives having just read them instead of working from memory. That costs nothing to
-build and is the whole of the tool's contribution to the decision.
+**A trip goes to one Sub-Cluster.** That is what a journey is: a set of Schools near enough
+to reach on one trip. Choosing it is what decides which Schools may appear on the trip at
+all, so the form no longer asks anyone to assemble that set by hand — which was the old
+design asking a planner to remember geography the tool could have held.
 
-**Creating a Perjadin is what brings its Sessions into existence** — one per School on
+**Its Schools default to all of the Sub-Cluster's, and any of them can be dropped.** The
+Sub-Cluster says which Schools are eligible; the plan says which are visited this time. A
+School sitting exams that week is a School left off the trip, not a reason to abandon it.
+
+**Each School gets its own date and its own start time**, inside the trip's range. The Group
+travels once and teaches across several days, so one date for the whole Perjadin was never
+the right shape. Two Schools may share a date — morning at one, afternoon at another — but
+not a date _and_ a time, because the Group cannot be in two places.
+
+**Creating a Perjadin is what brings its Sessions into existence** — one per School kept on
 the trip. This form is the arranging.
 
 The **Advance** is fixed during trip planning and transferred to the PIC before
@@ -430,6 +456,32 @@ Publishing or unpublishing tells the public site to refresh rather than waiting 
 scheduled one — the site otherwise serves its last good copy indefinitely, which is right for
 a figure and wrong for a photograph someone has asked to have removed.
 
+### Sub-Clusters — which Schools are one journey
+
+Staff group a Cluster's Schools into **Sub-Clusters**: sets close enough to reach on a single
+trip. This is what offline planning is built on, so it is the one piece of reference data the
+tool lets anyone edit — create a Sub-Cluster, rename one, move Schools between them.
+
+**Every School is in exactly one, always.** There is no unassigned state to represent, because
+an unassigned School would be a School no trip could be planned for and nothing on any screen
+would say so. The initial grouping is seeded for that reason; the screen is for correcting it.
+
+**It exists because the grouping is a guess until somebody has made the journey.** Clusters and
+Topics were allocated to DITSAMA and the tool only reflects them. Nobody allocated the
+Sub-Clusters — they are DITSAMA's own reading of roads, flights and distances, and the first
+Perjadin is what teaches you two Schools are not as close as the map suggested. Behind a deploy,
+that lesson does not get recorded. See
+[ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md).
+
+Two things the screen refuses, both saying why rather than failing quietly:
+
+- **Deleting a Sub-Cluster that still holds Schools.** Empty it first — there is nowhere for
+  the Schools to go.
+- **Moving a School that a planned trip is still going to visit**, naming the Perjadins in the
+  way so somebody can re-plan or cancel them. Only trips that have not happened block a move:
+  Sessions already delivered record where the Programme went, and a grouping that could not be
+  corrected after the first trip would be a grouping nobody could fix.
+
 ### People — the invite list
 
 Staff add and revoke People here. This is the invite list from
@@ -480,6 +532,11 @@ Absences look like oversights unless they are written down. These are decisions.
   seeded by migration. **This does not extend to People** — the roster grows and
   revocations happen, so there is a People screen; see
   [ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
+  **Nor to Sub-Clusters**, which do have one. The three nouns above were allocated to
+  DITSAMA by somebody else and the tool's job is to reflect them; a Sub-Cluster is
+  DITSAMA's own judgement about which Schools are one journey, and the first trip is what
+  teaches you it was wrong. See
+  [ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md).
 - **No scheduling, no overdue, no alerts.**
 
 The consequence, stated plainly so nobody builds against the opposite: _"has this School

@@ -36,8 +36,12 @@ Direktorat Persiapan Bersama ITB — the organiser appointed to deliver the STEM
 A participating school receiving teaching under the Programme. Around 42, and the set is fixed.
 
 **Province**:
-The Indonesian province a School sits in. Nothing is organised by Province — it is not a Cluster and does not group anything — but the number of them the Programme reaches is one of the figures the public site leads with.
+The Indonesian province a School sits in. Nothing is organised by Province — it is not a Cluster and does not group anything — but the number of them the Programme reaches is one of the figures the public site leads with, and it is what says which Time Zone a School keeps.
 _Avoid_: region, area, location
+
+**Time Zone**:
+Which of Indonesia's three — **WIB**, **WITA** or **WIT** — a School keeps. A Province sits wholly in one, so a School's is its Province's and is never stated separately. It is what makes a Session's start time mean something: 09:00 at a Papua School is not 09:00 to the professor reading the screen in Bandung.
+_Avoid_: timezone (one word), offset, UTC offset, region
 
 **Kabupaten/Kota**:
 The regency or city a School sits in, one level below the Province. Kept in Indonesian because the level covers both a _kabupaten_ and a _kota_ and no single English word means the same thing.
@@ -46,6 +50,10 @@ _Avoid_: city (a Kabupaten is not one), regency (a Kota is not one), district, m
 **Cluster**:
 A group of Schools sharing one Topic. Broadly regional, but not tightly so — one Cluster reaches from Kalimantan to Papua Barat Daya, so a Cluster is never a plausible single journey. There are four, and they are allocated and fixed.
 _Avoid_: region (the Cluster is the unit; the island groups a spreadsheet may show are not a level the Programme is organised by)
+
+**Sub-Cluster**:
+A set of Schools inside one Cluster close enough to each other to be reached on **one journey**. It is the unit an offline Session's travel is planned around: a Cluster is never a plausible single journey and a Sub-Cluster is exactly one. Unlike the Cluster, it is not allocated to DITSAMA by anyone — it is DITSAMA's own judgement about what is near what, and so it is the one piece of reference data the tool lets Staff correct. The team says _Kelompok Sekolah_; "Sub-Cluster" says the same thing and says its relationship to the Cluster as it does so.
+_Avoid_: Group (reserved for the travelling party — a Sub-Cluster is Schools, a Group is people), cluster (unqualified — it names the level above), region, area, zone (reserved against time)
 
 **Topic**:
 The subject matter assigned to a Cluster. Each Cluster carries a different one. Allocated, and fixed.
@@ -74,7 +82,7 @@ A small set of students within the Student Class who produce one Final Project t
 _Avoid_: group (reserved for the travelling party), sub-group, team, squad
 
 **Session**:
-A single teaching occasion at one School — one date, one mode, offline or online — at which all three of its Classes are taught. Comes into existence when it is arranged, not before. The team says _Sesi_; it translates cleanly.
+A single teaching occasion at one School — one date, one start time, one mode, offline or online — at which all three of its Classes are taught. Its start time is local to the School, in the School's Time Zone, whichever mode it is and wherever the people teaching it are. Comes into existence when it is arranged, not before. The team says _Sesi_; it translates cleanly.
 _Avoid_: visit, teaching, meeting, class (a Session is an occurrence; a Class is people)
 
 ### People and travel
@@ -92,7 +100,7 @@ The professors and instructors who deliver Sessions — a maintained roster of n
 _Avoid_: lecturers, trainers, facilitators
 
 **Perjadin**:
-An authorised duty travel — one Group, one date range, one destination — that must be accounted for administratively afterwards.
+An authorised duty travel — one Group, one date range, one Sub-Cluster — that must be accounted for administratively afterwards. The Sub-Cluster is what the Group goes to; the Schools it teaches at are that Sub-Cluster's, each on its own date and at its own time inside the range.
 _Avoid_: trip, visit, travel, duty travel (a Perjadin is the authorisation and its accounting, not the journey; the English translations name something vaguer)
 
 **Group**:
@@ -165,8 +173,11 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - The **Track** has exactly two **Streams**: STEM and Research
 - The **Track** covers four **Clusters**
 - A **Cluster** contains many **Schools** — between six and seventeen; a **School** belongs to exactly one **Cluster**
+- A **Cluster** divides into **Sub-Clusters**; a **Sub-Cluster** sits in exactly one **Cluster** and a **School** belongs to exactly one **Sub-Cluster**, so the **Sub-Clusters** of a **Cluster** partition its **Schools** with none left over
+- A **Sub-Cluster** of one **School** is legal — a School far from every other must still be reachable, and pairing it with a distant one to avoid a **Sub-Cluster** of one would be a lie about the journey
 - A **School** sits in exactly one **Kabupaten/Kota**, which sits in exactly one **Province**
 - A **Cluster** spans several **Provinces**, and a **Province** never spans **Clusters**
+- A **Province** keeps exactly one **Time Zone**, and a **School**'s is its **Province**'s
 - A **Cluster** has exactly one **Topic** and exactly one **Problem**; both **Streams** work that same **Problem**
 - A **School** runs three **Classes**: **GTK**, **MS** and **Student**
 - Each **Class** is taught in both **Streams** — six teaching threads per **School**
@@ -182,6 +193,11 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - A person is **Staff** or **Teaching Team**, never both, so a valid **Group** is always at least three people
 - A **Session** records which **Teaching Team** member taught each **Stream**, whether or not it had a **Group** — which is how an online **Session** still knows who was in the room and therefore who might file a **Session Record**
 - Offline **Sessions** happen during a **Perjadin**; online **Sessions** have no **Perjadin** at all
+- A **Perjadin** goes to exactly one **Sub-Cluster**, and every **School** it teaches at belongs to that **Sub-Cluster**
+- A **Perjadin** need not reach every **School** in its **Sub-Cluster** — the **Sub-Cluster** says which **Schools** are eligible, the plan says which are visited this time
+- Each of those **Schools** gets its own **Session**, on its own date and at its own start time inside the **Perjadin**'s range — the **Group** travels once and teaches on several days
+- No two **Sessions** on one **Perjadin** share a date _and_ a start time; the **Group** cannot be at two **Schools** at once
+- Online **Sessions** are arranged one **School** at a time, because each is held at a moment of its own — there is nothing a batch of them would share
 - A **Perjadin** is funded by an **Advance**, fixed when the trip is planned and transferred to the **PIC** before departure
 - A **Perjadin** yields exactly one **Perjadin Report** covering the whole **Group**, filed by its **PIC**, itemising every transaction with evidence and reconciling them against the **Advance**
 - Whatever is left of an **Advance** is returned to the **Treasurer**
@@ -227,6 +243,9 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - "evaluation" was used for three different things — the internal **Session** form, the **Participant** one, and the travel one — resolved: they produce a **Session Record**, **Participant Feedback** and a **Perjadin Evaluation** respectively. Unqualified "evaluation" names none of them.
 - The team says "evaluation form" for both the internal one and the **Participant** one — resolved: the internal form produces a **Session Record**; the **Participant** one produces **Participant Feedback**. "Evaluation" unqualified names neither, because the whole point is that they are different documents.
 - The public narrative had three names and no term — "stories and photographs" in product.md, "published items" in ADR-0008, _Cerita_ in the design — while every internal record had a precise one. Resolved: one authored piece is a **Story**. "Publishing" remains the act, and names no document.
+- The unit an offline **Session**'s travel is planned around was the **School** — a **Perjadin** was planned by picking Schools one by one and its destination was free text — while the thing actually being travelled to was a handful of Schools near each other. Resolved: the **Sub-Cluster** is that thing and is now named. A **Perjadin** goes to one, and the Schools follow from it rather than being assembled by hand each time.
+- **Sub-Cluster** was very nearly called a "school group", which is unusable: **Group** is the travelling party, so "the group goes to the school group" names two different kinds of thing with one word in one sentence. _Kelompok Sekolah_ — what the team says — was the other candidate and was rejected on the rule stated at the top of this file: Indonesian is kept only where no English term means the same thing, and unlike **Perjadin** or **GTK**, this concept translates. "Sub-Cluster" also carries its relationship to the **Cluster**, which "Kelompok Sekolah" does not.
+- A **Session** was a calendar day and nothing finer, on the ground that Indonesia spans three time zones and a date needs no zone to be unambiguous. Resolved: a **Session** now carries a start time as well, and the reasoning is preserved rather than overturned — the time is local to the **School**, and the **Time Zone** that makes it meaningful comes from the **Province**, which is a fact the Programme already held. What was rejected is storing a Session as an _instant_, which would have made every reader convert before they could read it.
 - The source spreadsheet groups **Schools** by island (Sumatera, Jawa, Kalimantan, Sulawesi/Maluku/Papua) and separately by numbered **Cluster**, and the two do not agree — Jawa splits across two **Clusters** and Kalimantan merges with Sulawesi into one — resolved: only the **Cluster** is a level the Programme is organised by. The island grouping is a way of reading a spreadsheet and has no term here.
 
 ## Open questions

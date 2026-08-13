@@ -237,6 +237,14 @@ Person, and only ever to one that exists.
 Seeded by migration. No admin screens — [`product.md`](./product.md) is explicit that Schools,
 Clusters and Topics are fixed facts, not records with an editing lifecycle.
 
+> **One row of this is now false: the Sub-Cluster.** It is seeded like everything else here, and
+> it is also the one thing on this page with a Staff-facing editing screen. The rule is not
+> weakened, it is stated more precisely than it used to be: what has no admin screen is
+> reference data DITSAMA was _given_ — Schools, Clusters, Topics, Provinces are all allocated by
+> someone else and the tool's job is to reflect them. A **Sub-Cluster** is DITSAMA's own
+> judgement about which Schools are one journey, and a judgement is exactly the kind of fact
+> that gets revised. See [ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md).
+
 **`person` is not reference data and this rule does not reach it.** The roster grows and
 revocations happen, so People are added through a Staff-only screen; only the founding
 Staff rows are seeded, and only because the sign-in hook makes them a prerequisite for
@@ -245,8 +253,9 @@ freely.
 
 ```sql
 create table province (
-  code  text primary key,          -- 'JB', 'JI', 'SS', …
-  name  text not null
+  code       text primary key,          -- 'JB', 'JI', 'SS', …
+  name       text not null,
+  time_zone  text not null check (time_zone in ('WIB', 'WITA', 'WIT'))
 );
 
 create table cluster (
@@ -257,13 +266,25 @@ create table cluster (
   problem  text not null
 );
 
+create table sub_cluster (
+  id          uuid primary key default gen_random_uuid(),
+  slug        text not null unique,
+  name        text not null,
+  cluster_id  uuid not null references cluster (id),
+
+  unique (id, cluster_id)
+);
+
 create table school (
   id              uuid primary key default gen_random_uuid(),
   slug            text not null unique,
   name            text not null,
   cluster_id      uuid not null references cluster (id),
+  sub_cluster_id  uuid not null references sub_cluster (id),
   province_code   text not null references province (code),
-  kabupaten_kota  text not null
+  kabupaten_kota  text not null,
+
+  foreign key (sub_cluster_id, cluster_id) references sub_cluster (id, cluster_id)
 );
 ```
 
@@ -277,6 +298,37 @@ each Cluster's is different, so there is nothing to share and nothing to join.
 **`cluster_id` is NOT NULL.** Clusters and their Topics are already allocated, so "a School
 with no Cluster" is not a state the coverage view — which groups Schools by Cluster — ever
 has to render, and no Cluster join is ever an outer join.
+
+**`sub_cluster_id` is NOT NULL for the same reason, and it is a stronger claim.** A Cluster is
+given; a Sub-Cluster is invented, so "not yet grouped" is a genuinely tempting state to allow.
+It is not allowed. Every School belongs to exactly one Sub-Cluster from the moment the seed
+runs, which is what lets a Perjadin be planned by picking a Sub-Cluster and nothing else — an
+unassigned School would be a School no trip could ever be planned for, and nothing on any
+screen would say so.
+
+**A School carries both `cluster_id` and `sub_cluster_id`, and they cannot disagree.** The
+second is derivable from the first via `sub_cluster`, so this is a denormalisation, and it is
+the same one `group_member.role` already makes: the composite foreign key
+`(sub_cluster_id, cluster_id) → sub_cluster (id, cluster_id)` means a row can only exist if
+the pair is true in `sub_cluster`. Carrying `cluster_id` keeps every existing Cluster join —
+the coverage view's included — a single inner join rather than two hops, and carrying it
+costs nothing precisely because the database will not let it drift. The `unique (id, cluster_id)`
+on `sub_cluster` exists solely to be the target of that key.
+
+**`province.time_zone` is on the Province, not the School.** Indonesia has three zones —
+WIB, WITA, WIT — and **no Indonesian province straddles a boundary**, so a column on `school`
+would let forty-two rows express something only the Province list can vary by, and would admit
+a state that cannot exist: two Schools in one Province disagreeing about the hour. This is the
+argument for Province being a table at all, applied again with more force — a wrong Province
+misspells a line, a wrong Time Zone puts a Session on screen at the wrong time and nothing
+looks broken.
+
+It is the abbreviations rather than IANA names (`Asia/Jakarta` and friends) because that is
+what goes on an Indonesian screen, because it matches how every other enum here is done —
+`text` plus a hand-written CHECK, narrowed by `$type<>()` off a constant in `@sugt/domain` —
+and because all three are **fixed offsets with no daylight saving**, so `Intl` would be doing
+arithmetic that `+7/+8/+9` already does. IANA earns its keep in a country with DST; Indonesia
+is not one.
 
 **Province is a table rather than a text column** for one reason: _provinces covered_ is a
 headline figure on the portfolio site, and a typo in a free-text column silently inflates the
@@ -307,6 +359,7 @@ create table session (
   perjadin_id       uuid references perjadin (id),
   mode              text not null check (mode in ('offline', 'online')),
   held_on           date not null,
+  starts_at         time not null,
   status            text not null default 'arranged'
                       check (status in ('arranged', 'delivered', 'cancelled')),
   cancelled_reason  text,
@@ -331,6 +384,10 @@ create unique index session_one_per_school_per_perjadin
 create unique index session_one_online_per_school_per_day
   on session (school_id, held_on)
   where perjadin_id is null and status <> 'cancelled';
+
+create unique index session_one_school_at_a_time_per_perjadin
+  on session (perjadin_id, held_on, starts_at)
+  where status <> 'cancelled';
 ```
 
 That index is `product.md`'s "creating a Perjadin is what brings its Sessions into existence
@@ -346,6 +403,41 @@ twice on the same day" moved from theoretical to one mis-click away. The first i
 catch it, because it keys on `perjadin_id` and every online Session has none. Partial in the
 same two ways and for the same reasons: cancelled rows accumulate and must not collide, and
 offline Sessions are untouched because their `perjadin_id` is not null.
+
+**The third index is the Group being in one place at a time.** A Perjadin reaches several
+Schools and each gets its own date, but nothing stopped two of them being written for the same
+moment, and with a start time on the row that stopped being theoretical: morning at one School
+and afternoon at another is exactly the case the time column exists to serve, so the tool
+cannot simply forbid two Schools on one day. What it forbids is the same day _and_ the same
+time on one trip, which is physically impossible and is a typo every time it appears. Partial
+in the same way and for the same reason as the other two — cancelled rows accumulate and must
+not collide with their own replacements — and online Sessions are untouched, because their
+`perjadin_id` is null and Postgres treats nulls in a unique index as distinct.
+
+**There is no `sub_cluster_id` on a Session, and the reason is worth stating because the column
+is an obvious thing to reach for.** The rule it would enforce — every School a Perjadin teaches
+at belongs to that Perjadin's Sub-Cluster — is real, and it is genuinely enforceable: denormalise
+the Sub-Cluster onto the Session and make both sides composite foreign keys, exactly the
+`person (id, role)` trick that already makes "the PIC is Staff" declarative.
+
+**It was designed, and then rejected, because of what it does to the School.** That key pins
+`session → school (id, sub_cluster_id)` and defaults to `NO ACTION`, so Postgres would refuse
+to move a School between Sub-Clusters while **any** Session referenced the old pairing —
+delivered and cancelled ones included. A School would be frozen into its Sub-Cluster by its
+first completed trip, and with four offline Sessions each, that is every School early in the
+Programme. `on update cascade` does not rescue it: it would rewrite history, making a past
+Perjadin claim it travelled somewhere it did not, and it fails on its own terms anyway because
+the trip's own `sub_cluster_id` does not move with the School, so the cascade would violate the
+other half of the key. This is the same argument
+[ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md) makes when
+it rejects `on update cascade` on `person.role`.
+
+**The rule compares a mutable grouping against history, so it cannot be a key.** A Sub-Cluster
+is a judgement that gets revised ([ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md));
+a delivered Session is a fact that does not. It is therefore enforced by the application at the
+point a trip is planned, and listed with the others in
+[what the database does not hold](#what-the-database-does-not-hold) — the same disposition, for
+the same reason, as "an arranged offline Session falls inside its Perjadin".
 
 The first CHECK is the sharpest rule in the delivery half of the domain, and it is an
 equivalence rather than an implication in both directions: **an offline Session has a
@@ -371,6 +463,29 @@ column set, pass without a special case.
 `held_on` is the date the Session is arranged for, and the date it happened once delivered.
 It is a `date`, not a `timestamptz` — Indonesia spans three time zones and a Session is a
 calendar day, not an instant.
+
+**`starts_at` is a `time`, and the pair is deliberately not a timestamp.** A Session now carries
+a start time as well as a date, because a Perjadin reaching several Schools teaches at each at
+a different hour and an online Session is held at a moment somebody has to be told. The reason
+`held_on` is not a `timestamptz` survives that intact, and is why the time is stored beside the
+date rather than folded into it: **`starts_at` is wall-clock time local to the School**, and the
+zone that makes it meaningful is `province.time_zone`, reached through `school.province_code`.
+A `timestamptz` would store an instant, which means every write converts on the way in and every
+read converts on the way out, and any reader who forgets is silently wrong by up to two hours.
+A bare `time` says 09:00 and means 09:00 to the people in the room.
+
+**Both modes, and always the School's local time.** For an offline Session that is uncontentious
+— the Group is standing in the building. For an online one it is a choice: the School is in WIT
+and the professor is in Bandung on WIB, so the same Session is 09:00 to one and 07:00 to the
+other. The stored number is the School's, so that `starts_at` means one thing regardless of
+`mode` and nobody has to check a sibling column to know how to read it. **The conversion is a
+rendering concern**: a Session's time is shown with its zone attached — "09:00 WIT" — and screens
+read by Bandung-based Staff show the WIB equivalent alongside it when the School is not on WIB.
+Nothing stores the second number.
+
+`starts_at` is NOT NULL. It is affordable because no Session exists yet in any live database, and
+it is worth spending that one-off affordance on: a nullable start time acquires a null on the
+first row written and keeps it forever, and every screen then has to render "time unknown".
 
 **An arranged offline Session's `held_on` lies inside its Perjadin's `starts_on`–`ends_on`.**
 Nothing holds that — not this schema, and until now not any document either. It is scoped to
@@ -820,6 +935,7 @@ are the ones who slept in the hotel.
 ```sql
 create table perjadin (
   id                          uuid primary key default gen_random_uuid(),
+  sub_cluster_id              uuid not null references sub_cluster (id),
   destination                 text not null,
   starts_on                   date not null,
   ends_on                     date not null,
@@ -871,9 +987,25 @@ Two declarative constraints replace what would otherwise be trigger code:
   hold at commit. It has to be deferred because `perjadin` and its `group_member` rows are
   inserted in the same transaction and neither can go first.
 
-`destination` is free text: it is what goes on the paperwork. The Schools actually visited are
-the structural truth, reached through `session.perjadin_id`, and one Perjadin may cover
-several.
+**`sub_cluster_id` is where a Perjadin goes, and `destination` is what the paperwork calls it.**
+They are not redundant, and dropping either would cost something real. The Sub-Cluster is
+structural: it decides which Schools may appear on the trip at all, and the composite key on
+`session` makes that unbreakable. `destination` stays free text because it is prose that ends up
+on a Surat Tugas — "Kab. Sorong, Papua Barat Daya" — written for a reader who has never heard of
+a Sub-Cluster and is not a foreign key to anything. Deriving it from `sub_cluster.name` would
+put an internal planning label on external paperwork.
+
+The Schools **actually** visited remain the structural truth and are still reached through
+`session.perjadin_id`. A Perjadin covers several, but no longer an arbitrary several: the
+Sub-Cluster fixes the eligible set and the plan chooses from within it. **It need not choose all
+of them** — a School with exams that week is dropped from the trip, not a reason to abandon the
+trip — which is why nothing here requires a Session per School of the Sub-Cluster.
+
+**`sub_cluster_id` being NOT NULL is as far as the database goes.** That a trip's _Sessions_ are
+at Schools of that Sub-Cluster is not a key; see
+[Delivery](#delivery) for the version of this that was designed and rejected, and
+[what the database does not hold](#what-the-database-does-not-hold) for where the rule actually
+lives.
 
 ### The Group
 
@@ -1285,10 +1417,38 @@ places:
    carries it. The edit surface that drives it is not built yet; the cascade and its refusal
    are, with a test.
 
+   **It shifts `held_on` and must never touch `starts_at`.** The offset is a whole number of
+   days, and a trip sliding a week later does not change the hour a School is expecting
+   somebody. The two columns move independently by design.
+
 So an arranged offline Session can no longer be born outside its trip, nor moved outside
 it, nor left behind when the trip's own dates move — the cascade in path 3 shifts the
 arranged ones with it. Both halves of #28's invariant now hold at the data layer; what stays
 open is the edit surface that drives path 3, which is not built yet.
+
+**That a Perjadin's Sessions are at Schools of its Sub-Cluster.** `perjadin.sub_cluster_id` is
+NOT NULL and `school.sub_cluster_id` is NOT NULL, but nothing joins them. The composite-key
+version was designed and rejected — [Delivery](#delivery) has the argument — because it would
+also freeze a School into its Sub-Cluster the moment it had one delivered Session, and the
+whole point of [ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md)
+is that a Sub-Cluster is a revisable judgement. So it is checked in the application at the one
+point it can be violated: planning a trip, where the eligible Schools are read from the chosen
+Sub-Cluster and a payload naming any other School is refused whole. There is no "add a School
+to an existing Perjadin" write, so that is genuinely the only path.
+
+**That a School is not moved out from under a Perjadin that is still going to visit it.** The
+mirror of the rule above, and the reason the pair is application-held rather than declarative.
+Moving a School between Sub-Clusters is refused while an **arranged** Session at that School
+sits on a Perjadin against the Sub-Cluster it is leaving, and the refusal names those Perjadins
+so somebody can cancel or re-plan them first. Delivered and cancelled Sessions never block a
+move: they record where the Programme went, not where it is going, and a grouping that could
+not be corrected after the first trip would be a grouping nobody could fix.
+
+**That a Sub-Cluster still holding Schools is not deleted.** This one _is_ declarative and is
+listed only so it is not looked for in the application: `school.sub_cluster_id` is NOT NULL and
+references `sub_cluster (id)` with the default `NO ACTION`, so Postgres refuses the delete
+while any School points at it. Emptying it first is the only route, which is what keeps "every
+School belongs to exactly one Sub-Cluster" true without an unassigned limbo to represent.
 
 **That `delivered` is terminal.** `session_status_check` permits all three values with no
 regard to what a row already holds, so nothing in the database stops `delivered` being written
