@@ -7,6 +7,7 @@ import {
   bulletListKeymap,
   bulletListSchema,
   docSchema,
+  downgradeHeadingCommand,
   emphasisAttr,
   emphasisKeymap,
   emphasisSchema,
@@ -153,6 +154,10 @@ export const storyEditorAllowlist: MilkdownPlugin[] = [
   // Commands, invoked by the keymaps below (and available to any toolbar a later slice adds).
   turnIntoTextCommand,
   wrapInHeadingCommand,
+  // Backspace and Delete at the start of a heading, bound by `headingKeymap` below. A keymap and the
+  // command it calls are one unit: `$command` assigns its `key` only when the plugin runs, so a
+  // keymap kept without its command calls `commandsCtx.call(undefined)` and throws on the keystroke.
+  downgradeHeadingCommand,
   wrapInBlockquoteCommand,
   wrapInBulletListCommand,
   wrapInOrderedListCommand,
