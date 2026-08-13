@@ -54,9 +54,11 @@ export {
   type OnlineSessionTeacher,
 } from "./online-session-batch";
 export {
+  movePerjadinDates,
   perjadinDetail,
   replacePerjadinGroup,
   type GroupMemberEntry,
+  type MovePerjadinDatesResult,
   type PerjadinDetail,
   type PerjadinSession,
   type ReplaceGroupResult,

@@ -1271,19 +1271,24 @@ trigger was the alternative and is still the upgrade if raw SQL ever produces a 
 refuses; it was not taken here for the reason the two rules above were not, which is that
 every write path this schema has goes through one package.
 
-**The rule reaches two of its three write paths.** A Session's date is written in three
+**The rule now reaches all three write paths.** A Session's date is written in three
 places:
 
 1. **Moving one Session's date** — Detail Sesi calls the validator and refuses.
 2. **Arranging an offline Session** — Rencanakan Perjadin calls it against every Session on
    the trip, before the transaction opens, and refuses the whole plan naming the Schools
    whose dates fall outside.
-3. **Moving the trip** — nothing edits `perjadin.starts_on`/`ends_on` at all, so the rule
-   that a trip's **arranged** Sessions move with it has nothing to hang from.
-   [#55](https://github.com/mafiefa02/sugt/issues/55) carries it.
+3. **Moving the trip** — `movePerjadinDates` in `@sugt/db` offset-shifts the trip's
+   **arranged** Sessions by the days its `starts_on` moved, leaves delivered and cancelled ones
+   where they are, and refuses whole a shrink that would strand an arranged Session — one
+   transaction with the trip's own update. [#55](https://github.com/mafiefa02/sugt/issues/55)
+   carries it. The edit surface that drives it is not built yet; the cascade and its refusal
+   are, with a test.
 
 So an arranged offline Session can no longer be born outside its trip, nor moved outside
-it. What stays open is the trip moving out from under a Session that stayed still.
+it, nor left behind when the trip's own dates move — the cascade in path 3 shifts the
+arranged ones with it. Both halves of #28's invariant now hold at the data layer; what stays
+open is the edit surface that drives path 3, which is not built yet.
 
 **That `delivered` is terminal.** `session_status_check` permits all three values with no
 regard to what a row already holds, so nothing in the database stops `delivered` being written
