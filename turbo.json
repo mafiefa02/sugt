@@ -10,7 +10,9 @@
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "GOOGLE_CLIENT_ID",
-        "GOOGLE_CLIENT_SECRET"
+        "GOOGLE_CLIENT_SECRET",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
       ]
     },
     "typecheck": {
@@ -20,7 +22,9 @@
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "GOOGLE_CLIENT_ID",
-        "GOOGLE_CLIENT_SECRET"
+        "GOOGLE_CLIENT_SECRET",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
       ]
     },
     "dev": {
@@ -31,7 +35,9 @@
         "BETTER_AUTH_SECRET",
         "BETTER_AUTH_URL",
         "GOOGLE_CLIENT_ID",
-        "GOOGLE_CLIENT_SECRET"
+        "GOOGLE_CLIENT_SECRET",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
       ]
     }
   }

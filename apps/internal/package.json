@@ -12,9 +12,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@milkdown/kit": "catalog:",
+    "@milkdown/react": "catalog:",
     "@sugt/db": "workspace:*",
     "@sugt/domain": "workspace:*",
     "@sugt/ui": "workspace:*",
+    "@supabase/supabase-js": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",
     "lucide-react": "catalog:",
