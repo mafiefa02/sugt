@@ -27,23 +27,27 @@ begin;
 -- Provinces the Programme reaches. Not all thirty-eight of Indonesia's — only these are
 -- referenced, and school.province_code has a foreign key here so a typo cannot inflate the
 -- "provinces covered" figure on the public site.
-insert into province (code, name) values
-  ('AC', 'Aceh'),
-  ('SU', 'Sumatera Utara'),
-  ('SS', 'Sumatera Selatan'),
-  ('BT', 'Banten'),
-  ('JK', 'DKI Jakarta'),
-  ('JB', 'Jawa Barat'),
-  ('JT', 'Jawa Tengah'),
-  ('YO', 'DI Yogyakarta'),
-  ('JI', 'Jawa Timur'),
-  ('KI', 'Kalimantan Timur'),
-  ('KS', 'Kalimantan Selatan'),
-  ('GO', 'Gorontalo'),
-  ('SN', 'Sulawesi Selatan'),
-  ('MA', 'Maluku'),
-  ('PD', 'Papua Barat Daya')
-on conflict (code) do update set name = excluded.name;
+--
+-- `time_zone` is NOT NULL, so a freshly-migrated database is seeded with it here — no
+-- Province straddles a boundary. Migration 0007 backfills the same values for a database
+-- that was seeded before the column existed; this file is where a fresh one gets them.
+insert into province (code, name, time_zone) values
+  ('AC', 'Aceh', 'WIB'),
+  ('SU', 'Sumatera Utara', 'WIB'),
+  ('SS', 'Sumatera Selatan', 'WIB'),
+  ('BT', 'Banten', 'WIB'),
+  ('JK', 'DKI Jakarta', 'WIB'),
+  ('JB', 'Jawa Barat', 'WIB'),
+  ('JT', 'Jawa Tengah', 'WIB'),
+  ('YO', 'DI Yogyakarta', 'WIB'),
+  ('JI', 'Jawa Timur', 'WIB'),
+  ('KI', 'Kalimantan Timur', 'WITA'),
+  ('KS', 'Kalimantan Selatan', 'WITA'),
+  ('GO', 'Gorontalo', 'WITA'),
+  ('SN', 'Sulawesi Selatan', 'WITA'),
+  ('MA', 'Maluku', 'WIT'),
+  ('PD', 'Papua Barat Daya', 'WIT')
+on conflict (code) do update set name = excluded.name, time_zone = excluded.time_zone;
 
 -- The four Clusters. Sizes are lopsided on purpose — 6, 17, 11, 8 — so nothing should
 -- assume they are comparable.
