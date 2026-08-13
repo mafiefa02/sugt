@@ -1,5 +1,6 @@
 "use server";
 
+import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import {
@@ -7,6 +8,7 @@ import {
   correctSessionTeachers,
   fileClassRecord,
   fileSessionRecord,
+  issueFeedbackToken,
   markSessionDelivered,
   moveSessionDate,
   type CancelSessionResult,
@@ -20,6 +22,7 @@ import {
   type TaughtBy,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
+import QRCode from "qrcode";
 
 /**
  * **Detail Sesi's four writes.** Each is the same three lines as Jadwalkan Sesi daring's:
@@ -137,4 +140,40 @@ export async function fileSessionRecordAction(
   const result = await staffSurface(() => fileSessionRecord(person, input));
   if (result.outcome === "filed") revalidatePath(`/sesi/${input.sessionId}`);
   return result;
+}
+
+/** What issuing a feedback token hands back to the QR dialog: the link and its QR image. */
+export type IssueFeedbackTokenActionResult =
+  | { outcome: "issued"; url: string; qr: string }
+  | { outcome: "session-cancelled" };
+
+/**
+ * **Issue — or reissue — the Participant Feedback token, and render its QR.**
+ *
+ * No `staffSurface` and no role check: anyone signed in may hold up the QR at the end of a
+ * Session, so `issueFeedbackToken` takes a plain `Person` and refuses only a cancelled Session.
+ *
+ * **The QR is generated here, server-side, and the colours are baked into the image** — black
+ * on white via the `color` option — so a scanner reads it whatever the theme, and the dialog
+ * needs no client QR dependency. The URL points at this app's own `/f/{token}`: the handler
+ * lives on the internal app, whose base URL is `BETTER_AUTH_URL`.
+ *
+ * No `revalidatePath`: nothing on the page reflects the token, so there is nothing to refresh.
+ */
+export async function issueFeedbackTokenAction(
+  sessionId: string,
+): Promise<IssueFeedbackTokenActionResult> {
+  const person = await requirePerson();
+
+  const result = await issueFeedbackToken(person, sessionId);
+  if (result.outcome !== "issued") return result;
+
+  const url = `${requireEnv("BETTER_AUTH_URL")}/f/${result.token}`;
+  const qr = await QRCode.toDataURL(url, {
+    color: { dark: "#000000ff", light: "#ffffffff" },
+    margin: 2,
+    width: 320,
+  });
+
+  return { outcome: "issued", url, qr };
 }

@@ -1,3 +1,4 @@
+import { FeedbackTokenDialog } from "-/components/feedback-token";
 import { MODE_LABELS, SessionStatusBadge } from "-/components/session-labels";
 import { SessionRecords } from "-/components/session-records";
 import { SessionWrites } from "-/components/session-writes";
@@ -71,6 +72,17 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
         session={session}
         personId={person.id}
       />
+
+      {/*
+        The feedback QR, offered to everyone signed in — not only Staff, so it sits outside
+        SessionWrites. Barred on a cancelled Session: the wrapper is gated here so the row is
+        absent, and the dialog self-guards the same way as a backstop.
+      */}
+      {session.status !== "cancelled" && (
+        <div className="flex flex-wrap gap-2.5 px-7 py-5">
+          <FeedbackTokenDialog session={session} />
+        </div>
+      )}
 
       {person.role === "Staff" && <SessionWrites session={session} />}
     </div>

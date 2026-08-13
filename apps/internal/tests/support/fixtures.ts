@@ -314,6 +314,43 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
   return feedback!;
 }
 
+export type FeedbackTokenFixture = {
+  sessionId: string;
+  /** Any signed-in Person issued it. `session_feedback_token.issued_by_person_id` references one. */
+  issuedByPersonId: string;
+  /** Defaults to a fresh random token. Pass one to drive the resolver at a known value. */
+  token?: string;
+  /**
+   * When the token was issued. Defaults to the schema's `now()`. Pass a past `Date` **with** a
+   * past `expiresAt` to build an already-expired token — `session_feedback_token_expiry_check`
+   * refuses `expires_at <= issued_at`, so an expired token needs both in the past.
+   */
+  issuedAt?: Date;
+  /**
+   * When the token dies. Defaults to the schema's 24-hours-from-now. Pass a past `Date` to build
+   * an already-expired token — the resolver enforces expiry itself, so a test needs a real one.
+   */
+  expiresAt?: Date;
+};
+
+/**
+ * One Session's feedback token — the QR's target. The primary key is `session_id`, so a second
+ * one for the same Session replaces the first, which is how a reissue kills the old link.
+ */
+export async function addFeedbackToken(fixture: FeedbackTokenFixture) {
+  const [token] = await db
+    .insert(schema.sessionFeedbackToken)
+    .values({
+      sessionId: fixture.sessionId,
+      token: fixture.token ?? randomUUID(),
+      issuedByPersonId: fixture.issuedByPersonId,
+      ...(fixture.issuedAt ? { issuedAt: fixture.issuedAt } : {}),
+      ...(fixture.expiresAt ? { expiresAt: fixture.expiresAt } : {}),
+    })
+    .returning();
+  return token!;
+}
+
 export type PerjadinFixture = {
   destination?: string;
   startsOn?: string;
@@ -463,12 +500,12 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
  * "what the tests populate" survives a fixture being deleted, while one pruned to the
  * cascade minimum quietly stops covering a table the day its parent leaves.
  *
- * `cascade` is what reaches everything **no** fixture writes and no test populates:
- * `session_feedback_token` alone now. A new table referencing one of these therefore needs no
- * entry; a new table nothing references does. The other three evaluation tables are named
- * below, because fixtures now write them directly, and `transaction_evidence` has joined them
- * for the same reason — `addTransactionEvidence` writes it, so by the rule above it is named
- * even though `cascade` from `public."transaction"` already reaches it.
+ * Every table a fixture writes is named here. `session_feedback_token` was the last one
+ * `cascade` reached without a fixture of its own; `addFeedbackToken` now writes it, so it is
+ * named below like `transaction_evidence` — a fixture writes it, so the rule above names it even
+ * though `cascade` from `public."session"` already reaches it. A new table that nothing
+ * references and no fixture writes needs no entry; one a fixture writes does. The other three
+ * evaluation tables are named below because fixtures write them directly.
  *
  * `session_teacher` is the first table here that **no fixture writes and the tests
  * populate anyway** — `arrangeOnlineSessions` writes it, and the batch tests assert on
@@ -500,6 +537,7 @@ export async function resetDatabase() {
       public."class_record",
       public."session_record",
       public."participant_feedback",
+      public."session_feedback_token",
       public."perjadin_evaluation",
       public."perjadin",
       public."group_member",

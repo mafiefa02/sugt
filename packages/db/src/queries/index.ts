@@ -89,6 +89,14 @@ export {
   type PerjadinEvaluationRatings,
 } from "./perjadin-evaluation";
 export {
+  issueFeedbackToken,
+  submitParticipantFeedback,
+  type IssueFeedbackTokenResult,
+  type NewParticipantFeedback,
+  type ParticipantFeedbackRatings,
+  type SubmitParticipantFeedbackResult,
+} from "./participant-feedback";
+export {
   perjadinPlan,
   planPerjadin,
   type PerjadinPlan,
