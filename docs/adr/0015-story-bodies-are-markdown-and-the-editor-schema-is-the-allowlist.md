@@ -6,6 +6,12 @@ expressed once rather than twice.
 
 ## Why
 
+> **One premise below was overtaken by [#16](https://github.com/mafiefa02/sugt/issues/16).**
+> The photo gallery has no ordering and the cover is its own column, not "the first
+> photograph" — see [Amendment: the gallery has no ordering, and the cover is its own
+> column](#amendment-the-gallery-has-no-ordering-and-the-cover-is-its-own-column). The
+> conclusion the premise supports is unchanged, and the rest of the argument stands.
+
 [ADR-0008](./0008-public-narrative-is-authored-in-the-internal-app.md)'s second amendment puts
 the authoring UI in the first release, so this format has to be chosen before anyone writes
 anything. It is also the hardest thing on the map to reverse: once Staff have written thirty
@@ -64,3 +70,20 @@ rich-text one. The round trip is lossless by construction rather than by care.
   application holds.
 - A Story is authored for publication and no internal record is ever a source for one. That wall
   is [ADR-0001](./0001-public-site-reads-aggregates-only.md)'s and is untouched by anything here.
+
+## Amendment: the gallery has no ordering, and the cover is its own column
+
+**One premise in "Why" is now false, and the conclusion it supports is stronger for it.**
+The rejection of structured blocks rested on images being "already solved" outside the
+body — and it named that solution as `story_photo` carrying `position` and a caption,
+"with the first photograph as the cover." [#16](https://github.com/mafiefa02/sugt/issues/16)
+settled the gallery differently: there is **no `position` and no ordering at all** — the
+gallery renders by `uploaded_at`, tie-broken by `id`, and Staff cannot reorder it — and the
+cover is its own nullable column, `story.cover_photo_id` (`on delete set null`), not
+"whichever photograph is first." See [`data-model.md`](../data-model.md).
+
+**Read this as reinforcement, not reversal.** Blocks were refused because images are placed
+and captioned outside the prose, so the body never carries them — and that is more true now,
+not less. Photographs are never inside the text, and there is no ordering for a block layer to
+express, so blocks would have even less to do than when this ADR was written. The premise's
+wording changed; the decision it leads to did not, and Milkdown stands.
