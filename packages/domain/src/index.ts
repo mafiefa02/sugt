@@ -158,3 +158,39 @@ export const FEEDBACK_TOKEN_LIFETIME_HOURS = 24;
  * shown as days remaining and that is all.
  */
 export const REPORT_DEADLINE_DAYS_AFTER_RETURN = 2;
+
+/**
+ * What a transaction against an Advance was spent on. A closed set of twelve, and the
+ * one fixed set here that was **read off a document rather than agreed in conversation**:
+ * the first eleven are the line items the Programme's approved budget repeats across every
+ * travel group, and `Lainnya` is the escape hatch.
+ *
+ * They are in Indonesian because that is what goes on the paperwork. `Uang Harian` stays
+ * one category — the budget's split by role is a rate difference, not a different kind of
+ * spend.
+ *
+ * This narrows the amendment to `docs/adr/0007-the-tool-generates-the-acquittal.md`, which
+ * ruled out "no category, no cost-centre, no account code, no payee". That clause objected
+ * to *inventing* fields for a template nobody has read; a list taken from an approved
+ * document answers the objection rather than overriding it. Nothing else came with it — no
+ * cost-centre, no account code, no payee, no `Ref Standar Biaya`.
+ *
+ * The names are not glossary terms, which is why they live here and not in `CONTEXT.md`:
+ * a category is a value a column may hold. `transaction.category` CHECKs this list
+ * character for character; see `packages/db/src/schema/travel.ts`.
+ */
+export const TRANSACTION_CATEGORIES = [
+  "Tiket Pesawat/Kereta PP",
+  "Uang Harian",
+  "Honorarium Narasumber",
+  "Akomodasi",
+  "Transport Bandara/Stasiun",
+  "Transport Lokal Dalam Provinsi",
+  "Konsumsi",
+  "Modul",
+  "ATK",
+  "Alat dan Bahan Research Project",
+  "Seminar kit",
+  "Lainnya",
+] as const;
+export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number];

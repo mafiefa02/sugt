@@ -1,0 +1,4 @@
+ALTER TABLE "transaction" ADD COLUMN "category" text NOT NULL;--> statement-breakpoint
+ALTER TABLE "transaction" ADD COLUMN "incurred_by_person_id" uuid;--> statement-breakpoint
+ALTER TABLE "transaction" ADD CONSTRAINT "transaction_incurred_by_person_id_person_id_fk" FOREIGN KEY ("incurred_by_person_id") REFERENCES "public"."person"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "transaction" ADD CONSTRAINT "transaction_category_check" CHECK ("transaction"."category" in ('Tiket Pesawat/Kereta PP', 'Uang Harian', 'Honorarium Narasumber', 'Akomodasi', 'Transport Bandara/Stasiun', 'Transport Lokal Dalam Provinsi', 'Konsumsi', 'Modul', 'ATK', 'Alat dan Bahan Research Project', 'Seminar kit', 'Lainnya'));

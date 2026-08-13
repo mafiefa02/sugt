@@ -7,7 +7,6 @@ import {
   LayoutGrid,
   Newspaper,
   Plane,
-  ReceiptText,
   School,
   TriangleAlert,
   Users,
@@ -19,11 +18,16 @@ import { usePathname } from "next/navigation";
  * The sidebar's destinations, in order.
  *
  * `staffOnly` is the sidebar's whole share of the access rule: **delivery data is open,
- * money is not** (ADR-0004). Perjadin Report is the money screen, so a Teaching Team
- * member never sees the link — the Perjadin list and detail stay, because they get a
- * money-free variant of both and need it to file a Perjadin Evaluation. Cerita is
+ * money is not** (ADR-0004). The Perjadin list and detail stay open, because a professor
+ * gets a money-free variant of both and needs it to file a Perjadin Evaluation. Cerita is
  * Staff-only for a different reason: publishing is (ADR-0008), and a link to a screen
  * that will refuse you is worse than no link.
+ *
+ * **Perjadin Report is not here, and its absence is the answer to a question issue #30
+ * owned.** The Report is the acquittal state on one `perjadin` row — there is no
+ * `perjadin_report` table — so it lives at `/perjadin/[id]/laporan` and is reached from the
+ * trip it accounts for. A top-level entry would have needed an index of trips to point at,
+ * and nothing asked for one.
  *
  * Omitting a link is not access control. The gate is a Staff-only choke point in the
  * data layer, which is issue #25 rather than this shell.
@@ -34,7 +38,6 @@ const NAV = [
   { href: "/sekolah", label: "Direktori Sekolah", icon: School, staffOnly: false },
   { href: "/concerns", label: "Concerns", icon: TriangleAlert, staffOnly: false },
   { href: "/perjadin", label: "Perjadin", icon: Plane, staffOnly: false },
-  { href: "/laporan-perjadin", label: "Perjadin Report", icon: ReceiptText, staffOnly: true },
   { href: "/cerita", label: "Cerita", icon: Newspaper, staffOnly: true },
   { href: "/orang", label: "Orang", icon: Users, staffOnly: false },
 ] as const;

@@ -17,7 +17,7 @@ import Link from "next/link";
  * into a 403 server-side. Without it on the read, a Teaching Team member who reached
  * this URL directly would be shown the whole form and refused only on submit.
  *
- * The route is named after the surface, the way `/laporan-perjadin` is. `/sesi-daring`
+ * The route is named after the surface, the way `/rencanakan-perjadin` is. `/sesi-daring`
  * would have been shorter and would have sat badly beside the `/sesi/[id]` that Detail
  * Sesi ([#28](https://github.com/mafiefa02/sugt/issues/28)) will want.
  */
