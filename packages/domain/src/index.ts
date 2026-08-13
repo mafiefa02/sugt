@@ -51,6 +51,76 @@ export const SESSION_STATUSES = ["arranged", "delivered", "cancelled"] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
 /**
+ * Indonesia's three Time Zones. A Province keeps exactly one and a School's is its
+ * Province's, so this is what makes a Session's start time mean something — 09:00 at a
+ * Papua School is not 09:00 to the professor reading the screen in Bandung.
+ *
+ * The abbreviations rather than IANA names (`Asia/Jakarta` and friends) because that is
+ * what goes on an Indonesian screen and because all three are **fixed offsets with no
+ * daylight saving anywhere in Indonesia** — WIB +7, WITA +8, WIT +9 — so converting one
+ * to another is the arithmetic in `formatSessionStartTime` below, not a job for `Intl`.
+ */
+export const TIME_ZONES = ["WIB", "WITA", "WIT"] as const;
+export type TimeZone = (typeof TIME_ZONES)[number];
+
+/**
+ * Each Time Zone's fixed offset east of UTC, in hours. There is no daylight saving
+ * anywhere in Indonesia, so these never change and a conversion is subtraction.
+ */
+const TIME_ZONE_OFFSET_HOURS = { WIB: 7, WITA: 8, WIT: 9 } as const satisfies Record<
+  TimeZone,
+  number
+>;
+
+const MINUTES_PER_DAY = 24 * 60;
+
+/**
+ * Read a Postgres `time` value — `"09:00"` or `"09:00:00"` — as minutes since midnight.
+ * Seconds are dropped: a Session's start time is a wall-clock hour and minute.
+ */
+function startTimeToMinutes(time: string): number {
+  const match = /^(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(time);
+  const hours = match ? Number(match[1]) : Number.NaN;
+  const minutes = match ? Number(match[2]) : Number.NaN;
+  if (!match || hours > 23 || minutes > 59) {
+    throw new Error(`Not a HH:MM[:SS] time: ${time}`);
+  }
+  return hours * 60 + minutes;
+}
+
+/** Render minutes since midnight as `"HH:MM"`, wrapping across midnight in either direction. */
+function minutesToHhMm(minutes: number): string {
+  const wrapped = ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const hh = String(Math.floor(wrapped / 60)).padStart(2, "0");
+  const mm = String(wrapped % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+/**
+ * A Session's start time in its own Time Zone: `"09:00 WIT"`. The `time` is a Postgres
+ * `time` value local to the School, and the zone is the School's Province's.
+ */
+export function formatSessionStartTime(time: string, zone: TimeZone): string {
+  return `${minutesToHhMm(startTimeToMinutes(time))} ${zone}`;
+}
+
+/**
+ * The same, followed by the WIB equivalent where the School is not on WIB —
+ * `"09:00 WIT · 07:00 WIB"` — so a reader in Jakarta knows when the Session actually is.
+ * On WIB it is just `formatSessionStartTime`, since the equivalent would repeat it.
+ *
+ * The conversion can cross midnight: 00:30 WIT is 22:30 WIB the day before, and the
+ * result wraps to `"22:30 WIB"` because only the wall-clock time is shown, not the date.
+ */
+export function formatSessionStartTimeWithWib(time: string, zone: TimeZone): string {
+  const local = formatSessionStartTime(time, zone);
+  if (zone === "WIB") return local;
+  const wibMinutes =
+    startTimeToMinutes(time) - (TIME_ZONE_OFFSET_HOURS[zone] - TIME_ZONE_OFFSET_HOURS.WIB) * 60;
+  return `${local} · ${minutesToHhMm(wibMinutes)} WIB`;
+}
+
+/**
  * The two roles in the internal tool. The Programme's leadership are senior
  * Staff, not a third role — see `docs/adr/0004-delivery-data-is-open-internally-money-is-not.md`.
  */

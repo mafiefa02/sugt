@@ -7,6 +7,7 @@ import {
   pgTable,
   primaryKey,
   text,
+  time,
   timestamp,
   uniqueIndex,
   uuid,
@@ -60,6 +61,11 @@ export const session = pgTable(
     // that the default is checked against the set too.
     mode: text("mode").$type<SessionMode>().notNull(),
     heldOn: date("held_on").notNull(),
+    // A wall-clock start time local to the School, in the School's Time Zone. NOT NULL
+    // immediately — no Session exists in any live database, so there is nothing to
+    // backfill, and a nullable column would take a null on the first row written and keep
+    // it. `time` without a zone by design: the zone is the Province's, joined not stored.
+    startsAt: time("starts_at").notNull(),
     status: text("status").$type<SessionStatus>().notNull().default("arranged"),
     cancelledReason: text("cancelled_reason"),
 
@@ -122,6 +128,16 @@ export const session = pgTable(
     uniqueIndex("session_one_online_per_school_per_day")
       .on(t.schoolId, t.heldOn)
       .where(ONLINE_SESSION_STILL_STANDS),
+    // The Group is in one place at a time. A Perjadin reaches several Schools, each on its
+    // own date, and morning-at-one / afternoon-at-another is exactly what the start time
+    // exists to serve — so two Schools may share a date, but not a date AND a time on one
+    // trip, which is physically impossible and a typo every time it appears. Partial in the
+    // same way as the other two: cancelled rows accumulate and must not collide with their
+    // own replacements. Online Sessions are untouched — their `perjadin_id` is null and
+    // Postgres treats nulls in a unique index as distinct.
+    uniqueIndex("session_one_school_at_a_time_per_perjadin")
+      .on(t.perjadinId, t.heldOn, t.startsAt)
+      .where(sql`status <> 'cancelled'`),
   ],
 );
 

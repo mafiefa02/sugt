@@ -17,7 +17,7 @@
  *
  * ## These files may import `@sugt/domain`, for types only
  *
- * Eleven `text` columns carry a CHECK naming a fixed set that `@sugt/domain` already
+ * Twelve `text` columns carry a CHECK naming a fixed set that `@sugt/domain` already
  * declares. Each one carries `$type<>()` off that declaration, so a reader of a Session
  * gets `SessionMode` rather than `string` and no caller has to assert the difference.
  * `packages/db` already depends on the package and `src/queries/` imports it freely, so

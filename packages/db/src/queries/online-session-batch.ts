@@ -23,6 +23,14 @@ import { requireStaff } from "./staff-only";
  * is the only thing standing between a Teaching Team member and an arranged Session.
  */
 
+/**
+ * The start time every arranged online Session takes until the form supplies one
+ * ([#70](https://github.com/mafiefa02/sugt/issues/70)). A placeholder, not a default worth
+ * keeping: `session.starts_at` is NOT NULL, so a value is needed to write. A wall-clock
+ * `HH:MM` local to the School.
+ */
+const DEFAULT_START_TIME = "09:00";
+
 /** One School in the selection, as a row of the form names it. */
 export type BatchSchool = SelectedSchool;
 
@@ -104,6 +112,14 @@ export type OnlineSessionRow = {
   schoolId: string;
   /** `YYYY-MM-DD`. The shared date the form applied, or whatever this row was edited to. */
   heldOn: string;
+  /**
+   * Local wall-clock start time (`HH:MM`), in the School's Time Zone. Optional until the
+   * form collects one ([#70](https://github.com/mafiefa02/sugt/issues/70)); every row takes
+   * `DEFAULT_START_TIME` meanwhile. `session.starts_at` is NOT NULL, so a value is always
+   * written — and an online Session is untouched by the same-time index, whose key starts
+   * at the NULL `perjadin_id` Postgres treats as distinct.
+   */
+  startsAt?: string;
   /**
    * The Staff member accountable for this Session. Every online Session has its own,
    * since it has no Perjadin to take one from — otherwise six of every ten Sessions
@@ -215,6 +231,7 @@ export async function arrangeOnlineSessions(
             schoolId: row.schoolId,
             mode: "online",
             heldOn: row.heldOn,
+            startsAt: row.startsAt ?? DEFAULT_START_TIME,
             onlinePicPersonId: row.picPersonId,
             onlinePicRole: "Staff",
           })
