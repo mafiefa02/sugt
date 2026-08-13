@@ -124,10 +124,12 @@ export type SessionDetail = {
  * the day it arrives and on the day it leaves.
  *
  * **Exported from this module and deliberately not from `./index.ts`.** `docs/data-model.md`
- * says the rule belongs *wherever the date is written*, and there are three such places.
- * Two now call this: the date edit below, and `./perjadin-planning.ts`, which checks every
- * Session on a trip before it writes one. The third is the trip-date move
- * ([#55](https://github.com/mafiefa02/sugt/issues/55)), which has no surface yet.
+ * says the rule belongs *wherever the date is written*, and there are three such places, all
+ * three now calling this: the date edit below; `./perjadin-planning.ts`, which checks every
+ * Session on a trip before it writes one; and `movePerjadinDates` in `./perjadin-detail.ts`,
+ * which checks each arranged Session's shifted date when a trip moves
+ * ([#55](https://github.com/mafiefa02/sugt/issues/55)). That third one's cascade is built and
+ * tested; its edit surface has no screen yet.
  *
  * They are modules *inside* this package and import it from here directly. Putting it on
  * the package's public surface would break convention 3 — nothing is exported that a

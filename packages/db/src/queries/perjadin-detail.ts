@@ -9,6 +9,7 @@ import { school } from "../schema/reference";
 import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 import { duplicatedTeachers, streamsUncovered, type PlannedTeacher } from "./group-rules";
+import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -218,5 +219,92 @@ export async function replacePerjadinGroup(
     ]);
 
     return { outcome: "replaced" };
+  });
+}
+
+// Calendar-day arithmetic on the `YYYY-MM-DD` strings the `date` columns hold. Both helpers
+// work at UTC midnight, so the calculation stays in one zone and a Session — a calendar day,
+// not an instant — never drifts across a boundary.
+const MS_PER_DAY = 86_400_000;
+
+function daysBetween(from: string, to: string): number {
+  return (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY;
+}
+
+function shiftDate(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
+}
+
+export type MovePerjadinDatesResult =
+  | { outcome: "moved"; sessionsShifted: number }
+  /** At least one arranged Session would fall outside the new window; nothing was changed. */
+  | { outcome: "would-strand"; strandedCount: number; startsOn: string; endsOn: string }
+  | { outcome: "no-such-perjadin" };
+
+/**
+ * Moving a trip's dates shifts its arranged Sessions, or is refused whole.
+ *
+ * The offset is measured from the trip's **start**: each arranged Session moves by the same
+ * number of days `startsOn` moved, so a Session on day two of the trip stays on day two. A pure
+ * translation (start and end move together) keeps every arranged Session inside the new window by
+ * construction; a resize can push one out, and then the whole edit is refused rather than
+ * stranding it — one write must not leave a trip whose dates moved but whose Sessions did not.
+ *
+ * Only **arranged** Sessions move. A delivered or cancelled Session records something that
+ * already happened, so it may legitimately sit outside the window its trip now claims — which is
+ * why the invariant is scoped to arranged (see `docs/data-model.md`, Delivery). Online Sessions
+ * carry no `perjadin_id` and so are never among these.
+ *
+ * An inverted window (`startsOn` after `endsOn`) is a precondition violation, not a user state:
+ * the edit surface validates it and `perjadin_dates_check` would refuse it, so it throws rather
+ * than returning an outcome.
+ */
+export async function movePerjadinDates(
+  caller: Person,
+  perjadinId: string,
+  startsOn: string,
+  endsOn: string,
+): Promise<MovePerjadinDatesResult> {
+  requireStaff(caller);
+  if (startsOn > endsOn) {
+    throw new Error(
+      `movePerjadinDates got startsOn ${startsOn} after endsOn ${endsOn}. The edit surface ` +
+        "validates the window before calling, and perjadin_dates_check would refuse it, so this " +
+        "is a bug or a hand-edited request rather than a user state.",
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    const [trip] = await tx
+      .select({ startsOn: perjadin.startsOn, endsOn: perjadin.endsOn })
+      .from(perjadin)
+      .where(eq(perjadin.id, perjadinId))
+      .for("update");
+    if (!trip) return { outcome: "no-such-perjadin" };
+
+    const offsetDays = daysBetween(trip.startsOn, startsOn);
+
+    // Offline arranged Sessions on this trip; online ones carry no `perjadin_id`, so the
+    // `perjadin_id` match already excludes them.
+    const arranged = await tx
+      .select({ id: session.id, heldOn: session.heldOn })
+      .from(session)
+      .where(and(eq(session.perjadinId, perjadinId), eq(session.status, "arranged")))
+      .for("update", { of: session });
+
+    const window = { startsOn, endsOn };
+    const shifted = arranged.map((s) => ({ id: s.id, heldOn: shiftDate(s.heldOn, offsetDays) }));
+    const stranded = shifted.filter((s) => !heldOnWithinPerjadin(s.heldOn, window));
+    if (stranded.length > 0) {
+      // Return before any write: the transaction commits, but it carries only the locking
+      // reads, so the trip and its Sessions are left exactly as they were.
+      return { outcome: "would-strand", strandedCount: stranded.length, startsOn, endsOn };
+    }
+
+    await tx.update(perjadin).set({ startsOn, endsOn }).where(eq(perjadin.id, perjadinId));
+    for (const shift of shifted) {
+      await tx.update(session).set({ heldOn: shift.heldOn }).where(eq(session.id, shift.id));
+    }
+    return { outcome: "moved", sessionsShifted: shifted.length };
   });
 }
