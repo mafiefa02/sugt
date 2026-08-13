@@ -19,10 +19,15 @@ import { requireStaff } from "./staff-only";
  * **The two internal evaluation forms** — a Teaching Team member's Class Record and the
  * PIC's Session Record, filed against a Session that has been delivered.
  *
- * Both are writes and both own their transaction, by convention 5 beside this package: a
- * status read and the insert commit together, so a Session cannot slip out from under the
- * gate between the two. Neither is a Staff/Teaching-Team read, so neither exposes a payload
- * function here; the reads that render these Records live on `./session-detail.ts`.
+ * Both are writes and both own their transaction, by convention 5 beside this package: the
+ * status read and the insert sit in one transaction, and the constraint catch sits outside
+ * it, as `moveSessionDate` does. **The delivered gate is best-effort, not a lock** — the read
+ * takes no `for update`, so a Session cancelled between the read and the insert is not
+ * prevented, and deliberately: `docs/data-model.md` says nothing in the database stops a
+ * Record against an arranged or cancelled Session, so the gate is the application being
+ * helpful rather than an invariant to serialise around. Neither is a Staff/Teaching-Team read,
+ * so neither exposes a payload function here; the reads that render these Records live on
+ * `./session-detail.ts`.
  *
  * **The elaboration rule is the one `docs/data-model.md` calls _enforced twice by design_.**
  * A Rating at or below `CONCERN_AT_OR_BELOW` cannot be filed without prose, and that is
@@ -58,16 +63,29 @@ function needsProse(ratings: number[]): boolean {
   return Math.min(...ratings) <= CONCERN_AT_OR_BELOW;
 }
 
-/** One Session's status, or `null` when the id names none. */
+/**
+ * One Session's status.
+ *
+ * **A missing row throws rather than returning a value**, and that is the same rule
+ * `lockedStatus` states on `./session-detail.ts`: Detail Sesi 404s on an unknown id before
+ * offering either form, and nothing deletes a Session, so an id naming nothing here arrived
+ * by a bug or a hand-edited request and is not a user state to be helpful about.
+ */
 async function statusOf(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   sessionId: string,
-): Promise<SessionStatus | null> {
+): Promise<SessionStatus> {
   const [row] = await tx
     .select({ status: session.status })
     .from(session)
     .where(eq(session.id, sessionId));
-  return row?.status ?? null;
+  if (!row) {
+    throw new Error(
+      `No Session has id ${sessionId}. Detail Sesi 404s on an unknown id before offering ` +
+        "the form, and nothing deletes a Session, so this is a bug or a hand-edited request.",
+    );
+  }
+  return row.status;
 }
 
 /**
@@ -145,15 +163,6 @@ export async function fileClassRecord(
   try {
     return await db.transaction(async (tx) => {
       const status = await statusOf(tx, input.sessionId);
-      // A missing row throws rather than refusing: Detail Sesi 404s on an unknown id before
-      // offering the form, and nothing deletes a Session, so this is a bug or a hand-edited
-      // request and not a user state — the rule `lockedStatus` states on `./session-detail.ts`.
-      if (status === null) {
-        throw new Error(
-          `No Session has id ${input.sessionId}. Detail Sesi 404s on an unknown id before ` +
-            "offering the form, and nothing deletes a Session, so this is a bug or a hand-edited request.",
-        );
-      }
       if (status !== "delivered") return { outcome: "session-not-delivered", status };
 
       const [record] = await tx
@@ -234,12 +243,6 @@ export async function fileSessionRecord(
   try {
     return await db.transaction(async (tx) => {
       const status = await statusOf(tx, input.sessionId);
-      if (status === null) {
-        throw new Error(
-          `No Session has id ${input.sessionId}. Detail Sesi 404s on an unknown id before ` +
-            "offering the form, and nothing deletes a Session, so this is a bug or a hand-edited request.",
-        );
-      }
       if (status !== "delivered") return { outcome: "session-not-delivered", status };
 
       const [record] = await tx

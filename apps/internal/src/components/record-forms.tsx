@@ -69,8 +69,13 @@ const SESSION_ASPECT_LABELS: Record<SessionRecordAspect, string> = {
   coordination: "Koordinasi",
 };
 
-const INSTRUCTION =
-  "Beri nilai 1–10 untuk tiap aspek. Nilai 7 ke bawah wajib disertai penjelasan pada Kendala.";
+// The scale and the threshold come from `@sugt/domain` rather than the sentence, so the copy
+// cannot drift from the rule it describes — the same reason `perjadin-report.ts` names its one
+// zone as a constant. The threshold reads `7` today, and this reads whatever it becomes.
+const INSTRUCTION = `Beri nilai ${RATING_MIN}–${RATING_MAX} untuk tiap aspek. Nilai ${CONCERN_AT_OR_BELOW} ke bawah wajib disertai penjelasan pada Kendala.`;
+
+/** The message the Kendala field carries when a low Rating owes prose. Shared by both dialogs. */
+const PROSE_REQUIRED = `Nilai ${CONCERN_AT_OR_BELOW} ke bawah wajib disertai penjelasan.`;
 
 /** What a refusal the screen did not predict says — a page held open while the Session moved. */
 const STALE_MESSAGES = {
@@ -166,7 +171,7 @@ function ClassRecordDialog({
         label="Kendala"
         value={problems}
         invalid={proseNeeded}
-        message={proseNeeded ? "Nilai 7 ke bawah wajib disertai penjelasan." : undefined}
+        message={proseNeeded ? PROSE_REQUIRED : undefined}
         onChange={(value) => {
           setProblems(value);
           setProseNeeded(false);
@@ -249,7 +254,7 @@ function SessionRecordDialog({ sessionId }: { sessionId: string }) {
         label="Kendala"
         value={problems}
         invalid={proseNeeded}
-        message={proseNeeded ? "Nilai 7 ke bawah wajib disertai penjelasan." : undefined}
+        message={proseNeeded ? PROSE_REQUIRED : undefined}
         onChange={(value) => {
           setProblems(value);
           setProseNeeded(false);
