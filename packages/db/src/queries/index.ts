@@ -135,4 +135,15 @@ export {
   type SessionPerjadin,
   type TaughtBy,
 } from "./session-detail";
+export {
+  fileClassRecord,
+  fileSessionRecord,
+  type ClassRecordRatings,
+  type FileClassRecordResult,
+  type FileSessionRecordResult,
+  type NewClassRecord,
+  type NewSessionRecord,
+  type NotDelivered,
+  type SessionRecordRatings,
+} from "./session-records";
 export { isNotStaffError, NotStaffError, requireStaff } from "./staff-only";
