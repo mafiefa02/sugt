@@ -1,4 +1,4 @@
-import { Button } from "@sugt/ui/components/button";
+import { LinkButton } from "@sugt/ui/components/link-button";
 import Link from "next/link";
 
 /**
@@ -22,12 +22,12 @@ export default function Forbidden() {
           Data keuangan hanya terbuka untuk Staff. Hubungi tim DITSAMA jika Anda perlu akses.
         </p>
       </div>
-      <Button
+      <LinkButton
         render={<Link href="/" />}
         variant="outline"
       >
         Kembali ke Dashboard
-      </Button>
+      </LinkButton>
     </main>
   );
 }

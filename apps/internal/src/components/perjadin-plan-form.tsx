@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
 import { Label } from "@sugt/ui/components/label";
+import { LinkButton } from "@sugt/ui/components/link-button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
@@ -269,12 +270,12 @@ function PerjadinPlanForm({
         </p>
 
         <div className="flex gap-2.5">
-          <Button
+          <LinkButton
             variant="ghost"
             render={<Link href="/coverage" />}
           >
             Batal
-          </Button>
+          </LinkButton>
           <Button
             disabled={incomplete || saving}
             onClick={submit}

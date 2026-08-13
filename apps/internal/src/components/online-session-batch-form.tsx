@@ -14,6 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
 import { Label } from "@sugt/ui/components/label";
+import { LinkButton } from "@sugt/ui/components/link-button";
 import { cn } from "@sugt/ui/lib/utils";
 import Link from "next/link";
 import { useId, useState, useTransition } from "react";
@@ -250,12 +251,12 @@ function OnlineSessionBatchForm({
         </p>
 
         <div className="flex gap-2.5">
-          <Button
+          <LinkButton
             variant="ghost"
             render={<Link href="/coverage" />}
           >
             Batal
-          </Button>
+          </LinkButton>
           <Button
             disabled={incomplete.length > 0 || saving}
             onClick={submit}
@@ -390,13 +391,13 @@ function Arranged({ schools, drafts }: { schools: BatchSchool[]; drafts: Record<
       </Alert>
 
       <div className="flex gap-2.5">
-        <Button render={<Link href="/coverage" />}>Kembali ke Coverage</Button>
-        <Button
+        <LinkButton render={<Link href="/coverage" />}>Kembali ke Coverage</LinkButton>
+        <LinkButton
           variant="outline"
           render={<Link href="/sekolah" />}
         >
           Buka Direktori Sekolah
-        </Button>
+        </LinkButton>
       </div>
     </div>
   );

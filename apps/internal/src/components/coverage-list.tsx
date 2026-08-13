@@ -4,6 +4,7 @@ import type { CoverageCluster, CoverageSchool } from "@sugt/db/queries";
 import { TOTAL_SESSIONS_PER_SCHOOL } from "@sugt/domain";
 import { Button } from "@sugt/ui/components/button";
 import { Checkbox } from "@sugt/ui/components/checkbox";
+import { LinkButton } from "@sugt/ui/components/link-button";
 import { Progress } from "@sugt/ui/components/progress";
 import { cn } from "@sugt/ui/lib/utils";
 import type { Route } from "next";
@@ -192,13 +193,13 @@ function SelectionBar({
         </Button>
         {canPlan && (
           <>
-            <Button
+            <LinkButton
               variant="outline"
               render={<Link href={arrangeOnline} />}
             >
               Jadwalkan Sesi daring
-            </Button>
-            <Button render={<Link href={planPerjadin} />}>Rencanakan Perjadin</Button>
+            </LinkButton>
+            <LinkButton render={<Link href={planPerjadin} />}>Rencanakan Perjadin</LinkButton>
           </>
         )}
       </div>
