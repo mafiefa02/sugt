@@ -8,7 +8,7 @@ import {
   recordTransaction,
 } from "@sugt/db/queries";
 import { REPORT_DEADLINE_DAYS_AFTER_RETURN, TRANSACTION_CATEGORIES } from "@sugt/domain";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -38,6 +38,26 @@ async function pic(email = "rina@ditsama.itb.ac.id") {
 
 async function professor(email = "budi@gmail.com") {
   return addPerson({ fullName: "Budi Santoso", email, role: "Teaching Team" });
+}
+
+// Calendar-day arithmetic on the `YYYY-MM-DD` strings the `date` columns hold, at UTC midnight
+// so the shift itself never crosses a boundary — the same helper `perjadin-detail.ts` keeps.
+const MS_PER_DAY = 86_400_000;
+
+function shiftDate(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
+}
+
+/**
+ * Today's date in the zone the deadline is counted in.
+ *
+ * Read from `Intl` rather than from the machine's local clock: a test that took the runner's
+ * zone would agree with the query only on a machine that happens to sit in Jakarta, which is
+ * both of the machines this has ever run on and neither of the ones it needs to keep working
+ * on.
+ */
+function jakartaToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
 }
 
 /** A trip with an Advance, its PIC, and one professor on the Group. */
@@ -86,9 +106,9 @@ describe("the acquittal payload", () => {
     });
   });
 
-  it("derives the deadline and the days left from the trip's end date", async () => {
+  it("derives the deadline from the trip's end date", async () => {
     /**
-     * Both follow from `ends_on` plus the constant, so the assertion computes the same way
+     * It follows from `ends_on` plus the constant, so the assertion computes the same way
      * rather than hard-coding a date — a hard-coded one would only be testing the clock.
      */
     const staff = await pic();
@@ -102,10 +122,33 @@ describe("the acquittal payload", () => {
 
     const acquittal = await perjadinAcquittal(staff, trip.id);
 
-    const due = new Date(Date.parse(`${endsOn}T00:00:00Z`));
-    due.setUTCDate(due.getUTCDate() + REPORT_DEADLINE_DAYS_AFTER_RETURN);
-    expect(acquittal?.reportDueOn).toBe(due.toISOString().slice(0, 10));
-    expect(typeof acquittal?.daysRemaining).toBe("number");
+    expect(acquittal?.reportDueOn).toBe(shiftDate(endsOn, REPORT_DEADLINE_DAYS_AFTER_RETURN));
+  });
+
+  it("counts the days left in Jakarta's calendar, and past the deadline as negative", async () => {
+    /**
+     * The arithmetic, driven at four offsets rather than asserted to be a number.
+     *
+     * "Today" is a zone, and the query names `Asia/Jakarta` rather than inheriting whatever the
+     * database session defaults to. So the expectation is computed in that zone too — reading
+     * the machine's own clock here would make this test pass or fail by where it runs, which is
+     * the exact bug the named zone exists to prevent.
+     */
+    const staff = await pic();
+    const today = jakartaToday();
+
+    for (const offset of [5, 0, -2, -10]) {
+      const endsOn = shiftDate(today, offset - REPORT_DEADLINE_DAYS_AFTER_RETURN);
+      const trip = await addPerjadin({
+        advanceIdr: 1_000_000,
+        picPersonId: staff.id,
+        startsOn: shiftDate(endsOn, -2),
+        endsOn,
+      });
+
+      const acquittal = await perjadinAcquittal(staff, trip.id);
+      expect(acquittal?.daysRemaining).toBe(offset);
+    }
   });
 
   it("carries each line item's evidence without multiplying the money", async () => {
@@ -208,6 +251,29 @@ describe("the category", () => {
     expect(rows.map((row) => row.category).sort()).toEqual([...TRANSACTION_CATEGORIES].sort());
   });
 
+  it("holds exactly the twelve, with the constraint read back rather than inferred", async () => {
+    /**
+     * The loop above catches drift in one direction only — a value the domain gains and the
+     * CHECK lacks fails on insert. This catches the other: a value the CHECK still names after
+     * the domain drops it would never be inserted, so no insert could notice. Reading the
+     * constraint's own text out of Postgres is what closes it.
+     *
+     * `pg_get_constraintdef` returns the whole `CHECK (...)` expression, so the assertion is on
+     * which quoted literals appear in it rather than on its exact formatting — Postgres
+     * normalises that and pinning it would test the server's printer.
+     */
+    const [row] = await db.execute<{ definition: string }>(sql`
+      select pg_get_constraintdef(oid) as definition
+      from pg_constraint
+      where conname = 'transaction_category_check'
+    `);
+
+    const named = [...(row?.definition ?? "").matchAll(/'((?:[^']|'')*)'/g)].map((match) =>
+      match[1]!.replaceAll("''", "'"),
+    );
+    expect([...new Set(named)].sort()).toEqual([...TRANSACTION_CATEGORIES].sort());
+  });
+
   it("refuses a value outside the closed set, at the database", async () => {
     const { staff, trip } = await aTrip();
 
@@ -246,9 +312,15 @@ describe("recording a line item", () => {
     expect(isNotStaffError(refusal)).toBe(true);
   });
 
-  it("refuses somebody who did not travel as the person who incurred it", async () => {
+  it("names somebody who did not travel, because an honorarium is paid to exactly that", async () => {
+    /**
+     * The tempting rule — only a Group member can have incurred a cost on this trip — is false
+     * against the category list it would police. `Honorarium Narasumber` pays a speaker, who is
+     * a Person the Programme knows and is on no Group. The foreign key into `person` is the
+     * whole of what this column claims.
+     */
     const { staff, trip } = await aTrip();
-    const outsider = await addPerson({
+    const speaker = await addPerson({
       fullName: "Sari Wulandari",
       email: "sari@gmail.com",
       role: "Teaching Team",
@@ -257,14 +329,18 @@ describe("recording a line item", () => {
     const result = await recordTransaction(staff, {
       perjadinId: trip.id,
       spentOn: "2026-09-02",
-      description: "Uang harian",
+      description: "Honorarium narasumber",
       amountIdr: 600_000,
-      category: "Uang Harian",
-      incurredByPersonId: outsider.id,
+      category: "Honorarium Narasumber",
+      incurredByPersonId: speaker.id,
     });
 
-    expect(result).toEqual({ outcome: "incurred-by-not-in-group" });
-    await expect(db.select().from(schema.transaction)).resolves.toHaveLength(0);
+    expect(result.outcome).toBe("recorded");
+    const acquittal = await perjadinAcquittal(staff, trip.id);
+    expect(acquittal?.transactions[0]?.incurredBy).toEqual({
+      personId: speaker.id,
+      fullName: "Sari Wulandari",
+    });
   });
 
   it("comes back as a value on a stale Perjadin link and on a non-positive amount", async () => {

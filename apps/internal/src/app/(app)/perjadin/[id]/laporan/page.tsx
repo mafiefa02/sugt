@@ -1,6 +1,6 @@
 import { AcquittalReceipts } from "-/components/laporan-perjadin/acquittal-receipts";
 import { AcquittalTransactions } from "-/components/laporan-perjadin/acquittal-transactions";
-import { FileReport } from "-/components/laporan-perjadin/file-report";
+import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-report";
 import { requirePerson } from "-/lib/person";
 import { signedReceiptUrl } from "-/lib/receipt-media";
 import { staffSurface } from "-/lib/staff-surface";
@@ -75,7 +75,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
             >
               Ekspor rincian
             </LinkButton>
-            <FileReport
+            <FilePerjadinReport
               perjadinId={id}
               filedAt={acquittal.reportFiledAt}
             />

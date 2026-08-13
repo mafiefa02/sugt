@@ -1,4 +1,4 @@
-import type { AcquittalTransaction } from "@sugt/db/queries";
+import type { AcquittalEvidence, AcquittalTransaction } from "@sugt/db/queries";
 
 /**
  * The shapes the Perjadin Report's Server Actions pass to and from the client. They live here
@@ -20,21 +20,38 @@ export type ReceiptToFinalize = {
 };
 
 /**
- * What `finalizeReceiptsAction` recorded. `failed` is the count whose bytes never landed — a real
- * partial-success state, since the browser uploads several files independently and one PUT can fail
- * while the rest succeed. The successes are still attached; the failures are reported, not
- * discarded silently.
+ * What `finalizeReceiptsAction` recorded.
+ *
+ * `failed` is the count whose bytes never landed — a real partial-success state, since the browser
+ * uploads several files independently and one PUT can fail while the rest succeed. The successes
+ * are still attached; the failures are reported, not discarded silently.
+ *
+ * The two refusals are the query layer's own, passed through rather than swallowed. Both are stale
+ * screens and both are reachable, so both come back as values by the rule the query layer settled.
  */
-export type FinalizeReceiptsResult = { attached: number; failed: number };
+export type FinalizeReceiptsResult =
+  | { outcome: "attached"; attached: number; failed: number }
+  | { outcome: "no-such-transaction" }
+  | { outcome: "no-such-perjadin" };
 
 /**
- * One line item as the screen renders it: the row, plus a short-lived signed URL per receipt.
+ * One receipt as the screen renders it: the row, minus the object key, plus a short-lived signed
+ * URL that resolves it.
+ *
+ * **The `storagePath` is dropped on purpose.** The row's key is of no use to a browser — the bucket
+ * is private — and the URL below is what renders it, so sending the key too would put it in the
+ * page's serialised payload for nothing.
  *
  * The URL is minted server-side, after `perjadinAcquittal` has already refused a non-Staff caller.
- * The `receipts` bucket is private and Better Auth means storage policies cannot see who is asking,
- * so this signed link is the only way a receipt renders — and the Staff check that precedes it is
- * the only thing standing between Teaching Team and one.
+ * Better Auth means storage policies cannot see who is asking, so this signed link is the only way
+ * a receipt renders, and the Staff check that precedes it is the only thing standing between
+ * Teaching Team and one.
  */
+export type ViewableEvidence = Omit<AcquittalEvidence, "storagePath" | "uploadedAt"> & {
+  url: string | null;
+};
+
+/** One line item as the screen renders it. */
 export type ViewableTransaction = Omit<AcquittalTransaction, "evidence"> & {
-  evidence: { id: string; contentType: string; byteSize: number; url: string | null }[];
+  evidence: ViewableEvidence[];
 };

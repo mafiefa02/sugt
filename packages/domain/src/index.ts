@@ -9,6 +9,19 @@
  *
  * Terms follow `CONTEXT.md`. Don't add a name to this file that isn't in the
  * glossary.
+ *
+ * **One set is here without glossary entries, and it was put here on purpose.**
+ * `TRANSACTION_CATEGORIES` holds twelve values a column may take, not twelve terms the
+ * Programme's language defines — the difference `CONTEXT.md` draws itself where it declines
+ * to gloss them: *"a category is a value a column may hold, not a term this glossary
+ * defines."* [#21](https://github.com/mafiefa02/sugt/issues/21) settled the same placement, and
+ * `docs/data-model.md` names this file as where the CHECK's list is kept in step.
+ *
+ * That is a narrow exception and not a general licence. Every other set here — `STREAMS`,
+ * `CLASS_KINDS`, `SESSION_MODES`, `SESSION_STATUSES`, `ROLES`, `STORY_KINDS` — names things
+ * the glossary defines, and the rule above governs anything new by default. A set of *values*
+ * earns this exception only when `CONTEXT.md` has explicitly declined to define them, which
+ * is a sentence somebody has to write there first.
  */
 
 /** The two subject-matter divisions inside the STEM & Research Track. */

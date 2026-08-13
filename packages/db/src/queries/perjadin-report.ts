@@ -26,6 +26,17 @@ import { requireStaff } from "./staff-only";
  */
 
 /**
+ * The zone "days remaining" counts in. DITSAMA is in Bandung and the deadline is its own, so
+ * this is the office's calendar rather than a School's — Indonesia spans three zones and a
+ * Perjadin's Schools may sit in more than one of them.
+ *
+ * It is a named constant rather than a literal in the SQL so that the one decision is visible,
+ * and it stays here rather than in `@sugt/domain` because it is a fact about where the
+ * Programme is administered, not a term `CONTEXT.md` defines.
+ */
+const DEADLINE_TIME_ZONE = "Asia/Jakarta";
+
+/**
  * One uploaded receipt. `storagePath` is an opaque key in the private `receipts` bucket —
  * the app mints a signed URL for it after checking the caller is Staff, so the path travels
  * to the browser but never resolves without that step.
@@ -94,9 +105,19 @@ export type PerjadinAcquittal = {
    */
   reportDueOn: string;
   /**
-   * Days left against that deadline, negative once it has passed. Computed in Postgres
-   * against `current_date` for the same reason `reportDueOn` is: a `Date` here would
-   * introduce a time zone the domain does not have.
+   * Days left against that deadline, negative once it has passed.
+   *
+   * **"Today" is a zone, and this one is named rather than inherited.** `reportDueOn` needs
+   * no zone — it is date arithmetic on two calendar days. This does: it compares the deadline
+   * to the current day, and which day that is depends on where you stand. Left as bare
+   * `current_date` it would be whatever zone the database session happens to default to, and
+   * a Perjadin ending on the 3rd would read `terlambat 1 hari` in one session and `sisa 0
+   * hari` in another at the same instant.
+   *
+   * `Asia/Jakarta` is the zone because the deadline is DITSAMA's own, set for itself, and
+   * DITSAMA is in Bandung. It is not the School's zone — Indonesia spans three — and it is
+   * not meant to be: what is being counted is how long the PIC has left with their own
+   * office, not anything about where the trip went.
    */
   daysRemaining: number;
   transactions: AcquittalTransaction[];
@@ -135,8 +156,12 @@ export async function perjadinAcquittal(
       reportDueOn: sql<string>`to_char(
         ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}, 'YYYY-MM-DD'
       )`,
+      // `now() at time zone` yields a timestamp *in* that zone; casting it to `date` is the
+      // calendar day there. Bare `current_date` would be the session's zone instead, which
+      // nothing in this repository sets — see the field's own comment.
       daysRemaining: sql<number>`(
-        ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))} - current_date
+        ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}
+        - (now() at time zone ${DEADLINE_TIME_ZONE})::date
       )`.mapWith(Number),
       returnedToTreasurerIdr: perjadin.returnedToTreasurerIdr,
       returnedAt: perjadin.returnedAt,
@@ -258,9 +283,7 @@ export type RecordTransactionResult =
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" }
   /** A zero or negative line item. `transaction_amount_check` refuses it too. */
-  | { outcome: "amount-not-positive" }
-  /** Somebody who did not travel cannot have incurred a cost on this trip. */
-  | { outcome: "incurred-by-not-in-group" };
+  | { outcome: "amount-not-positive" };
 
 /**
  * Record one line item against the Advance.
@@ -269,11 +292,13 @@ export type RecordTransactionResult =
  * earns a field-level message rather than an error page. `NotStaffError` is the opposite
  * case and still throws.
  *
- * **`incurredByPersonId` is checked against the Group, not just against `person`.** The
- * foreign key only says the person exists; the rule this screen needs is that they were on
- * the trip, which no constraint expresses because `transaction` carries no Group edge. It is
- * checked inside the write's own transaction so a Group replaced concurrently cannot slip a
- * departed member through between the check and the insert.
+ * **`incurredByPersonId` is not checked against the Group**, and the omission is deliberate
+ * rather than missing. The obvious rule — "only somebody who travelled can have incurred a
+ * cost on this trip" — is false against the category list it would police:
+ * `Honorarium Narasumber` pays a speaker, who is a `Person` the Programme knows and is on no
+ * Group. The foreign key into `person` is the constraint `docs/data-model.md` specifies, and
+ * it is the whole of what this column claims. The acquittal form offers the Group because
+ * that is the common case, not because the write refuses anybody else.
  */
 export async function recordTransaction(
   caller: Person,
@@ -289,19 +314,6 @@ export async function recordTransaction(
       .from(perjadin)
       .where(eq(perjadin.id, input.perjadinId));
     if (!trip) return { outcome: "no-such-perjadin" };
-
-    if (input.incurredByPersonId !== null) {
-      const [member] = await tx
-        .select({ personId: groupMember.personId })
-        .from(groupMember)
-        .where(
-          and(
-            eq(groupMember.perjadinId, input.perjadinId),
-            eq(groupMember.personId, input.incurredByPersonId),
-          ),
-        );
-      if (!member) return { outcome: "incurred-by-not-in-group" };
-    }
 
     const [line] = await tx
       .insert(transaction)

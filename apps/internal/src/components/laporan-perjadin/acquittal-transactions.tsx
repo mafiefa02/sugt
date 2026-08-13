@@ -131,7 +131,17 @@ function Receipts({ perjadinId, line }: { perjadinId: string; line: ViewableTran
     startUploading(async () => {
       setNote(null);
       const batch = files.slice(0, MAX_RECEIPT_BATCH);
-      const targets = await mintReceiptUploadsAction(perjadinId, batch.length);
+
+      // The mint throws when the trip is gone, which is a page left open while somebody
+      // deleted it in another tab. Caught here rather than left to become an unhandled
+      // rejection: the component already knows how to say "muat ulang halaman".
+      let targets;
+      try {
+        targets = await mintReceiptUploadsAction(perjadinId, batch.length);
+      } catch {
+        setNote(STALE_PAGE);
+        return;
+      }
 
       const landed: { path: string }[] = [];
       let failed = 0;
@@ -158,6 +168,12 @@ function Receipts({ perjadinId, line }: { perjadinId: string; line: ViewableTran
 
       if (landed.length > 0) {
         const result = await finalizeReceiptsAction(perjadinId, line.id, landed);
+        // The write's refusals are answered rather than counted as upload failures. Both
+        // mean the page is stale, and neither means a file did not reach Storage.
+        if (result.outcome !== "attached") {
+          setNote(STALE_PAGE);
+          return;
+        }
         failed += result.failed;
       }
       // Partial success is real — several files upload independently and one can fail while
@@ -420,14 +436,21 @@ function RecordTransaction({
 }
 
 /**
+ * What a page that has gone stale under the reader says. Reached from three places — a mint
+ * against a deleted trip, a write that finds no such trip, and one that finds no such line item
+ * — because all three mean the same thing to a PIC: what is on screen is no longer what is
+ * stored, and no field they could edit will fix it.
+ */
+const STALE_PAGE = "Halaman ini sudah tidak sesuai. Muat ulang untuk melihat keadaannya.";
+
+/**
  * What each refusal says. `no-such-perjadin` is the only one the form cannot have predicted —
  * somebody deleted the trip while this page was open — so it says to reload rather than which
  * field to fix.
  */
 const REFUSALS = {
   "amount-not-positive": "Jumlah harus lebih besar dari nol.",
-  "incurred-by-not-in-group": "Orang itu bukan anggota Group Perjadin ini.",
-  "no-such-perjadin": "Perjadin ini sudah tidak ada. Muat ulang halaman untuk melihat keadaannya.",
+  "no-such-perjadin": STALE_PAGE,
 } as const;
 
 export { AcquittalTransactions };

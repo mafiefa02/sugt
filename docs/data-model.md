@@ -1085,8 +1085,12 @@ create table transaction_evidence (
 );
 ```
 
-**A transaction is not attributed to a person.** The Advance is one pot and the acquittal
-reconciles the pot. Per-diems appear as unattributed lines like anything else. Worth knowing:
+**The Advance is one pot and the acquittal reconciles the pot** — a transaction consumes the
+Advance rather than a person's share of it. That is the claim, and `incurred_by_person_id` below
+does not weaken it: naming who a per-diem was paid to says nothing about how the pot reconciles.
+This paragraph read _"A transaction is not attributed to a person"_ until that column shipped;
+the sentence is gone rather than corrected in place, because the pot is what it was always about.
+Worth knowing:
 [ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md) justifies hiding money
 from Teaching Team by citing "per-diem amounts and personal travel claims" — the rule still
 holds, its stated reason is just thinner than when it was written. Adding
