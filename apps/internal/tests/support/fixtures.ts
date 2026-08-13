@@ -463,18 +463,21 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
  * "what the tests populate" survives a fixture being deleted, while one pruned to the
  * cascade minimum quietly stops covering a table the day its parent leaves.
  *
- * `cascade` is what reaches everything **no** fixture writes: `perjadin_evaluation` and
- * `session_feedback_token`. A new table referencing one of these therefore needs no entry;
- * a new table nothing references does. The other three evaluation tables are named below,
- * because fixtures now write them directly, and `transaction_evidence` has joined them for
- * the same reason — `addTransactionEvidence` writes it, so by the rule above it is named
+ * `cascade` is what reaches everything **no** fixture writes and no test populates:
+ * `session_feedback_token` alone now. A new table referencing one of these therefore needs no
+ * entry; a new table nothing references does. The other three evaluation tables are named
+ * below, because fixtures now write them directly, and `transaction_evidence` has joined them
+ * for the same reason — `addTransactionEvidence` writes it, so by the rule above it is named
  * even though `cascade` from `public."transaction"` already reaches it.
  *
  * `session_teacher` is the first table here that **no fixture writes and the tests
  * populate anyway** — `arrangeOnlineSessions` writes it, and the batch tests assert on
  * it. `cascade` from `public."session"` already reaches it, so naming it changes nothing
  * today; it is named for the reason above, which is that a list pruned to the cascade
- * minimum stops covering a table the day its parent leaves.
+ * minimum stops covering a table the day its parent leaves. `perjadin_evaluation` has since
+ * joined it: no fixture writes one, but the Perjadin Evaluation write-path tests file them
+ * directly, and `cascade` from `public."perjadin"` reaches it, so naming it is for the same
+ * reason and not for a fixture.
  *
  * `public."session"` and `better_auth."session"` are both here and both qualified.
  * That collision is the whole reason Better Auth was given a Postgres schema of its
@@ -497,6 +500,7 @@ export async function resetDatabase() {
       public."class_record",
       public."session_record",
       public."participant_feedback",
+      public."perjadin_evaluation",
       public."perjadin",
       public."group_member",
       public."transaction",

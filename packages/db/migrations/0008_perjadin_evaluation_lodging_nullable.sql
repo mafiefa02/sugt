@@ -1,0 +1,1 @@
+ALTER TABLE "perjadin_evaluation" ALTER COLUMN "lodging" DROP NOT NULL;
