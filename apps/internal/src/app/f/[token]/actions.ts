@@ -1,7 +1,11 @@
 "use server";
 
 import { resolveFeedbackToken } from "-/lib/feedback-token";
-import { submitParticipantFeedback, type NewParticipantFeedback } from "@sugt/db/queries";
+import {
+  submitParticipantFeedback,
+  type NewParticipantFeedback,
+  type SubmitParticipantFeedbackResult,
+} from "@sugt/db/queries";
 
 /**
  * **Submit one Participant's feedback.** The only Server Action in either app reached without a
@@ -15,11 +19,9 @@ import { submitParticipantFeedback, type NewParticipantFeedback } from "@sugt/db
  *
  * `gone` collapses expired, replaced, unknown and cancelled into one outcome — the form shows
  * the same dead-link message a fresh load would, because a scanner can do nothing differently.
+ * The write's own outcomes are reused rather than restated; `gone` is the one this layer adds.
  */
-export type SubmitFeedbackActionResult =
-  | { outcome: "submitted" }
-  | { outcome: "name-required" }
-  | { outcome: "gone" };
+export type SubmitFeedbackActionResult = SubmitParticipantFeedbackResult | { outcome: "gone" };
 
 export async function submitFeedbackAction(
   token: string,

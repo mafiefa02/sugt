@@ -15,6 +15,7 @@ import {
   type CorrectTeachersResult,
   type FileClassRecordResult,
   type FileSessionRecordResult,
+  type IssueFeedbackTokenResult,
   type MarkDeliveredResult,
   type MoveSessionDateResult,
   type NewClassRecord,
@@ -142,10 +143,14 @@ export async function fileSessionRecordAction(
   return result;
 }
 
-/** What issuing a feedback token hands back to the QR dialog: the link and its QR image. */
+/**
+ * What issuing a feedback token hands back to the QR dialog: the link and its QR image. The
+ * `session-cancelled` refusal is the write's own, reused rather than restated; only the `issued`
+ * arm differs, because the action renders the QR the query never sees.
+ */
 export type IssueFeedbackTokenActionResult =
   | { outcome: "issued"; url: string; qr: string }
-  | { outcome: "session-cancelled" };
+  | Extract<IssueFeedbackTokenResult, { outcome: "session-cancelled" }>;
 
 /**
  * **Issue — or reissue — the Participant Feedback token, and render its QR.**

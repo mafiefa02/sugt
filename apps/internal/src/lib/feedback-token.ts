@@ -3,7 +3,7 @@ import type { ParticipantToken } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
 
 /**
- * Resolving a feedback token into the caller a Participant write is checked as.
+ * Turning a feedback token into the caller a Participant write is checked against.
  *
  * **Why this lives in the app rather than in `@sugt/db`.** It is the same deliberate exception
  * `invite-list.ts` is: `@sugt/db`'s query layer takes a caller it is given and never resolves

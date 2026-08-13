@@ -16,6 +16,7 @@ import { Textarea } from "@sugt/ui/components/textarea";
 import { useId, useState, useTransition } from "react";
 
 import { submitFeedbackAction } from "./actions";
+import { GoneNotice } from "./gone-notice";
 
 /**
  * The phone form a Participant fills after scanning the QR. Three Aspects, the Class they sat
@@ -81,18 +82,9 @@ function FeedbackForm({ token }: { token: string }) {
     });
   }
 
-  // The link died while the form was open — a reissue, or the 24 hours ran out. Same message as
-  // a fresh dead load, and no form: there is nothing a second try here would reach.
-  if (gone) {
-    return (
-      <div className="text-center">
-        <h1 className="font-heading text-lg font-medium">Tautan sudah tidak berlaku</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Minta QR yang baru kepada pengajar di ruangan.
-        </p>
-      </div>
-    );
-  }
+  // The link died while the form was open — a reissue, or the 24 hours ran out. The same notice
+  // a fresh dead load shows, and no form: there is nothing a second try here would reach.
+  if (gone) return <GoneNotice />;
 
   // A thank-you and no form. A second submission is not prevented, so the page must not invite
   // one — there is no button back to the form.
@@ -109,7 +101,8 @@ function FeedbackForm({ token }: { token: string }) {
     <div>
       <h1 className="font-heading text-lg font-medium">Umpan balik sesi</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Beri nilai {RATING_MIN}–{RATING_MAX} untuk tiap aspek. Isian ini anonim kalau kamu mau.
+        Beri nilai {RATING_MIN}–{RATING_MAX} untuk tiap aspek. Masukanmu membantu kami memperbaiki
+        sesi berikutnya.
       </p>
 
       <div className="mt-5 grid gap-5">

@@ -22,15 +22,17 @@ import { useState, useTransition } from "react";
  * `SessionWrites`. It is **barred on a cancelled Session**: nobody sat in a room that never
  * happened, and `issueFeedbackToken` refuses one anyway.
  *
- * **Issuing confirms first, and reissuing is a distinct act.** The table is keyed on
+ * **Issuing confirms first, and reissuing asks again, more pointedly.** The table is keyed on
  * `session_id`, so a new token invalidates every link already handed out. Once a QR is shown it
  * **stays shown** across closing and reopening the dialog — re-viewing it must not silently
- * replace it while half the room is still scanning. Replacing it is *Tampilkan QR baru*, which
- * routes back through the confirm step, so a reissue is always a second, deliberate act.
+ * replace it while half the room is still scanning. Replacing it is *Terbitkan QR baru*, which
+ * opens its own confirmation naming what dies, so a reissue is a second, deliberate act rather
+ * than a repeat of the neutral first-issue notice.
  */
 function FeedbackTokenDialog({ session }: { session: SessionDetail }) {
   const [open, setOpen] = useState(false);
   const [issued, setIssued] = useState<{ url: string; qr: string } | null>(null);
+  const [confirmingReissue, setConfirmingReissue] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
@@ -42,8 +44,13 @@ function FeedbackTokenDialog({ session }: { session: SessionDetail }) {
   function issue() {
     startSaving(async () => {
       const result = await issueFeedbackTokenAction(session.id);
-      if (result.outcome === "issued") setIssued({ url: result.url, qr: result.qr });
-      else setError("Sesi ini sudah dibatalkan. Muat ulang halaman untuk melihat keadaannya.");
+      if (result.outcome === "issued") {
+        setIssued({ url: result.url, qr: result.qr });
+        setConfirmingReissue(false);
+        setCopied(false);
+      } else {
+        setError("Sesi ini sudah dibatalkan. Muat ulang halaman untuk melihat keadaannya.");
+      }
     });
   }
 
@@ -53,16 +60,20 @@ function FeedbackTokenDialog({ session }: { session: SessionDetail }) {
     setCopied(true);
   }
 
+  // Three states: no QR yet (confirm and mint), a QR shown, and a QR shown with a reissue being
+  // confirmed. The shown QR persists across close; only reissuing — a second, pointed
+  // confirmation — replaces it, because that is the act that kills a link the room is scanning.
+  const showingQr = issued !== null && !confirmingReissue;
+
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        // The QR persists across close — reopening re-views it rather than reissuing. Only the
-        // transient copy/error hints are cleared.
         if (!next) {
           setCopied(false);
           setError(null);
+          setConfirmingReissue(false);
         }
       }}
     >
@@ -71,31 +82,17 @@ function FeedbackTokenDialog({ session }: { session: SessionDetail }) {
         <DialogHeader>
           <DialogTitle>QR umpan balik</DialogTitle>
           <DialogDescription>
-            Peserta memindai QR ini untuk menilai sesi tanpa perlu masuk. Menampilkan QR baru akan
-            menonaktifkan tautan yang sudah dibagikan sebelumnya.
+            {issued === null
+              ? "Peserta memindai QR ini untuk menilai sesi tanpa perlu masuk."
+              : confirmingReissue
+                ? "Tautan yang sedang dibagikan akan langsung mati begitu QR baru dibuat. Lanjutkan?"
+                : "Tunjukkan QR ini kepada peserta untuk mereka pindai."}
           </DialogDescription>
         </DialogHeader>
 
         {error !== null && <p className="text-sm text-destructive">{error}</p>}
 
-        {issued === null ? (
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setOpen(false);
-              }}
-            >
-              Batal
-            </Button>
-            <Button
-              disabled={saving}
-              onClick={issue}
-            >
-              {saving ? "Menyiapkan…" : "Tampilkan QR"}
-            </Button>
-          </DialogFooter>
-        ) : (
+        {showingQr && issued !== null && (
           <div className="grid gap-4">
             {/*
               Black on white regardless of the theme. The colours are baked into the image by the
@@ -123,24 +120,56 @@ function FeedbackTokenDialog({ session }: { session: SessionDetail }) {
                 {copied ? "Tersalin" : "Salin tautan"}
               </Button>
             </div>
+          </div>
+        )}
 
-            <DialogFooter>
-              {/*
-                Reissue is a second act, back through the confirm step: it clears the shown QR,
-                which returns to the "Tampilkan QR" button whose warning is the confirmation.
-              */}
+        <DialogFooter>
+          {issued === null ? (
+            <>
               <Button
                 variant="ghost"
                 onClick={() => {
-                  setIssued(null);
-                  setCopied(false);
+                  setOpen(false);
                 }}
               >
-                Tampilkan QR baru
+                Batal
               </Button>
-            </DialogFooter>
-          </div>
-        )}
+              <Button
+                disabled={saving}
+                onClick={issue}
+              >
+                {saving ? "Menyiapkan…" : "Tampilkan QR"}
+              </Button>
+            </>
+          ) : confirmingReissue ? (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setConfirmingReissue(false);
+                }}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={saving}
+                onClick={issue}
+              >
+                {saving ? "Menyiapkan…" : "Terbitkan QR baru"}
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setConfirmingReissue(true);
+              }}
+            >
+              Terbitkan QR baru
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

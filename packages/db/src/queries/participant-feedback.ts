@@ -70,16 +70,20 @@ export async function issueFeedbackToken(
     // generates none in TypeScript, and a UUID is URL-safe and unique by the column's own
     // constraint. `gen_random_uuid()` is what `defaultRandom()` compiles to for the id columns.
     const token = sql`gen_random_uuid()::text`;
+    // The lifetime is set from `FEEDBACK_TOKEN_LIFETIME_HOURS` on **both** paths rather than
+    // leaning on the column default for the insert — otherwise a change to the constant would
+    // move a reissued token's expiry while a first-issued one silently kept the old default.
+    const expiresAt = sql`now() + make_interval(hours => ${FEEDBACK_TOKEN_LIFETIME_HOURS})`;
     const [row] = await tx
       .insert(sessionFeedbackToken)
-      .values({ sessionId, token, issuedByPersonId: caller.id })
+      .values({ sessionId, token, issuedByPersonId: caller.id, expiresAt })
       .onConflictDoUpdate({
         target: sessionFeedbackToken.sessionId,
         set: {
           token,
           issuedByPersonId: caller.id,
           issuedAt: sql`now()`,
-          expiresAt: sql`now() + make_interval(hours => ${FEEDBACK_TOKEN_LIFETIME_HOURS})`,
+          expiresAt,
         },
       })
       .returning({
