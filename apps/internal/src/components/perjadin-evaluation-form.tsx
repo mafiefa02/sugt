@@ -2,7 +2,13 @@
 
 import { filePerjadinEvaluationAction } from "-/app/(app)/perjadin/[id]/actions";
 import type { PerjadinEvaluationRatings } from "@sugt/db/queries";
-import { CONCERN_AT_OR_BELOW, RATING_MAX, RATING_MIN, type PerjadinAspect } from "@sugt/domain";
+import {
+  CONCERN_AT_OR_BELOW,
+  PERJADIN_ASPECTS,
+  RATING_MAX,
+  RATING_MIN,
+  type PerjadinAspect,
+} from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { Checkbox } from "@sugt/ui/components/checkbox";
@@ -47,9 +53,15 @@ const PERJADIN_ASPECT_LABELS: Record<PerjadinAspect, string> = {
   punctuality: "Ketepatan waktu",
 };
 
-/** The three Aspects that are always rated. `lodging` is handled on its own, because it is nullable. */
-const ALWAYS_RATED = ["transport", "meals", "punctuality"] as const;
-type AlwaysRated = (typeof ALWAYS_RATED)[number];
+/**
+ * The Aspects that are always rated — `PERJADIN_ASPECTS` without `lodging`, which is handled on
+ * its own because it is nullable. Derived from the domain list rather than restated, so a new
+ * Aspect there reaches the form without a second edit.
+ */
+type AlwaysRated = Exclude<PerjadinAspect, "lodging">;
+const ALWAYS_RATED = PERJADIN_ASPECTS.filter(
+  (aspect): aspect is AlwaysRated => aspect !== "lodging",
+);
 
 const INSTRUCTION = `Beri nilai ${RATING_MIN}–${RATING_MAX} untuk tiap aspek. Nilai ${CONCERN_AT_OR_BELOW} ke bawah wajib disertai penjelasan pada Kendala.`;
 

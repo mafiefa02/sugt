@@ -1,5 +1,6 @@
 import { db, schema } from "@sugt/db";
 import { filePerjadinEvaluation, type PerjadinEvaluationRatings } from "@sugt/db/queries";
+import { CONCERN_AT_OR_BELOW } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -229,7 +230,10 @@ describe("the nullable lodging invariant", () => {
       problems: null,
     });
 
-    // The exact predicate the concerns index carries, read back against the row.
+    // The predicate the concerns index carries, read back against the row, with the threshold
+    // from the same constant the schema's index does. An end-to-end exercise of the index waits
+    // on the Concerns list that reads it (#34); this pins the behaviour the AC names — a skipped
+    // lodging does not drag the minimum to a concern.
     const [row] = await db
       .select({
         concern: sql<boolean>`least(
@@ -237,7 +241,7 @@ describe("the nullable lodging invariant", () => {
           ${schema.perjadinEvaluation.transport},
           ${schema.perjadinEvaluation.meals},
           ${schema.perjadinEvaluation.punctuality}
-        ) <= 7`,
+        ) <= ${CONCERN_AT_OR_BELOW}`,
       })
       .from(schema.perjadinEvaluation)
       .where(eq(schema.perjadinEvaluation.perjadinId, trip.id));
