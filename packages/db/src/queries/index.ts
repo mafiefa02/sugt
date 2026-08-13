@@ -41,6 +41,24 @@
  * take; see `./caller.ts`.
  */
 export type { Caller, ParticipantToken, Person, ServiceCaller } from "./caller";
+export {
+  addStoryPhotos,
+  ceritaIndex,
+  createStory,
+  deleteStoryPhoto,
+  publishStory,
+  setStoryCover,
+  storyForEditor,
+  updateStory,
+  withdrawStory,
+  type CeritaEntry,
+  type CreateStoryInput,
+  type NewStoryPhoto,
+  type PublishResult,
+  type StoryForEditor,
+  type StoryPhoto,
+  type UpdateStoryInput,
+} from "./cerita";
 export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage";
 export {
   arrangeOnlineSessions,
