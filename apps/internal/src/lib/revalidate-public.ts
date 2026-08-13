@@ -19,15 +19,19 @@
 /** The three pages a publish or withdrawal invalidates, in the order they must run. */
 export type RevalidationTarget = "detail" | "list" | "school";
 
+/**
+ * A step's result. `"pending-issue-37"` is the only one this stub ever returns today; `"ok"` and
+ * `"failed"` are here **now** so #37 changes only the value it returns, not this type — and the
+ * editor already switches on all three, so a failure will display the moment the route can produce
+ * one. That is the "says plainly when it failed" half of the requirement, wired ahead of the route.
+ */
+export type RevalidationOutcome = "pending-issue-37" | "ok" | "failed";
+
 export type RevalidationStepReport = {
   target: RevalidationTarget;
   /** What the operator sees for this step, in Indonesian to match the surface. */
   label: string;
-  /**
-   * `"pending-issue-37"` while the route is unbuilt. #37 replaces this with `"ok"` on a 2xx and
-   * `"failed"` otherwise, and the flow already renders all three.
-   */
-  outcome: "pending-issue-37";
+  outcome: RevalidationOutcome;
 };
 
 export type RevalidationReport = {

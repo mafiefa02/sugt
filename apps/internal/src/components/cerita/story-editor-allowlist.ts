@@ -97,9 +97,9 @@ import {
  *
  * - **Image** (`imageSchema`/`imageAttr` and its commands, input rule and cursor plugin).
  *   Photographs are never placed inside the body; they live in the Dokumentasi gallery as
- *   `story_photo` rows. This is the single most important omission and the one the paste test
- *   guards: with no image node in the schema, pasting an image drops it rather than smuggling it
- *   into the prose.
+ *   `story_photo` rows. This is the single most important omission, and it holds structurally: with
+ *   no image node in the schema, ProseMirror has nowhere to put a pasted image, so it drops one
+ *   rather than smuggling it into the prose — nothing has to remember to strip it.
  * - **Raw HTML** (`htmlSchema`/`htmlAttr` and `remarkHtmlTransformer`). An HTML node is an
  *   allowlist bypass by construction — it would let arbitrary tags reach the public page through a
  *   field the whole ADR exists to bound.

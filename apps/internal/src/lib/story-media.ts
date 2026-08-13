@@ -77,15 +77,6 @@ export async function readPhotoFacts(path: string): Promise<PhotoObjectFacts | n
 }
 
 /**
- * The public URL for a stored photograph. `public-media` is a public bucket, so this is a plain
- * `object/public/...` path that needs no token and any browser can load. Built here, on the server,
- * so `SUPABASE_URL` never has to reach the client — the editor is handed finished URLs.
- */
-export function publicUrlFor(storagePath: string): string {
-  return `${requireEnv("SUPABASE_URL")}/storage/v1/object/public/${BUCKET}/${storagePath}`;
-}
-
-/**
  * Best-effort removal of the stored object after its row is gone. The row is the source of truth
  * for whether a photograph exists, so this runs **after** `deleteStoryPhoto` and a failure here is
  * swallowed — an orphaned object in a public bucket is a tidiness problem, a blocked delete is a

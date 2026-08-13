@@ -1,6 +1,6 @@
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
-import { publicUrlFor } from "-/lib/story-media";
+import { publicUrlFor } from "-/lib/story-photo-url";
 import { type CeritaEntry, ceritaIndex } from "@sugt/db/queries";
 import { Badge } from "@sugt/ui/components/badge";
 import { LinkButton } from "@sugt/ui/components/link-button";

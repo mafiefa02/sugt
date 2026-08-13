@@ -1,7 +1,7 @@
 import { CeritaEditor } from "-/components/cerita/cerita-editor";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
-import { publicUrlFor } from "-/lib/story-media";
+import { publicUrlFor } from "-/lib/story-photo-url";
 import { schoolDirectory, storyForEditor } from "@sugt/db/queries";
 import { notFound } from "next/navigation";
 
@@ -24,8 +24,10 @@ export default async function Page({ params }: PageProps<"/cerita/[id]">) {
   const story = await staffSurface(() => storyForEditor(person, id));
   if (!story) notFound();
 
+  // `school_id` is a NOT NULL foreign key and `schoolDirectory` returns every School, so the match
+  // always resolves; the `?? ""` is only there to satisfy the type, not a School the reader will see.
   const schools = await schoolDirectory(person);
-  const schoolName = schools.find((school) => school.id === story.schoolId)?.name ?? "Sekolah";
+  const schoolName = schools.find((school) => school.id === story.schoolId)?.name ?? "";
 
   return (
     <div className="flex min-h-full flex-col">

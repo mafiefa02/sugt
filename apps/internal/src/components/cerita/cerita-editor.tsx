@@ -1,6 +1,6 @@
 "use client";
 
-import type { EditorPhoto } from "-/app/(app)/cerita/action-types";
+import { type EditorPhoto, MAX_PHOTO_BATCH } from "-/app/(app)/cerita/action-types";
 import {
   deleteStoryPhotoAction,
   finalizeStoryPhotosAction,
@@ -12,6 +12,7 @@ import {
 } from "-/app/(app)/cerita/actions";
 import { StoryEditor } from "-/components/cerita/story-editor";
 import type { RevalidationReport } from "-/lib/revalidate-public";
+import type { PublishResult } from "@sugt/db/queries";
 import { STORY_KINDS, type StoryKind, type Stream } from "@sugt/domain";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
@@ -21,6 +22,13 @@ import { Check, ImageOff, Info, Loader2, Plus, Star, Trash2, Upload, X } from "l
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type Dispatch, type SetStateAction, useRef, useState, useTransition } from "react";
+
+/**
+ * A publish attempt that did not publish — the outcomes `publishStory` returns other than success,
+ * derived from `PublishResult` so this and the query stay one definition. `needs-cover` is the one
+ * gate; `no-such-story` is a stale editor.
+ */
+type PublishRefusal = Exclude<PublishResult["outcome"], "published">;
 
 /**
  * **The Cerita editor — Variant B, one document column.**
@@ -69,9 +77,7 @@ export function CeritaEditor({
 
   // The result of the last publish attempt and the revalidation it triggered, rendered inline. The
   // `needs-cover` gate lands here, exercising the server path rather than only the disabled button.
-  const [publishOutcome, setPublishOutcome] = useState<"needs-cover" | "no-such-story" | null>(
-    null,
-  );
+  const [publishOutcome, setPublishOutcome] = useState<PublishRefusal | null>(null);
   const [revalidation, setRevalidation] = useState<RevalidationReport | null>(null);
 
   const cover = story.photos.find((photo) => photo.id === story.coverPhotoId) ?? null;
@@ -220,7 +226,7 @@ function PublishBar({
   coverMissing: boolean;
   busy: boolean;
   dirty: boolean;
-  outcome: "needs-cover" | "no-such-story" | null;
+  outcome: PublishRefusal | null;
   revalidation: RevalidationReport | null;
   onToggle: () => void;
 }) {
@@ -272,9 +278,11 @@ function PublishBar({
 }
 
 /**
- * The revalidation of `@sugt/public`, step by step. The route is [#37]'s and unbuilt, so every step
- * reports pending rather than done — the flow is complete and the operator is told plainly that the
- * public site has not refreshed yet.
+ * The revalidation of `@sugt/public`, step by step. Each step renders by its `outcome`, so this is
+ * already the "says plainly when it failed" surface: a failed step shows a cross and _gagal_, a done
+ * step a tick. The route is [#37]'s and unbuilt, so today every outcome is `pending-issue-37` and the
+ * operator is told the public site has not refreshed yet — but when #37 returns `ok`/`failed`, this
+ * displays it with no change here.
  *
  * [#37]: https://github.com/mafiefa02/sugt/issues/37
  */
@@ -290,11 +298,24 @@ function RevalidationSteps({ report }: { report: RevalidationReport }) {
         {report.steps.map((step) => (
           <li
             key={step.target}
-            className="flex items-center gap-2 text-xs text-muted-foreground"
+            className={cn(
+              "flex items-center gap-2 text-xs",
+              step.outcome === "failed" ? "text-destructive" : "text-muted-foreground",
+            )}
           >
-            <span className="size-3 rounded-full border border-border" />
+            {step.outcome === "ok" ? (
+              <Check className="size-3" />
+            ) : step.outcome === "failed" ? (
+              <X className="size-3" />
+            ) : (
+              <span className="size-3 rounded-full border border-border" />
+            )}
             {step.label}
-            <span className="text-[11px]">— menunggu #37</span>
+            {step.outcome === "failed" ? (
+              <span className="text-[11px]">— gagal, halaman lama masih tayang</span>
+            ) : step.outcome === "pending-issue-37" ? (
+              <span className="text-[11px]">— menunggu #37</span>
+            ) : null}
           </li>
         ))}
       </ol>
@@ -416,11 +437,12 @@ function CoverField({
   );
 }
 
-/** One file the operator has chosen but not yet uploaded: bytes, an editable caption, a preview. */
+/**
+ * One file the operator has chosen but not yet uploaded: bytes, an editable caption, a preview, and
+ * a `localId` that is a monotonic counter — not derived from the file — so removing then re-adding
+ * the same file never collides on a React key.
+ */
 type StagedPhoto = { localId: string; file: File; caption: string; previewUrl: string };
-
-/** How many files one batch may stage and upload — matches the Server Action's mint cap. */
-const MAX_BATCH = 20;
 
 /**
  * The Dokumentasi gallery and its upload. There is no ordering: photographs render in `uploaded_at`
@@ -446,18 +468,19 @@ function Dokumentasi({
   const [uploading, startUploading] = useTransition();
   const [note, setNote] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const nextLocalId = useRef(0);
 
   function chooseFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const room = MAX_BATCH - staged.length;
+    const room = MAX_PHOTO_BATCH - staged.length;
     const picked = Array.from(files).slice(0, Math.max(0, room));
     if (picked.length < files.length) {
-      setNote(`Maksimal ${MAX_BATCH} foto sekaligus. Sebagian tidak ditambahkan.`);
+      setNote(`Maksimal ${MAX_PHOTO_BATCH} foto sekaligus. Sebagian tidak ditambahkan.`);
     }
     setStaged((current) => [
       ...current,
-      ...picked.map((file, index) => ({
-        localId: `${file.name}-${file.size}-${current.length + index}`,
+      ...picked.map((file) => ({
+        localId: String(nextLocalId.current++),
         file,
         caption: "",
         previewUrl: URL.createObjectURL(file),
@@ -650,7 +673,7 @@ function PhotoRow({
 
   function remove() {
     startBusy(async () => {
-      await deleteStoryPhotoAction(storyId, photo.id, photo.storagePath);
+      await deleteStoryPhotoAction(storyId, photo.id);
       onChanged();
     });
   }

@@ -8,6 +8,13 @@ import type { PublishResult, StoryPhoto } from "@sugt/db/queries";
  * actions and the editor import them.
  */
 
+/**
+ * How many photographs one upload batch may stage and mint URLs for. Shared by the client (which
+ * caps a file selection) and the mint action (which caps the array it hands out), so the two cannot
+ * drift — a guard on the array size, not a product rule.
+ */
+export const MAX_PHOTO_BATCH = 20;
+
 /** One photograph the browser has PUT to Storage, waiting to be recorded as a `story_photo` row. */
 export type PhotoToFinalize = {
   /** The object key returned when its upload URL was minted. */
