@@ -79,9 +79,10 @@ neither.
 A column CHECKed against a **whole** set is read back as that set's type rather than as
 `string`. A column CHECKed against a **single member** of one — `perjadin.pic_role`,
 `session.online_pic_role`, `session_teacher.person_role` and the two `filed_by_role`
-columns — is not, and whether it should be is open;
-[#52](https://github.com/mafiefa02/sugt/issues/52) decides it. Neither is DDL, and the
-header of `packages/db/src/schema/index.ts` carries the reasoning.
+columns — now carries that member as a literal type too:
+[#52](https://github.com/mafiefa02/sugt/issues/52) settled it, so each reads back as
+`"Staff"` or `"Teaching Team"` via `$type<"Staff">()` rather than `string`. Neither is DDL,
+and the header of `packages/db/src/schema/index.ts` carries the reasoning.
 
 The four Aspect lists are the exception — `CLASS_RECORD_ASPECTS`, `SESSION_RECORD_ASPECTS`,
 `PARTICIPANT_FEEDBACK_ASPECTS` and `PERJADIN_ASPECTS` name **columns** rather than stored

@@ -64,7 +64,10 @@ export const session = pgTable(
     cancelledReason: text("cancelled_reason"),
 
     onlinePicPersonId: uuid("online_pic_person_id"),
-    onlinePicRole: text("online_pic_role"),
+    // Pinned to the single value 'Staff' by `session_online_pic_role_check`, so it reads
+    // back as the literal "Staff" rather than string — a narrower claim than the set
+    // columns above; see the header on single-literal columns.
+    onlinePicRole: text("online_pic_role").$type<"Staff">(),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -138,7 +141,7 @@ export const sessionTeacher = pgTable(
       .references(() => session.id, { onDelete: "cascade" }),
     stream: text("stream").$type<Stream>().notNull(),
     personId: uuid("person_id").notNull(),
-    personRole: text("person_role").notNull().default("Teaching Team"),
+    personRole: text("person_role").$type<"Teaching Team">().notNull().default("Teaching Team"),
   },
   (t) => [
     primaryKey({ columns: [t.sessionId, t.stream] }),

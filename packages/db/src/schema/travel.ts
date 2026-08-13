@@ -49,7 +49,7 @@ export const perjadin = pgTable(
     advanceIdr: bigint("advance_idr", { mode: "number" }).notNull(),
 
     picPersonId: uuid("pic_person_id").notNull(),
-    picRole: text("pic_role").notNull().default("Staff"),
+    picRole: text("pic_role").$type<"Staff">().notNull().default("Staff"),
 
     returnedToTreasurerIdr: bigint("returned_to_treasurer_idr", { mode: "number" }),
     returnedAt: timestamp("returned_at", { withTimezone: true }),

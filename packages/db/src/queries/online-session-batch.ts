@@ -1,4 +1,4 @@
-import type { Role, Stream } from "@sugt/domain";
+import type { Stream } from "@sugt/domain";
 
 import { db } from "../client";
 import { ONLINE_SESSION_STILL_STANDS, session, sessionTeacher } from "../schema/delivery";
@@ -216,11 +216,7 @@ export async function arrangeOnlineSessions(
             mode: "online",
             heldOn: row.heldOn,
             onlinePicPersonId: row.picPersonId,
-            // `satisfies` where `mode` needs none: `online_pic_role` is pinned to a single
-            // literal by CHECK rather than to a set, and whether those columns carry a
-            // type is open — see
-            // [#52](https://github.com/mafiefa02/sugt/issues/52).
-            onlinePicRole: "Staff" satisfies Role,
+            onlinePicRole: "Staff",
           })
           .onConflictDoNothing({
             target: [session.schoolId, session.heldOn],
