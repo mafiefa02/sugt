@@ -45,6 +45,14 @@ export const ROLES = ["Staff", "Teaching Team"] as const;
 export type Role = (typeof ROLES)[number];
 
 /**
+ * The two kinds a Story may be. They share one editor and one upload path; they differ only
+ * in where the public site lists them — a Final Project reaches the public this way without
+ * becoming a tracked record (see `docs/adr/0009-the-tool-tracks-delivery-not-outcomes.md`).
+ */
+export const STORY_KINDS = ["field", "final_project"] as const;
+export type StoryKind = (typeof STORY_KINDS)[number];
+
+/**
  * How many Sessions each School receives, by mode. The same for every School and
  * fixed from the start, which is what lets progress read as "3 of 10 delivered"
  * without any planned Sessions existing
