@@ -2,7 +2,7 @@ import { PerjadinPlanForm } from "-/components/perjadin-plan-form";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import { perjadinPlan } from "@sugt/db/queries";
-import { Button } from "@sugt/ui/components/button";
+import { LinkButton } from "@sugt/ui/components/link-button";
 import Link from "next/link";
 
 /**
@@ -41,12 +41,12 @@ export default async function Page({ searchParams }: PageProps<"/rencanakan-perj
           <p className="text-sm text-muted-foreground">
             Tidak ada Sekolah yang dipilih. Pilih Sekolah di Coverage terlebih dahulu.
           </p>
-          <Button
+          <LinkButton
             variant="outline"
             render={<Link href="/coverage" />}
           >
             Kembali ke Coverage
-          </Button>
+          </LinkButton>
         </div>
       ) : (
         <PerjadinPlanForm

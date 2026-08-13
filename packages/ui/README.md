@@ -40,6 +40,7 @@ surface for is a file to maintain and nothing more.
 | `field`        | `shadcn add`          | the four evaluation forms — label, description and error as one unit                                                                                 |
 | `input`        | `shadcn add`          | Rencanakan Perjadin, Orang's add form, Pencarian                                                                                                     |
 | `label`        | `shadcn add`          | every form                                                                                                                                           |
+| `link-button`  | hand-written          | every control that navigates but looks like a Button — see [Button vs LinkButton](#button-vs-linkbutton)                                             |
 | `progress`     | `shadcn add`          | Coverage — delivered against ten; the Staff Dashboard's per-Cluster bars                                                                             |
 | `rating`       | hand-written          | Concerns, Detail Sekolah, Detail Sesi — every Rating already filed                                                                                   |
 | `rating-input` | hand-written          | Class Record, Session Record, Perjadin Evaluation, Participant Feedback                                                                              |
@@ -67,6 +68,36 @@ Absences look like oversights unless they are written down.
 | `switch`                                                                   | Orang shows three states with _"revoked behind a toggle"_ ([#9](https://github.com/mafiefa02/sugt/issues/9)). Whether that toggle is a Switch, a Checkbox or a filter on `tabs` is [issue #35](https://github.com/mafiefa02/sugt/issues/35)'s to settle, and all three already exist here or cost nothing. |
 | a file input                                                               | Perjadin Report attaches evidence through a signed upload URL. The registry has no upload primitive to add, so the control is hand-written by [issue #30](https://github.com/mafiefa02/sugt/issues/30) against the shape that endpoint needs.                                                              |
 | `carousel`                                                                 | Cerita (detail) carries a gallery whose first photo is the cover. Whether that reads as a carousel or a grid is [issue #38](https://github.com/mafiefa02/sugt/issues/38)'s, and a grid needs no component.                                                                                                 |
+
+## Button vs LinkButton
+
+`Button` is for controls that **act** — submit, cancel, open a dialog. `LinkButton` is for
+controls that **navigate** but should look the same. They are not interchangeable, and the
+difference is in the accessibility tree, not the pixels.
+
+Base UI's `Button` is a button. Rendering it as a link — `render={<Link />}`, the pattern this
+package uses over `asChild` — has no good setting, and this was checked in Base UI 1.7 rather
+than assumed:
+
+- `nativeButton` defaults **true**, so Base UI expects a real `<button>` and logs a warning on
+  every such site because the element is an `<a>`. Its keyboard and `disabled` handling branch on
+  that flag too, so both are wrong for a link.
+- `nativeButton={false}` silences the warning, but Base UI then applies button semantics to the
+  anchor — it reports **`role="button"`** and answers Space. A control that navigates is a
+  **link**: it should report `role: link` and be driven by Enter alone. So `nativeButton={false}`,
+  per call site or defaulted in the wrapper, trades the one thing that was already right for the
+  warning's silence. That is why it is the **wrong** fix, and why neither option the issue
+  proposed was taken.
+
+`LinkButton` sidesteps both. It never touches Base UI's `Button`: it styles the app's own link
+(injected through `render`, so this package stays free of `next/link`) with `buttonVariants`. The
+result is a real anchor — `role: link`, Enter navigates, Space does not — that matches `Button`
+exactly. See [#51](https://github.com/mafiefa02/sugt/issues/51).
+
+Base UI's other button-based controls — `Dialog.Close` / `SheetClose`, and anything else built on
+`use-button` — carry the same trap when handed a navigating `render`. `LinkButton` does not fit
+them, because they also act on click (a `SheetClose` closes the sheet). That case is tracked
+separately.
 
 ## The two Rating controls
 
