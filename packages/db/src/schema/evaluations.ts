@@ -276,7 +276,13 @@ export const perjadinEvaluation = pgTable(
       .notNull()
       .references(() => person.id),
 
-    lodging: rating("lodging"),
+    // **The one nullable Rating in the system.** Not every Perjadin involves a night away —
+    // a School close enough for a day trip has no hotel to rate — so `lodging` is not the
+    // `rating()` helper's NOT NULL. It keeps its `between 1 and 10` bound below; `NULL between
+    // 1 and 10` is NULL, which a CHECK accepts. Postgres `least()` ignores NULLs, so the
+    // elaboration CHECK and the concerns index both still behave: a skipped `lodging` drops
+    // out of the minimum rather than forcing prose or reaching the concerns list.
+    lodging: smallint("lodging"),
     transport: rating("transport"),
     meals: rating("meals"),
     punctuality: rating("punctuality"),

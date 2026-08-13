@@ -1,3 +1,4 @@
+import { PerjadinEvaluationDialog } from "-/components/perjadin-evaluation-form";
 import { PerjadinGroup } from "-/components/perjadin-group";
 import { SessionStatusBadge } from "-/components/session-labels";
 import { requirePerson } from "-/lib/person";
@@ -32,6 +33,11 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
   // a courtesy so a professor's page makes no pointless call — `requireStaff` inside is
   // what actually closes the path.
   const acquittal = person.role === "Staff" ? await perjadinAcquittal(person, id) : null;
+
+  // The Evaluation is offered to whoever was on the Group — the people who slept in the hotel,
+  // Teaching Team and the PIC alike. Checked here for the display; `filePerjadinEvaluation`
+  // re-checks membership authoritatively, since a Server Action is a public endpoint.
+  const isGroupMember = trip.group.some((member) => member.personId === person.id);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -102,6 +108,24 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         teachingTeam={trip.teachingTeam}
         canSubstitute={person.role === "Staff"}
       />
+
+      {/*
+        Offered to Group members only, and to every one of them — the Evaluation is about the
+        journey, so the PIC who arranged it may file one too. Nothing tracks here whether this
+        viewer already filed; a second attempt is refused by the write as `already-filed`.
+      */}
+      {isGroupMember && (
+        <div className="border-b border-border px-7 py-5">
+          <h2 className="font-heading text-sm font-medium">Evaluasi Perjadin</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Nilai perjalanannya — penginapan, transportasi, konsumsi dan ketepatan waktu. Tiap
+            anggota Group mengisi satu.
+          </p>
+          <div className="mt-3">
+            <PerjadinEvaluationDialog perjadinId={trip.id} />
+          </div>
+        </div>
+      )}
 
       <div className="px-7 py-5">
         <h2 className="font-heading text-sm font-medium">Sesi</h2>
