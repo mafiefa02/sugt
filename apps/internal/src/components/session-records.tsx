@@ -1,13 +1,24 @@
+import { ClassRecordDialog, SessionRecordDialog } from "-/components/record-forms";
 import type { SessionDetail } from "@sugt/db/queries";
 import { CLASS_KINDS } from "@sugt/domain";
 
 /**
  * What has been filed against this Session, and who still owes what.
  *
- * A read-only block, so a server component: nothing here is interactive, and the two
- * numbers it renders are the payload's.
+ * A server component that renders read-only figures and lists, plus one interactive leaf:
+ * beside an owed Record the signed-in person owes, the form to file it. `personId` is that
+ * person's id — the forms appear for their own Records and nobody else's, so a professor
+ * fills their Class Records and the PIC the Session Record.
+ *
+ * **The form is offered to the person the tool chases, which is narrower than who may file.**
+ * `owed` names the PIC for the Session Record and each named teacher for their Class Records
+ * — the chase list, empty until the Session is delivered (ADR-0009). The write is broader:
+ * `fileSessionRecord` admits any Staff member, not only the PIC, because `docs/data-model.md`
+ * says any Staff who was there may file one while the PIC's is the one chased. A non-PIC Staff
+ * member's Session Record is therefore permitted by the write and has no screen here yet —
+ * a stated boundary, not an oversight.
  */
-function SessionRecords({ session }: { session: SessionDetail }) {
+function SessionRecords({ session, personId }: { session: SessionDetail; personId: string }) {
   return (
     <div className="border-b border-border px-7 py-5">
       <h2 className="font-heading text-sm font-medium">Catatan</h2>
@@ -67,7 +78,7 @@ function SessionRecords({ session }: { session: SessionDetail }) {
             : "Belum ada yang diharapkan sampai Sesi ini ditandai terlaksana."}
         </p>
       ) : (
-        <ul className="mt-2 space-y-1 text-sm">
+        <ul className="mt-2 space-y-1.5 text-sm">
           {session.owed.map((owed) => (
             <li
               key={
@@ -75,12 +86,31 @@ function SessionRecords({ session }: { session: SessionDetail }) {
                   ? `session-record:${owed.personId}`
                   : `class-record:${owed.personId}:${owed.classKind}`
               }
-              className="text-muted-foreground"
+              className="flex items-center justify-between gap-3 text-muted-foreground"
             >
-              <span className="text-foreground">{owed.fullName}</span>
-              {owed.kind === "session-record"
-                ? " · Catatan Sesi"
-                : ` · Catatan Kelas ${CLASS_LABELS[owed.classKind]}`}
+              <span>
+                <span className="text-foreground">{owed.fullName}</span>
+                {owed.kind === "session-record"
+                  ? " · Catatan Sesi"
+                  : ` · Catatan Kelas ${CLASS_LABELS[owed.classKind]}`}
+              </span>
+
+              {/*
+                The form is offered only for the signed-in person's own Records. Everyone
+                sees the list — naming who has not filed is the whole of the enforcement
+                (ADR-0009) — but only the person who owes a Record can file it, and the
+                write refuses anyone else regardless.
+              */}
+              {owed.personId === personId &&
+                (owed.kind === "session-record" ? (
+                  <SessionRecordDialog sessionId={session.id} />
+                ) : (
+                  <ClassRecordDialog
+                    sessionId={session.id}
+                    classKind={owed.classKind}
+                    classLabel={CLASS_LABELS[owed.classKind]}
+                  />
+                ))}
             </li>
           ))}
         </ul>

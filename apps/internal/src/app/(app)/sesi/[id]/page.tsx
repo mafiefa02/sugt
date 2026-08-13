@@ -67,7 +67,10 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
         </p>
       </header>
 
-      <SessionRecords session={session} />
+      <SessionRecords
+        session={session}
+        personId={person.id}
+      />
 
       {person.role === "Staff" && <SessionWrites session={session} />}
     </div>
