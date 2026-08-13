@@ -23,6 +23,15 @@
  * `packages/db` already depends on the package and `src/queries/` imports it freely, so
  * the arrow is one that exists — this only extends it to the layer under the queries.
  *
+ * **Five more carry a single literal, not a set.** `session.online_pic_role`,
+ * `perjadin.pic_role`, `session_teacher.person_role` and the two `filed_by_role` columns are
+ * each CHECKed against **one** value — `'Staff'` or `'Teaching Team'` — so each reads back as
+ * that literal via `$type<"Staff">()` rather than `string`, the guarantee the composite
+ * foreign key into `person (id, role)` rests on. These need no `@sugt/domain` import: a single
+ * value has no name in the vocabulary, so it is written out here exactly as the CHECK spells
+ * it. As with the set columns, `$type<>()` comes before `.default()` so the default is checked
+ * against it too.
+ *
  * **The import is `import type`, and value imports stay out of these files.** Building a
  * `check()` out of `SESSION_MODES` would compose a different constraint string from the
  * literal one the snapshot holds, and drizzle-kit would emit DDL to reconcile the two.

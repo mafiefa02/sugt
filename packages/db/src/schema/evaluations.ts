@@ -69,7 +69,7 @@ export const classRecord = pgTable(
     // does its twin on `participant_feedback` below.
     classKind: text("class_kind").$type<ClassKind>().notNull(),
     filedByPersonId: uuid("filed_by_person_id").notNull(),
-    filedByRole: text("filed_by_role").notNull().default("Teaching Team"),
+    filedByRole: text("filed_by_role").$type<"Teaching Team">().notNull().default("Teaching Team"),
 
     comprehension: rating("comprehension"),
     participation: rating("participation"),
@@ -136,7 +136,7 @@ export const sessionRecord = pgTable(
       .notNull()
       .references(() => session.id, { onDelete: "cascade" }),
     filedByPersonId: uuid("filed_by_person_id").notNull(),
-    filedByRole: text("filed_by_role").notNull().default("Staff"),
+    filedByRole: text("filed_by_role").$type<"Staff">().notNull().default("Staff"),
 
     facilities: rating("facilities"),
     turnout: rating("turnout"),
