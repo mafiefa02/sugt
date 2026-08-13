@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import { db, schema } from "@sugt/db";
-import type { ClassKind, SessionStatus, Stream, Role, TransactionCategory } from "@sugt/domain";
+import type {
+  ClassKind,
+  SessionStatus,
+  Stream,
+  Role,
+  TimeZone,
+  TransactionCategory,
+} from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 
 export type PersonFixture = {
@@ -49,13 +56,24 @@ export async function authSessions() {
  * make every count assertion depend on a file nobody edits for a test — so a test
  * that needs Schools builds the handful it is about.
  */
-export async function addProvince(code: string, name: string) {
+export async function addProvince(code: string, name: string, timeZone: TimeZone = "WIB") {
   const [province] = await db
     .insert(schema.province)
-    .values({ code, name })
+    .values({ code, name, timeZone })
     .onConflictDoNothing()
     .returning();
-  return province ?? { code, name };
+  return province ?? { code, name, timeZone };
+}
+
+export type SubClusterFixture = { slug: string; name: string; clusterId: string };
+
+/** A Sub-Cluster inside one Cluster. `addPerjadin` builds a throwaway one when given none. */
+export async function addSubCluster(fixture: SubClusterFixture) {
+  const [subCluster] = await db
+    .insert(schema.subCluster)
+    .values({ slug: fixture.slug, name: fixture.name, clusterId: fixture.clusterId })
+    .returning();
+  return subCluster!;
 }
 
 export type ClusterFixture = { slug: string; name: string; topic?: string; problem?: string };
@@ -79,6 +97,8 @@ export type SchoolFixture = {
   clusterId: string;
   provinceCode: string;
   kabupatenKota?: string;
+  /** Nullable this ticket — supplied only by a test that asserts on the Sub-Cluster link. */
+  subClusterId?: string;
 };
 
 export async function addSchool(fixture: SchoolFixture) {
@@ -88,6 +108,7 @@ export async function addSchool(fixture: SchoolFixture) {
       slug: fixture.slug,
       name: fixture.name,
       clusterId: fixture.clusterId,
+      subClusterId: fixture.subClusterId ?? null,
       provinceCode: fixture.provinceCode,
       kabupatenKota: fixture.kabupatenKota ?? "Kota Bandung",
     })
@@ -98,6 +119,8 @@ export async function addSchool(fixture: SchoolFixture) {
 export type SessionFixture = {
   schoolId: string;
   heldOn: string;
+  /** Local wall-clock start time, in the School's Time Zone. Defaults to a mid-morning hour. */
+  startsAt?: string;
   status?: SessionStatus;
   /** A Staff Person. An online Session carries its own PIC, since it has no Perjadin. */
   onlinePicPersonId: string;
@@ -119,6 +142,7 @@ export async function addSession(fixture: SessionFixture) {
       schoolId: fixture.schoolId,
       mode: "online",
       heldOn: fixture.heldOn,
+      startsAt: fixture.startsAt ?? "09:00",
       status,
       cancelledReason: status === "cancelled" ? "Sekolah meminta penjadwalan ulang" : null,
       onlinePicPersonId: fixture.onlinePicPersonId,
@@ -131,6 +155,12 @@ export async function addSession(fixture: SessionFixture) {
 export type OfflineSessionFixture = {
   schoolId: string;
   heldOn: string;
+  /**
+   * Local wall-clock start time. Defaults to a mid-morning hour. Two offline Sessions on the
+   * same Perjadin and date must differ here — `session_one_school_at_a_time_per_perjadin`
+   * forbids the Group being at two Schools at the same moment.
+   */
+  startsAt?: string;
   status?: SessionStatus;
   /** The Perjadin the Session happens on. `addPerjadin` builds one. */
   perjadinId: string;
@@ -157,6 +187,7 @@ export async function addOfflineSession(fixture: OfflineSessionFixture) {
       schoolId: fixture.schoolId,
       mode: "offline",
       heldOn: fixture.heldOn,
+      startsAt: fixture.startsAt ?? "09:00",
       status,
       cancelledReason: status === "cancelled" ? "Sekolah meminta penjadwalan ulang" : null,
       perjadinId: fixture.perjadinId,
@@ -288,6 +319,12 @@ export type PerjadinFixture = {
   startsOn?: string;
   endsOn?: string;
   advanceIdr: number;
+  /**
+   * Where the trip goes. A Perjadin needs one, so `addPerjadin` builds a throwaway Cluster
+   * and Sub-Cluster when a test does not supply this — the Schools-belong-to-the-Sub-Cluster
+   * rule is the application's, not the database's, so an unrelated Sub-Cluster is a legal row.
+   */
+  subClusterId?: string;
   /** Staff. They are the PIC and, by the deferred foreign key, a member of their own Group. */
   picPersonId: string;
   /** Teaching Team, each carrying the Stream they cover. Staff never carry one. */
@@ -303,9 +340,32 @@ export type PerjadinFixture = {
  */
 export async function addPerjadin(fixture: PerjadinFixture) {
   return db.transaction(async (tx) => {
+    let subClusterId = fixture.subClusterId;
+    if (!subClusterId) {
+      const [cluster] = await tx
+        .insert(schema.cluster)
+        .values({
+          slug: `cluster-${randomUUID()}`,
+          name: "Cluster Perjalanan",
+          topic: "Mitigasi Bencana",
+          problem: "Peringatan dini banjir",
+        })
+        .returning();
+      const [subCluster] = await tx
+        .insert(schema.subCluster)
+        .values({
+          slug: `sub-cluster-${randomUUID()}`,
+          name: "Kelompok Sekolah Bandung",
+          clusterId: cluster!.id,
+        })
+        .returning();
+      subClusterId = subCluster!.id;
+    }
+
     const [perjadin] = await tx
       .insert(schema.perjadin)
       .values({
+        subClusterId,
         destination: fixture.destination ?? "Bandung",
         startsOn: fixture.startsOn ?? "2026-09-01",
         endsOn: fixture.endsOn ?? "2026-09-03",
@@ -430,6 +490,7 @@ export async function resetDatabase() {
       public."person",
       public."province",
       public."cluster",
+      public."sub_cluster",
       public."school",
       public."session",
       public."session_teacher",

@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { person } from "./people";
+import { subCluster } from "./reference";
 
 /**
  * Travel: the Perjadin, its Group, and the acquittal state.
@@ -42,6 +43,13 @@ export const perjadin = pgTable(
   "perjadin",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // Where the Perjadin goes: it fixes the Schools that may appear on the trip at all.
+    // NOT NULL immediately — no Perjadin exists in any live database, so there is nothing
+    // to backfill. `destination` beside it is free-text prose for the Surat Tugas and is
+    // deliberately not derived from this; see `docs/data-model.md`'s Travel section.
+    subClusterId: uuid("sub_cluster_id")
+      .notNull()
+      .references(() => subCluster.id),
     destination: text("destination").notNull(),
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),

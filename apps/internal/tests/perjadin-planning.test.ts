@@ -17,6 +17,7 @@ import {
   addPerson,
   addProvince,
   addSchool,
+  addSubCluster,
   addTransaction,
   constraintOf,
   resetDatabase,
@@ -44,21 +45,32 @@ async function professors() {
   ]);
 }
 
-/** Two Schools, so a trip can carry more than one and the per-School Sessions are visible. */
+/**
+ * Two Schools, so a trip can carry more than one and the per-School Sessions are visible.
+ * Both sit in one Sub-Cluster — a Perjadin goes to exactly one, and `planPerjadin` derives
+ * the trip's from its Schools, so a trip whose Schools disagree cannot be planned.
+ */
 async function twoSchools() {
   await addProvince("JB", "Jawa Barat");
   const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
+  const subCluster = await addSubCluster({
+    slug: "alpha-bandung",
+    name: "Kelompok Sekolah Bandung",
+    clusterId: cluster.id,
+  });
   return Promise.all([
     addSchool({
       slug: "sman-1",
       name: "SMAN 1 Bandung",
       clusterId: cluster.id,
+      subClusterId: subCluster.id,
       provinceCode: "JB",
     }),
     addSchool({
       slug: "sman-2",
       name: "SMAN 2 Bandung",
       clusterId: cluster.id,
+      subClusterId: subCluster.id,
       provinceCode: "JB",
     }),
   ]);
@@ -307,11 +319,18 @@ describe("Rencanakan Perjadin", () => {
    */
   it("is refused by perjadin_pic_is_a_group_member, and at COMMIT rather than at the insert", async () => {
     const pic = await staff();
+    const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
+    const subCluster = await addSubCluster({
+      slug: "alpha-bandung",
+      name: "Kelompok Sekolah Bandung",
+      clusterId: cluster.id,
+    });
     let insertSucceeded = false;
 
     const refusal = await db
       .transaction(async (tx) => {
         await tx.insert(schema.perjadin).values({
+          subClusterId: subCluster.id,
           destination: "Bandung",
           startsOn: "2026-09-01",
           endsOn: "2026-09-03",
@@ -434,6 +453,7 @@ describe("the Perjadin list and detail", () => {
       perjadinId: planned.perjadinId,
       mode: "offline",
       heldOn: "2026-09-02",
+      startsAt: "09:00",
     });
 
     const [trip] = await perjadinDirectory(pic);

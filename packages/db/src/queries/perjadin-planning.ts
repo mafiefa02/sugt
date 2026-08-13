@@ -1,7 +1,9 @@
 import type { Stream } from "@sugt/domain";
+import { inArray } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
+import { school } from "../schema/reference";
 import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 import { duplicatedTeachers, streamsUncovered, type PlannedTeacher } from "./group-rules";
@@ -29,6 +31,13 @@ export type PlannedSession = {
   schoolId: string;
   /** `YYYY-MM-DD`, and inside the trip's window — see the refusal below. */
   heldOn: string;
+  /**
+   * Local wall-clock start time (`HH:MM`), in the School's Time Zone. Optional here: the
+   * form that supplies a time per School is [#69](https://github.com/mafiefa02/sugt/issues/69),
+   * and until it lands every Session takes `DEFAULT_START_TIME`. `session.starts_at` is
+   * NOT NULL, so a value is always written.
+   */
+  startsAt?: string;
 };
 
 /**
@@ -79,6 +88,38 @@ export type PlanPerjadinResult =
       endsOn: string;
       offending: PlannedSession[];
     };
+
+/**
+ * The start time every planned Session takes until the form supplies one per School
+ * ([#69](https://github.com/mafiefa02/sugt/issues/69)). A placeholder, not a default worth
+ * keeping: `session.starts_at` is NOT NULL, so #67 needs a value to write, and #69/#72 make
+ * it real. A wall-clock `HH:MM` local to the School.
+ */
+const DEFAULT_START_TIME = "09:00";
+
+/**
+ * The one Sub-Cluster every School on a trip belongs to, which is the trip's own. Throws
+ * when the Schools name no Sub-Cluster or more than one — neither is a state an honest
+ * selection reaches once the Sub-Clusters are seeded, so it is an invariant, not a user
+ * error routed back to a field. `NO ACTION` on `school.sub_cluster_id` and the seed of
+ * [#73](https://github.com/mafiefa02/sugt/issues/73) are what make the single-value case
+ * the only one in practice.
+ */
+async function subClusterOfSchools(schoolIds: string[]): Promise<string> {
+  const rows = await db
+    .select({ subClusterId: school.subClusterId })
+    .from(school)
+    .where(inArray(school.id, schoolIds));
+
+  const subClusterIds = new Set(rows.map((row) => row.subClusterId));
+  const [subClusterId] = [...subClusterIds];
+  if (subClusterIds.size !== 1 || subClusterId == null) {
+    throw new Error(
+      "A Perjadin's Schools must share one Sub-Cluster. Seed the Sub-Clusters (#73) first.",
+    );
+  }
+  return subClusterId;
+}
 
 /**
  * Plan a Perjadin: the trip, its Group and one Session per School, in one transaction.
@@ -133,10 +174,20 @@ export async function planPerjadin(
     return { outcome: "session-outside-perjadin", ...window, offending };
   }
 
+  // A Perjadin goes to exactly one Sub-Cluster and every School it teaches at belongs to
+  // that Sub-Cluster (CONTEXT.md). The trip's Sub-Cluster is therefore its Schools', derived
+  // here rather than picked in the form — the Sub-Cluster-first planning flow is
+  // [#69](https://github.com/mafiefa02/sugt/issues/69). Until the Sub-Clusters are seeded
+  // ([#73](https://github.com/mafiefa02/sugt/issues/73)) no School has one, so this throws
+  // rather than inventing a value: `perjadin.sub_cluster_id` is NOT NULL and a trip whose
+  // Schools disagree about their Sub-Cluster is not a state any honest selection can reach.
+  const subClusterId = await subClusterOfSchools(input.sessions.map((planned) => planned.schoolId));
+
   const perjadinId = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(perjadin)
       .values({
+        subClusterId,
         destination: input.destination,
         startsOn: input.startsOn,
         endsOn: input.endsOn,
@@ -166,6 +217,7 @@ export async function planPerjadin(
         perjadinId: id,
         mode: "offline" as const,
         heldOn: planned.heldOn,
+        startsAt: planned.startsAt ?? DEFAULT_START_TIME,
       })),
     );
 
