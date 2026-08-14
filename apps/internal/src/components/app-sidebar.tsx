@@ -3,6 +3,7 @@
 import type { Role } from "@sugt/domain";
 import { cn } from "@sugt/ui/lib/utils";
 import {
+  Boxes,
   LayoutDashboard,
   LayoutGrid,
   Newspaper,
@@ -36,6 +37,7 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, staffOnly: false },
   { href: "/coverage", label: "Coverage", icon: LayoutGrid, staffOnly: false },
   { href: "/sekolah", label: "Direktori Sekolah", icon: School, staffOnly: false },
+  { href: "/kelompok-sekolah", label: "Kelompok Sekolah", icon: Boxes, staffOnly: false },
   { href: "/concerns", label: "Concerns", icon: TriangleAlert, staffOnly: false },
   { href: "/perjadin", label: "Perjadin", icon: Plane, staffOnly: false },
   { href: "/cerita", label: "Cerita", icon: Newspaper, staffOnly: true },
