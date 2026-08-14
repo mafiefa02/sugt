@@ -33,15 +33,7 @@ export default async function Page() {
           Belum ada data Sekolah. Jalankan seed data referensi.
         </p>
       ) : (
-        <CoverageList
-          clusters={clusters}
-          /**
-           * The counts and the selection are open to everyone signed in — ADR-0004,
-           * and why the query above applies no role check. Only the two **actions** a
-           * selection feeds are Staff, so only they are withheld.
-           */
-          canPlan={person.role === "Staff"}
-        />
+        <CoverageList clusters={clusters} />
       )}
     </div>
   );
