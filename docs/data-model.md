@@ -1436,8 +1436,8 @@ places:
    **arranged** Sessions by the days its `starts_on` moved, leaves delivered and cancelled ones
    where they are, and refuses whole a shrink that would strand an arranged Session — one
    transaction with the trip's own update. [#55](https://github.com/mafiefa02/sugt/issues/55)
-   carries it. The edit surface that drives it is not built yet; the cascade and its refusal
-   are, with a test.
+   carries it. The edit surface that drives it is the "Ubah tanggal" dialog on Detail Perjadin,
+   Staff-only; the cascade and its refusal are held by the query, with tests.
 
    **It shifts `held_on` and must never touch `starts_at`.** The offset is a whole number of
    days, and a trip sliding a week later does not change the hour a School is expecting
@@ -1445,8 +1445,9 @@ places:
 
 So an arranged offline Session can no longer be born outside its trip, nor moved outside
 it, nor left behind when the trip's own dates move — the cascade in path 3 shifts the
-arranged ones with it. Both halves of #28's invariant now hold at the data layer; what stays
-open is the edit surface that drives path 3, which is not built yet.
+arranged ones with it. Both halves of #28's invariant now hold, at the data layer and at the
+surface that drives it: Detail Perjadin's Staff-only "Ubah tanggal" dialog is what a person moves
+a trip through, and it reaches the cascade in path 3.
 
 **That a Perjadin's Sessions are at Schools of its Sub-Cluster.** `perjadin.sub_cluster_id` is
 NOT NULL and `school.sub_cluster_id` is NOT NULL, but nothing joins them. The composite-key

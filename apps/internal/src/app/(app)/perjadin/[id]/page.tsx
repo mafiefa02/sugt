@@ -1,3 +1,4 @@
+import { PerjadinDates } from "-/components/perjadin-dates";
 import { PerjadinEvaluationDialog } from "-/components/perjadin-evaluation-form";
 import { PerjadinGroup } from "-/components/perjadin-group";
 import { SessionStatusBadge } from "-/components/session-labels";
@@ -49,9 +50,18 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
           Perjadin
         </Link>
         <h1 className="mt-1 font-heading text-lg font-medium">{trip.destination}</h1>
-        <p className="text-sm text-muted-foreground tabular-nums">
-          {trip.startsOn} – {trip.endsOn}
-        </p>
+        {/*
+          The dates and, for Staff, the one write that corrects them. Moving the trip offset-shifts
+          its arranged Sessions; delivered and cancelled ones stay, and the times do not move.
+        */}
+        <div className="mt-0.5">
+          <PerjadinDates
+            perjadinId={trip.id}
+            startsOn={trip.startsOn}
+            endsOn={trip.endsOn}
+            canEdit={person.role === "Staff"}
+          />
+        </div>
         <p className="mt-3 text-sm text-muted-foreground">
           PIC: <span className="text-foreground">{trip.picFullName}</span>
         </p>

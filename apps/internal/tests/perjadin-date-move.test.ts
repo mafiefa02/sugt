@@ -70,6 +70,15 @@ async function heldOnOf(sessionId: string) {
   return row?.heldOn ?? null;
 }
 
+/** The `starts_at` a Session actually carries, read back rather than trusted. */
+async function startsAtOf(sessionId: string) {
+  const [row] = await db
+    .select({ startsAt: schema.session.startsAt })
+    .from(schema.session)
+    .where(eq(schema.session.id, sessionId));
+  return row?.startsAt ?? null;
+}
+
 /** The window a Perjadin actually carries, read back rather than trusted. */
 async function windowOf(perjadinId: string) {
   const [row] = await db
@@ -103,6 +112,32 @@ describe("Moving a Perjadin's dates", () => {
     expect(result).toEqual({ outcome: "moved", sessionsShifted: 1 });
     expect(await heldOnOf(session.id)).toBe("2026-09-09");
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-08", endsOn: "2026-09-10" });
+  });
+
+  it("moves held_on but never starts_at — the trip slides, the hour a School expects does not", async () => {
+    const pic = await staff();
+    const school = await oneSchool();
+    const perjadin = await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: 5_000_000,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-03",
+    });
+    // A time distinct from the fixture default, so pinning it after the move discriminates: a
+    // rewrite from anywhere would show up as "09:00" and pass a lazier assertion.
+    const session = await addOfflineSession({
+      schoolId: school.id,
+      heldOn: "2026-09-02",
+      startsAt: "13:30",
+      perjadinId: perjadin.id,
+    });
+
+    const result = await movePerjadinDates(pic, perjadin.id, "2026-09-08", "2026-09-10");
+
+    expect(result).toEqual({ outcome: "moved", sessionsShifted: 1 });
+    // The date moves with the trip; the time does not. A PG `time` column renders HH:MM:SS.
+    expect(await heldOnOf(session.id)).toBe("2026-09-09");
+    expect(await startsAtOf(session.id)).toBe("13:30:00");
   });
 
   it("leaves delivered and cancelled Sessions where they are", async () => {

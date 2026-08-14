@@ -4,8 +4,10 @@ import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import {
   filePerjadinEvaluation,
+  movePerjadinDates,
   replacePerjadinGroup,
   type FilePerjadinEvaluationResult,
+  type MovePerjadinDatesResult,
   type NewPerjadinEvaluation,
   type PlannedTeacher,
   type ReplaceGroupResult,
@@ -57,5 +59,29 @@ export async function filePerjadinEvaluationAction(
 
   const result = await filePerjadinEvaluation(person, input);
   if (result.outcome === "filed") revalidatePath(`/perjadin/${input.perjadinId}`);
+  return result;
+}
+
+/**
+ * **Correct a Perjadin's dates**, moving its arranged Sessions with them.
+ *
+ * Staff-only, so it is wrapped in `staffSurface` for the same reason `replacePerjadinGroupAction`
+ * is: `movePerjadinDates` throws `NotStaffError`, and a Server Action's error is sanitized on the
+ * way to the client, so the translation to a 403 has to happen here on the server.
+ *
+ * The cascade also rewrites `held_on` on the trip's arranged Sessions, which `/sesi/[id]` and
+ * `/sekolah/[slug]` render — but only `/perjadin/${perjadinId}` is revalidated, following the
+ * convention this file's first action states: a route's action revalidating some other route is a
+ * sign it is in the wrong file. Those pages re-read on their own next visit.
+ */
+export async function movePerjadinDatesAction(
+  perjadinId: string,
+  startsOn: string,
+  endsOn: string,
+): Promise<MovePerjadinDatesResult> {
+  const person = await requirePerson();
+
+  const result = await staffSurface(() => movePerjadinDates(person, perjadinId, startsOn, endsOn));
+  if (result.outcome === "moved") revalidatePath(`/perjadin/${perjadinId}`);
   return result;
 }
