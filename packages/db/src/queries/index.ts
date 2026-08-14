@@ -59,6 +59,7 @@ export {
   type StoryPhoto,
   type UpdateStoryInput,
 } from "./cerita";
+export { concerns, type Concern, type ConcernSource } from "./concerns";
 export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage";
 export {
   arrangeOnlineSessions,
