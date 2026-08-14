@@ -23,7 +23,7 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
         <h2 className="font-heading text-sm font-medium">Program secara keseluruhan</h2>
         <p className="mt-0.5 text-sm text-muted-foreground">Hitungan, bukan penilaian.</p>
 
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-border p-4">
             <p className="font-heading text-2xl font-semibold tabular-nums">
               {dashboard.schoolsReached}
@@ -35,6 +35,13 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
               {dashboard.deliveredTotal}
             </p>
             <p className="mt-0.5 text-sm text-muted-foreground">Sesi terlaksana</p>
+          </div>
+          <div className="rounded-lg border border-border p-4">
+            {/* Folded from `perCluster` — how many of the Clusters have any delivery yet. */}
+            <p className="font-heading text-2xl font-semibold tabular-nums">
+              {dashboard.perCluster.filter((entry) => entry.delivered > 0).length}
+            </p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Cluster sudah terjangkau</p>
           </div>
         </div>
 

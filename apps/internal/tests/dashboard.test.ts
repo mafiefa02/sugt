@@ -1,4 +1,5 @@
 import {
+  arrangeOnlineSession,
   isNotStaffError,
   markSessionDelivered,
   staffDashboard,
@@ -112,6 +113,32 @@ describe("teachingTeamDashboard", () => {
     expect(dashboard.upcoming.map((entry) => entry.sessionId)).toEqual([arranged.id]);
     expect(dashboard.activeTripCount).toBe(1);
   });
+
+  /**
+   * The ADR-0006 scenario the ticket names, and the one the delivered-only filter exists for: an
+   * **online** Session names its professor at *arrangement*, so its `session_teacher` row exists
+   * before any teaching has happened. Nothing is owed until it is delivered — dropping the filter
+   * would report three Class Records owed for teaching that has not happened, which this catches.
+   */
+  it("owes nothing for an arranged online Session that already names the professor", async () => {
+    const pic = await staff();
+    const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
+    const { school } = await oneSchool();
+    const arranged = await arrangeOnlineSession(pic, {
+      schoolId: school.id,
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+      picPersonId: pic.id,
+      teachers: [{ stream: "STEM", personId: bagus.id }],
+    });
+    if (arranged.outcome !== "arranged") throw new Error("unreachable");
+
+    const dashboard = await teachingTeamDashboard(bagus);
+
+    expect(dashboard.owed).toEqual([]);
+    // It is Bagus's upcoming Session, since it names him.
+    expect(dashboard.upcoming.map((entry) => entry.sessionId)).toEqual([arranged.sessionId]);
+  });
 });
 
 describe("staffDashboard", () => {
@@ -123,6 +150,27 @@ describe("staffDashboard", () => {
     const refusal = await staffDashboard(bagus).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);
+  });
+
+  /**
+   * The delivered-only rule on the PIC's side: an arranged online Session names its PIC at
+   * arrangement, so the PIC is on it before it has happened. No Session Record is owed until it is
+   * delivered — dropping the filter would report one for a visit that has not occurred.
+   */
+  it("does not owe a Session Record for an arranged Session the caller leads", async () => {
+    const pic = await staff();
+    const { school } = await oneSchool();
+    await arrangeOnlineSession(pic, {
+      schoolId: school.id,
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+      picPersonId: pic.id,
+      teachers: [],
+    });
+
+    const dashboard = await staffDashboard(pic);
+
+    expect(dashboard.owed).toEqual([]);
   });
 
   it("assembles the delivery picture, the outstanding Advance and the PIC's owed Records", async () => {
@@ -170,7 +218,6 @@ describe("staffDashboard", () => {
       receiptsSettled: 0,
       transactionCount: 1,
       remainderIdr: 4_000_000,
-      reportFiled: false,
     });
     expect(report?.reportDueOn).toBe("2026-09-05");
   });

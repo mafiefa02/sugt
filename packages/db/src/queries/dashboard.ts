@@ -212,11 +212,12 @@ export type PicReport = {
   transactionCount: number;
   /** Advance minus everything spent. Negative means the Group overspent. */
   remainderIdr: number;
-  /** Two days after the Group gets back — derived, never stored. */
+  /**
+   * Two days after the Group gets back — derived, never stored. Shown as an absolute date, not a
+   * countdown: the Report has a due date (DITSAMA's own), but the dashboard states it rather than
+   * counting down to it, so nothing here reads as overdue.
+   */
   reportDueOn: string;
-  /** Days left against that deadline in `Asia/Jakarta`, negative once passed. No gate, just a count. */
-  daysRemaining: number;
-  reportFiled: boolean;
 };
 
 /**
@@ -298,8 +299,8 @@ export async function staffDashboard(caller: Person): Promise<StaffDashboard> {
       )
       .orderBy(asc(session.heldOn), asc(session.id)),
     // Trips the caller is PIC of whose Report is not filed, with the acquittal figures the strip
-    // shows. `reportDueOn` and `daysRemaining` are derived here the way `perjadinAcquittal`
-    // derives them — two days after return, counted against today in Asia/Jakarta.
+    // shows. `reportDueOn` is derived here the way `perjadinAcquittal` derives it — two days after
+    // return — and stated as a date rather than counted down to, so nothing reads as overdue.
     db
       .select({
         perjadinId: perjadin.id,
@@ -322,16 +323,10 @@ export async function staffDashboard(caller: Person): Promise<StaffDashboard> {
           sql<number>`${perjadin.advanceIdr} - coalesce((select sum(tx.amount_idr) from ${transaction} tx where tx.perjadin_id = ${OUTER_PERJADIN_ID}), 0)`.mapWith(
             Number,
           ),
-        // `reportDueOn` and `daysRemaining` are derived the way `perjadinAcquittal` derives them:
-        // two calendar days after return, counted against today in Asia/Jakarta (DITSAMA's own
-        // zone — the deadline is theirs, not the School's). The day count is a trusted constant,
-        // rendered as a literal so `date + int` type-checks rather than binding an untyped param.
+        // Two calendar days after return, the way `perjadinAcquittal` derives it. The day count is
+        // a trusted constant rendered as a literal so `date + int` type-checks rather than binding
+        // an untyped param.
         reportDueOn: sql<string>`to_char(${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}, 'YYYY-MM-DD')`,
-        daysRemaining: sql<number>`(
-          ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}
-          - (now() at time zone 'Asia/Jakarta')::date
-        )`.mapWith(Number),
-        reportFiled: sql<boolean>`${perjadin.reportFiledAt} is not null`,
       })
       .from(perjadin)
       .where(and(eq(perjadin.picPersonId, caller.id), isNull(perjadin.reportFiledAt)))
