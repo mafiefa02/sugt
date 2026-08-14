@@ -20,9 +20,7 @@ import { LinkButton } from "@sugt/ui/components/link-button";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@sugt/ui/components/select";
@@ -193,21 +191,14 @@ function PerjadinPlanForm({
               <SelectValue placeholder="Pilih Kelompok Sekolah" />
             </SelectTrigger>
             <SelectContent>
-              {clusters
-                .filter((cluster) => cluster.subClusters.length > 0)
-                .map((cluster) => (
-                  <SelectGroup key={cluster.id}>
-                    <SelectLabel>{cluster.name}</SelectLabel>
-                    {cluster.subClusters.map((sub) => (
-                      <SelectItem
-                        key={sub.id}
-                        value={sub.id}
-                      >
-                        {sub.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
+              {[...subClusters].map(([id, sub]) => (
+                <SelectItem
+                  key={id}
+                  value={id}
+                >
+                  {sub.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
