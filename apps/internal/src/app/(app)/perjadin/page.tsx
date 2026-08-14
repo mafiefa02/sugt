@@ -25,13 +25,14 @@ export default async function Page() {
       <header className="border-b border-border px-7 py-5">
         <h1 className="font-heading text-lg font-medium">Perjadin</h1>
         <p className="text-sm text-muted-foreground">
-          Setiap perjalanan dinas, yang terbaru di atas. Perjadin direncanakan dari Coverage.
+          Setiap perjalanan dinas, yang terbaru di atas. Perjadin direncanakan dari menu Rencanakan
+          Perjadin.
         </p>
       </header>
 
       {trips.length === 0 ? (
         <p className="p-7 text-sm text-muted-foreground">
-          Belum ada Perjadin. Pilih Sekolah di Coverage untuk merencanakan yang pertama.
+          Belum ada Perjadin. Buka Rencanakan Perjadin untuk merencanakan yang pertama.
         </p>
       ) : (
         <ul className="border-t border-border">

@@ -5,14 +5,19 @@ import { person } from "../schema/people";
 import { school } from "../schema/reference";
 
 /**
- * The two lists every planning form picks from, and the Schools a Coverage selection names.
+ * The two rosters every planning form picks from, and the Schools a Coverage selection names.
  *
- * **This is the helper `./online-session-batch.ts` said this ticket would earn.** That
- * module's comment reads: *"The rosters will want an unexported helper the moment
+ * **`activeRosters` is the helper `./online-session-batch.ts` said this ticket would earn.**
+ * That module's comment reads: *"The rosters will want an unexported helper the moment
  * [#29](https://github.com/mafiefa02/sugt/issues/29) picks a Group from the same two lists.
  * The convention beside this module is that the **second** module wanting an expression is
  * what earns the helper, so it stays inline here and moves down then."* Rencanakan Perjadin
- * is that second module, so it moved down here.
+ * is that second module — it reads both rosters through `perjadinPlan` — so it moved down here.
+ *
+ * `selectedSchools` is Jadwalkan Sesi daring's alone now: Rencanakan Perjadin defaults its
+ * Schools from the picked Sub-Cluster ([#69](https://github.com/mafiefa02/sugt/issues/69))
+ * rather than from a Coverage selection, so it no longer names Schools by id. The helper
+ * stays because that one caller still does.
  *
  * **Nothing here is re-exported from `./index.ts`.** Convention 3 says nothing is exported
  * that a surface renders, and no surface renders these — they are shared SQL beneath two

@@ -111,7 +111,6 @@ export {
   planPerjadin,
   type PerjadinPlan,
   type PlannablePerson,
-  type PlannableSchool,
   type PlannedSession,
   type PlannedTeacher,
   type PlanPerjadinInput,

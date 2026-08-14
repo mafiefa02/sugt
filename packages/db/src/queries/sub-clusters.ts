@@ -353,3 +353,27 @@ export async function moveSchool(
     return { outcome: "moved" };
   });
 }
+
+/**
+ * The ids of the Schools eligible for a Perjadin against one Sub-Cluster.
+ *
+ * The rule ADR-0016 says cannot be a foreign key — *"every School a Perjadin teaches at
+ * belongs to that Perjadin's Sub-Cluster"* — is checked in `./perjadin-planning.ts` against
+ * this set, before a trip is written and while it can still be refused as a value. Rencanakan
+ * Perjadin is the one place that rule can be violated, since no write adds a School to an
+ * existing Perjadin.
+ *
+ * **Imported by that module directly and not re-exported from `./index.ts`.** No surface
+ * renders it — it is shared SQL beneath two modules, the case convention 3 makes room for,
+ * the same way `heldOnWithinPerjadin` sits in `./session-detail.ts` without joining the public
+ * surface. An id naming no Sub-Cluster returns an empty list, so every planned School reads as
+ * outside it and the trip is refused — the honest response to a hand-edited id, and the reason
+ * `planPerjadin` needs no separate `no-such-sub-cluster` outcome.
+ */
+export async function subClusterSchoolIds(subClusterId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: school.id })
+    .from(school)
+    .where(eq(school.subClusterId, subClusterId));
+  return rows.map((row) => row.id);
+}

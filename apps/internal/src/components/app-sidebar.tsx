@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Newspaper,
   Plane,
+  PlaneTakeoff,
   School,
   TriangleAlert,
   Users,
@@ -40,6 +41,15 @@ const NAV = [
   { href: "/kelompok-sekolah", label: "Kelompok Sekolah", icon: Boxes, staffOnly: false },
   { href: "/concerns", label: "Concerns", icon: TriangleAlert, staffOnly: false },
   { href: "/perjadin", label: "Perjadin", icon: Plane, staffOnly: false },
+  // Staff-only: this form writes the Advance, and a link to a screen that would refuse you is
+  // worse than no link. The trip starts here now, from a Sub-Cluster, rather than from a
+  // Coverage selection.
+  {
+    href: "/rencanakan-perjadin",
+    label: "Rencanakan Perjadin",
+    icon: PlaneTakeoff,
+    staffOnly: true,
+  },
   { href: "/cerita", label: "Cerita", icon: Newspaper, staffOnly: true },
   { href: "/orang", label: "Orang", icon: Users, staffOnly: false },
 ] as const;

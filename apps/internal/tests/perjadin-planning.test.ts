@@ -46,9 +46,10 @@ async function professors() {
 }
 
 /**
- * Two Schools, so a trip can carry more than one and the per-School Sessions are visible.
- * Both sit in one Sub-Cluster — a Perjadin goes to exactly one, and `planPerjadin` derives
- * the trip's from its Schools, so a trip whose Schools disagree cannot be planned.
+ * Two Schools in one Sub-Cluster, so a trip can carry more than one and the per-School
+ * Sessions are visible. A Perjadin goes to exactly one Sub-Cluster and `input.subClusterId`
+ * names it — the id is returned so a test can plan against it and so the not-in-this-one case
+ * has a Sub-Cluster to be outside of.
  */
 async function twoSchools() {
   await addProvince("JB", "Jawa Barat");
@@ -58,7 +59,7 @@ async function twoSchools() {
     name: "Kelompok Sekolah Bandung",
     clusterId: cluster.id,
   });
-  return Promise.all([
+  const schools = await Promise.all([
     addSchool({
       slug: "sman-1",
       name: "SMAN 1 Bandung",
@@ -74,6 +75,7 @@ async function twoSchools() {
       provinceCode: "JB",
     }),
   ]);
+  return { cluster, subCluster, schools };
 }
 
 /** Everything a valid trip needs, so each test below can spoil exactly one thing. */
@@ -81,19 +83,24 @@ async function validPlan(): Promise<{
   pic: Awaited<ReturnType<typeof staff>>;
   bagus: Awaited<ReturnType<typeof staff>>;
   sari: Awaited<ReturnType<typeof staff>>;
-  schools: Awaited<ReturnType<typeof twoSchools>>;
+  cluster: Awaited<ReturnType<typeof twoSchools>>["cluster"];
+  subCluster: Awaited<ReturnType<typeof twoSchools>>["subCluster"];
+  schools: Awaited<ReturnType<typeof twoSchools>>["schools"];
   input: PlanPerjadinInput;
 }> {
   const pic = await staff();
   const [bagus, sari] = await professors();
-  const schools = await twoSchools();
+  const { cluster, subCluster, schools } = await twoSchools();
 
   return {
     pic,
     bagus,
     sari,
+    cluster,
+    subCluster,
     schools,
     input: {
+      subClusterId: subCluster.id,
       destination: "Bandung",
       startsOn: "2026-09-01",
       endsOn: "2026-09-03",
@@ -103,9 +110,11 @@ async function validPlan(): Promise<{
         { personId: bagus.id, stream: "STEM" },
         { personId: sari.id, stream: "Research" },
       ],
+      // Each School its own date and time. These two share neither, which is the plain
+      // valid case every spoiling test starts from.
       sessions: [
-        { schoolId: schools[0].id, heldOn: "2026-09-01" },
-        { schoolId: schools[1].id, heldOn: "2026-09-03" },
+        { schoolId: schools[0].id, heldOn: "2026-09-01", startsAt: "09:00" },
+        { schoolId: schools[1].id, heldOn: "2026-09-03", startsAt: "09:00" },
       ],
     },
   };
@@ -133,6 +142,7 @@ async function sessionsOf(perjadinId: string) {
       id: schema.session.id,
       schoolId: schema.session.schoolId,
       heldOn: schema.session.heldOn,
+      startsAt: schema.session.startsAt,
       mode: schema.session.mode,
       status: schema.session.status,
     })
@@ -237,14 +247,14 @@ describe("Rencanakan Perjadin", () => {
 
     const result = await planPerjadin(pic, {
       ...input,
-      sessions: [{ schoolId: schools[0].id, heldOn: "2026-09-09" }],
+      sessions: [{ schoolId: schools[0].id, heldOn: "2026-09-09", startsAt: "09:00" }],
     });
 
     expect(result).toEqual({
       outcome: "session-outside-perjadin",
       startsOn: "2026-09-01",
       endsOn: "2026-09-03",
-      offending: [{ schoolId: schools[0].id, heldOn: "2026-09-09" }],
+      offending: [{ schoolId: schools[0].id, heldOn: "2026-09-09", startsAt: "09:00" }],
     });
     expect(await perjadinRows()).toEqual([]);
   });
@@ -255,12 +265,122 @@ describe("Rencanakan Perjadin", () => {
     const result = await planPerjadin(pic, {
       ...input,
       sessions: [
-        { schoolId: schools[0].id, heldOn: "2026-09-01" },
-        { schoolId: schools[1].id, heldOn: "2026-09-03" },
+        { schoolId: schools[0].id, heldOn: "2026-09-01", startsAt: "09:00" },
+        { schoolId: schools[1].id, heldOn: "2026-09-03", startsAt: "09:00" },
       ],
     });
 
     expect(result.outcome).toBe("planned");
+  });
+
+  /**
+   * The "Done when" criterion, made literal: one Session per kept School, each carrying its
+   * own date **and** its own start time, all inside the trip's range. The two differ in both,
+   * so a Session that took the wrong row's date or time would be visible.
+   */
+  it("writes one Session per kept School, each with its own held_on and starts_at", async () => {
+    const { pic, schools, input } = await validPlan();
+
+    const planned = await planPerjadin(pic, {
+      ...input,
+      sessions: [
+        { schoolId: schools[0].id, heldOn: "2026-09-01", startsAt: "08:30" },
+        { schoolId: schools[1].id, heldOn: "2026-09-02", startsAt: "13:00" },
+      ],
+    });
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const sessions = await sessionsOf(planned.perjadinId);
+    const bySchool = new Map(sessions.map((row) => [row.schoolId, row]));
+    expect(bySchool.get(schools[0].id)).toMatchObject({
+      heldOn: "2026-09-01",
+      startsAt: "08:30:00",
+    });
+    expect(bySchool.get(schools[1].id)).toMatchObject({
+      heldOn: "2026-09-02",
+      startsAt: "13:00:00",
+    });
+    // Both dates land inside [starts_on, ends_on], which is the range the write re-checks.
+    expect(sessions.every((row) => row.heldOn >= "2026-09-01" && row.heldOn <= "2026-09-03")).toBe(
+      true,
+    );
+  });
+
+  /**
+   * The Schools kept on a trip default to a Sub-Cluster's, and a School from another one is
+   * not reachable through the form — but ADR-0016 says this rule cannot be a foreign key, and
+   * planning is the one place it can be violated, so `planPerjadin` checks it and refuses the
+   * whole payload rather than writing a trip that reaches outside its Sub-Cluster. `addSchool`
+   * with no `subClusterId` builds its own throwaway Sub-Cluster, which is exactly the outsider.
+   */
+  it("refuses a School that is not in the chosen Sub-Cluster, and writes nothing", async () => {
+    const { pic, cluster, schools, input } = await validPlan();
+    const outsider = await addSchool({
+      slug: "sman-3",
+      name: "SMAN 3 Garut",
+      clusterId: cluster.id,
+      provinceCode: "JB",
+    });
+
+    const result = await planPerjadin(pic, {
+      ...input,
+      sessions: [
+        { schoolId: schools[0].id, heldOn: "2026-09-01", startsAt: "09:00" },
+        { schoolId: outsider.id, heldOn: "2026-09-02", startsAt: "09:00" },
+      ],
+    });
+
+    expect(result).toEqual({ outcome: "school-outside-sub-cluster", schoolIds: [outsider.id] });
+    expect(await perjadinRows()).toEqual([]);
+  });
+
+  /**
+   * The Group is in one place at a time. `session_one_school_at_a_time_per_perjadin` refuses
+   * two Schools on one date and one time at the database, but a named pair up front reads
+   * better than a constraint violation from inside the transaction — so the refusal names them
+   * and nothing is written.
+   */
+  it("refuses two Schools on the same date and the same time, and writes nothing", async () => {
+    const { pic, schools, input } = await validPlan();
+
+    const result = await planPerjadin(pic, {
+      ...input,
+      sessions: [
+        { schoolId: schools[0].id, heldOn: "2026-09-02", startsAt: "09:00" },
+        { schoolId: schools[1].id, heldOn: "2026-09-02", startsAt: "09:00" },
+      ],
+    });
+
+    expect(result).toEqual({
+      outcome: "schools-collide",
+      schoolIds: [schools[0].id, schools[1].id],
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+    });
+    expect(await perjadinRows()).toEqual([]);
+  });
+
+  /**
+   * The case that looks illegal and is not: two Schools on the **same date** at **different
+   * times** — morning at one, afternoon at another — which is what the per-School start time
+   * exists to serve. It plans, and both Sessions are written.
+   */
+  it("accepts two Schools on the same date at different times", async () => {
+    const { pic, schools, input } = await validPlan();
+
+    const planned = await planPerjadin(pic, {
+      ...input,
+      sessions: [
+        { schoolId: schools[0].id, heldOn: "2026-09-02", startsAt: "09:00" },
+        { schoolId: schools[1].id, heldOn: "2026-09-02", startsAt: "14:00" },
+      ],
+    });
+
+    expect(planned.outcome).toBe("planned");
+    if (planned.outcome !== "planned") return;
+    const sessions = await sessionsOf(planned.perjadinId);
+    expect(sessions).toHaveLength(2);
+    expect(sessions.map((row) => row.startsAt).sort()).toEqual(["09:00:00", "14:00:00"]);
   });
 
   it("refuses a trip that ends before it starts, and writes nothing", async () => {
@@ -389,7 +509,9 @@ describe("the Perjadin list and detail", () => {
       destination: "Cirebon",
       startsOn: "2026-10-01",
       endsOn: "2026-10-02",
-      sessions: [{ schoolId: input.sessions[0]!.schoolId, heldOn: "2026-10-01" }],
+      sessions: [
+        { schoolId: input.sessions[0]!.schoolId, heldOn: "2026-10-01", startsAt: "09:00" },
+      ],
     });
 
     const trips = await perjadinDirectory(bagus);
@@ -440,7 +562,7 @@ describe("the Perjadin list and detail", () => {
     const { pic, schools, input } = await validPlan();
     const planned = await planPerjadin(pic, {
       ...input,
-      sessions: [{ schoolId: schools[0]!.id, heldOn: "2026-09-01" }],
+      sessions: [{ schoolId: schools[0]!.id, heldOn: "2026-09-01", startsAt: "09:00" }],
     });
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
     await cancelSession(

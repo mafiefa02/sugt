@@ -1,43 +1,42 @@
 import type { Stream } from "@sugt/domain";
-import { inArray } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
-import { school } from "../schema/reference";
 import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 import { duplicatedTeachers, streamsUncovered, type PlannedTeacher } from "./group-rules";
-import { activeRosters, selectedSchools, type RosterPerson, type SelectedSchool } from "./rosters";
+import { activeRosters, type RosterPerson } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
+import { subClusterBoard, subClusterSchoolIds, type ClusterWithSubClusters } from "./sub-clusters";
 
 /**
  * **Rencanakan Perjadin** — the form that plans a trip, and the write that brings the
- * Perjadin, its Group and one Session per School into existence together.
+ * Perjadin, its Group and one Session per kept School into existence together.
  *
  * Staff-only, by the surface list and by ADR-0004 alike: this one writes the Advance, so
  * both of `./staff-only.ts`'s two reasons apply rather than only the second.
  *
  * **The form is deliberately dumb** — no ranking, no suggestions, no coverage data inside
- * it. `docs/product.md` is explicit that the context comes from where you started: Staff
- * select Schools on Coverage having just read the delivered counts, and the form takes the
- * selection from there.
+ * it. `docs/product.md` is explicit that it is "not a planning aid". The trip starts from a
+ * **Sub-Cluster**, whose Schools it defaults to and lets the planner drop one at a time; the
+ * Sub-Cluster says which Schools are eligible, the plan says which are visited this time.
  */
 
 export type { PlannedTeacher };
 
-/** One School on the trip, and the day the Group teaches there. */
+/** One School kept on the trip, the day the Group teaches there, and the hour it starts. */
 export type PlannedSession = {
   schoolId: string;
   /** `YYYY-MM-DD`, and inside the trip's window — see the refusal below. */
   heldOn: string;
   /**
-   * Local wall-clock start time (`HH:MM`), in the School's Time Zone. Optional here: the
-   * form that supplies a time per School is [#69](https://github.com/mafiefa02/sugt/issues/69),
-   * and until it lands every Session takes `DEFAULT_START_TIME`. `session.starts_at` is
-   * NOT NULL, so a value is always written.
+   * Local wall-clock start time (`HH:MM`), in the School's Time Zone. Each kept School gets
+   * its own, because the Group teaches across several days and morning-at-one /
+   * afternoon-at-another is exactly what the start time is for — so two Schools may share a
+   * date, but not a date *and* a time. `session.starts_at` is NOT NULL.
    */
-  startsAt?: string;
+  startsAt: string;
 };
 
 /**
@@ -53,6 +52,13 @@ export type PlannedSession = {
  * foreign key below a thing a form could forget.
  */
 export type PlanPerjadinInput = {
+  /**
+   * The Sub-Cluster the trip goes to. It decides which Schools may appear at all, and is
+   * `perjadin.sub_cluster_id` — written straight through rather than derived, since the form
+   * now picks it first. `destination` is separate free-text prose and is **not** derived from
+   * its name (`docs/data-model.md`, Travel).
+   */
+  subClusterId: string;
   destination: string;
   startsOn: string;
   endsOn: string;
@@ -87,51 +93,66 @@ export type PlanPerjadinResult =
       startsOn: string;
       endsOn: string;
       offending: PlannedSession[];
-    };
+    }
+  /**
+   * A School planned onto the trip that does not belong to its Sub-Cluster. The rule
+   * ADR-0016 explains cannot be a foreign key, checked here because this is the one place it
+   * can be violated. Not reachable through the form — its Schools all come from the picked
+   * Sub-Cluster — and refused anyway, for the whole payload, by naming the offending Schools.
+   */
+  | { outcome: "school-outside-sub-cluster"; schoolIds: string[] }
+  /**
+   * Two Schools planned on the same date **and** the same time. The Group cannot be in two
+   * places, and `session_one_school_at_a_time_per_perjadin` refuses it at the database — but a
+   * constraint violation from inside the transaction is a worse message than a named pair, so
+   * it is caught up front and the index is left as the backstop. Two Schools sharing a *date*
+   * (different times) is legal and never reaches this.
+   */
+  | { outcome: "schools-collide"; schoolIds: string[]; heldOn: string; startsAt: string };
 
 /**
- * The start time every planned Session takes until the form supplies one per School
- * ([#69](https://github.com/mafiefa02/sugt/issues/69)). A placeholder, not a default worth
- * keeping: `session.starts_at` is NOT NULL, so #67 needs a value to write, and #69/#72 make
- * it real. A wall-clock `HH:MM` local to the School.
+ * The first pair of Schools planned on the same date **and** the same time, or `null` when
+ * none share both. Checked against the payload alone — `planPerjadin` creates a fresh
+ * Perjadin, so there are no earlier Sessions to read, and the index keys on
+ * `(perjadin_id, held_on, starts_at)` with no `school_id`, so a date+time bucket holding two
+ * Schools is the whole violation.
+ *
+ * The comparison is on the payload strings as the form emits them (`HH:MM`). The database is
+ * the backstop for anything non-canonical a raw caller might send (`09:00` versus `09:00:00`,
+ * which Postgres reads as one time and a string compare does not).
  */
-const DEFAULT_START_TIME = "09:00";
-
-/**
- * The one Sub-Cluster every School on a trip belongs to, which is the trip's own. Throws
- * when the Schools name no Sub-Cluster or more than one — neither is a state an honest
- * selection reaches once the Sub-Clusters are seeded, so it is an invariant, not a user
- * error routed back to a field. `NO ACTION` on `school.sub_cluster_id` and the seed of
- * [#73](https://github.com/mafiefa02/sugt/issues/73) are what make the single-value case
- * the only one in practice.
- */
-async function subClusterOfSchools(schoolIds: string[]): Promise<string> {
-  const rows = await db
-    .select({ subClusterId: school.subClusterId })
-    .from(school)
-    .where(inArray(school.id, schoolIds));
-
-  const subClusterIds = new Set(rows.map((row) => row.subClusterId));
-  const [subClusterId] = [...subClusterIds];
-  if (subClusterIds.size !== 1 || subClusterId == null) {
-    throw new Error(
-      "A Perjadin's Schools must share one Sub-Cluster. Seed the Sub-Clusters (#73) first.",
-    );
+function collidingSchools(sessions: PlannedSession[]): {
+  schoolIds: string[];
+  heldOn: string;
+  startsAt: string;
+} | null {
+  const seen = new Map<string, string>();
+  for (const planned of sessions) {
+    const slot = `${planned.heldOn} ${planned.startsAt}`;
+    const already = seen.get(slot);
+    if (already !== undefined && already !== planned.schoolId) {
+      return {
+        schoolIds: [already, planned.schoolId],
+        heldOn: planned.heldOn,
+        startsAt: planned.startsAt,
+      };
+    }
+    seen.set(slot, planned.schoolId);
   }
-  return subClusterId;
+  return null;
 }
 
 /**
- * Plan a Perjadin: the trip, its Group and one Session per School, in one transaction.
+ * Plan a Perjadin: the trip, its Group and one Session per kept School, in one transaction.
  *
  * **Creating the Perjadin is what arranges its Sessions**, per ADR-0006 — there are no
  * planned rows waiting to be filled in, so this form is the arranging and there is no
  * second step. The three writes are one act and commit together.
  *
  * Everything the application has to check is checked **before** the transaction opens.
- * That is not an optimisation: each of these is a rule the database cannot hold, so
- * finding out inside the transaction would mean rolling back a trip somebody typed rather
- * than telling them which field is wrong.
+ * That is not an optimisation: each of these is a rule the database cannot hold (or a worse
+ * message than the one that can), so finding out inside the transaction would mean rolling
+ * back a trip somebody typed rather than telling them which field is wrong.
  *
  * What is **not** checked here is checked at the database and left there. The PIC being
  * Staff is `perjadin_pic_is_staff`; a Session being offline and carrying its Perjadin is
@@ -174,20 +195,27 @@ export async function planPerjadin(
     return { outcome: "session-outside-perjadin", ...window, offending };
   }
 
-  // A Perjadin goes to exactly one Sub-Cluster and every School it teaches at belongs to
-  // that Sub-Cluster (CONTEXT.md). The trip's Sub-Cluster is therefore its Schools', derived
-  // here rather than picked in the form — the Sub-Cluster-first planning flow is
-  // [#69](https://github.com/mafiefa02/sugt/issues/69). Until the Sub-Clusters are seeded
-  // ([#73](https://github.com/mafiefa02/sugt/issues/73)) no School has one, so this throws
-  // rather than inventing a value: `perjadin.sub_cluster_id` is NOT NULL and a trip whose
-  // Schools disagree about their Sub-Cluster is not a state any honest selection can reach.
-  const subClusterId = await subClusterOfSchools(input.sessions.map((planned) => planned.schoolId));
+  // ADR-0016's rule that cannot be a foreign key: every School a Perjadin teaches at belongs
+  // to its Sub-Cluster. Checked against the Sub-Cluster's eligible set — read from
+  // `./sub-clusters.ts` rather than fetched here again — and refused for the whole payload.
+  // An unknown Sub-Cluster returns an empty set, so its every School reads as outside it.
+  const eligible = new Set(await subClusterSchoolIds(input.subClusterId));
+  const outside = input.sessions
+    .map((planned) => planned.schoolId)
+    .filter((schoolId) => !eligible.has(schoolId));
+  if (outside.length > 0) return { outcome: "school-outside-sub-cluster", schoolIds: outside };
+
+  // The Group is in one place at a time. Two Schools on one date and one time is physically
+  // impossible; `session_one_school_at_a_time_per_perjadin` is the backstop, and this names
+  // the pair up front rather than surfacing a constraint violation from inside the write.
+  const collision = collidingSchools(input.sessions);
+  if (collision) return { outcome: "schools-collide", ...collision };
 
   const perjadinId = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(perjadin)
       .values({
-        subClusterId,
+        subClusterId: input.subClusterId,
         destination: input.destination,
         startsOn: input.startsOn,
         endsOn: input.endsOn,
@@ -217,7 +245,7 @@ export async function planPerjadin(
         perjadinId: id,
         mode: "offline" as const,
         heldOn: planned.heldOn,
-        startsAt: planned.startsAt ?? DEFAULT_START_TIME,
+        startsAt: planned.startsAt,
       })),
     );
 
@@ -227,15 +255,17 @@ export async function planPerjadin(
   return { outcome: "planned", perjadinId };
 }
 
-/** A School the form is planning a Session for. */
-export type PlannableSchool = SelectedSchool;
-
 /** Somebody the form's pickers can name. */
 export type PlannablePerson = RosterPerson;
 
 /** What Rencanakan Perjadin renders before anything is written. */
 export type PerjadinPlan = {
-  schools: PlannableSchool[];
+  /**
+   * Every Cluster and its Sub-Clusters, each with the Schools currently in it — the shape the
+   * Kelompok Sekolah screen already reads. The form picks a Sub-Cluster from these, then
+   * defaults the trip to its Schools.
+   */
+  clusters: ClusterWithSubClusters[];
   /** Staff, for the PIC. */
   staff: PlannablePerson[];
   /** Teaching Team, for the Group. */
@@ -243,21 +273,18 @@ export type PerjadinPlan = {
 };
 
 /**
- * The form's payload.
+ * The form's payload: every Sub-Cluster to pick from, and the two rosters.
  *
- * Two statements rather than one, and the same reading of convention 3 that Jadwalkan Sesi
- * daring settled: Schools and People are unrelated aggregates with no join to assemble, so
- * the single-statement form would be a `union all` stapling them together behind a
- * placeholder column. The screen still makes one call and assembles nothing. `Promise.all`
- * keeps the two concurrent.
- *
- * Both halves come from `./rosters.ts`, which Jadwalkan Sesi daring wrote first and this
- * module is the second caller of — the second is what earns the helper.
+ * **Reuses `subClusterBoard`** (from #68) rather than assembling its own Sub-Cluster read —
+ * the second module wanting an expression is what earns the helper, the convention beside
+ * `@sugt/db`, and this is that second caller. The rosters come from `./rosters.ts`, whose
+ * `activeRosters` still has its two callers. The screen makes one call and assembles nothing;
+ * `Promise.all` keeps the two concurrent.
  */
-export async function perjadinPlan(caller: Person, schoolIds: string[]): Promise<PerjadinPlan> {
+export async function perjadinPlan(caller: Person): Promise<PerjadinPlan> {
   requireStaff(caller);
 
-  const [schools, rosters] = await Promise.all([selectedSchools(schoolIds), activeRosters()]);
+  const [clusters, rosters] = await Promise.all([subClusterBoard(caller), activeRosters()]);
 
-  return { schools, ...rosters };
+  return { clusters, ...rosters };
 }
