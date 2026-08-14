@@ -40,7 +40,7 @@ The partial `person_email_key` and the four hand-declared
 [#27](https://github.com/mafiefa02/sugt/issues/27) wrote because Jadwalkan Sesi daring is the
 screen that makes it necessary. The claim this list held against that index — _"the new partial
 index actually rejecting a second online Session for one School on one day"_ — was checked
-rather than assumed: `apps/internal/tests/online-session-batch.test.ts` drives it at the
+rather than assumed: `apps/internal/tests/arrange-online-session.test.ts` drives it at the
 database, in both the ways it is partial and in both directions. All three were checked against
 a real Postgres the way the rest of this document was.
 

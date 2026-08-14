@@ -130,6 +130,13 @@ export async function arrangeOnlineSession(
 /** A School the screen can arrange a Session at, as a picker or a heading names it. */
 export type SchoolOption = SelectedSchool;
 
+/** The three columns a `SchoolOption` renders, selected the same way by both reads below. */
+const SCHOOL_OPTION_COLUMNS = {
+  id: school.id,
+  name: school.name,
+  kabupatenKota: school.kabupatenKota,
+};
+
 /** Somebody a picker on this screen can name — the PIC, or a Teaching Team member per Stream. */
 export type ArrangePerson = RosterPerson;
 
@@ -145,10 +152,7 @@ export type ArrangeOnlineSessionForm = {
 
 /** Every School, in name order, for the standalone screen's School picker. */
 async function pickableSchools(): Promise<SchoolOption[]> {
-  return db
-    .select({ id: school.id, name: school.name, kabupatenKota: school.kabupatenKota })
-    .from(school)
-    .orderBy(asc(school.name));
+  return db.select(SCHOOL_OPTION_COLUMNS).from(school).orderBy(asc(school.name));
 }
 
 /**
@@ -184,10 +188,7 @@ export async function arrangeOnlineSessionAt(
 ): Promise<ArrangeOnlineSessionAt | null> {
   requireStaff(caller);
 
-  const [row] = await db
-    .select({ id: school.id, name: school.name, kabupatenKota: school.kabupatenKota })
-    .from(school)
-    .where(eq(school.slug, slug));
+  const [row] = await db.select(SCHOOL_OPTION_COLUMNS).from(school).where(eq(school.slug, slug));
   if (!row) return null;
 
   const rosters = await activeRosters();

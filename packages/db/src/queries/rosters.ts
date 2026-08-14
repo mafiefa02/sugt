@@ -7,12 +7,10 @@ import { school } from "../schema/reference";
 /**
  * The two lists every planning form picks from, and the Schools a Coverage selection names.
  *
- * **This is the helper `./online-session-batch.ts` said this ticket would earn.** That
- * module's comment reads: *"The rosters will want an unexported helper the moment
- * [#29](https://github.com/mafiefa02/sugt/issues/29) picks a Group from the same two lists.
- * The convention beside this module is that the **second** module wanting an expression is
- * what earns the helper, so it stays inline here and moves down then."* Rencanakan Perjadin
- * is that second module, so it moved down here.
+ * **This helper was earned by the second module wanting it.** Jadwalkan Sesi daring picked the
+ * two lists inline first; Rencanakan Perjadin ([#29](https://github.com/mafiefa02/sugt/issues/29))
+ * is the second module to want them, and the convention beside `@sugt/db` is that the second is
+ * what earns a shared helper — so they moved down here.
  *
  * **Nothing here is re-exported from `./index.ts`.** Convention 3 says nothing is exported
  * that a surface renders, and no surface renders these — they are shared SQL beneath two

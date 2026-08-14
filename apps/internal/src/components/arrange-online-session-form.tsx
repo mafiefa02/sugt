@@ -35,13 +35,12 @@ function ArrangeOnlineSessionForm({
   staff,
   teachingTeam,
 }: {
-  /** Detail Sekolah pins the School; omit for the standalone picker. */
-  school?: SchoolOption;
-  /** The standalone screen's picker; omit when a School is pinned. */
-  schools?: SchoolOption[];
   staff: ArrangePerson[];
   teachingTeam: ArrangePerson[];
-}) {
+} & (
+  | /** Detail Sekolah pins the School. */ { school: SchoolOption; schools?: never }
+  | /** The standalone screen offers a picker. */ { school?: never; schools: SchoolOption[] }
+)) {
   const router = useRouter();
   const [schoolId, setSchoolId] = useState(school?.id ?? "");
   const [heldOn, setHeldOn] = useState("");

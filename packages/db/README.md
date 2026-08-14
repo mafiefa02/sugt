@@ -107,6 +107,6 @@ in this package — every Staff-only query taking the authenticated Person and r
 non-Staff caller. It and the `Caller` union arrived with the query layer; this section said
 they were still to come until then.
 
-That matters most on a **write**, and `arrangeOnlineSessions` is the first. A Next.js layout
+That matters most on a **write**, and `arrangeOnlineSession` is the first. A Next.js layout
 does not run before a Server Action, so the app's own signed-in check protects pages and
 leaves every write open — the guard in this package is the one that closes it.
