@@ -3,8 +3,12 @@ import { requirePerson } from "-/lib/person";
 import { coverage } from "@sugt/db/queries";
 
 /**
- * **Coverage** — the landing screen for trip planning, and the first real read
- * through `@sugt/db`'s query layer.
+ * **Coverage** — a read surface answering "where are we overall", and the first real
+ * read through `@sugt/db`'s query layer. Trip planning no longer starts here: it moved
+ * to its own screen once a Perjadin came to be planned around a Sub-Cluster.
+ *
+ * The counts are open to everyone signed in — ADR-0004 — which is why the query below
+ * applies no role check.
  *
  * One `requirePerson()`, one query, one payload. The Person is not re-resolved
  * anywhere below: `requirePerson()` shares its memoised read with the signed-in
@@ -33,15 +37,7 @@ export default async function Page() {
           Belum ada data Sekolah. Jalankan seed data referensi.
         </p>
       ) : (
-        <CoverageList
-          clusters={clusters}
-          /**
-           * The counts and the selection are open to everyone signed in — ADR-0004,
-           * and why the query above applies no role check. Only the two **actions** a
-           * selection feeds are Staff, so only they are withheld.
-           */
-          canPlan={person.role === "Staff"}
-        />
+        <CoverageList clusters={clusters} />
       )}
     </div>
   );
