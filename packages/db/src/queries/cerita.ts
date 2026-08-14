@@ -296,3 +296,24 @@ export async function withdrawStory(caller: Person, id: string): Promise<void> {
   requireStaff(caller);
   await db.update(story).set({ publishedAt: null, updatedAt: new Date() }).where(eq(story.id, id));
 }
+
+/** The two slugs a publish or withdrawal has to revalidate on `@sugt/public`: the Story's own and its School's. */
+export type StoryPublicTargets = { slug: string; schoolSlug: string };
+
+/**
+ * The public path segments a Story's revalidation needs — its own slug and its School's — read in
+ * one join so the publish flow does not carry the School slug from the editor. `null` when the id
+ * names no Story. Staff-only, like everything that reaches a publish.
+ */
+export async function storyPublicTargets(
+  caller: Person,
+  id: string,
+): Promise<StoryPublicTargets | null> {
+  requireStaff(caller);
+  const [row] = await db
+    .select({ slug: story.slug, schoolSlug: school.slug })
+    .from(story)
+    .innerJoin(school, eq(school.id, story.schoolId))
+    .where(eq(story.id, id));
+  return row ?? null;
+}

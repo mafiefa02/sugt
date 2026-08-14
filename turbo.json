@@ -12,7 +12,11 @@
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
         "SUPABASE_URL",
-        "SUPABASE_SERVICE_ROLE_KEY"
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "AGGREGATES_SECRET",
+        "REVALIDATE_SECRET",
+        "INTERNAL_APP_URL",
+        "PUBLIC_APP_URL"
       ]
     },
     "typecheck": {
@@ -24,7 +28,11 @@
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
         "SUPABASE_URL",
-        "SUPABASE_SERVICE_ROLE_KEY"
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "AGGREGATES_SECRET",
+        "REVALIDATE_SECRET",
+        "INTERNAL_APP_URL",
+        "PUBLIC_APP_URL"
       ]
     },
     "dev": {
@@ -37,7 +45,11 @@
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
         "SUPABASE_URL",
-        "SUPABASE_SERVICE_ROLE_KEY"
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "AGGREGATES_SECRET",
+        "REVALIDATE_SECRET",
+        "INTERNAL_APP_URL",
+        "PUBLIC_APP_URL"
       ]
     }
   }

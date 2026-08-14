@@ -38,6 +38,16 @@ export default defineConfig({
       BETTER_AUTH_URL: "http://localhost:3001",
       GOOGLE_CLIENT_ID: "test-google-client-id",
       GOOGLE_CLIENT_SECRET: "test-google-client-secret",
+      /**
+       * The aggregates routes build public photo URLs from `SUPABASE_URL` and check the bearer
+       * against `AGGREGATES_SECRET`; the revalidation call posts to `PUBLIC_APP_URL` with
+       * `REVALIDATE_SECRET`. Values, not secrets — the fetch to `PUBLIC_APP_URL` is stubbed at the
+       * network boundary the same way Google's token endpoint is.
+       */
+      SUPABASE_URL: "https://test-project.supabase.co",
+      AGGREGATES_SECRET: "test-aggregates-secret",
+      REVALIDATE_SECRET: "test-revalidate-secret",
+      PUBLIC_APP_URL: "http://localhost:3000",
     },
   },
 });

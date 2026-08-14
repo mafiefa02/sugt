@@ -40,7 +40,7 @@ export function proxy(request: NextRequest) {
  *
  *   - `/f/**` — the Participant Feedback handler. Reached by a **short-lived token**
  *     in the URL, by a Participant who has no account and never will.
- *   - `/api/aggregates/**` — the three routes the public site reads. They authenticate
+ *   - `/api/aggregates/**` — the four routes the public site reads. They authenticate
  *     with a **shared secret** in a header, not a session.
  */
 export const config = {
