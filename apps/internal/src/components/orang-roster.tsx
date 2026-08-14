@@ -62,7 +62,7 @@ function OrangRoster({ people, canWrite }: { people: RosterEntry[]; canWrite: bo
               <PersonRow
                 key={entry.id}
                 entry={entry}
-                canWrite={false}
+                canWrite={canWrite}
               />
             ))}
         </TableBody>
@@ -85,20 +85,32 @@ function OrangRoster({ people, canWrite }: { people: RosterEntry[]; canWrite: bo
   );
 }
 
-/** One row. A revoked row (`canWrite` forced false by the caller) shows no revoke control. */
+/**
+ * One row. `canWrite` is whether the viewer is Staff — it decides whether the actions column
+ * exists at all, so every row a Staff member sees keeps the column count of the header. The
+ * revoke button inside it shows only on an active row: a revoked one is already off.
+ */
 function PersonRow({ entry, canWrite }: { entry: RosterEntry; canWrite: boolean }) {
   return (
     <TableRow className={entry.active ? undefined : "text-muted-foreground"}>
       <TableCell className="font-medium">{entry.fullName}</TableCell>
       <TableCell className="text-muted-foreground">{entry.email}</TableCell>
       <TableCell>
-        <span className="inline-flex items-center gap-1.5">
+        {/*
+          The row says whether the role is fixed. It is write-once once a Person is used — the
+          database refuses the change — so a used row shows a lock and an unused one says, in the
+          title, that the role can still change. Correcting a role either way is revoke-and-re-add,
+          never an in-place edit the database would reject.
+        */}
+        <span
+          className="inline-flex items-center gap-1.5"
+          title={
+            entry.used
+              ? "Peran terkunci karena sudah dipakai"
+              : "Peran masih bisa diubah dengan menonaktifkan lalu menambahkan ulang"
+          }
+        >
           {entry.role}
-          {/*
-            The lock is the whole of what the row says about role. It is write-once once a Person
-            is used — the database refuses the change — so the screen shows the lock rather than an
-            edit it would reject. Correcting a role is revoking and re-adding.
-          */}
           {entry.used && (
             <Lock
               className="size-3.5 text-muted-foreground"
@@ -112,7 +124,7 @@ function PersonRow({ entry, canWrite }: { entry: RosterEntry; canWrite: boolean 
       </TableCell>
       {canWrite && (
         <TableCell className="text-right">
-          <RevokeButton personId={entry.id} />
+          {entry.active && <RevokeButton personId={entry.id} />}
         </TableCell>
       )}
     </TableRow>
@@ -175,6 +187,13 @@ function AddPersonForm() {
 
   function submit() {
     if (!canSubmit) return;
+
+    // Checked here so the message lands before a round trip, and again in `addPerson` so it is a
+    // rule rather than a convenience. A Teaching Team member needs no particular domain.
+    if (role === "Staff" && !email.trim().toLowerCase().endsWith(STAFF_EMAIL_DOMAIN)) {
+      setError(MESSAGES["staff-needs-domain"]);
+      return;
+    }
 
     startSaving(async () => {
       const result = await addPersonAction({ fullName, email, role });
