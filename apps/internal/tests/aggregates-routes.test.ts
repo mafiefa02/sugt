@@ -115,6 +115,8 @@ describe("the aggregates gate", () => {
     await addStoryPhotos(pic, s.id, [
       { storagePath: "story/d/1.jpg", contentType: "image/jpeg", byteSize: 1, caption: "Satu" },
     ]);
+    const editor = await storyForEditor(pic, s.id);
+    await setStoryCover(pic, s.id, editor!.photos[0]!.id); // a Story with photos needs a cover to publish
     await publishStory(pic, s.id);
 
     const ok = await storyRoute(authed("/api/aggregates/stories/detail"), {

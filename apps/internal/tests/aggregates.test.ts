@@ -239,13 +239,16 @@ describe("the Stories payloads", () => {
       body: "Isi lengkap cerita.",
       coverPhotoPath: "story/g/1.jpg",
     });
-    // Ordered by uploaded_at then id, the same order the editor and schema fix.
-    expect(detail!.gallery.map((p) => p.storagePath)).toEqual([
-      "story/g/1.jpg",
-      "story/g/2.jpg",
-      "story/g/3.jpg",
-    ]);
-    expect(detail!.gallery.map((p) => p.caption)).toEqual(["Satu", null, "Tiga"]);
+    // Ordered by uploaded_at then id — the one insert shares a timestamp, so the id tie-break
+    // orders it, which is exactly the order the editor reads too. Assert against that rather than
+    // insertion order, which the random ids do not follow.
+    const ordered = editor!.photos.map((p) => p.storagePath);
+    expect(detail!.gallery.map((p) => p.storagePath)).toEqual(ordered);
+    expect(new Set(detail!.gallery.map((p) => p.storagePath))).toEqual(
+      new Set(["story/g/1.jpg", "story/g/2.jpg", "story/g/3.jpg"]),
+    );
+    expect(detail!.gallery.find((p) => p.storagePath === "story/g/1.jpg")!.caption).toBe("Satu");
+    expect(detail!.gallery.find((p) => p.storagePath === "story/g/2.jpg")!.caption).toBeNull();
   });
 
   it("returns null for a slug that names no Story", async () => {
