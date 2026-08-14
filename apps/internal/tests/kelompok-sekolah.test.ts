@@ -3,9 +3,9 @@ import {
   createSubCluster,
   deleteSubCluster,
   isNotStaffError,
-  kelompokSekolah,
   moveSchool,
   renameSubCluster,
+  subClusterBoard,
 } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -209,6 +209,24 @@ describe("deleteSubCluster", () => {
     });
   });
 
+  it("refuses, as planned-against, a Sub-Cluster a Perjadin was planned against even with no Schools", async () => {
+    // A Perjadin references `sub_cluster` too, with the same `NO ACTION`. An empty Sub-Cluster a
+    // trip has visited must not be mislabelled "still holds Schools" — it is history, not a
+    // School to move out. Reachable: move every School out once its Sessions are delivered.
+    const staff = await staffCaller();
+    const cluster = await oneCluster();
+    const sub = await addSubCluster({
+      slug: "dikunjungi",
+      name: "Dikunjungi",
+      clusterId: cluster.id,
+    });
+    await addPerjadin({ advanceIdr: 5_000_000, picPersonId: staff.id, subClusterId: sub.id });
+
+    expect(await deleteSubCluster(staff, sub.id)).toEqual({ outcome: "planned-against" });
+    const rows = await db.select().from(schema.subCluster).where(eq(schema.subCluster.id, sub.id));
+    expect(rows).toHaveLength(1);
+  });
+
   it("throws NotStaffError for a Teaching Team caller", async () => {
     const teacher = await teacherCaller();
     const cluster = await oneCluster();
@@ -351,7 +369,7 @@ describe("moveSchool", () => {
   });
 });
 
-describe("kelompokSekolah", () => {
+describe("subClusterBoard", () => {
   beforeEach(resetDatabase);
 
   it("groups Sub-Clusters under their Cluster, each with its Schools", async () => {
@@ -373,7 +391,7 @@ describe("kelompokSekolah", () => {
     // A second Cluster with no Sub-Clusters at all still appears, to be filled.
     await addCluster({ slug: "beta", name: "Cluster beta" });
 
-    const tree = await kelompokSekolah(staff);
+    const tree = await subClusterBoard(staff);
 
     const alpha = tree.find((entry) => entry.id === cluster.id);
     expect(alpha?.subClusters).toHaveLength(2);
