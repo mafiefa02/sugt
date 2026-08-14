@@ -35,7 +35,7 @@ export type Caller = Person | ServiceCaller | ParticipantToken;
  * `Person` is what closes it. See the amendment on
  * [#24](https://github.com/mafiefa02/sugt/issues/24).
  *
- * `role` is write-once — six composite foreign keys into `person (id, role)` default
+ * `role` is write-once — seven composite foreign keys into `person (id, role)` default
  * to `NO ACTION` — so nothing re-reads it within a session.
  */
 export type Person = {

@@ -84,6 +84,15 @@ export {
 } from "./perjadin-detail";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
+  addPerson,
+  revokePerson,
+  roster,
+  type AddPersonResult,
+  type NewPerson,
+  type RevokePersonResult,
+  type RosterEntry,
+} from "./roster";
+export {
   filePerjadinEvaluation,
   type FilePerjadinEvaluationResult,
   type NewPerjadinEvaluation,

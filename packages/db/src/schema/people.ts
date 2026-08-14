@@ -26,12 +26,14 @@ import {
  * historical reference to that person.
  *
  * `unique (id, role)` looks pointless beside a primary key on `id`. It is not — it
- * is the target of six composite foreign keys elsewhere in this schema, and it is
+ * is the target of seven composite foreign keys elsewhere in this schema, and it is
  * what lets "the PIC is Staff", "only Teaching Team taught a Stream", "only
- * Teaching Team file Class Records" and "only Staff file Session Records" be
- * declarative constraints instead of triggers. **Do not drop it.**
+ * Teaching Team file Class Records", "only Staff file Session Records" and "only
+ * Staff author a Story" be declarative constraints instead of triggers. **Do not
+ * drop it.** (The seventh, `story_written_by_staff`, arrived after this comment first
+ * said "six".)
  *
- * None of the six declares `on update`, so all default to `NO ACTION` — which makes
+ * None of the seven declares `on update`, so all default to `NO ACTION` — which makes
  * `role` **write-once** once a Person has been used anywhere. A wrong role is
  * corrected by revoking the row and creating a new Person, which is why
  * `person_email_key` is partial (`where active`) — see

@@ -128,6 +128,16 @@ export const ROLES = ["Staff", "Teaching Team"] as const;
 export type Role = (typeof ROLES)[number];
 
 /**
+ * The email domain a **Staff** member must hold. A Teaching Team member need not — ADR-0003
+ * chose Google sign-in precisely so a professor with a personal address can be invited.
+ *
+ * It lives here, not beside the app's sign-in code, because two places enforce it: the add
+ * form's `addPerson` write in `@sugt/db`, before a row is inserted, and the sign-in hook in
+ * `@sugt/internal`, as a roster-integrity backstop. One constant, so the two cannot drift.
+ */
+export const STAFF_EMAIL_DOMAIN = "@ditsama.itb.ac.id";
+
+/**
  * The two kinds a Story may be. They share one editor and one upload path; they differ only
  * in where the public site lists them — a Final Project reaches the public this way without
  * becoming a tracked record (see `docs/adr/0009-the-tool-tracks-delivery-not-outcomes.md`).
