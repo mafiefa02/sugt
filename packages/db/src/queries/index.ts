@@ -112,10 +112,12 @@ export {
   type PerjadinPlan,
   type PlannablePerson,
   type PlannableSchool,
+  type PlannableSubCluster,
   type PlannedSession,
   type PlannedTeacher,
   type PlanPerjadinInput,
   type PlanPerjadinResult,
+  type SessionTimeClash,
 } from "./perjadin-planning";
 export {
   attachTransactionEvidence,
