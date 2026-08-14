@@ -553,7 +553,7 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
  * evaluation tables are named below because fixtures write them directly.
  *
  * `session_teacher` is the first table here that **no fixture writes and the tests
- * populate anyway** — `arrangeOnlineSessions` writes it, and the batch tests assert on
+ * populate anyway** — `arrangeOnlineSession` writes it, and the arrange tests assert on
  * it. `cascade` from `public."session"` already reaches it, so naming it changes nothing
  * today; it is named for the reason above, which is that a list pruned to the cascade
  * minimum stops covering a table the day its parent leaves. `perjadin_evaluation` has since

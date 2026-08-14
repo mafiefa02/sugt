@@ -249,7 +249,7 @@ export async function planPerjadin(
 /**
  * A School the form is planning a Session for, as one row of its Sub-Cluster shows it. The same
  * three fields a form row has always rendered, so it **aliases** `SelectedSchool` rather than
- * restating the shape — the reuse `online-session-batch.ts`'s `BatchSchool` also makes, which
+ * restating the shape — the reuse `arrange-online-session.ts`'s `SchoolOption` also makes, which
  * keeps the two from drifting.
  */
 export type PlannableSchool = SelectedSchool;

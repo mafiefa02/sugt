@@ -22,7 +22,7 @@ import { perjadin } from "./travel";
  * not been cancelled.
  *
  * **Exported because a second place has to say the same thing, character for character.**
- * `arrangeOnlineSessions` names this index as its `on conflict` arbiter and has to repeat
+ * `arrangeOnlineSession` names this index as its `on conflict` arbiter and has to repeat
  * the predicate to do so — and Postgres refuses to infer an index whose predicate does not
  * match, which fails at runtime rather than at typecheck. Two copies of it are two chances
  * to find that out in production.

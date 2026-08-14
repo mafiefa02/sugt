@@ -24,11 +24,11 @@
  *    `session` rows; Tandai terlaksana writes `session.status` and `session_teacher`;
  *    a Group is replaced wholesale. The boundary belongs in the function here, never
  *    in the Server Action calling it — a Server Action that opens one has put the
- *    boundary somewhere a second caller cannot reuse. **`arrangeOnlineSessions` in
- *    `./online-session-batch.ts` is the first write in this package**, so it is where
- *    the convention stopped being stated and started being exercised: N Sessions and
- *    their `session_teacher` rows commit together, and one collision rolls the whole
- *    batch back.
+ *    boundary somewhere a second caller cannot reuse. **`arrangeOnlineSession` in
+ *    `./arrange-online-session.ts`** exercises it: a Session and its `session_teacher`
+ *    rows commit together, and a collision returns a value without writing either. (It
+ *    replaced a batch write, `#70`, once online Sessions were arranged one at a time —
+ *    a one-row batch was dead weight every reader had to understand.)
  *
  * Validation belongs beside the write, in this package, for the rules
  * `docs/data-model.md` describes as *enforced twice by design* — chief among them
@@ -62,16 +62,17 @@ export {
 export { concerns, type Concern, type ConcernAspect, type ConcernSource } from "./concerns";
 export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage";
 export {
-  arrangeOnlineSessions,
-  onlineSessionBatch,
-  type ArrangeOnlineSessionsResult,
-  type BatchPerson,
-  type BatchSchool,
-  type OnlineSessionBatch,
-  type OnlineSessionCollision,
-  type OnlineSessionRow,
+  arrangeOnlineSession,
+  arrangeOnlineSessionAt,
+  arrangeOnlineSessionForm,
+  type ArrangeOnlineSessionAt,
+  type ArrangeOnlineSessionForm,
+  type ArrangeOnlineSessionInput,
+  type ArrangeOnlineSessionResult,
+  type ArrangePerson,
   type OnlineSessionTeacher,
-} from "./online-session-batch";
+  type SchoolOption,
+} from "./arrange-online-session";
 export {
   movePerjadinDates,
   perjadinDetail,

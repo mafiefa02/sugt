@@ -403,7 +403,7 @@ describe("Rencanakan Perjadin", () => {
    * The other half of the PIC rule, and the reason the whole write is one transaction.
    *
    * **Driven at the database rather than through `planPerjadin`**, for the reason
-   * `online-session-batch.test.ts` gives about its index: a function-level test would pass
+   * `arrange-online-session.test.ts` gives about its index: a function-level test would pass
    * just as well against a constraint that was never created, and this one lives in a
    * hand-written migration that drizzle-kit does not know about. Adding a flag to the
    * write function so a test could withhold the PIC's membership row would also put a
