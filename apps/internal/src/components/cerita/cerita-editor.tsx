@@ -279,21 +279,12 @@ function PublishBar({
 
 /**
  * The revalidation of `@sugt/public`, step by step. Each step renders by its `outcome`, so this is
- * already the "says plainly when it failed" surface: a failed step shows a cross and _gagal_, a done
- * step a tick. The route is [#37]'s and unbuilt, so today every outcome is `pending-issue-37` and the
- * operator is told the public site has not refreshed yet — but when #37 returns `ok`/`failed`, this
- * displays it with no change here.
- *
- * [#37]: https://github.com/mafiefa02/sugt/issues/37
+ * the "says plainly when it failed" surface: a failed step shows a cross and _gagal_ — the public
+ * page did not refresh and the old one is still live — while a done step shows a tick.
  */
 function RevalidationSteps({ report }: { report: RevalidationReport }) {
   return (
     <div className="space-y-1 border-t border-border pt-2">
-      {report.pending ? (
-        <p className="text-[11px] text-muted-foreground">
-          Situs publik belum dimuat ulang — rutenya menyusul di #37.
-        </p>
-      ) : null}
       <ol className="space-y-1">
         {report.steps.map((step) => (
           <li
@@ -305,16 +296,12 @@ function RevalidationSteps({ report }: { report: RevalidationReport }) {
           >
             {step.outcome === "ok" ? (
               <Check className="size-3" />
-            ) : step.outcome === "failed" ? (
-              <X className="size-3" />
             ) : (
-              <span className="size-3 rounded-full border border-border" />
+              <X className="size-3" />
             )}
             {step.label}
             {step.outcome === "failed" ? (
               <span className="text-[11px]">— gagal, halaman lama masih tayang</span>
-            ) : step.outcome === "pending-issue-37" ? (
-              <span className="text-[11px]">— menunggu #37</span>
             ) : null}
           </li>
         ))}

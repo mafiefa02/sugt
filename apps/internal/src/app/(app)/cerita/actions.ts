@@ -18,6 +18,7 @@ import {
   publishStory,
   setStoryCover,
   storyForEditor,
+  storyPublicTargets,
   updateStory,
   type UpdateStoryInput,
   withdrawStory,
@@ -148,14 +149,20 @@ export async function deleteStoryPhotoAction(storyId: string, photoId: string): 
 /**
  * Publish a Story, then refresh its public pages. The database holds the one gate — photographs but
  * no cover is refused with `{ outcome: "needs-cover" }`, which the editor renders — so this returns
- * the outcome rather than throwing. Only a Story that actually published is revalidated.
+ * the outcome rather than throwing. Only a Story that actually published is revalidated, and the
+ * School slug the refresh needs is read here rather than trusted from the client.
  */
-export async function publishStoryAction(id: string, slug: string): Promise<PublishActionResult> {
+export async function publishStoryAction(id: string, _slug: string): Promise<PublishActionResult> {
   const person = await requirePerson();
 
   const result = await staffSurface(() => publishStory(person, id));
-  const revalidation =
-    result.outcome === "published" ? await revalidatePublicStory({ slug }) : null;
+  const targets =
+    result.outcome === "published"
+      ? await staffSurface(() => storyPublicTargets(person, id))
+      : null;
+  const revalidation = targets
+    ? await revalidatePublicStory({ slug: targets.slug, schoolSlug: targets.schoolSlug })
+    : null;
 
   return { result, revalidation };
 }
@@ -163,12 +170,14 @@ export async function publishStoryAction(id: string, slug: string): Promise<Publ
 /**
  * Take a Story down, then refresh its public pages so the withdrawn Story stops being served.
  * Withdrawal has no gate — a draft withdrawn is a no-op — so this returns only the revalidation
- * report.
+ * report. The Story's and its School's slugs are read here, not trusted from the client.
  */
-export async function withdrawStoryAction(id: string, slug: string): Promise<RevalidationReport> {
+export async function withdrawStoryAction(id: string, _slug: string): Promise<RevalidationReport> {
   const person = await requirePerson();
 
   await staffSurface(() => withdrawStory(person, id));
 
-  return revalidatePublicStory({ slug });
+  const targets = await staffSurface(() => storyPublicTargets(person, id));
+  if (!targets) return { steps: [] };
+  return revalidatePublicStory({ slug: targets.slug, schoolSlug: targets.schoolSlug });
 }
