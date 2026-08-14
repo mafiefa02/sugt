@@ -1,0 +1,1 @@
+ALTER TABLE "school" ALTER COLUMN "sub_cluster_id" SET NOT NULL;
