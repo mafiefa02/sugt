@@ -4,6 +4,7 @@ import type { Role } from "@sugt/domain";
 import { cn } from "@sugt/ui/lib/utils";
 import {
   Boxes,
+  CalendarPlus,
   LayoutDashboard,
   LayoutGrid,
   Newspaper,
@@ -22,7 +23,8 @@ import { usePathname } from "next/navigation";
  * money is not** (ADR-0004). The Perjadin list and detail stay open, because a professor
  * gets a money-free variant of both and needs it to file a Perjadin Evaluation. Cerita is
  * Staff-only for a different reason: publishing is (ADR-0008), and a link to a screen
- * that will refuse you is worse than no link.
+ * that will refuse you is worse than no link. Rencanakan Perjadin is Staff-only by the same
+ * "worse than no link" rule: it writes the Advance, so its read is Staff-only too (#69).
  *
  * **Perjadin Report is not here, and its absence is the answer to a question issue #30
  * owned.** The Report is the acquittal state on one `perjadin` row — there is no
@@ -40,6 +42,12 @@ const NAV = [
   { href: "/kelompok-sekolah", label: "Kelompok Sekolah", icon: Boxes, staffOnly: false },
   { href: "/concerns", label: "Concerns", icon: TriangleAlert, staffOnly: false },
   { href: "/perjadin", label: "Perjadin", icon: Plane, staffOnly: false },
+  {
+    href: "/rencanakan-perjadin",
+    label: "Rencanakan Perjadin",
+    icon: CalendarPlus,
+    staffOnly: true,
+  },
   { href: "/cerita", label: "Cerita", icon: Newspaper, staffOnly: true },
   { href: "/orang", label: "Orang", icon: Users, staffOnly: false },
 ] as const;
