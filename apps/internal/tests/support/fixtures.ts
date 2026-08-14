@@ -290,6 +290,8 @@ export type ParticipantFeedbackFixture = {
   sessionId: string;
   classKind: ClassKind;
   name?: string;
+  /** Optional, as the form is — a Participant owes no prose. Null by default. */
+  comment?: string;
   ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>>;
 };
 
@@ -305,6 +307,7 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
       sessionId: fixture.sessionId,
       classKind: fixture.classKind,
       name: fixture.name ?? "Siti",
+      comment: fixture.comment ?? null,
       materials: FINE,
       instructor: FINE,
       relevance: FINE,
@@ -312,6 +315,35 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
     })
     .returning();
   return feedback!;
+}
+
+export type PerjadinEvaluationFixture = {
+  perjadinId: string;
+  /** A Group member. Membership is the application's rule; the row references `person`. */
+  filedByPersonId: string;
+  /** The one nullable Rating — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
+  lodging?: number | null;
+  ratings?: Partial<Record<"transport" | "meals" | "punctuality", number>>;
+};
+
+/** How the trip went. Four Aspects, `lodging` nullable, the elaboration rule on the other prose. */
+export async function addPerjadinEvaluation(fixture: PerjadinEvaluationFixture) {
+  const ratings = { transport: FINE, meals: FINE, punctuality: FINE, ...fixture.ratings };
+  const lodging = fixture.lodging === undefined ? FINE : fixture.lodging;
+  const given = [lodging, ...Object.values(ratings)].filter(
+    (rating): rating is number => rating !== null,
+  );
+  const [evaluation] = await db
+    .insert(schema.perjadinEvaluation)
+    .values({
+      perjadinId: fixture.perjadinId,
+      filedByPersonId: fixture.filedByPersonId,
+      lodging,
+      ...ratings,
+      problems: needsProse(given) ? WENT_WRONG : null,
+    })
+    .returning();
+  return evaluation!;
 }
 
 export type FeedbackTokenFixture = {
