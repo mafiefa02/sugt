@@ -290,6 +290,8 @@ export type ParticipantFeedbackFixture = {
   sessionId: string;
   classKind: ClassKind;
   name?: string;
+  /** Optional, as the form is — a Participant owes no prose. Null by default. */
+  comment?: string;
   ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>>;
 };
 
@@ -305,6 +307,7 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
       sessionId: fixture.sessionId,
       classKind: fixture.classKind,
       name: fixture.name ?? "Siti",
+      comment: fixture.comment ?? null,
       materials: FINE,
       instructor: FINE,
       relevance: FINE,

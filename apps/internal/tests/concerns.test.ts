@@ -124,6 +124,21 @@ describe("concerns", () => {
     expect(row?.sessionId).toBe(session.id);
   });
 
+  it("shows a Participant's comment when they left one", async () => {
+    const pic = await staff();
+    const session = await aDeliveredSession(pic.id);
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Ayu",
+      comment: "Terlalu cepat",
+      ratings: { instructor: 3 },
+    });
+
+    // The optional comment is prose too — a Participant owes none, but a filled one is shown.
+    expect(find(await concerns(pic), "participant", "instructor")?.said).toBe("Terlalu cepat");
+  });
+
   it("surfaces a low Perjadin Evaluation Aspect, linked to the trip", async () => {
     const pic = await staff();
     const teacher = await professor();

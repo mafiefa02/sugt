@@ -4,6 +4,10 @@ import {
   PARTICIPANT_FEEDBACK_ASPECTS,
   PERJADIN_ASPECTS,
   SESSION_RECORD_ASPECTS,
+  type ClassRecordAspect,
+  type ParticipantFeedbackAspect,
+  type PerjadinAspect,
+  type SessionRecordAspect,
 } from "@sugt/domain";
 import { sql, type SQL } from "drizzle-orm";
 
@@ -45,17 +49,32 @@ export type ConcernSource =
   | "participant"
   | "perjadin-evaluation";
 
+/**
+ * Any Aspect that can be Rated, across the four rubrics. Typed as the union rather than `string`
+ * so the screen's label map is exhaustive — an Aspect added to a rubric fails to typecheck until
+ * it is labelled, rather than degrading to its raw column name at runtime.
+ */
+export type ConcernAspect =
+  | ClassRecordAspect
+  | SessionRecordAspect
+  | ParticipantFeedbackAspect
+  | PerjadinAspect;
+
 /** One low Rating, with what it was against and who said it. */
 export type Concern = {
   source: ConcernSource;
   /** The School and cohort, or the Perjadin's destination — what the row is about. */
   subject: string;
   /** The Aspect that was Rated low. Its key doubles as the column name. */
-  aspect: string;
+  aspect: ConcernAspect;
   rating: number;
   /** The filer's name, or the Participant's own typed name. */
   who: string;
-  /** The prose filed with a low internal Rating. Null for a Participant, who owes none. */
+  /**
+   * What was said about it: the prose an internal filer had to write to file a Rating this low,
+   * or a Participant's optional comment. Null when a Participant left the comment blank — they
+   * are held to no elaboration rule, so the internal sources carry prose far more often.
+   */
   said: string | null;
   /** When it was filed — the list is ordered on this, newest first. */
   at: Date;
@@ -96,7 +115,7 @@ export async function concerns(_caller: Person): Promise<Concern[]> {
     .select({
       source: sql<ConcernSource>`concerns.source`,
       subject: sql<string>`concerns.subject`,
-      aspect: sql<string>`concerns.aspect`,
+      aspect: sql<ConcernAspect>`concerns.aspect`,
       rating: sql<number>`concerns.rating`.mapWith(Number),
       who: sql<string>`concerns.who`,
       said: sql<string | null>`concerns.said`,

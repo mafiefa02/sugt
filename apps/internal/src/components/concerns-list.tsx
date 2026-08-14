@@ -1,6 +1,6 @@
 "use client";
 
-import type { Concern, ConcernSource } from "@sugt/db/queries";
+import type { Concern, ConcernAspect, ConcernSource } from "@sugt/db/queries";
 import { Badge } from "@sugt/ui/components/badge";
 import { Tabs, TabsList, TabsTrigger } from "@sugt/ui/components/tabs";
 import Link from "next/link";
@@ -32,7 +32,7 @@ const SOURCE_LABELS: Record<ConcernSource, string> = {
  * (`facilities`, `timing`/`punctuality`) but never within one source, so a row is never
  * ambiguous once its source is shown.
  */
-const ASPECT_LABELS: Record<string, string> = {
+const ASPECT_LABELS: Record<ConcernAspect, string> = {
   comprehension: "Pemahaman",
   participation: "Partisipasi",
   readiness: "Kesiapan",
@@ -127,13 +127,14 @@ function ConcernRow({ concern }: { concern: Concern }) {
         <Badge variant="secondary">{SOURCE_LABELS[concern.source]}</Badge>
         <span className="text-sm text-foreground">{concern.subject}</span>
         <span className="text-muted-foreground">·</span>
-        <span className="text-sm font-medium">
-          {ASPECT_LABELS[concern.aspect] ?? concern.aspect}
-        </span>
+        <span className="text-sm font-medium">{ASPECT_LABELS[concern.aspect]}</span>
         <Badge variant="destructive">{concern.rating}</Badge>
       </div>
 
-      {/* Only the internal sources carry prose; a Participant is held to no elaboration rule. */}
+      {/*
+        The prose, when there is any: an internal filer's mandatory explanation, or a Participant's
+        optional comment. Absent when a Participant left theirs blank — they owe no elaboration.
+      */}
       {concern.said !== null && (
         <p className="mt-2 text-sm text-muted-foreground">{concern.said}</p>
       )}
