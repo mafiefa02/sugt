@@ -171,3 +171,19 @@ export {
   type SessionRecordRatings,
 } from "./session-records";
 export { isNotStaffError, NotStaffError, requireStaff } from "./staff-only";
+export {
+  createSubCluster,
+  deleteSubCluster,
+  kelompokSekolah,
+  moveSchool,
+  renameSubCluster,
+  type BlockingPerjadin,
+  type CreateSubClusterResult,
+  type DeleteSubClusterResult,
+  type KelompokCluster,
+  type KelompokSekolah,
+  type KelompokSubCluster,
+  type MoveSchoolResult,
+  type NewSubCluster,
+  type RenameSubClusterResult,
+} from "./sub-clusters";
