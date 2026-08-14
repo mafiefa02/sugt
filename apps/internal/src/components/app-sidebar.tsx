@@ -12,6 +12,7 @@ import {
   School,
   TriangleAlert,
   Users,
+  Video,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -23,8 +24,9 @@ import { usePathname } from "next/navigation";
  * money is not** (ADR-0004). The Perjadin list and detail stay open, because a professor
  * gets a money-free variant of both and needs it to file a Perjadin Evaluation. Cerita is
  * Staff-only for a different reason: publishing is (ADR-0008), and a link to a screen
- * that will refuse you is worse than no link. Rencanakan Perjadin is Staff-only by the same
- * "worse than no link" rule: it writes the Advance, so its read is Staff-only too (#69).
+ * that will refuse you is worse than no link. Rencanakan Perjadin and Jadwalkan Sesi daring are
+ * Staff-only by the same "worse than no link" rule: arranging delivery is Staff-only (the surface
+ * list, #9/#70), so their reads are Staff-only too and a Teaching Team member gets no link.
  *
  * **Perjadin Report is not here, and its absence is the answer to a question issue #30
  * owned.** The Report is the acquittal state on one `perjadin` row — there is no
@@ -46,6 +48,12 @@ const NAV = [
     href: "/rencanakan-perjadin",
     label: "Rencanakan Perjadin",
     icon: CalendarPlus,
+    staffOnly: true,
+  },
+  {
+    href: "/jadwalkan-sesi-daring",
+    label: "Jadwalkan Sesi daring",
+    icon: Video,
     staffOnly: true,
   },
   { href: "/cerita", label: "Cerita", icon: Newspaper, staffOnly: true },
