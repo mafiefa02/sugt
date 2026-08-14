@@ -12,7 +12,7 @@ import type { Role } from "@sugt/domain";
  * | Caller             | Is                                                     | May read                      | May write                   |
  * | ------------------ | ------------------------------------------------------ | ----------------------------- | --------------------------- |
  * | `Person`           | somebody signed in whose `person` row is still `active` | delivery; money only if Staff | their own records           |
- * | `ServiceCaller`    | `@sugt/public`, holding `AGGREGATES_SECRET`            | the three aggregate payloads  | nothing                     |
+ * | `ServiceCaller`    | `@sugt/public`, holding `AGGREGATES_SECRET`            | the four aggregate payloads   | nothing                     |
  * | `ParticipantToken` | a live Session feedback token                          | nothing                       | `participant_feedback` only |
  *
  * See `docs/data-model.md`, *what the database does not hold*.
@@ -53,7 +53,7 @@ export type Person = {
  * choke point needs a sibling for 'no Person at all, but a valid secret'"*. It does,
  * and **the sibling is a type rather than a second guard**.
  *
- * The three aggregates queries are [#37](https://github.com/mafiefa02/sugt/issues/37)'s
+ * The four aggregates queries are [#37](https://github.com/mafiefa02/sugt/issues/37)'s
  * work. The type is declared here because the union is one decision and splitting it
  * across three tickets is how the arms drift apart.
  */
