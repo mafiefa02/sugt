@@ -8,7 +8,8 @@ import { GoogleSignInButton } from "./google-sign-in-button";
 export const metadata: Metadata = { title: "Masuk" };
 
 /** What every rejected visitor reads. DITSAMA's copy, not a placeholder. */
-const REJECTION = "Akun ini tidak terdaftar. Hubungi tim DITSAMA untuk mendapat akses.";
+const REJECTION =
+  "Akun ini tidak terdaftar. Coba akun lain, atau hubungi tim DITSAMA untuk mendapat akses.";
 
 /**
  * The sign-in screen, and the one page that genuinely branches on "signed in or not"
