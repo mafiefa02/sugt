@@ -1,5 +1,6 @@
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
+import { STAFF_EMAIL_DOMAIN } from "@sugt/domain";
 import { and, eq, sql } from "drizzle-orm";
 
 /**
@@ -32,8 +33,12 @@ import { and, eq, sql } from "drizzle-orm";
 
 export type { Person };
 
-/** Staff must additionally hold a Google account on this domain. */
-export const STAFF_EMAIL_DOMAIN = "@ditsama.itb.ac.id";
+/**
+ * Re-exported from `@sugt/domain`, where it now lives so `addPerson` in `@sugt/db` and this
+ * backstop share one constant. Kept exported here so `/masuk` and any other app consumer need
+ * not learn a new import path.
+ */
+export { STAFF_EMAIL_DOMAIN };
 
 /**
  * `where lower(email) = $1 and active`.
