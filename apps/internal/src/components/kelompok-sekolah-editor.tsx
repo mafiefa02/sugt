@@ -6,7 +6,11 @@ import {
   moveSchoolAction,
   renameSubClusterAction,
 } from "-/app/(app)/kelompok-sekolah/actions";
-import type { BlockingPerjadin, KelompokCluster, KelompokSubCluster } from "@sugt/db/queries";
+import type {
+  BlockingPerjadin,
+  ClusterWithSubClusters,
+  SubClusterWithSchools,
+} from "@sugt/db/queries";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
 import {
@@ -30,7 +34,7 @@ function KelompokSekolahEditor({
   clusters,
   canWrite,
 }: {
-  clusters: KelompokCluster[];
+  clusters: ClusterWithSubClusters[];
   canWrite: boolean;
 }) {
   return (
@@ -46,7 +50,13 @@ function KelompokSekolahEditor({
   );
 }
 
-function ClusterSection({ cluster, canWrite }: { cluster: KelompokCluster; canWrite: boolean }) {
+function ClusterSection({
+  cluster,
+  canWrite,
+}: {
+  cluster: ClusterWithSubClusters;
+  canWrite: boolean;
+}) {
   return (
     <section>
       <h2 className="font-heading text-base font-medium">{cluster.name}</h2>
@@ -122,8 +132,8 @@ function SubClusterCard({
   siblings,
   canWrite,
 }: {
-  subCluster: KelompokSubCluster;
-  siblings: KelompokSubCluster[];
+  subCluster: SubClusterWithSchools;
+  siblings: SubClusterWithSchools[];
   canWrite: boolean;
 }) {
   return (
@@ -157,7 +167,7 @@ function SubClusterName({
   subCluster,
   canWrite,
 }: {
-  subCluster: KelompokSubCluster;
+  subCluster: SubClusterWithSchools;
   canWrite: boolean;
 }) {
   const [editing, setEditing] = useState(false);
@@ -236,7 +246,7 @@ function SubClusterName({
   );
 }
 
-function DeleteSubClusterButton({ subCluster }: { subCluster: KelompokSubCluster }) {
+function DeleteSubClusterButton({ subCluster }: { subCluster: SubClusterWithSchools }) {
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
@@ -298,7 +308,7 @@ function SchoolRow({
   canWrite,
 }: {
   school: { id: string; name: string };
-  siblings: KelompokSubCluster[];
+  siblings: SubClusterWithSchools[];
   canWrite: boolean;
 }) {
   const [blocking, setBlocking] = useState<BlockingPerjadin[] | null>(null);
@@ -383,6 +393,8 @@ const RENAME_MESSAGES = {
 
 const DELETE_MESSAGES = {
   "has-schools": "Masih ada Sekolah di dalamnya — pindahkan dulu semuanya, baru bisa dihapus.",
+  "planned-against":
+    "Ada Perjadin yang pernah direncanakan ke Kelompok ini. Kelompok yang sudah dikunjungi tidak bisa dihapus.",
   "no-such-sub-cluster": "Kelompok itu sudah tidak ada. Muat ulang halaman.",
 } as const;
 

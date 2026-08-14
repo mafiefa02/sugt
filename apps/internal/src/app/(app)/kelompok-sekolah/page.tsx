@@ -1,6 +1,6 @@
 import { KelompokSekolahEditor } from "-/components/kelompok-sekolah-editor";
 import { requirePerson } from "-/lib/person";
-import { kelompokSekolah } from "@sugt/db/queries";
+import { subClusterBoard } from "@sugt/db/queries";
 
 /**
  * **Kelompok Sekolah** — the Sub-Cluster editing screen, the tool's only admin surface over
@@ -14,7 +14,7 @@ import { kelompokSekolah } from "@sugt/db/queries";
  */
 export default async function Page() {
   const person = await requirePerson();
-  const clusters = await kelompokSekolah(person);
+  const clusters = await subClusterBoard(person);
 
   return (
     <div className="flex min-h-full flex-col">

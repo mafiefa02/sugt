@@ -8,9 +8,10 @@ import type { Person } from "./caller";
 import { requireStaff } from "./staff-only";
 
 /**
- * **Kelompok Sekolah** — the Sub-Cluster editing screen, and the only admin surface over
- * anything in `docs/data-model.md`'s reference-data section. It exists because DITSAMA
- * *invented* the Sub-Clusters rather than being handed them, and
+ * **Kelompok Sekolah** — the Sub-Cluster editing screen (its Indonesian team name; the concept is
+ * **Sub-Cluster** in code, per `CONTEXT.md`), and the only admin surface over anything in
+ * `docs/data-model.md`'s reference-data section. It exists because DITSAMA *invented* the
+ * Sub-Clusters rather than being handed them, and
  * [ADR-0016](../../../../docs/adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md)
  * is the whole argument. Two rules live here that no key can hold, and they are the point:
  *
@@ -32,16 +33,16 @@ import { requireStaff } from "./staff-only";
  */
 
 /** One School under a Sub-Cluster, as the screen lists it. */
-export type KelompokSekolah = {
+export type SubClusterSchool = {
   id: string;
   name: string;
 };
 
 /** One Sub-Cluster, with the Schools currently in it. */
-export type KelompokSubCluster = {
+export type SubClusterWithSchools = {
   id: string;
   name: string;
-  schools: KelompokSekolah[];
+  schools: SubClusterSchool[];
 };
 
 /**
@@ -49,10 +50,10 @@ export type KelompokSubCluster = {
  * where the "create the first Sub-Cluster here" affordance lives, and the create form needs
  * every Cluster to target one.
  */
-export type KelompokCluster = {
+export type ClusterWithSubClusters = {
   id: string;
   name: string;
-  subClusters: KelompokSubCluster[];
+  subClusters: SubClusterWithSchools[];
 };
 
 /**
@@ -66,7 +67,7 @@ export type KelompokCluster = {
  * appear under none; the screen offers no unassigned state, matching "a School is always in
  * exactly one".
  */
-export async function kelompokSekolah(_caller: Person): Promise<KelompokCluster[]> {
+export async function subClusterBoard(_caller: Person): Promise<ClusterWithSubClusters[]> {
   const rows = await db
     .select({
       clusterId: cluster.id,
@@ -81,8 +82,8 @@ export async function kelompokSekolah(_caller: Person): Promise<KelompokCluster[
     .leftJoin(school, eq(school.subClusterId, subCluster.id))
     .orderBy(asc(cluster.name), asc(subCluster.name), asc(school.name));
 
-  const clusters = new Map<string, KelompokCluster>();
-  const subClusters = new Map<string, KelompokSubCluster>();
+  const clusters = new Map<string, ClusterWithSubClusters>();
+  const subClusters = new Map<string, SubClusterWithSchools>();
 
   for (const row of rows) {
     let clusterEntry = clusters.get(row.clusterId);
@@ -122,10 +123,10 @@ function slugify(name: string): string {
   return base === "" ? "kelompok" : base;
 }
 
-/** Whether a driver error is a foreign-key violation, read from both places a driver may put it. */
-function isForeignKeyViolation(error: unknown): boolean {
-  const wrapped = error as { code?: string; cause?: { code?: string } };
-  return (wrapped.cause?.code ?? wrapped.code) === "23503";
+/** The FK constraint that refused a write, read from both places a driver may put it. */
+function foreignKeyConstraintOf(error: unknown): string | null {
+  const wrapped = error as { constraint_name?: string; cause?: { constraint_name?: string } };
+  return wrapped.cause?.constraint_name ?? wrapped.constraint_name ?? null;
 }
 
 /** What the create form collects: a name, and the Cluster it lands in. */
@@ -218,16 +219,24 @@ export type DeleteSubClusterResult =
   /** No Sub-Cluster has that id — already deleted, or a stale screen. */
   | { outcome: "no-such-sub-cluster" }
   /** Schools still point at it. `school.sub_cluster_id`'s `NO ACTION` refuses the delete. */
-  | { outcome: "has-schools" };
+  | { outcome: "has-schools" }
+  /**
+   * A past Perjadin was planned against it. `perjadin.sub_cluster_id` also references
+   * `sub_cluster(id)` with `NO ACTION`, and a completed trip cannot be un-referenced — a
+   * Sub-Cluster the Programme has travelled to is history, not a School still to be moved out.
+   */
+  | { outcome: "planned-against" };
 
 /**
  * Delete a Sub-Cluster. Staff-only.
  *
- * The "not while it holds Schools" rule is the database's, not this function's:
- * `school.sub_cluster_id` references `sub_cluster(id)` with the default `NO ACTION`, so the
- * delete throws a foreign-key violation. ADR-0016 is explicit that emptying it first is the
- * only route and that this rule must **not** be duplicated in application code — so this
- * catches the refusal and names it, rather than re-counting the Schools itself.
+ * Two tables reference `sub_cluster` with the default `NO ACTION`, and they mean different
+ * things: a School still in it (empty it first) versus a Perjadin planned against it (which
+ * records where the Programme went and cannot be un-referenced). Both raise the same SQLSTATE,
+ * so the two are told apart by the **constraint name** rather than lumped into one refusal —
+ * the same precision `roster.ts` uses, and what keeps a trip-held Sub-Cluster from being
+ * mislabelled "still holds Schools". ADR-0016 is explicit that the Schools rule must **not** be
+ * duplicated in application code, so this catches and names it rather than re-counting.
  */
 export async function deleteSubCluster(
   caller: Person,
@@ -242,7 +251,13 @@ export async function deleteSubCluster(
       .returning({ id: subCluster.id });
     return row ? { outcome: "deleted" } : { outcome: "no-such-sub-cluster" };
   } catch (error) {
-    if (isForeignKeyViolation(error)) return { outcome: "has-schools" };
+    const constraint = foreignKeyConstraintOf(error);
+    // Both `school`'s foreign keys into `sub_cluster` share this prefix — the single-column one
+    // and the `(sub_cluster_id, cluster_id)` composite — and either firing means Schools remain.
+    if (constraint?.startsWith("school_sub_cluster")) return { outcome: "has-schools" };
+    if (constraint === "perjadin_sub_cluster_id_sub_cluster_id_fk") {
+      return { outcome: "planned-against" };
+    }
     throw error;
   }
 }
@@ -270,7 +285,7 @@ export type MoveSchoolResult =
   | { outcome: "different-cluster" }
   /**
    * An `arranged` Session at the School still sits on a Perjadin against the Sub-Cluster it is
-   * leaving. The refusal names those Perjadins so somebody can re-plan or cancel them first.
+   * leaving. The refusal names those Perjadins so somebody can re-plan or cancel them.
    */
   | { outcome: "still-visited"; perjadins: BlockingPerjadin[] };
 
