@@ -46,8 +46,13 @@ type RevalidateResponse = {
   revalidated: { target: RevalidationTarget; outcome: RevalidationOutcome }[];
 };
 
-/** A report in which every step failed, for when the call itself never reached a per-step answer. */
-function allFailed(): RevalidationReport {
+/**
+ * A report in which every step failed. Used when the call never reached a per-step answer — a dead
+ * network or a non-2xx — and by a caller that could not even find the Story to name its pages: a
+ * publish or withdrawal that refreshed nothing must say so, never answer with an empty step list the
+ * editor would render as blank silence.
+ */
+export function revalidationFailed(): RevalidationReport {
   return { steps: STEPS.map((step) => ({ ...step, outcome: "failed" as const })) };
 }
 
@@ -73,9 +78,9 @@ export async function revalidatePublicStory(input: {
       body: JSON.stringify({ slug: input.slug, school: input.schoolSlug }),
     });
   } catch {
-    return allFailed();
+    return revalidationFailed();
   }
-  if (!response.ok) return allFailed();
+  if (!response.ok) return revalidationFailed();
 
   const answer = (await response.json()) as RevalidateResponse;
   const byTarget = new Map(answer.revalidated.map((step) => [step.target, step.outcome]));

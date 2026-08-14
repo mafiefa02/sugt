@@ -108,10 +108,10 @@ export function CeritaEditor({
         setDirty(false);
       }
       if (story.publishedAt) {
-        setRevalidation(await withdrawStoryAction(story.id, story.slug));
+        setRevalidation(await withdrawStoryAction(story.id));
         setPublishOutcome(null);
       } else {
-        const { result, revalidation: report } = await publishStoryAction(story.id, story.slug);
+        const { result, revalidation: report } = await publishStoryAction(story.id);
         setPublishOutcome(result.outcome === "published" ? null : result.outcome);
         setRevalidation(report);
       }

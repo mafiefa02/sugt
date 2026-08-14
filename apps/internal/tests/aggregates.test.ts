@@ -298,6 +298,9 @@ describe("the Stories payloads", () => {
       { storagePath: "story/g/3.jpg", contentType: "image/jpeg", byteSize: 1, caption: "Tiga" },
     ]);
     const editor = await storyForEditor(pic, s.id);
+    // The one insert shares a timestamp, so `photos[0]` is the smallest random id, not "story/g/1".
+    // The cover is whichever that is; assert against it rather than a hardcoded path.
+    const coverPath = editor!.photos[0]!.storagePath;
     await setStoryCover(pic, s.id, editor!.photos[0]!.id);
     await publishStory(pic, s.id);
 
@@ -309,7 +312,7 @@ describe("the Stories payloads", () => {
       kind: "final_project",
       stream: "Research",
       body: "Isi lengkap cerita.",
-      coverPhotoPath: "story/g/1.jpg",
+      coverPhotoPath: coverPath,
     });
     // Ordered by uploaded_at then id — the one insert shares a timestamp, so the id tie-break
     // orders it, which is exactly the order the editor reads too. Assert against that rather than

@@ -1,7 +1,11 @@
 "use server";
 
 import { requirePerson } from "-/lib/person";
-import { revalidatePublicStory, type RevalidationReport } from "-/lib/revalidate-public";
+import {
+  revalidatePublicStory,
+  revalidationFailed,
+  type RevalidationReport,
+} from "-/lib/revalidate-public";
 import { staffSurface } from "-/lib/staff-surface";
 import {
   mintPhotoUpload,
@@ -149,20 +153,23 @@ export async function deleteStoryPhotoAction(storyId: string, photoId: string): 
 /**
  * Publish a Story, then refresh its public pages. The database holds the one gate — photographs but
  * no cover is refused with `{ outcome: "needs-cover" }`, which the editor renders — so this returns
- * the outcome rather than throwing. Only a Story that actually published is revalidated, and the
- * School slug the refresh needs is read here rather than trusted from the client.
+ * the outcome rather than throwing. Only a Story that actually published is revalidated.
+ *
+ * The slug the refresh needs — the Story's own and its School's — is **read from the row here**, not
+ * taken as an argument, so a stale editor cannot revalidate the wrong page. A published Story that
+ * somehow resolves no targets reports every step failed rather than nothing, so the operator is
+ * never told a refresh happened when it did not.
  */
-export async function publishStoryAction(id: string, _slug: string): Promise<PublishActionResult> {
+export async function publishStoryAction(id: string): Promise<PublishActionResult> {
   const person = await requirePerson();
 
   const result = await staffSurface(() => publishStory(person, id));
-  const targets =
-    result.outcome === "published"
-      ? await staffSurface(() => storyPublicTargets(person, id))
-      : null;
+  if (result.outcome !== "published") return { result, revalidation: null };
+
+  const targets = await staffSurface(() => storyPublicTargets(person, id));
   const revalidation = targets
     ? await revalidatePublicStory({ slug: targets.slug, schoolSlug: targets.schoolSlug })
-    : null;
+    : revalidationFailed();
 
   return { result, revalidation };
 }
@@ -170,14 +177,16 @@ export async function publishStoryAction(id: string, _slug: string): Promise<Pub
 /**
  * Take a Story down, then refresh its public pages so the withdrawn Story stops being served.
  * Withdrawal has no gate — a draft withdrawn is a no-op — so this returns only the revalidation
- * report. The Story's and its School's slugs are read here, not trusted from the client.
+ * report. The slugs are read from the row here, and a Story that resolves no targets reports every
+ * step failed rather than an empty list the editor would render as blank silence.
  */
-export async function withdrawStoryAction(id: string, _slug: string): Promise<RevalidationReport> {
+export async function withdrawStoryAction(id: string): Promise<RevalidationReport> {
   const person = await requirePerson();
 
   await staffSurface(() => withdrawStory(person, id));
 
   const targets = await staffSurface(() => storyPublicTargets(person, id));
-  if (!targets) return { steps: [] };
-  return revalidatePublicStory({ slug: targets.slug, schoolSlug: targets.schoolSlug });
+  return targets
+    ? revalidatePublicStory({ slug: targets.slug, schoolSlug: targets.schoolSlug })
+    : revalidationFailed();
 }
