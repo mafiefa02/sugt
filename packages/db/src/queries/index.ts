@@ -42,6 +42,20 @@
  */
 export type { Caller, ParticipantToken, Person, ServiceCaller } from "./caller";
 export {
+  delivery,
+  publishedStories,
+  publishedStory,
+  scope,
+  type ClusterDelivery,
+  type DeliveryData,
+  type ScopeCluster,
+  type ScopeData,
+  type ScopeSchool,
+  type StoryDetailData,
+  type StoryGalleryPhoto,
+  type StoryListItem,
+} from "./aggregates";
+export {
   addStoryPhotos,
   ceritaIndex,
   createStory,
@@ -49,6 +63,7 @@ export {
   publishStory,
   setStoryCover,
   storyForEditor,
+  storyPublicTargets,
   updateStory,
   withdrawStory,
   type CeritaEntry,
@@ -57,6 +72,7 @@ export {
   type PublishResult,
   type StoryForEditor,
   type StoryPhoto,
+  type StoryPublicTargets,
   type UpdateStoryInput,
 } from "./cerita";
 export { concerns, type Concern, type ConcernAspect, type ConcernSource } from "./concerns";
