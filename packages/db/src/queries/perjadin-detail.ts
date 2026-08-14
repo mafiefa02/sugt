@@ -1,11 +1,11 @@
-import type { Role, SessionStatus, Stream } from "@sugt/domain";
+import type { Role, SessionStatus, Stream, TimeZone } from "@sugt/domain";
 import { and, asc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
-import { school } from "../schema/reference";
+import { province, school } from "../schema/reference";
 import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 import { duplicatedTeachers, streamsUncovered, type PlannedTeacher } from "./group-rules";
@@ -39,6 +39,10 @@ export type PerjadinSession = {
   schoolName: string;
   schoolSlug: string;
   heldOn: string;
+  /** Wall-clock start time local to the School (`HH:MM:SS`), rendered with its zone. */
+  startsAt: string;
+  /** The School's Province's Time Zone, for rendering `startsAt`. */
+  timeZone: TimeZone;
   status: SessionStatus;
 };
 
@@ -115,10 +119,13 @@ export async function perjadinDetail(
         schoolName: school.name,
         schoolSlug: school.slug,
         heldOn: session.heldOn,
+        startsAt: session.startsAt,
+        timeZone: province.timeZone,
         status: session.status,
       })
       .from(session)
       .innerJoin(school, eq(school.id, session.schoolId))
+      .innerJoin(province, eq(province.code, school.provinceCode))
       .where(eq(session.perjadinId, perjadinId))
       .orderBy(asc(session.heldOn), asc(school.name)),
     // Revoked People are not offered: naming one puts them on a trip they are no longer on.

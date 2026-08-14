@@ -4,6 +4,7 @@ import { SessionRecords } from "-/components/session-records";
 import { SessionWrites } from "-/components/session-writes";
 import { requirePerson } from "-/lib/person";
 import { sessionDetail } from "@sugt/db/queries";
+import { formatSessionStartTimeWithWib } from "@sugt/domain";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -44,6 +45,9 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
 
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <h1 className="font-heading text-lg font-medium tabular-nums">{session.heldOn}</h1>
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {formatSessionStartTimeWithWib(session.startsAt, session.timeZone)}
+          </span>
           <span className="text-sm text-muted-foreground">{MODE_LABELS[session.mode]}</span>
           <SessionStatusBadge status={session.status} />
         </div>

@@ -8,6 +8,7 @@ import {
   type SessionMode,
   type SessionRecordAspect,
   type SessionStatus,
+  type TimeZone,
 } from "@sugt/domain";
 import { asc, eq, sql, type SQL } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
@@ -15,7 +16,7 @@ import type { PgTable } from "drizzle-orm/pg-core";
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { classRecord, participantFeedback, sessionRecord } from "../schema/evaluations";
-import { cluster, school } from "../schema/reference";
+import { cluster, province, school } from "../schema/reference";
 import type { Person } from "./caller";
 import { countsTowardsProgress } from "./delivered-sessions";
 
@@ -72,6 +73,10 @@ export type SchoolSession = {
   mode: SessionMode;
   /** The date it is arranged for, and the date it happened once delivered. */
   heldOn: string;
+  /** Wall-clock start time local to the School (`HH:MM:SS`), rendered with its zone. */
+  startsAt: string;
+  /** The School's Province's Time Zone, for rendering `startsAt`. */
+  timeZone: TimeZone;
   status: SessionStatus;
   /** Set on a cancelled Session and null on every other, by CHECK. */
   cancelledReason: string | null;
@@ -188,6 +193,8 @@ export async function schoolDetail(_caller: Person, slug: string): Promise<Schoo
       sessionId: session.id,
       mode: session.mode,
       heldOn: session.heldOn,
+      startsAt: session.startsAt,
+      timeZone: province.timeZone,
       status: session.status,
       cancelledReason: session.cancelledReason,
 
@@ -198,6 +205,9 @@ export async function schoolDetail(_caller: Person, slug: string): Promise<Schoo
     .from(school)
     // Inner, never outer: `school.cluster_id` is NOT NULL.
     .innerJoin(cluster, eq(cluster.id, school.clusterId))
+    // The School's Province carries the Time Zone `startsAt` is read in. `province_code` is
+    // NOT NULL, so an inner join.
+    .innerJoin(province, eq(province.code, school.provinceCode))
     // Outer, and unfiltered by status. A School nobody has reached still has a page,
     // and a cancelled Session stays visible — it counts for nothing, but a School that
     // was planned for and missed looks different from one nobody has reached yet.
@@ -215,15 +225,25 @@ export async function schoolDetail(_caller: Person, slug: string): Promise<Schoo
 
   const sessions: SchoolSession[] = [];
   for (const row of rows) {
-    const { sessionId, mode, heldOn, status } = row;
+    const { sessionId, mode, heldOn, startsAt, status } = row;
     // The outer join is all-or-nothing: a School with no Sessions comes back as one row
     // with every Session column null, and any Session at all brings them together.
-    if (sessionId === null || mode === null || heldOn === null || status === null) continue;
+    if (
+      sessionId === null ||
+      mode === null ||
+      heldOn === null ||
+      startsAt === null ||
+      status === null
+    )
+      continue;
 
     sessions.push({
       id: sessionId,
       mode,
       heldOn,
+      startsAt,
+      // `province` joins off `school`, so `timeZone` is present on every row, session or not.
+      timeZone: row.timeZone,
       status,
       cancelledReason: row.cancelledReason,
       ratingsFiled: row.ratingsFiled,
