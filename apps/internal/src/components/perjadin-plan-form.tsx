@@ -156,7 +156,9 @@ function PerjadinPlanForm({
           label="Kelompok Sekolah"
         >
           <Select
-            items={Object.fromEntries(subClusters.map((entry) => [entry.id, entry.name]))}
+            items={Object.fromEntries(
+              subClusters.map((entry) => [entry.id, `${entry.name} — ${entry.clusterName}`]),
+            )}
             value={subClusterId === "" ? null : subClusterId}
             onValueChange={(value) => {
               pickSubCluster((value as string | null) ?? "");

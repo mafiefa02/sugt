@@ -7,7 +7,7 @@ import { cluster, school, subCluster } from "../schema/reference";
 import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 import { duplicatedTeachers, streamsUncovered, type PlannedTeacher } from "./group-rules";
-import { activeRosters, type RosterPerson } from "./rosters";
+import { activeRosters, type RosterPerson, type SelectedSchool } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -246,13 +246,13 @@ export async function planPerjadin(
   return { outcome: "planned", perjadinId };
 }
 
-/** A School the form is planning a Session for, as one row of its Sub-Cluster shows it. */
-export type PlannableSchool = {
-  id: string;
-  name: string;
-  /** Shown so a reader can confirm this is the right School, not a namesake. */
-  kabupatenKota: string;
-};
+/**
+ * A School the form is planning a Session for, as one row of its Sub-Cluster shows it. The same
+ * three fields a form row has always rendered, so it **aliases** `SelectedSchool` rather than
+ * restating the shape — the reuse `online-session-batch.ts`'s `BatchSchool` also makes, which
+ * keeps the two from drifting.
+ */
+export type PlannableSchool = SelectedSchool;
 
 /** One Sub-Cluster the form can plan a trip around, with the Schools it is eligible to visit. */
 export type PlannableSubCluster = {
