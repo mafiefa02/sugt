@@ -69,6 +69,7 @@ import {
   wrapInOrderedListCommand,
   wrapInOrderedListInputRule,
 } from "@milkdown/kit/preset/commonmark";
+import { Bold, Italic, Link2, List, ListOrdered, Quote } from "lucide-react";
 
 /**
  * **The Story body allowlist — the one list ADR-0015 asks for.**
@@ -199,3 +200,78 @@ export const storyEditorAllowlist: MilkdownPlugin[] = [
   remarkMarker,
   remarkPreserveEmptyLinePlugin,
 ].flat();
+
+/**
+ * **The formatting toolbar's binding — the "one list, not three" property, held.**
+ *
+ * ADR-0015's decision is that the editor's capabilities and the public renderer's allowlist are
+ * **one list, defined once** — the `storyEditorAllowlist` above. A toolbar is a candidate *third*
+ * list: a hand-written `["bold", "italic", "heading", …]` is a second enumeration of the same
+ * capabilities that can drift from the schema silently. When it drifts you get
+ * `commandsCtx.call(undefined)` — the crash [`c79105f`](https://github.com/mafiefa02/sugt/commit/c79105f)
+ * fixed on this exact surface.
+ *
+ * So this spec holds the imported command **values**, not their string names. Each entry below binds
+ * to the same import the allowlist array binds to. Removing a command from the allowlist means
+ * removing its import — which breaks *this* spec at compile time, so the failure is a build error a
+ * reviewer cannot miss, not a click that dispatches `undefined`. The allowlist is a **ceiling, not a
+ * quota**: this exposes six of its capabilities and deliberately omits some the schema still permits
+ * (Judul 1, horizontal rule, hard break, list indent, undo/redo — each reachable another way). It
+ * never exposes anything the schema does not.
+ *
+ * Icons and Indonesian labels live here too, beside the commands they trigger, so the whole binding
+ * is one thing to read. The toolbar component in `story-editor.tsx` renders from this; the caret
+ * state it reflects is derived by the pure function in `toolbar-state.ts`.
+ */
+export const storyToolbar = {
+  /**
+   * Judul 2 and Judul 3 wrap into a heading; Paragraf turns back into text. Judul 1 is deliberately
+   * absent — `story.title` is the document's H1, and a second H1 in the prose is an outline bug.
+   * `# ` still works, so this narrows the toolbar, not the schema.
+   */
+  heading: {
+    toParagraph: turnIntoTextCommand,
+    toHeading: wrapInHeadingCommand,
+  },
+  bold: {
+    command: toggleStrongCommand,
+    icon: Bold,
+    label: "Tebal",
+    hint: "Tebal (Ctrl+B)",
+  },
+  italic: {
+    command: toggleEmphasisCommand,
+    icon: Italic,
+    label: "Miring",
+    hint: "Miring (Ctrl+I)",
+  },
+  bulletList: {
+    command: wrapInBulletListCommand,
+    icon: List,
+    label: "Daftar poin",
+    hint: "Daftar poin",
+  },
+  orderedList: {
+    command: wrapInOrderedListCommand,
+    icon: ListOrdered,
+    label: "Daftar bernomor",
+    hint: "Daftar bernomor",
+  },
+  blockquote: {
+    command: wrapInBlockquoteCommand,
+    icon: Quote,
+    label: "Kutipan",
+    hint: "Kutipan",
+  },
+  /**
+   * `toggle` marks a fresh link over a selection (and, over a selected existing link, removes it);
+   * `update` rewrites the href of the link under the caret. Both are needed and both are bound here.
+   */
+  link: {
+    toggle: toggleLinkCommand,
+    update: updateLinkCommand,
+    icon: Link2,
+    label: "Tautan",
+    hint: "Tautan",
+  },
+} as const;
