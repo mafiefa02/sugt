@@ -3,8 +3,9 @@ import { requirePerson } from "-/lib/person";
 import { coverage } from "@sugt/db/queries";
 
 /**
- * **Coverage** — the landing screen for trip planning, and the first real read
- * through `@sugt/db`'s query layer.
+ * **Coverage** — a read surface answering "where are we overall", and the first real
+ * read through `@sugt/db`'s query layer. Trip planning no longer starts here: it moved
+ * to its own screen once a Perjadin came to be planned around a Sub-Cluster.
  *
  * One `requirePerson()`, one query, one payload. The Person is not re-resolved
  * anywhere below: `requirePerson()` shares its memoised read with the signed-in
