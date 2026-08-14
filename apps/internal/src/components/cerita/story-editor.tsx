@@ -140,6 +140,9 @@ function headingLabel(value: HeadingValue): string {
   return `Judul ${value.slice(1)}`;
 }
 
+/** The seven controls, left to right: heading Select, bold, italic, bullet, ordered, quote, link. */
+const TOOLBAR_CONTROL_COUNT = 7;
+
 /** The five icon buttons that dispatch a payload-less command, paired with the state they reflect. */
 type SimpleButton = {
   spec: { command: { key: CmdKey<unknown> }; icon: LucideIcon; label: string; hint: string };
@@ -235,7 +238,7 @@ function StoryToolbar({
     if (!forward && !back && !home && !end) return;
     event.preventDefault();
 
-    const count = refs.current.length;
+    const count = TOOLBAR_CONTROL_COUNT;
     const enabled = (index: number) => {
       const element = refs.current[index];
       return element != null && !element.disabled;
@@ -440,14 +443,18 @@ function StoryLinkDialog({
   );
 }
 
-/** The range of the link mark under the caret, so Remove can select it before toggling it off. */
+/**
+ * The range of the first link mark within the selection, so Remove can select it before toggling it
+ * off. It scans `from`→`to` (widening a collapsed caret by one, as `updateLinkCommand` itself does),
+ * so it finds the link whether the caret sits inside one or a selection merely reaches into one.
+ */
 function linkRange(view: EditorView): { from: number; to: number } | null {
   const { state } = view;
   const linkType = state.schema.marks.link;
   if (!linkType) return null;
-  const { from } = state.selection;
+  const { from, to } = state.selection;
   let range: { from: number; to: number } | null = null;
-  state.doc.nodesBetween(from, from + 1, (node, pos) => {
+  state.doc.nodesBetween(from, from === to ? to + 1 : to, (node, pos) => {
     if (range) return false;
     if (linkType.isInSet(node.marks)) {
       range = { from: pos, to: pos + node.nodeSize };
