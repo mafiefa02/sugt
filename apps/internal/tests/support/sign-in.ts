@@ -13,6 +13,13 @@ export const SIGN_IN_PATH = "/masuk";
 export type SignInResult = {
   /** The callback's own response. Nothing follows the redirect. */
   response: Response;
+  /**
+   * The authorization URL `POST /sign-in/social` handed back — the one a browser would
+   * send to Google. Exposed because the failure this whole flow guards against was a
+   * **missing** `prompt` param on it, and nothing type-checks the absence of a query
+   * parameter; only an assertion on this URL can.
+   */
+  authorizationURL: URL;
   /** Where the browser is sent next, as a URL. */
   location: URL;
   /** The session cookie, ready to hand to seam 2. `null` when none was issued. */
@@ -48,7 +55,8 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<SignInRe
   }
 
   const { url } = (await start.json()) as { url: string };
-  const state = new URL(url).searchParams.get("state");
+  const authorizationURL = new URL(url);
+  const state = authorizationURL.searchParams.get("state");
   if (!state) throw new Error(`No state on the authorization URL: ${url}`);
 
   const response = await auth.handler(
@@ -60,6 +68,7 @@ export async function signInWithGoogle(profile: GoogleProfile): Promise<SignInRe
 
   return {
     response,
+    authorizationURL,
     location: new URL(response.headers.get("location") ?? "", ORIGIN),
     sessionCookie: sessionCookie(response),
     tokenExchanges: google.tokenExchanges,

@@ -2,7 +2,7 @@
 
 import { authClient } from "-/lib/auth-client";
 import { Button } from "@sugt/ui/components/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * The one button.
@@ -17,6 +17,27 @@ import { useState } from "react";
  */
 export function GoogleSignInButton() {
   const [pending, setPending] = useState(false);
+
+  /**
+   * **`pending` never resets itself — this is what stops it sticking.** The click below
+   * sets it and nothing here clears it, which was safe only while the call always
+   * navigated away. Now that `select_account consent` always reopens the chooser, a
+   * visitor can open it and press browser-back; the page then comes back from bfcache
+   * with this React state restored, and the button would sit `disabled` reading
+   * "Menghubungkan…" with no way out.
+   *
+   * `pageshow` with `event.persisted` is the one signal that names exactly that restore
+   * — a fresh load fires it with `persisted: false` and needs no reset. Resetting there
+   * keeps the "stop clicking" affordance on the outbound click while making the stuck
+   * state unreachable.
+   */
+  useEffect(() => {
+    function reset(event: PageTransitionEvent) {
+      if (event.persisted) setPending(false);
+    }
+    window.addEventListener("pageshow", reset);
+    return () => window.removeEventListener("pageshow", reset);
+  }, []);
 
   return (
     <Button

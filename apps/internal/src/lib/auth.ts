@@ -77,6 +77,29 @@ export const auth = betterAuth({
     google: {
       clientId: requireEnv("GOOGLE_CLIENT_ID"),
       clientSecret: requireEnv("GOOGLE_CLIENT_SECRET"),
+
+      /**
+       * **This costs a click on every sign-in and is not a mistake — do not delete it.**
+       * Both halves are load-bearing against the one dead end this screen can reach.
+       *
+       * `select_account` reopens Google's account chooser. Without it, Google silently
+       * re-authorizes the account it already remembers for this client, so a visitor the
+       * invite gate refuses is handed the **same** refused account on every retry and can
+       * never offer a different one — the "personal Gmail out of habit" case ADR-0003
+       * names becomes unrecoverable from inside the app. That is the fix.
+       *
+       * `consent` re-shows Google's permission screen each time, deliberately: it puts the
+       * chosen account's email in front of the person one more time before they land, so a
+       * mis-picked account is caught by them rather than by the invite gate. It is **not**
+       * for a refresh token — nothing here is persisted from Google; `resolvePerson`
+       * re-reads the invite list by email every request.
+       *
+       * `1.6.27` accepts `prompt` **only** in this server config — the `sign-in/social`
+       * body has no such field — so it is unconditional by construction and cannot be made
+       * to fire only after a failure. Accepted, not overlooked: sessions persist, so
+       * sign-in is rare, and one extra click beats an unrecoverable dead end.
+       */
+      prompt: "select_account consent",
     },
   },
 

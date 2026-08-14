@@ -25,6 +25,24 @@ describe("the invite gate", () => {
     vi.unstubAllGlobals();
   });
 
+  it("asks Google to reopen the account chooser on every sign-in", async () => {
+    /**
+     * The refusal this pins was terminal by omission: with no `prompt` on the
+     * authorization URL, Google silently re-authorizes the account it remembers, so a
+     * refused visitor is handed the same account forever. `select_account` reopens the
+     * chooser and `consent` re-shows the permission screen — both halves, on the wire,
+     * on a sign-in that does not even reach the invite gate. Asserted here because a
+     * missing query parameter is exactly what nothing else type-checks.
+     */
+    const result = await signInWithGoogle({
+      googleId: "google-anyone",
+      email: "anyone@gmail.com",
+      name: "Anyone",
+    });
+
+    expect(result.authorizationURL.searchParams.get("prompt")).toBe("select_account consent");
+  });
+
   it("lets an invited Teaching Team member in with any Google address", async () => {
     const person = await addPerson({
       fullName: "Prof. Ratna",
