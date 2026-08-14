@@ -3,7 +3,6 @@
 import { Button } from "@sugt/ui/components/button";
 import {
   Sheet,
-  SheetClose,
   SheetContent,
   SheetHeader,
   SheetTitle,
@@ -13,6 +12,7 @@ import { cn } from "@sugt/ui/lib/utils";
 import { Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 /**
  * The four public sections, in the order the header lists them. Pencarian and the
@@ -36,6 +36,18 @@ function isActive(pathname: string, href: string) {
  */
 function SiteNav() {
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // The menu is a dialog, and a route change does not dismiss one by itself: closing
+  // on navigation is deliberate and has to be arranged. The items below are plain
+  // links — real anchors, so a link's role and keyboard, and none of the button
+  // semantics a close primitive would drag in — so the close is driven from here
+  // instead of per item. This effect covers every navigation the menu can outlive,
+  // browser back and forward included; the onClick on each link covers the one it
+  // cannot see, a tap on the section already open, where the pathname never changes.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   return (
     <>
@@ -58,7 +70,10 @@ function SiteNav() {
             plain link to another origin when it arrives, not a route of this app. */}
       </nav>
 
-      <Sheet>
+      <Sheet
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+      >
         <SheetTrigger
           render={
             <Button
@@ -77,18 +92,17 @@ function SiteNav() {
           </SheetHeader>
           <nav className="flex flex-col gap-1 px-4">
             {SECTIONS.map((section) => (
-              /* Closing on navigation is explicit: the menu is a dialog, and a route
-                 change does not dismiss one by itself. */
-              <SheetClose
+              <Link
                 key={section.href}
-                render={<Link href={section.href} />}
+                href={section.href}
+                onClick={() => setMenuOpen(false)}
                 className={cn(
                   "rounded-md px-3 py-2 text-left text-sm font-medium text-foreground",
                   isActive(pathname, section.href) && "bg-muted font-semibold text-primary",
                 )}
               >
                 {section.label}
-              </SheetClose>
+              </Link>
             ))}
           </nav>
         </SheetContent>
