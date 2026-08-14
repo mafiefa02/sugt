@@ -76,6 +76,17 @@ export {
   type UpdateStoryInput,
 } from "./cerita";
 export { concerns, type Concern, type ConcernAspect, type ConcernSource } from "./concerns";
+export {
+  staffDashboard,
+  teachingTeamDashboard,
+  type ClusterReach,
+  type OwedClassRecord,
+  type OwedSessionRecord,
+  type PicReport,
+  type StaffDashboard,
+  type TeachingTeamDashboard,
+  type UpcomingSession,
+} from "./dashboard";
 export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage";
 export {
   arrangeOnlineSession,
