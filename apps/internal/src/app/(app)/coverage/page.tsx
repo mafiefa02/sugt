@@ -7,6 +7,9 @@ import { coverage } from "@sugt/db/queries";
  * read through `@sugt/db`'s query layer. Trip planning no longer starts here: it moved
  * to its own screen once a Perjadin came to be planned around a Sub-Cluster.
  *
+ * The counts are open to everyone signed in — ADR-0004 — which is why the query below
+ * applies no role check.
+ *
  * One `requirePerson()`, one query, one payload. The Person is not re-resolved
  * anywhere below: `requirePerson()` shares its memoised read with the signed-in
  * layout, so this page costs no second round trip, and the query takes the Person it
