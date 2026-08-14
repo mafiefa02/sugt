@@ -127,6 +127,30 @@ describe("Detail Sesi", () => {
     });
   });
 
+  /** The start time, and the Time Zone it is read in — the School's Province's (#72). */
+  it("carries the Session's start time and its School's Time Zone", async () => {
+    const pic = await staff();
+    await addProvince("PA", "Papua", "WIT");
+    const cluster = await addCluster({ slug: "timur", name: "Cluster Timur" });
+    const school = await addSchool({
+      slug: "sman-jayapura",
+      name: "SMAN Jayapura",
+      clusterId: cluster.id,
+      provinceCode: "PA",
+    });
+    const session = await addSession({
+      schoolId: school.id,
+      heldOn: "2026-09-10",
+      startsAt: "09:00",
+      onlinePicPersonId: pic.id,
+    });
+
+    const detail = await sessionDetail(pic, session.id);
+
+    expect(detail?.startsAt).toBe("09:00:00");
+    expect(detail?.timeZone).toBe("WIT");
+  });
+
   it("is open to a Teaching Team caller, because a Session carries no money", async () => {
     const pic = await staff();
     const [bagus] = await professors();
@@ -636,10 +660,29 @@ describe("moving a date", () => {
       onlinePicPersonId: pic.id,
     });
 
-    const result = await moveSessionDate(pic, session.id, "2026-09-17");
+    const result = await moveSessionDate(pic, session.id, "2026-09-17", "09:00");
 
     expect(result.outcome).toBe("moved");
     expect(await statusOf(session.id)).toBe("arranged");
+  });
+
+  /** Moving a Session is one act: the time moves with the date, in the same dialog (#72). */
+  it("moves the start time with the date, in the same write", async () => {
+    const pic = await staff();
+    const school = await oneSchool();
+    const session = await addSession({
+      schoolId: school.id,
+      heldOn: "2026-09-10",
+      startsAt: "09:00",
+      onlinePicPersonId: pic.id,
+    });
+
+    expect((await moveSessionDate(pic, session.id, "2026-09-17", "13:30")).outcome).toBe("moved");
+    const [after] = await db
+      .select({ heldOn: schema.session.heldOn, startsAt: schema.session.startsAt })
+      .from(schema.session)
+      .where(eq(schema.session.id, session.id));
+    expect(after).toEqual({ heldOn: "2026-09-17", startsAt: "13:30:00" });
   });
 
   /**
@@ -657,7 +700,7 @@ describe("moving a date", () => {
     });
     await addSession({ schoolId: school.id, heldOn: "2026-09-17", onlinePicPersonId: pic.id });
 
-    const result = await moveSessionDate(pic, moving.id, "2026-09-17");
+    const result = await moveSessionDate(pic, moving.id, "2026-09-17", "09:00");
 
     expect(result).toEqual({
       outcome: "collided",
@@ -687,7 +730,7 @@ describe("moving a date", () => {
       status: "cancelled",
     });
 
-    expect((await moveSessionDate(pic, moving.id, "2026-09-17")).outcome).toBe("moved");
+    expect((await moveSessionDate(pic, moving.id, "2026-09-17", "09:00")).outcome).toBe("moved");
   });
 
   it("refuses to move a delivered Session", async () => {
@@ -704,7 +747,7 @@ describe("moving a date", () => {
       { stream: "Research", personId: sari.id },
     ]);
 
-    expect(await moveSessionDate(pic, session.id, "2026-09-17")).toEqual({
+    expect(await moveSessionDate(pic, session.id, "2026-09-17", "09:00")).toEqual({
       outcome: "not-arranged",
       status: "delivered",
     });
@@ -730,7 +773,7 @@ describe("moving a date", () => {
       perjadinId: perjadin.id,
     });
 
-    const result = await moveSessionDate(pic, session.id, "2026-09-09");
+    const result = await moveSessionDate(pic, session.id, "2026-09-09", "09:00");
 
     expect(result).toEqual({
       outcome: "outside-perjadin",
@@ -754,7 +797,7 @@ describe("moving a date", () => {
       perjadinId: perjadin.id,
     });
 
-    expect((await moveSessionDate(pic, session.id, "2026-09-03")).outcome).toBe("moved");
+    expect((await moveSessionDate(pic, session.id, "2026-09-03", "09:00")).outcome).toBe("moved");
   });
 
   /**
@@ -777,11 +820,15 @@ describe("moving a date", () => {
       perjadinId: perjadin.id,
     });
 
-    expect((await moveSessionDate(pic, session.id, "2026-09-01")).outcome).toBe("moved");
-    expect((await moveSessionDate(pic, session.id, "2026-09-03")).outcome).toBe("moved");
+    expect((await moveSessionDate(pic, session.id, "2026-09-01", "09:00")).outcome).toBe("moved");
+    expect((await moveSessionDate(pic, session.id, "2026-09-03", "09:00")).outcome).toBe("moved");
     // One day outside either end, which is the pair that makes "inclusive" mean something.
-    expect((await moveSessionDate(pic, session.id, "2026-08-31")).outcome).toBe("outside-perjadin");
-    expect((await moveSessionDate(pic, session.id, "2026-09-04")).outcome).toBe("outside-perjadin");
+    expect((await moveSessionDate(pic, session.id, "2026-08-31", "09:00")).outcome).toBe(
+      "outside-perjadin",
+    );
+    expect((await moveSessionDate(pic, session.id, "2026-09-04", "09:00")).outcome).toBe(
+      "outside-perjadin",
+    );
   });
 
   it("refuses a Teaching Team caller", async () => {
@@ -794,7 +841,7 @@ describe("moving a date", () => {
       onlinePicPersonId: pic.id,
     });
 
-    await expect(moveSessionDate(bagus, session.id, "2026-09-17")).rejects.toSatisfy(
+    await expect(moveSessionDate(bagus, session.id, "2026-09-17", "09:00")).rejects.toSatisfy(
       isNotStaffError,
     );
   });

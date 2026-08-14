@@ -312,13 +312,17 @@ function Cancel({ session }: { session: SessionDetail }) {
 function MoveDate({ session }: { session: SessionDetail }) {
   const [open, setOpen] = useState(false);
   const [heldOn, setHeldOn] = useState(session.heldOn);
+  // The time moves with the date, in the same act (#72). Seeded from the current value so
+  // moving only the date leaves the hour where the School expects it.
+  const [startsAt, setStartsAt] = useState(session.startsAt);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const dateId = useId();
+  const timeId = useId();
 
   function submit() {
     startSaving(async () => {
-      const result = await moveSessionDateAction(session.id, heldOn);
+      const result = await moveSessionDateAction(session.id, heldOn, startsAt);
       if (result.outcome === "moved") {
         setOpen(false);
         return;
@@ -340,10 +344,10 @@ function MoveDate({ session }: { session: SessionDetail }) {
       open={open}
       onOpenChange={setOpen}
     >
-      <DialogTrigger render={<Button variant="outline">Ubah tanggal</Button>} />
+      <DialogTrigger render={<Button variant="outline">Ubah jadwal</Button>} />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Ubah tanggal Sesi</DialogTitle>
+          <DialogTitle>Ubah tanggal &amp; jam Sesi</DialogTitle>
           <DialogDescription>
             {session.perjadin === null
               ? "Tanggal baru tidak boleh bentrok dengan Sesi daring lain di Sekolah ini."
@@ -353,17 +357,34 @@ function MoveDate({ session }: { session: SessionDetail }) {
 
         {refusal !== null && <StaleAlert message={refusal} />}
 
-        <div className="grid gap-1.5">
-          <Label htmlFor={dateId}>Tanggal</Label>
-          <Input
-            id={dateId}
-            type="date"
-            value={heldOn}
-            onChange={(event) => {
-              setHeldOn(event.target.value);
-              setRefusal(null);
-            }}
-          />
+        <div className="flex flex-wrap gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor={dateId}>Tanggal</Label>
+            <Input
+              id={dateId}
+              type="date"
+              value={heldOn}
+              onChange={(event) => {
+                setHeldOn(event.target.value);
+                setRefusal(null);
+              }}
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor={timeId}>Jam Mulai</Label>
+            {/* Wall-clock time local to the School, in the School's Time Zone. */}
+            <Input
+              id={timeId}
+              type="time"
+              className="w-32"
+              value={startsAt}
+              onChange={(event) => {
+                setStartsAt(event.target.value);
+                setRefusal(null);
+              }}
+            />
+          </div>
         </div>
 
         <DialogFooter>
@@ -376,10 +397,10 @@ function MoveDate({ session }: { session: SessionDetail }) {
             Batal
           </Button>
           <Button
-            disabled={saving || heldOn === ""}
+            disabled={saving || heldOn === "" || startsAt === ""}
             onClick={submit}
           >
-            {saving ? "Menyimpan…" : "Simpan tanggal"}
+            {saving ? "Menyimpan…" : "Simpan"}
           </Button>
         </DialogFooter>
       </DialogContent>

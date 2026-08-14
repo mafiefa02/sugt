@@ -4,6 +4,7 @@ import { PerjadinGroup } from "-/components/perjadin-group";
 import { SessionStatusBadge } from "-/components/session-labels";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
+import { formatSessionStartTimeWithWib } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -151,6 +152,9 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
               >
                 {session.heldOn}
               </Link>
+              <span className="text-muted-foreground tabular-nums">
+                {formatSessionStartTimeWithWib(session.startsAt, session.timeZone)}
+              </span>
               <Link
                 href={`/sekolah/${session.schoolSlug}`}
                 className="text-muted-foreground hover:underline"

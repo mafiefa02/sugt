@@ -1,6 +1,11 @@
 import { MODE_LABELS, SessionStatusBadge } from "-/components/session-labels";
 import type { SchoolSession, SessionAspect } from "@sugt/db/queries";
-import { CONCERN_AT_OR_BELOW, RATING_MAX, RATING_MIN } from "@sugt/domain";
+import {
+  CONCERN_AT_OR_BELOW,
+  formatSessionStartTimeWithWib,
+  RATING_MAX,
+  RATING_MIN,
+} from "@sugt/domain";
 import { Rating } from "@sugt/ui/components/rating";
 import Link from "next/link";
 
@@ -44,6 +49,9 @@ function SchoolSessions({ sessions }: { sessions: SchoolSession[] }) {
           >
             {session.heldOn}
           </Link>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {formatSessionStartTimeWithWib(session.startsAt, session.timeZone)}
+          </span>
           <span className="text-xs text-muted-foreground">{MODE_LABELS[session.mode]}</span>
           <SessionStatusBadge status={session.status} />
 

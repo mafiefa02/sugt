@@ -5,6 +5,7 @@ import {
   type SessionMode,
   type SessionStatus,
   type Stream,
+  type TimeZone,
 } from "@sugt/domain";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -12,7 +13,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "../client";
 import { session, sessionTeacher } from "../schema/delivery";
 import { person } from "../schema/people";
-import { school } from "../schema/reference";
+import { province, school } from "../schema/reference";
 import { perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 import { requireStaff } from "./staff-only";
@@ -67,6 +68,13 @@ export type SessionDetail = {
   schoolSlug: string;
   mode: SessionMode;
   heldOn: string;
+  /** Wall-clock start time local to the School (`HH:MM:SS`), rendered with its zone. */
+  startsAt: string;
+  /**
+   * The School's Province's Time Zone, for rendering `startsAt` — no Indonesian Province
+   * straddles a boundary, so the zone lives on `province`, not `school`.
+   */
+  timeZone: TimeZone;
   status: SessionStatus;
   /** Set on a cancelled Session and null on every other, by CHECK. */
   cancelledReason: string | null;
@@ -178,6 +186,8 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
         schoolSlug: school.slug,
         mode: session.mode,
         heldOn: session.heldOn,
+        startsAt: session.startsAt,
+        timeZone: province.timeZone,
         status: session.status,
         cancelledReason: session.cancelledReason,
 
@@ -201,6 +211,9 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
       })
       .from(session)
       .innerJoin(school, eq(school.id, session.schoolId))
+      // The School's Province carries the Time Zone `startsAt` is read in. NOT NULL both ways,
+      // so an inner join.
+      .innerJoin(province, eq(province.code, school.provinceCode))
       // Outer: six of every ten Sessions have no Perjadin.
       .leftJoin(perjadin, eq(perjadin.id, session.perjadinId))
       // The `coalesce` the criterion names, resolved in the join rather than in TypeScript.
@@ -318,6 +331,8 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
     schoolSlug: first.schoolSlug,
     mode: first.mode,
     heldOn: first.heldOn,
+    startsAt: first.startsAt,
+    timeZone: first.timeZone,
     status: first.status,
     cancelledReason: first.cancelledReason,
     picPersonId: first.picPersonId,
@@ -566,11 +581,17 @@ export async function cancelSession(
  *   write rather than pre-read: a pre-read is a race, and the index is not.
  * - **Offline** — the new date must stay inside the Perjadin's window. No CHECK can carry
  *   that, since the range sits on another table, so it is held here beside the write.
+ *
+ * **The start time moves with the date, in the same write** ([#72](https://github.com/mafiefa02/sugt/issues/72)):
+ * moving a Session is one act, and a dialog that changed the date while silently keeping a
+ * time nobody can see would be a trap. The index keys on `(school_id, held_on)`, not
+ * `starts_at`, so the collision rule is unaffected by carrying the time.
  */
 export async function moveSessionDate(
   caller: Person,
   sessionId: string,
   heldOn: string,
+  startsAt: string,
 ): Promise<MoveSessionDateResult> {
   requireStaff(caller);
 
@@ -606,7 +627,7 @@ export async function moveSessionDate(
         }
       }
 
-      await tx.update(session).set({ heldOn }).where(eq(session.id, sessionId));
+      await tx.update(session).set({ heldOn, startsAt }).where(eq(session.id, sessionId));
       return { outcome: "moved" };
     });
   } catch (error) {

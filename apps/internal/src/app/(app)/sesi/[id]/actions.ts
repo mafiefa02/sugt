@@ -94,14 +94,15 @@ export async function cancelSessionAction(
   return result;
 }
 
-/** A slipped date, which is an edit and not a cancellation. */
+/** A slipped date, which is an edit and not a cancellation — and its time moves with it (#72). */
 export async function moveSessionDateAction(
   sessionId: string,
   heldOn: string,
+  startsAt: string,
 ): Promise<MoveSessionDateResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => moveSessionDate(person, sessionId, heldOn));
+  const result = await staffSurface(() => moveSessionDate(person, sessionId, heldOn, startsAt));
   if (result.outcome === "moved") revalidatePath(`/sesi/${sessionId}`);
   return result;
 }
