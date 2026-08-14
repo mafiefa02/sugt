@@ -451,6 +451,13 @@ one list rather than two — see
 [ADR-0015](./adr/0015-story-bodies-are-markdown-and-the-editor-schema-is-the-allowlist.md), which
 is where that constraint is argued, because the failure it prevents is silent.
 
+**A formatting toolbar sits above the body.** A writer who does not know `##` can still make a
+subheading, and a link — which had no keyboard shortcut and no input rule — becomes reachable at
+all. Seven controls: the paragraph or heading level (Judul 1 is left off, because the Story's title
+is the page's one H1), bold, italic, a bullet and a numbered list, a quote, and a link. Each button
+lights up to show what the caret already carries. The bar is bound to the same one list the editor
+and the public renderer share, so it can never offer a format the body is not allowed to hold.
+
 **A Story is a draft until it is published, and comes down immediately when withdrawn.**
 Publishing or unpublishing tells the public site to refresh rather than waiting for its next
 scheduled one — the site otherwise serves its last good copy indefinitely, which is right for

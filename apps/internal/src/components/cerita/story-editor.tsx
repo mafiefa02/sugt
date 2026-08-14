@@ -215,7 +215,9 @@ function StoryToolbar({
         // `toggleMark` on a collapsed caret only touches `storedMarks`, so the link's own range must
         // be selected first; toggleLink then finds the range wholly marked and removes it — keeping
         // Remove bound to an allowlist command value rather than a raw `removeMark`.
-        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, range.from, range.to)));
+        view.dispatch(
+          view.state.tr.setSelection(TextSelection.create(view.state.doc, range.from, range.to)),
+        );
         callCommand(storyToolbar.link.toggle.key)(ctx);
       }
       onStateChange(deriveToolbarState(ctx.get(editorViewCtx).state));
@@ -395,9 +397,7 @@ function StoryLinkDialog({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Tautan</DialogTitle>
-          <DialogDescription>
-            Tempel URL. Teks yang dipilih akan menjadi tautan.
-          </DialogDescription>
+          <DialogDescription>Tempel URL. Teks yang dipilih akan menjadi tautan.</DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"

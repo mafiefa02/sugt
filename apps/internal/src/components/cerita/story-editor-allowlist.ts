@@ -1,6 +1,4 @@
 import type { MilkdownPlugin } from "@milkdown/kit/ctx";
-import { Bold, Italic, Link2, List, ListOrdered, Quote } from "lucide-react";
-
 import {
   blockquoteAttr,
   blockquoteKeymap,
@@ -71,6 +69,7 @@ import {
   wrapInOrderedListCommand,
   wrapInOrderedListInputRule,
 } from "@milkdown/kit/preset/commonmark";
+import { Bold, Italic, Link2, List, ListOrdered, Quote } from "lucide-react";
 
 /**
  * **The Story body allowlist — the one list ADR-0015 asks for.**

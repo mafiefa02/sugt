@@ -1,8 +1,7 @@
+import { deriveToolbarState } from "-/components/cerita/toolbar-state";
 import { Schema } from "@milkdown/kit/prose/model";
 import { EditorState, TextSelection } from "@milkdown/kit/prose/state";
 import { describe, expect, it } from "vitest";
-
-import { deriveToolbarState } from "-/components/cerita/toolbar-state";
 
 /**
  * **The pure toolbar-state derivation, tested with no database and no DOM.**
@@ -38,7 +37,11 @@ const schema = new Schema({
     list_item: {
       content: "paragraph block*",
       group: "listItem",
-      attrs: { label: { default: "•" }, listType: { default: "bullet" }, spread: { default: false } },
+      attrs: {
+        label: { default: "•" },
+        listType: { default: "bullet" },
+        spread: { default: false },
+      },
     },
     text: { group: "inline" },
   },
@@ -120,9 +123,7 @@ describe("deriveToolbarState", () => {
 
   it("marks a bullet list active and disables heading inside it", () => {
     const doc = schema.node("doc", null, [
-      schema.node("bullet_list", null, [
-        schema.node("list_item", null, [para("satu")]),
-      ]),
+      schema.node("bullet_list", null, [schema.node("list_item", null, [para("satu")])]),
     ]);
     // Caret inside the list item's paragraph.
     const state = deriveToolbarState(stateAt(doc, 4));
@@ -133,9 +134,7 @@ describe("deriveToolbarState", () => {
   });
 
   it("marks a blockquote active", () => {
-    const doc = schema.node("doc", null, [
-      schema.node("blockquote", null, [para("dikutip")]),
-    ]);
+    const doc = schema.node("doc", null, [schema.node("blockquote", null, [para("dikutip")])]);
     const state = deriveToolbarState(stateAt(doc, 3));
     expect(state.blockquote.active).toBe(true);
     expect(state.bulletList.active).toBe(false);
