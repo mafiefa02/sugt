@@ -66,8 +66,20 @@ describe("the scope payload", () => {
     const payload = await scope(service);
 
     expect(payload.clusters).toEqual([
-      { id: alpha.id, slug: "alpha", name: "Cluster Alpha", topic: "Mitigasi Bencana", problem: "Peringatan dini banjir" },
-      { id: beta.id, slug: "beta", name: "Cluster Beta", topic: "Ketahanan Pangan", problem: "Hama padi" },
+      {
+        id: alpha.id,
+        slug: "alpha",
+        name: "Cluster Alpha",
+        topic: "Mitigasi Bencana",
+        problem: "Peringatan dini banjir",
+      },
+      {
+        id: beta.id,
+        slug: "beta",
+        name: "Cluster Beta",
+        topic: "Ketahanan Pangan",
+        problem: "Hama padi",
+      },
     ]);
     expect(payload.schools).toEqual([
       expect.objectContaining({
@@ -116,14 +128,49 @@ describe("the delivery payload", () => {
     await addProvince("JB", "Jawa Barat");
     const alpha = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
     const beta = await addCluster({ slug: "beta", name: "Cluster Beta" });
-    const busy = await addSchool({ slug: "s1", name: "S1", clusterId: alpha.id, provinceCode: "JB" });
-    const other = await addSchool({ slug: "s2", name: "S2", clusterId: beta.id, provinceCode: "JB" });
+    const busy = await addSchool({
+      slug: "s1",
+      name: "S1",
+      clusterId: alpha.id,
+      provinceCode: "JB",
+    });
+    const other = await addSchool({
+      slug: "s2",
+      name: "S2",
+      clusterId: beta.id,
+      provinceCode: "JB",
+    });
 
-    await addSession({ schoolId: busy.id, heldOn: "2026-09-01", status: "delivered", onlinePicPersonId: pic.id });
-    await addSession({ schoolId: busy.id, heldOn: "2026-09-08", status: "delivered", onlinePicPersonId: pic.id });
-    await addSession({ schoolId: busy.id, heldOn: "2026-09-15", status: "arranged", onlinePicPersonId: pic.id });
-    await addSession({ schoolId: busy.id, heldOn: "2026-09-22", status: "cancelled", onlinePicPersonId: pic.id });
-    await addSession({ schoolId: other.id, heldOn: "2026-09-02", status: "delivered", onlinePicPersonId: pic.id });
+    await addSession({
+      schoolId: busy.id,
+      heldOn: "2026-09-01",
+      status: "delivered",
+      onlinePicPersonId: pic.id,
+    });
+    await addSession({
+      schoolId: busy.id,
+      heldOn: "2026-09-08",
+      status: "delivered",
+      onlinePicPersonId: pic.id,
+    });
+    await addSession({
+      schoolId: busy.id,
+      heldOn: "2026-09-15",
+      status: "arranged",
+      onlinePicPersonId: pic.id,
+    });
+    await addSession({
+      schoolId: busy.id,
+      heldOn: "2026-09-22",
+      status: "cancelled",
+      onlinePicPersonId: pic.id,
+    });
+    await addSession({
+      schoolId: other.id,
+      heldOn: "2026-09-02",
+      status: "delivered",
+      onlinePicPersonId: pic.id,
+    });
 
     const payload = await delivery(service);
 
@@ -144,7 +191,9 @@ describe("the delivery payload", () => {
     const payload = await delivery(service);
 
     expect(payload.deliveredTotal).toBe(0);
-    expect(payload.perCluster).toEqual([{ clusterId: alpha.id, clusterSlug: "alpha", delivered: 0 }]);
+    expect(payload.perCluster).toEqual([
+      { clusterId: alpha.id, clusterSlug: "alpha", delivered: 0 },
+    ]);
   });
 });
 
@@ -168,7 +217,12 @@ describe("the Stories payloads", () => {
       stream: "STEM",
     });
     await addStoryPhotos(pic, s.id, [
-      { storagePath: "story/x/cover.jpg", contentType: "image/jpeg", byteSize: 1000, caption: null },
+      {
+        storagePath: "story/x/cover.jpg",
+        contentType: "image/jpeg",
+        byteSize: 1000,
+        caption: null,
+      },
     ]);
     const editor = await storyForEditor(pic, s.id);
     await setStoryCover(pic, s.id, editor!.photos[0]!.id);
@@ -194,10 +248,28 @@ describe("the Stories payloads", () => {
     const pic = await staff();
     const school = await oneSchool();
 
-    const draft = await createStory(pic, { schoolId: school.id, title: "Draf", body: "b", kind: "field", stream: null });
-    const published = await createStory(pic, { schoolId: school.id, title: "Terbit", body: "b", kind: "field", stream: null });
+    const draft = await createStory(pic, {
+      schoolId: school.id,
+      title: "Draf",
+      body: "b",
+      kind: "field",
+      stream: null,
+    });
+    const published = await createStory(pic, {
+      schoolId: school.id,
+      title: "Terbit",
+      body: "b",
+      kind: "field",
+      stream: null,
+    });
     await publishStory(pic, published.id);
-    const pulled = await createStory(pic, { schoolId: school.id, title: "Ditarik", body: "b", kind: "field", stream: null });
+    const pulled = await createStory(pic, {
+      schoolId: school.id,
+      title: "Ditarik",
+      body: "b",
+      kind: "field",
+      stream: null,
+    });
     await publishStory(pic, pulled.id);
     await withdrawStory(pic, pulled.id);
 

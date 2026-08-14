@@ -3,12 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { requireEnv } from "-/lib/env";
 import { publicUrlFor } from "-/lib/story-photo-url";
 import type { ServiceCaller } from "@sugt/db/queries";
-import type {
-  DeliveryData,
-  ScopeData,
-  StoryDetailData,
-  StoryListItem,
-} from "@sugt/db/queries";
+import type { DeliveryData, ScopeData, StoryDetailData, StoryListItem } from "@sugt/db/queries";
 
 /**
  * **The producer half of the aggregates contract.** `@sugt/db` returns the data; this turns it into

@@ -44,14 +44,13 @@ describe("the aggregates gate", () => {
   });
 
   it("401s a wrong secret, on every route", async () => {
-    const wrong = () =>
-      new Request(`${ORIGIN}/x`, { headers: { authorization: "Bearer nope" } });
+    const wrong = () => new Request(`${ORIGIN}/x`, { headers: { authorization: "Bearer nope" } });
     expect((await scopeRoute(wrong())).status).toBe(401);
     expect((await deliveryRoute(wrong())).status).toBe(401);
     expect((await storiesRoute(wrong())).status).toBe(401);
-    expect(
-      (await storyRoute(wrong(), { params: Promise.resolve({ slug: "x" }) })).status,
-    ).toBe(401);
+    expect((await storyRoute(wrong(), { params: Promise.resolve({ slug: "x" }) })).status).toBe(
+      401,
+    );
   });
 
   it("serves the scope payload with a version and no derived counts, to a valid secret", async () => {

@@ -294,11 +294,7 @@ function RevalidationSteps({ report }: { report: RevalidationReport }) {
               step.outcome === "failed" ? "text-destructive" : "text-muted-foreground",
             )}
           >
-            {step.outcome === "ok" ? (
-              <Check className="size-3" />
-            ) : (
-              <X className="size-3" />
-            )}
+            {step.outcome === "ok" ? <Check className="size-3" /> : <X className="size-3" />}
             {step.label}
             {step.outcome === "failed" ? (
               <span className="text-[11px]">— gagal, halaman lama masih tayang</span>
