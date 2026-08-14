@@ -74,17 +74,17 @@ export const subCluster = pgTable(
  * is not a state the coverage view ever has to render, and no Cluster join is
  * ever an outer join.
  *
- * `subClusterId` is **nullable in this ticket only**: there is no Sub-Cluster data yet, so
- * a NOT NULL column would make the migration unrunnable against the forty-two seeded
- * Schools. The seed ticket tightens it once real groupings exist —
- * `docs/data-model.md`'s Reference-data section is explicit that every School belongs to
- * exactly one Sub-Cluster from the moment the seed runs.
+ * `subClusterId` is NOT NULL: every School belongs to exactly one Sub-Cluster from the
+ * moment the seed runs, so a School with no Sub-Cluster is one no trip can ever be planned
+ * for and no screen would say so — the state ADR-0016 argues against. It was nullable while
+ * no Sub-Cluster data existed; the seed (`reference-data.sql`) assigns all forty-two Schools
+ * and migration 0009 then tightens the column. `docs/data-model.md`'s Reference-data section
+ * is the source for the invariant.
  *
  * A School carries both `clusterId` and `subClusterId`, and they cannot disagree: the
  * composite foreign key `(subClusterId, clusterId) → sub_cluster (id, cluster_id)` means a
  * row can only exist if the pair is true in `sub_cluster`. It is the same denormalisation
- * `group_member.role` already makes. A null `subClusterId` satisfies it under MATCH SIMPLE,
- * which is what lets the column stay nullable this ticket.
+ * `group_member.role` already makes.
  *
  * `kabupatenKota` is plain text, unlike Province: nothing counts it, so a typo
  * costs a misspelt line rather than a wrong headline. It is kept because six
@@ -99,7 +99,9 @@ export const school = pgTable(
     clusterId: uuid("cluster_id")
       .notNull()
       .references(() => cluster.id),
-    subClusterId: uuid("sub_cluster_id").references(() => subCluster.id),
+    subClusterId: uuid("sub_cluster_id")
+      .notNull()
+      .references(() => subCluster.id),
     provinceCode: text("province_code")
       .notNull()
       .references(() => province.code),

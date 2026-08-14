@@ -97,18 +97,31 @@ export type SchoolFixture = {
   clusterId: string;
   provinceCode: string;
   kabupatenKota?: string;
-  /** Nullable this ticket — supplied only by a test that asserts on the Sub-Cluster link. */
+  /**
+   * Every School belongs to exactly one Sub-Cluster (NOT NULL). A test that asserts on the
+   * link supplies one; otherwise `addSchool` builds a throwaway Sub-Cluster in the School's
+   * own Cluster, so the composite `(sub_cluster_id, cluster_id)` key still holds.
+   */
   subClusterId?: string;
 };
 
 export async function addSchool(fixture: SchoolFixture) {
+  const subClusterId =
+    fixture.subClusterId ??
+    (
+      await addSubCluster({
+        slug: `${fixture.slug}-kelompok`,
+        name: `${fixture.name} Kelompok`,
+        clusterId: fixture.clusterId,
+      })
+    ).id;
   const [school] = await db
     .insert(schema.school)
     .values({
       slug: fixture.slug,
       name: fixture.name,
       clusterId: fixture.clusterId,
-      subClusterId: fixture.subClusterId ?? null,
+      subClusterId,
       provinceCode: fixture.provinceCode,
       kabupatenKota: fixture.kabupatenKota ?? "Kota Bandung",
     })
