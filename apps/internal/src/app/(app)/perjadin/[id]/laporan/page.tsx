@@ -5,6 +5,7 @@ import { requirePerson } from "-/lib/person";
 import { signedReceiptUrl } from "-/lib/receipt-media";
 import { staffSurface } from "-/lib/staff-surface";
 import { perjadinAcquittal, type AcquittalTransaction } from "@sugt/db/queries";
+import { formatIdr } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -157,7 +158,7 @@ function Figure({ label, amountIdr }: { label: string; amountIdr: number }) {
   return (
     <div>
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="tabular-nums">Rp {amountIdr.toLocaleString("id-ID")}</dd>
+      <dd className="tabular-nums">Rp {formatIdr(amountIdr)}</dd>
     </div>
   );
 }

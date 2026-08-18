@@ -9,7 +9,7 @@ import type {
   PlanPerjadinResult,
   PlannedTeacher,
 } from "@sugt/db/queries";
-import { STREAMS, type Stream } from "@sugt/domain";
+import { formatIdr, STREAMS, type Stream } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { Checkbox } from "@sugt/ui/components/checkbox";
@@ -248,14 +248,22 @@ function PerjadinPlanForm({
           {/*
             Fixed at planning and transferred before departure, so a Perjadin is never in an
             unfunded state — which is why this is on the planning form rather than the acquittal.
+
+            A masked text input, not `type="number"`: it groups the thousands as they type so
+            a seven-figure advance's magnitude is legible at the point of entry, which a numeric
+            spinner cannot show. `advanceIdr` stays a plain digit string in state — every
+            non-digit (the `Rp` affix, the dot separators) is stripped back out on change — so
+            submit's `Number(...)` and the empty-value guard are unchanged. `inputMode="numeric"`
+            keeps the mobile keypad; only the desktop spinner is lost, which nobody uses here.
           */}
           <Input
             id={advanceId}
-            type="number"
-            min={0}
-            value={trip.advanceIdr}
+            type="text"
+            inputMode="numeric"
+            value={trip.advanceIdr === "" ? "" : `Rp ${formatIdr(Number(trip.advanceIdr))}`}
             onChange={(event) => {
-              setTrip((previous) => ({ ...previous, advanceIdr: event.target.value }));
+              const digits = event.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+              setTrip((previous) => ({ ...previous, advanceIdr: digits }));
             }}
           />
         </Field>

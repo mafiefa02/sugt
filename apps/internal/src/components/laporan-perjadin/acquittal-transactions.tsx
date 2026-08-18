@@ -10,7 +10,7 @@ import {
   recordTransactionAction,
 } from "-/app/(app)/perjadin/[id]/laporan/actions";
 import type { AcquittalReceipt } from "@sugt/db/queries";
-import { TRANSACTION_CATEGORIES, type TransactionCategory } from "@sugt/domain";
+import { formatIdr, TRANSACTION_CATEGORIES, type TransactionCategory } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -104,7 +104,7 @@ function TransactionRow({ perjadinId, line }: { perjadinId: string; line: Viewab
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="tabular-nums">Rp {line.amountIdr.toLocaleString("id-ID")}</span>
+        <span className="tabular-nums">Rp {formatIdr(line.amountIdr)}</span>
         <Receipts
           perjadinId={perjadinId}
           line={line}
