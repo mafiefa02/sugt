@@ -93,6 +93,19 @@ function unpivot(alias: string, aspects: readonly string[]): SQL {
 }
 
 /**
+ * `('aspect', src.aspect, src.aspect_comment), …` — the unpivot for Participant Feedback, where
+ * each Aspect carries its own optional comment (#102). Emits `(aspect, rating, said)` triples so a
+ * low Rating shows the prose written about *that* Aspect, not one comment shared across all three.
+ */
+function unpivotWithComment(alias: string, aspects: readonly string[]): SQL {
+  return sql.raw(
+    aspects
+      .map((aspect) => `('${aspect}', ${alias}.${aspect}, ${alias}.${aspect}_comment)`)
+      .join(", "),
+  );
+}
+
+/**
  * `least(src.a, src.b, …)` for one source's Aspects — **the base-table predicate that hits the
  * partial index.** Each `*_concerns_idx` is `on least(…) where least(…) <= 7`; a query that only
  * filtered the unpivoted `r.rating` would scan the whole table, so this repeats the index's own
@@ -153,12 +166,12 @@ export async function concerns(_caller: Person): Promise<Concern[]> {
 
         select 'participant' as source, sch.name || ' · ' || f.class_kind as subject,
                r.aspect as aspect, r.rating as rating, f.name as who,
-               f.comment as said, f.submitted_at as at,
+               r.said as said, f.submitted_at as at,
                f.session_id as session_id, null::uuid as perjadin_id
           from ${participantFeedback} as f
           join ${session} as sn on sn.id = f.session_id
           join ${school} as sch on sch.id = sn.school_id
-          cross join lateral (values ${unpivot("f", PARTICIPANT_FEEDBACK_ASPECTS)}) as r(aspect, rating)
+          cross join lateral (values ${unpivotWithComment("f", PARTICIPANT_FEEDBACK_ASPECTS)}) as r(aspect, rating, said)
          where ${least("f", PARTICIPANT_FEEDBACK_ASPECTS)} <= ${THRESHOLD} and r.rating <= ${THRESHOLD}
 
         union all

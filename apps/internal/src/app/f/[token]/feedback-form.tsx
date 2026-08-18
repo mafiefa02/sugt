@@ -46,14 +46,13 @@ function FeedbackForm({ token }: { token: string }) {
   const [classKind, setClassKind] = useState<ClassKind | undefined>(undefined);
   const [name, setName] = useState("");
   const [ratings, setRatings] = useState<Partial<Record<ParticipantFeedbackAspect, number>>>({});
-  const [comment, setComment] = useState("");
+  const [comments, setComments] = useState<Partial<Record<ParticipantFeedbackAspect, string>>>({});
   const [nameError, setNameError] = useState(false);
   const [done, setDone] = useState(false);
   const [gone, setGone] = useState(false);
   const [saving, startSaving] = useTransition();
   const namePrefix = useId();
   const nameId = useId();
-  const commentId = useId();
 
   const rated = PARTICIPANT_FEEDBACK_ASPECTS.every((aspect) => ratings[aspect] !== undefined);
   const canSubmit = classKind !== undefined && name.trim() !== "" && rated;
@@ -74,7 +73,11 @@ function FeedbackForm({ token }: { token: string }) {
           instructor: ratings.instructor!,
           relevance: ratings.relevance!,
         },
-        comment: comment.trim() === "" ? null : comment.trim(),
+        comments: {
+          materials: comments.materials?.trim() || null,
+          instructor: comments.instructor?.trim() || null,
+          relevance: comments.relevance?.trim() || null,
+        },
       });
       if (result.outcome === "submitted") setDone(true);
       else if (result.outcome === "name-required") setNameError(true);
@@ -140,38 +143,44 @@ function FeedbackForm({ token }: { token: string }) {
 
         {PARTICIPANT_FEEDBACK_ASPECTS.map((aspect) => {
           const labelId = `${namePrefix}-${aspect}-label`;
+          const commentId = `${namePrefix}-${aspect}-comment`;
           return (
             <div
               key={aspect}
-              className="flex items-center justify-between gap-3"
+              className="grid gap-2"
             >
-              <Label id={labelId}>{ASPECT_LABELS[aspect]}</Label>
-              <RatingInput
-                name={`${namePrefix}-${aspect}`}
-                aria-labelledby={labelId}
-                size="sm"
-                min={RATING_MIN}
-                max={RATING_MAX}
-                concernAtOrBelow={CONCERN_AT_OR_BELOW}
-                value={ratings[aspect]}
-                onValueChange={(value) => {
-                  setRatings((previous) => ({ ...previous, [aspect]: value }));
+              <div className="flex items-center justify-between gap-3">
+                <Label id={labelId}>{ASPECT_LABELS[aspect]}</Label>
+                <RatingInput
+                  name={`${namePrefix}-${aspect}`}
+                  aria-labelledby={labelId}
+                  size="sm"
+                  min={RATING_MIN}
+                  max={RATING_MAX}
+                  concernAtOrBelow={CONCERN_AT_OR_BELOW}
+                  value={ratings[aspect]}
+                  onValueChange={(value) => {
+                    setRatings((previous) => ({ ...previous, [aspect]: value }));
+                  }}
+                />
+              </div>
+              {/* One optional comment per Aspect, so it belongs to the Rating it explains (#102). */}
+              <Label
+                htmlFor={commentId}
+                className="text-xs text-muted-foreground"
+              >
+                Komentar {ASPECT_LABELS[aspect]} (opsional)
+              </Label>
+              <Textarea
+                id={commentId}
+                value={comments[aspect] ?? ""}
+                onChange={(event) => {
+                  setComments((previous) => ({ ...previous, [aspect]: event.target.value }));
                 }}
               />
             </div>
           );
         })}
-
-        <div className="grid gap-1.5">
-          <Label htmlFor={commentId}>Komentar (opsional)</Label>
-          <Textarea
-            id={commentId}
-            value={comment}
-            onChange={(event) => {
-              setComment(event.target.value);
-            }}
-          />
-        </div>
 
         <Button
           disabled={saving || !canSubmit}

@@ -124,19 +124,36 @@ describe("concerns", () => {
     expect(row?.sessionId).toBe(session.id);
   });
 
-  it("shows a Participant's comment when they left one", async () => {
+  it("shows the Participant's comment for the Aspect that was Rated low", async () => {
     const pic = await staff();
     const session = await aDeliveredSession(pic.id);
     await addParticipantFeedback({
       sessionId: session.id,
       classKind: "Student",
       name: "Ayu",
-      comment: "Terlalu cepat",
+      comments: { instructor: "Terlalu cepat" },
       ratings: { instructor: 3 },
     });
 
-    // The optional comment is prose too — a Participant owes none, but a filled one is shown.
+    // The optional comment is prose too — a Participant owes none, but a filled one is shown,
+    // paired to the Aspect it explains (#102).
     expect(find(await concerns(pic), "participant", "instructor")?.said).toBe("Terlalu cepat");
+  });
+
+  it("does not borrow another Aspect's comment for a low Rating", async () => {
+    const pic = await staff();
+    const session = await aDeliveredSession(pic.id);
+    // A comment on `materials`, but the low Rating is on `instructor` — the instructor concern
+    // must carry no prose, because a single shared comment could not say which Aspect it meant.
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Ayu",
+      comments: { materials: "Bahannya bagus" },
+      ratings: { instructor: 3 },
+    });
+
+    expect(find(await concerns(pic), "participant", "instructor")?.said).toBeNull();
   });
 
   it("surfaces a low Perjadin Evaluation Aspect, linked to the trip", async () => {

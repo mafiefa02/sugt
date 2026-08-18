@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { db, schema } from "@sugt/db";
 import type {
   ClassKind,
+  ParticipantFeedbackAspect,
   SessionStatus,
   Stream,
   Role,
@@ -303,8 +304,8 @@ export type ParticipantFeedbackFixture = {
   sessionId: string;
   classKind: ClassKind;
   name?: string;
-  /** Optional, as the form is — a Participant owes no prose. Null by default. */
-  comment?: string;
+  /** Optional comment per Aspect, as the form is — a Participant owes no prose. Null by default. */
+  comments?: Partial<Record<ParticipantFeedbackAspect, string>>;
   ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>>;
 };
 
@@ -320,7 +321,9 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
       sessionId: fixture.sessionId,
       classKind: fixture.classKind,
       name: fixture.name ?? "Siti",
-      comment: fixture.comment ?? null,
+      materialsComment: fixture.comments?.materials ?? null,
+      instructorComment: fixture.comments?.instructor ?? null,
+      relevanceComment: fixture.comments?.relevance ?? null,
       materials: FINE,
       instructor: FINE,
       relevance: FINE,
