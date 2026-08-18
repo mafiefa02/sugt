@@ -9,7 +9,7 @@ import type {
   PlanPerjadinResult,
   PlannedTeacher,
 } from "@sugt/db/queries";
-import { formatIdr, STREAMS, type Stream } from "@sugt/domain";
+import { formatIdr, STREAMS, TRANSPORT_MODES, type Stream, type TransportMode } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { Checkbox } from "@sugt/ui/components/checkbox";
@@ -67,6 +67,20 @@ function PerjadinPlanForm({
   // is edited — offering an unbounded roster on the planning form would make the common case
   // the awkward one.
   const [group, setGroup] = useState<Record<Stream, string>>({ STEM: "", Research: "" });
+  // Three optional extra-Staff slots, each a Person id or "" for empty. A set, not an order —
+  // slot position is not stored, so which slot holds whom does not matter.
+  const [extraStaff, setExtraStaff] = useState<[string, string, string]>(["", "", ""]);
+  // Departure/return logistics, all six required to submit. `mode` is a `TransportMode` once
+  // chosen; "" until then. The zones are not here — WIB and the derived return zone are the
+  // server's to set.
+  const [logistics, setLogistics] = useState({
+    departureDate: "",
+    departureTime: "",
+    departureMode: "" as TransportMode | "",
+    returnDate: "",
+    returnTime: "",
+    returnMode: "" as TransportMode | "",
+  });
   // Keyed by School id, seeded when a Sub-Cluster is picked. A School absent from the current
   // Sub-Cluster has no row, so switching Sub-Cluster starts its Schools fresh.
   const [rows, setRows] = useState<Record<string, SchoolRow>>({});
@@ -97,7 +111,7 @@ function PerjadinPlanForm({
     setRefusal(null);
   }
 
-  /** Every field the database needs before a trip can be written at all. */
+  /** Every field the database needs before a trip can be written at all. Extra Staff are optional. */
   const incomplete =
     subClusterId === "" ||
     trip.startsOn === "" ||
@@ -105,6 +119,12 @@ function PerjadinPlanForm({
     trip.advanceIdr === "" ||
     trip.picPersonId === "" ||
     STREAMS.some((stream) => group[stream] === "") ||
+    logistics.departureDate === "" ||
+    logistics.departureTime === "" ||
+    logistics.departureMode === "" ||
+    logistics.returnDate === "" ||
+    logistics.returnTime === "" ||
+    logistics.returnMode === "" ||
     kept.length === 0 ||
     kept.some((school) => rows[school.id]!.date === "" || rows[school.id]!.time === "");
 
@@ -121,12 +141,24 @@ function PerjadinPlanForm({
         endsOn: trip.endsOn,
         advanceIdr: Number(trip.advanceIdr),
         picPersonId: trip.picPersonId,
+        extraStaffPersonIds: extraStaff.filter((personId) => personId !== ""),
         teachers,
         sessions: kept.map((school) => ({
           schoolId: school.id,
           heldOn: rows[school.id]!.date,
           startsAt: rows[school.id]!.time,
         })),
+        // The guard above proves the six are set, so the `mode` casts hold.
+        departure: {
+          date: logistics.departureDate,
+          time: logistics.departureTime,
+          mode: logistics.departureMode as TransportMode,
+        },
+        return: {
+          date: logistics.returnDate,
+          time: logistics.returnTime,
+          mode: logistics.returnMode as TransportMode,
+        },
       });
 
       if (result.outcome === "planned") {
@@ -284,6 +316,81 @@ function PerjadinPlanForm({
             </Field>
           ))}
         </div>
+
+        <p className="mt-4 text-sm text-muted-foreground">
+          Staf tambahan (opsional) — koordinator, bendahara, atau dokumentator. Hingga tiga orang,
+          selain PIC.
+        </p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          {extraStaff.map((chosen, slot) => (
+            <Field
+              // Three fixed slots that are never reordered, so the position is a stable key.
+              key={`extra-staff-slot-${slot}`}
+              id={`${idPrefix}-extra-staff-${slot}`}
+              label={`Staf ${slot + 1}`}
+            >
+              {/*
+                The Staff roster minus the PIC and minus whoever the other slots hold, so a
+                duplicate is never offered — the write refuses one too. Clearable back to empty via
+                the unassigned item, because each slot is optional.
+              */}
+              <PersonSelect
+                id={`${idPrefix}-extra-staff-${slot}`}
+                people={staff.filter(
+                  (entry) =>
+                    entry.id === chosen ||
+                    (entry.id !== trip.picPersonId &&
+                      !extraStaff.some((other, index) => index !== slot && other === entry.id)),
+                )}
+                value={chosen}
+                placeholder="Pilih Staf"
+                unassignedLabel="Tanpa Staf"
+                onSelect={(personId) => {
+                  setExtraStaff((previous) => {
+                    const next = [...previous] as [string, string, string];
+                    next[slot] = personId;
+                    return next;
+                  });
+                }}
+              />
+            </Field>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 border-b border-border px-7 py-5 sm:grid-cols-2">
+        <TravelLeg
+          idPrefix={`${idPrefix}-departure`}
+          heading="Keberangkatan"
+          note="Dari Bandung (WIB)."
+          date={logistics.departureDate}
+          time={logistics.departureTime}
+          mode={logistics.departureMode}
+          onChange={(patch) => {
+            setLogistics((previous) => ({
+              ...previous,
+              departureDate: patch.date ?? previous.departureDate,
+              departureTime: patch.time ?? previous.departureTime,
+              departureMode: patch.mode ?? previous.departureMode,
+            }));
+          }}
+        />
+        <TravelLeg
+          idPrefix={`${idPrefix}-return`}
+          heading="Kepulangan"
+          note="Zona waktu mengikuti Sekolah terakhir yang dikunjungi."
+          date={logistics.returnDate}
+          time={logistics.returnTime}
+          mode={logistics.returnMode}
+          onChange={(patch) => {
+            setLogistics((previous) => ({
+              ...previous,
+              returnDate: patch.date ?? previous.returnDate,
+              returnTime: patch.time ?? previous.returnTime,
+              returnMode: patch.mode ?? previous.returnMode,
+            }));
+          }}
+        />
       </div>
 
       {selected === undefined ? (
@@ -418,6 +525,9 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
           {result.outcome === "duplicate-teacher" && (
             <p>Satu pengajar tidak bisa mengampu dua Stream sekaligus.</p>
           )}
+          {result.outcome === "duplicate-staff" && (
+            <p>Setiap Staf tambahan harus berbeda, dan bukan PIC.</p>
+          )}
           {result.outcome === "session-outside-perjadin" && (
             <>
               <p>
@@ -465,6 +575,95 @@ function Field({ id, label, children }: { id: string; label: string; children: R
     <div className="grid gap-1.5">
       <Label htmlFor={id}>{label}</Label>
       {children}
+    </div>
+  );
+}
+
+/**
+ * One travel leg on the plan form: a date, a wall-clock time and a transport mode. No zone
+ * picker — the departure zone is WIB and the return zone is derived server-side from the last
+ * School, so a control for it would offer a choice the form does not make.
+ */
+function TravelLeg({
+  idPrefix,
+  heading,
+  note,
+  date,
+  time,
+  mode,
+  onChange,
+}: {
+  idPrefix: string;
+  heading: string;
+  note: string;
+  date: string;
+  time: string;
+  mode: TransportMode | "";
+  onChange: (patch: { date?: string; time?: string; mode?: TransportMode }) => void;
+}) {
+  return (
+    <div className="grid gap-3">
+      <div>
+        <h2 className="font-heading text-sm font-medium">{heading}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{note}</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field
+          id={`${idPrefix}-date`}
+          label="Tanggal"
+        >
+          <Input
+            id={`${idPrefix}-date`}
+            type="date"
+            value={date}
+            onChange={(event) => {
+              onChange({ date: event.target.value });
+            }}
+          />
+        </Field>
+        <Field
+          id={`${idPrefix}-time`}
+          label="Jam"
+        >
+          <Input
+            id={`${idPrefix}-time`}
+            type="time"
+            value={time}
+            onChange={(event) => {
+              onChange({ time: event.target.value });
+            }}
+          />
+        </Field>
+        <Field
+          id={`${idPrefix}-mode`}
+          label="Moda"
+        >
+          <Select
+            items={Object.fromEntries(TRANSPORT_MODES.map((entry) => [entry, entry]))}
+            value={mode === "" ? null : mode}
+            onValueChange={(value) => {
+              onChange({ mode: (value as TransportMode | null) ?? undefined });
+            }}
+          >
+            <SelectTrigger
+              id={`${idPrefix}-mode`}
+              aria-label={`Moda ${heading}`}
+            >
+              <SelectValue placeholder="Pilih moda" />
+            </SelectTrigger>
+            <SelectContent>
+              {TRANSPORT_MODES.map((entry) => (
+                <SelectItem
+                  key={entry}
+                  value={entry}
+                >
+                  {entry}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
     </div>
   );
 }

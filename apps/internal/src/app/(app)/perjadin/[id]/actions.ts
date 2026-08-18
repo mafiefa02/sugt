@@ -6,11 +6,14 @@ import {
   filePerjadinEvaluation,
   movePerjadinDates,
   replacePerjadinGroup,
+  updatePerjadinLogistics,
   type FilePerjadinEvaluationResult,
   type MovePerjadinDatesResult,
   type NewPerjadinEvaluation,
+  type PerjadinLogisticsInput,
   type PlannedTeacher,
   type ReplaceGroupResult,
+  type UpdatePerjadinLogisticsResult,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
 
@@ -34,10 +37,13 @@ import { revalidatePath } from "next/cache";
 export async function replacePerjadinGroupAction(
   perjadinId: string,
   teachers: PlannedTeacher[],
+  extraStaffPersonIds: string[] = [],
 ): Promise<ReplaceGroupResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => replacePerjadinGroup(person, perjadinId, teachers));
+  const result = await staffSurface(() =>
+    replacePerjadinGroup(person, perjadinId, teachers, extraStaffPersonIds),
+  );
   // The page the user is looking at was just rewritten, so its payload is already in the
   // browser's router cache and would otherwise be re-shown unchanged.
   if (result.outcome === "replaced") revalidatePath(`/perjadin/${perjadinId}`);
@@ -83,5 +89,21 @@ export async function movePerjadinDatesAction(
 
   const result = await staffSurface(() => movePerjadinDates(person, perjadinId, startsOn, endsOn));
   if (result.outcome === "moved") revalidatePath(`/perjadin/${perjadinId}`);
+  return result;
+}
+
+/**
+ * **Correct a Perjadin's departure/return logistics.** Staff-only, wrapped in `staffSurface` for
+ * the same reason `movePerjadinDatesAction` is — `updatePerjadinLogistics` throws `NotStaffError`,
+ * sanitized on the way to the client, so the 403 translation happens here.
+ */
+export async function updatePerjadinLogisticsAction(
+  perjadinId: string,
+  input: PerjadinLogisticsInput,
+): Promise<UpdatePerjadinLogisticsResult> {
+  const person = await requirePerson();
+
+  const result = await staffSurface(() => updatePerjadinLogistics(person, perjadinId, input));
+  if (result.outcome === "updated") revalidatePath(`/perjadin/${perjadinId}`);
   return result;
 }

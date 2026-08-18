@@ -104,11 +104,15 @@ export {
   movePerjadinDates,
   perjadinDetail,
   replacePerjadinGroup,
+  updatePerjadinLogistics,
   type GroupMemberEntry,
   type MovePerjadinDatesResult,
   type PerjadinDetail,
+  type PerjadinLogisticsInput,
   type PerjadinSession,
+  type PerjadinTravelLeg,
   type ReplaceGroupResult,
+  type UpdatePerjadinLogisticsResult,
 } from "./perjadin-detail";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export { onlineSessionDirectory, type DirectoryOnlineSession } from "./online-session-directory";
@@ -145,6 +149,7 @@ export {
   type PlannableSubCluster,
   type PlannedSession,
   type PlannedTeacher,
+  type PlannedTravelLeg,
   type PlanPerjadinInput,
   type PlanPerjadinResult,
   type SessionTimeClash,

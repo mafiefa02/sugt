@@ -1,4 +1,4 @@
-import type { Role, SessionStatus, Stream, TimeZone } from "@sugt/domain";
+import type { Role, SessionStatus, Stream, TimeZone, TransportMode } from "@sugt/domain";
 import { and, asc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -8,7 +8,12 @@ import { person } from "../schema/people";
 import { province, school } from "../schema/reference";
 import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
-import { duplicatedTeachers, streamsUncovered, type PlannedTeacher } from "./group-rules";
+import {
+  duplicatedStaff,
+  duplicatedTeachers,
+  streamsUncovered,
+  type PlannedTeacher,
+} from "./group-rules";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -46,6 +51,17 @@ export type PerjadinSession = {
   status: SessionStatus;
 };
 
+/**
+ * One leg's travel logistics, as the detail screen reads them. Null on every Perjadin planned
+ * before the columns existed (#106) — the screen shows those legs as not recorded.
+ */
+export type PerjadinTravelLeg = {
+  /** Wall-clock date and time, `YYYY-MM-DD HH:MM:SS`, meaningful only beside `zone`. */
+  at: string;
+  zone: TimeZone;
+  mode: TransportMode;
+};
+
 /** Everything the Perjadin detail screen renders, and no money. */
 export type PerjadinDetail = {
   id: string;
@@ -54,6 +70,10 @@ export type PerjadinDetail = {
   endsOn: string;
   picPersonId: string;
   picFullName: string;
+  /** Departure from Bandung; null when this trip predates the logistics columns. */
+  departure: PerjadinTravelLeg | null;
+  /** Return; null when this trip predates the logistics columns. */
+  return: PerjadinTravelLeg | null;
   /**
    * **The Report deadline is not here.** It is on `perjadinAcquittal`, behind the
    * Staff-only choke point, because the Perjadin Report *is* the acquittal —
@@ -72,6 +92,12 @@ export type PerjadinDetail = {
    * exists for impossible.
    */
   teachingTeam: { id: string; fullName: string }[];
+  /**
+   * Every active Staff member, for the substitution dialog's extra-Staff slots — a Group carries
+   * up to three Staff beyond the PIC, and a substitution must be able to keep or change them
+   * rather than silently drop them.
+   */
+  staff: { id: string; fullName: string }[];
 };
 
 /**
@@ -88,7 +114,7 @@ export async function perjadinDetail(
 ): Promise<PerjadinDetail | null> {
   const pic = alias(person, "pic");
 
-  const [[trip], group, sessions, teachingTeam] = await Promise.all([
+  const [[trip], group, sessions, teachingTeam, staff] = await Promise.all([
     db
       .select({
         id: perjadin.id,
@@ -97,6 +123,12 @@ export async function perjadinDetail(
         endsOn: perjadin.endsOn,
         picPersonId: pic.id,
         picFullName: pic.fullName,
+        departureAt: perjadin.departureAt,
+        departureZone: perjadin.departureZone,
+        departureMode: perjadin.departureMode,
+        returnAt: perjadin.returnAt,
+        returnZone: perjadin.returnZone,
+        returnMode: perjadin.returnMode,
       })
       .from(perjadin)
       .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
@@ -134,17 +166,47 @@ export async function perjadinDetail(
       .from(person)
       .where(and(eq(person.active, true), eq(person.role, "Teaching Team")))
       .orderBy(asc(person.fullName)),
+    // The Staff roster, for the substitution's extra-Staff slots. Revoked People excluded, same
+    // reason as the Teaching Team roster above.
+    db
+      .select({ id: person.id, fullName: person.fullName })
+      .from(person)
+      .where(and(eq(person.active, true), eq(person.role, "Staff")))
+      .orderBy(asc(person.fullName)),
   ]);
 
   if (!trip) return null;
 
-  return { ...trip, group, sessions, teachingTeam };
+  const { departureAt, departureZone, departureMode, returnAt, returnZone, returnMode, ...header } =
+    trip;
+
+  return {
+    ...header,
+    // A leg reads as recorded only when all three of its columns are present. They are written
+    // together and the CHECKs pin the zone/mode, so in practice they are all-or-nothing — but the
+    // columns are independently nullable, so this assembles the object only when the datetime and
+    // its tags are all there, and leaves the leg null otherwise.
+    departure:
+      departureAt !== null && departureZone !== null && departureMode !== null
+        ? { at: departureAt, zone: departureZone, mode: departureMode }
+        : null,
+    return:
+      returnAt !== null && returnZone !== null && returnMode !== null
+        ? { at: returnAt, zone: returnZone, mode: returnMode }
+        : null,
+    group,
+    sessions,
+    teachingTeam,
+    staff,
+  };
 }
 
 export type ReplaceGroupResult =
   | { outcome: "replaced" }
   | { outcome: "stream-uncovered"; missing: Stream[] }
   | { outcome: "duplicate-teacher"; personIds: string[] }
+  /** An extra Staff member repeated, or the same as the PIC — a Group holds each person once. */
+  | { outcome: "duplicate-staff"; personIds: string[] }
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" };
 
@@ -169,6 +231,7 @@ export async function replacePerjadinGroup(
   caller: Person,
   perjadinId: string,
   teachers: PlannedTeacher[],
+  extraStaffPersonIds: string[] = [],
 ): Promise<ReplaceGroupResult> {
   requireStaff(caller);
 
@@ -185,6 +248,12 @@ export async function replacePerjadinGroup(
       .where(eq(perjadin.id, perjadinId))
       .for("update");
     if (!trip) return { outcome: "no-such-perjadin" };
+
+    // Extra Staff distinct from the PIC and each other — the same rule planning enforces, checked
+    // here because the substitution rewrites the whole Group. The PIC is the current trip's, read
+    // above rather than taken from the caller.
+    const duplicateStaff = duplicatedStaff(trip.picPersonId, extraStaffPersonIds);
+    if (duplicateStaff.length > 0) return { outcome: "duplicate-staff", personIds: duplicateStaff };
 
     // **What a member keeps across a replacement.** `receiptsSettledAt` is the PIC's
     // checklist — an explicit mark that somebody handed their receipts over, which cannot be
@@ -209,6 +278,16 @@ export async function replacePerjadinGroup(
         stream: null,
         receiptsSettledAt: settled.get(trip.picPersonId) ?? null,
       },
+      // The extra Staff, kept across the replacement rather than dropped. Their
+      // `receiptsSettledAt` is preserved the same way the professors' and the PIC's are — an
+      // extra Staff member with transactions still owes their receipts after a substitution.
+      ...extraStaffPersonIds.map((personId) => ({
+        perjadinId,
+        personId,
+        role: "Staff" as const,
+        stream: null,
+        receiptsSettledAt: settled.get(personId) ?? null,
+      })),
       ...teachers
         // The PIC is Staff and cannot be a professor, so this drops nothing a valid form
         // could send. It is here because the pair would otherwise violate the primary key
@@ -314,4 +393,56 @@ export async function movePerjadinDates(
     }
     return { outcome: "moved", sessionsShifted: shifted.length };
   });
+}
+
+/**
+ * The six logistics fields as the edit surface submits them. Unlike the plan form, the return
+ * **zone is explicit here** — it was derived from the last School at plan time, but a correction
+ * may be needed. The departure zone stays WIB (the origin is always Bandung), so it is not asked
+ * for and not accepted: the query fixes it.
+ */
+export type PerjadinLogisticsInput = {
+  departureDate: string;
+  departureTime: string;
+  departureMode: TransportMode;
+  returnDate: string;
+  returnTime: string;
+  returnMode: TransportMode;
+  returnZone: TimeZone;
+};
+
+export type UpdatePerjadinLogisticsResult =
+  | { outcome: "updated" }
+  /** The id names no Perjadin — a stale link, which is reachable. */
+  | { outcome: "no-such-perjadin" };
+
+/**
+ * Correct a Perjadin's departure/return logistics after planning. Staff-only, like the date edit.
+ *
+ * Writes all six columns at once. `departure_zone` is fixed to WIB and never taken from the
+ * caller; `return_zone` is the caller's, because a return from a WITA/WIT city is read in that
+ * city's wall-clock and the derivation at plan time can be wrong. The `*_at` values are wall-clock
+ * `date time` strings, the same shape planning wrote — no instant, no conversion.
+ */
+export async function updatePerjadinLogistics(
+  caller: Person,
+  perjadinId: string,
+  input: PerjadinLogisticsInput,
+): Promise<UpdatePerjadinLogisticsResult> {
+  requireStaff(caller);
+
+  const [updated] = await db
+    .update(perjadin)
+    .set({
+      departureAt: `${input.departureDate} ${input.departureTime}`,
+      departureZone: "WIB",
+      departureMode: input.departureMode,
+      returnAt: `${input.returnDate} ${input.returnTime}`,
+      returnZone: input.returnZone,
+      returnMode: input.returnMode,
+    })
+    .where(eq(perjadin.id, perjadinId))
+    .returning({ id: perjadin.id });
+
+  return updated ? { outcome: "updated" } : { outcome: "no-such-perjadin" };
 }

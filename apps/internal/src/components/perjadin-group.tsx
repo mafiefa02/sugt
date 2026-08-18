@@ -33,12 +33,17 @@ import { useId, useState, useTransition } from "react";
 function PerjadinGroup({
   perjadinId,
   group,
+  picPersonId,
   teachingTeam,
+  staff,
   canSubstitute,
 }: {
   perjadinId: string;
   group: GroupMemberEntry[];
+  /** Which member is the PIC, so the extra-Staff slots exclude them. */
+  picPersonId: string;
   teachingTeam: { id: string; fullName: string }[];
+  staff: { id: string; fullName: string }[];
   canSubstitute: boolean;
 }) {
   return (
@@ -49,7 +54,9 @@ function PerjadinGroup({
           <Substitute
             perjadinId={perjadinId}
             group={group}
+            picPersonId={picPersonId}
             teachingTeam={teachingTeam}
+            staff={staff}
           />
         )}
       </div>
@@ -63,10 +70,14 @@ function PerjadinGroup({
             <span className="text-foreground">{member.fullName}</span>
             {/*
               Staff carry no Stream and Teaching Team always carry one, by
-              `group_member_stream_iff_teaching`. So the Stream is the professor's label
-              and the role is the PIC's, and neither needs both.
+              `group_member_stream_iff_teaching`. A professor is labelled by their Stream; among
+              the stream-less Staff, the PIC is named as such and the rest are extra Staff.
             */}
-            {member.stream === null ? " · PIC" : ` · ${member.stream}`}
+            {member.stream !== null
+              ? ` · ${member.stream}`
+              : member.personId === picPersonId
+                ? " · PIC"
+                : " · Staf"}
           </li>
         ))}
       </ul>
@@ -84,11 +95,15 @@ function PerjadinGroup({
 function Substitute({
   perjadinId,
   group,
+  picPersonId,
   teachingTeam,
+  staff,
 }: {
   perjadinId: string;
   group: GroupMemberEntry[];
+  picPersonId: string;
   teachingTeam: { id: string; fullName: string }[];
+  staff: { id: string; fullName: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState<Record<Stream, string>>(
@@ -100,6 +115,15 @@ function Substitute({
         ]),
       ) as Record<Stream, string>,
   );
+  // Three extra-Staff slots, seeded from the Group's current stream-less Staff other than the
+  // PIC, so a substitution keeps them rather than dropping them. A set of up to three, padded to
+  // three fixed slots.
+  const [extraStaff, setExtraStaff] = useState<[string, string, string]>(() => {
+    const current = group
+      .filter((member) => member.role === "Staff" && member.personId !== picPersonId)
+      .map((member) => member.personId);
+    return [current[0] ?? "", current[1] ?? "", current[2] ?? ""];
+  });
   const [refusal, setRefusal] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   // One prefix for the per-Stream ids: `useId` cannot be called inside a `map`.
@@ -133,7 +157,11 @@ function Substitute({
         (stream) => ({ stream, personId: chosen[stream] }),
       );
 
-      const result = await replacePerjadinGroupAction(perjadinId, teachers);
+      const result = await replacePerjadinGroupAction(
+        perjadinId,
+        teachers,
+        extraStaff.filter((personId) => personId !== ""),
+      );
       if (result.outcome === "replaced") {
         setOpen(false);
         return;
@@ -209,6 +237,35 @@ function Substitute({
               />
             </div>
           ))}
+
+          <div className="grid gap-1.5">
+            <Label>Staf tambahan (opsional)</Label>
+            <div className="grid gap-2">
+              {extraStaff.map((chosen, slot) => (
+                <PersonSelect
+                  // Three fixed slots that are never reordered, so the position is a stable key.
+                  key={`extra-staff-slot-${slot}`}
+                  people={staff.filter(
+                    (entry) =>
+                      entry.id === chosen ||
+                      (entry.id !== picPersonId &&
+                        !extraStaff.some((other, index) => index !== slot && other === entry.id)),
+                  )}
+                  value={chosen}
+                  placeholder="Pilih Staf"
+                  unassignedLabel="Tanpa Staf"
+                  onSelect={(personId) => {
+                    setExtraStaff((previous) => {
+                      const next = [...previous] as [string, string, string];
+                      next[slot] = personId;
+                      return next;
+                    });
+                    setRefusal(null);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
@@ -240,6 +297,7 @@ function Substitute({
 const REFUSALS = {
   "stream-uncovered": "Setiap Stream harus punya pengajar.",
   "duplicate-teacher": "Satu pengajar tidak bisa mengampu dua Stream sekaligus.",
+  "duplicate-staff": "Setiap Staf tambahan harus berbeda, dan bukan PIC.",
   "no-such-perjadin": "Perjadin ini sudah tidak ada. Muat ulang halaman untuk melihat keadaannya.",
 } as const;
 

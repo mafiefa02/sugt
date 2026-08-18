@@ -1,4 +1,4 @@
-import type { Role, Stream, TransactionCategory } from "@sugt/domain";
+import type { Role, Stream, TimeZone, TransactionCategory, TransportMode } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -60,6 +60,27 @@ export const perjadin = pgTable(
 
     advanceIdr: bigint("advance_idr", { mode: "number" }).notNull(),
 
+    // **How the Group travels, on each leg.** Six nullable columns: nullable so the Perjadins
+    // that predate them stay valid with nothing to backfill — the form requires all six on a new
+    // plan, but the column cannot, because existing rows have none.
+    //
+    // Each `*_at` is a wall-clock date **and** time with **no instant** — a `timestamp` without a
+    // time zone — carrying its zone in a separate `*_zone` tag, exactly as `session.starts_at` is
+    // a wall-clock time meaningful only beside its Time Zone. Storing an instant would bake in a
+    // conversion nobody asked for; the Surat Tugas says "07:30 WIB", not a UTC moment.
+    //
+    // `departure_zone` is always `WIB` (the origin is Bandung) and `return_zone` is derived at
+    // insert from the Province of the last School visited — both snapshots, set server-side. The
+    // zone columns still CHECK all three `TIME_ZONES`, because the edit surface may correct a
+    // return zone. `*_mode` CHECKs `TRANSPORT_MODES`. Both lists are written out character for
+    // character rather than composed, for the reason `transaction_category_check` gives.
+    departureAt: timestamp("departure_at", { mode: "string" }),
+    departureZone: text("departure_zone").$type<TimeZone>(),
+    departureMode: text("departure_mode").$type<TransportMode>(),
+    returnAt: timestamp("return_at", { mode: "string" }),
+    returnZone: text("return_zone").$type<TimeZone>(),
+    returnMode: text("return_mode").$type<TransportMode>(),
+
     picPersonId: uuid("pic_person_id").notNull(),
     picRole: text("pic_role").$type<"Staff">().notNull().default("Staff"),
 
@@ -72,6 +93,17 @@ export const perjadin = pgTable(
     check("perjadin_advance_check", sql`${t.advanceIdr} >= 0`),
     check("perjadin_pic_role_check", sql`${t.picRole} = 'Staff'`),
     check("perjadin_dates_check", sql`${t.endsOn} >= ${t.startsOn}`),
+    // A null zone/mode passes (the columns are nullable); a present one must be in the set.
+    check("perjadin_departure_zone_check", sql`${t.departureZone} in ('WIB', 'WITA', 'WIT')`),
+    check("perjadin_return_zone_check", sql`${t.returnZone} in ('WIB', 'WITA', 'WIT')`),
+    check(
+      "perjadin_departure_mode_check",
+      sql`${t.departureMode} in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')`,
+    ),
+    check(
+      "perjadin_return_mode_check",
+      sql`${t.returnMode} in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')`,
+    ),
     check(
       "perjadin_returned_check",
       sql`(${t.returnedAt} is null) = (${t.returnedToTreasurerIdr} is null)`,
