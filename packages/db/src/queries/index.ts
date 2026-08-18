@@ -131,6 +131,7 @@ export {
   submitParticipantFeedback,
   type IssueFeedbackTokenResult,
   type NewParticipantFeedback,
+  type ParticipantFeedbackComments,
   type ParticipantFeedbackRatings,
   type SubmitParticipantFeedbackResult,
 } from "./participant-feedback";

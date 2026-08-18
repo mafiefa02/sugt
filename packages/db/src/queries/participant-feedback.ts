@@ -1,4 +1,8 @@
-import { FEEDBACK_TOKEN_LIFETIME_HOURS, type ClassKind } from "@sugt/domain";
+import {
+  FEEDBACK_TOKEN_LIFETIME_HOURS,
+  type ClassKind,
+  type ParticipantFeedbackAspect,
+} from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
@@ -102,12 +106,19 @@ export type ParticipantFeedbackRatings = {
   relevance: number;
 };
 
+/**
+ * One optional comment per Aspect, keyed off `PARTICIPANT_FEEDBACK_ASPECTS` so the form, this
+ * type and the concerns query stay driven by the one list. Each is independently optional — a
+ * Participant may explain one low Rating and leave the rest blank.
+ */
+export type ParticipantFeedbackComments = Record<ParticipantFeedbackAspect, string | null>;
+
 /** What the public form collects. The `sessionId` is not here — it comes from the resolved token. */
 export type NewParticipantFeedback = {
   classKind: ClassKind;
   name: string;
   ratings: ParticipantFeedbackRatings;
-  comment: string | null;
+  comments: ParticipantFeedbackComments;
 };
 
 export type SubmitParticipantFeedbackResult =
@@ -131,7 +142,12 @@ export async function submitParticipantFeedback(
   const name = input.name.trim();
   if (name === "") return { outcome: "name-required" };
 
-  const comment = input.comment?.trim() ?? "";
+  // Trim each comment blank → null exactly as the single `comment` was — a Participant owes no
+  // prose, so an empty box stores nothing rather than an empty string.
+  const trimmed = (comment: string | null): string | null => {
+    const value = comment?.trim() ?? "";
+    return value === "" ? null : value;
+  };
   await db.insert(participantFeedback).values({
     sessionId: caller.sessionId,
     classKind: input.classKind,
@@ -139,7 +155,9 @@ export async function submitParticipantFeedback(
     materials: input.ratings.materials,
     instructor: input.ratings.instructor,
     relevance: input.ratings.relevance,
-    comment: comment === "" ? null : comment,
+    materialsComment: trimmed(input.comments.materials),
+    instructorComment: trimmed(input.comments.instructor),
+    relevanceComment: trimmed(input.comments.relevance),
   });
 
   return { outcome: "submitted" };

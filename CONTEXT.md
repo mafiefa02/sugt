@@ -150,7 +150,7 @@ Someone taught at a Session — a member of a GTK, MS or Student Class. The Prog
 _Avoid_: attendee, student (only one of the three Classes is students), user, respondent
 
 **Participant Feedback**:
-What one Participant says about the Class they sat in: a Rating of **Materials**, **Instructor** and **Relevance**, a comment, and a name they type themselves. Left without signing in, through a link live only briefly. Nothing asks them to rate themselves — Comprehension, Participation and Readiness are on the Class Record precisely because they are judgements about the room. Deliberately not part of any internal record; the two are filed by different people who expect different readers.
+What one Participant says about the Class they sat in: a Rating of **Materials**, **Instructor** and **Relevance**, an optional comment on each of the three Aspects, and a name they type themselves. Left without signing in, through a link live only briefly. Nothing asks them to rate themselves — Comprehension, Participation and Readiness are on the Class Record precisely because they are judgements about the room. Deliberately not part of any internal record; the two are filed by different people who expect different readers.
 _Avoid_: review, survey, evaluation (unqualified), Class Record, Session Record
 
 **Final Project**:

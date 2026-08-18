@@ -237,7 +237,14 @@ export const participantFeedback = pgTable(
     instructor: rating("instructor"),
     relevance: rating("relevance"),
 
-    comment: text("comment"),
+    // One optional comment per Aspect, so a comment belongs to the Rating it explains and the
+    // concerns list can show the prose for the Aspect that was actually Rated low — a single
+    // shared comment could not say which of the three it was about (#102). All three stay
+    // nullable: a Participant owes no elaboration, the CHECK forcing prose lives on
+    // `class_record`/`session_record` only, never here.
+    materialsComment: text("materials_comment"),
+    instructorComment: text("instructor_comment"),
+    relevanceComment: text("relevance_comment"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

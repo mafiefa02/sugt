@@ -5,6 +5,7 @@ import {
   cancelSession,
   issueFeedbackToken,
   submitParticipantFeedback,
+  type ParticipantFeedbackComments,
   type ParticipantFeedbackRatings,
 } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
@@ -60,6 +61,13 @@ async function aSession(
 }
 
 const FINE: ParticipantFeedbackRatings = { materials: 9, instructor: 9, relevance: 9 };
+
+/** No comment on any Aspect — the common case, a Participant owing none. */
+const NO_COMMENTS: ParticipantFeedbackComments = {
+  materials: null,
+  instructor: null,
+  relevance: null,
+};
 
 async function tokenRows(sessionId: string) {
   return db
@@ -188,27 +196,42 @@ describe("submitParticipantFeedback", () => {
 
     const result = await submitParticipantFeedback(
       { kind: "participant", sessionId: session.id },
-      { classKind: "Student", name: "Siti", ratings: FINE, comment: "Seru sekali" },
+      {
+        classKind: "Student",
+        name: "Siti",
+        ratings: FINE,
+        comments: { materials: "Bahannya lengkap", instructor: "Seru sekali", relevance: null },
+      },
     );
 
     expect(result).toEqual({ outcome: "submitted" });
     const rows = await feedbackRows(session.id);
     expect(rows.length).toBe(1);
     expect(rows[0]?.name).toBe("Siti");
-    expect(rows[0]?.comment).toBe("Seru sekali");
+    // Each comment lands against its own Aspect, and a blank one stays null.
+    expect(rows[0]?.materialsComment).toBe("Bahannya lengkap");
+    expect(rows[0]?.instructorComment).toBe("Seru sekali");
+    expect(rows[0]?.relevanceComment).toBeNull();
   });
 
-  it("stores a blank comment as null", async () => {
+  it("stores a blank per-Aspect comment as null", async () => {
     const pic = await staff();
     const session = await aSession(pic.id, "delivered");
 
     await submitParticipantFeedback(
       { kind: "participant", sessionId: session.id },
-      { classKind: "GTK", name: "Budi", ratings: FINE, comment: "   " },
+      {
+        classKind: "GTK",
+        name: "Budi",
+        ratings: FINE,
+        comments: { materials: "   ", instructor: null, relevance: "  " },
+      },
     );
 
     const rows = await feedbackRows(session.id);
-    expect(rows[0]?.comment).toBeNull();
+    expect(rows[0]?.materialsComment).toBeNull();
+    expect(rows[0]?.instructorComment).toBeNull();
+    expect(rows[0]?.relevanceComment).toBeNull();
   });
 
   it("refuses a blank name, and writes nothing", async () => {
@@ -217,7 +240,7 @@ describe("submitParticipantFeedback", () => {
 
     const result = await submitParticipantFeedback(
       { kind: "participant", sessionId: session.id },
-      { classKind: "MS", name: "   ", ratings: FINE, comment: null },
+      { classKind: "MS", name: "   ", ratings: FINE, comments: NO_COMMENTS },
     );
 
     expect(result).toEqual({ outcome: "name-required" });
@@ -230,7 +253,12 @@ describe("submitParticipantFeedback", () => {
 
     const result = await submitParticipantFeedback(
       { kind: "participant", sessionId: session.id },
-      { classKind: "Student", name: "Ayu", ratings: { ...FINE, instructor: 2 }, comment: null },
+      {
+        classKind: "Student",
+        name: "Ayu",
+        ratings: { ...FINE, instructor: 2 },
+        comments: NO_COMMENTS,
+      },
     );
 
     expect(result).toEqual({ outcome: "submitted" });
@@ -256,7 +284,7 @@ describe("submitFeedbackAction", () => {
       classKind: "GTK",
       name: "Budi",
       ratings: FINE,
-      comment: null,
+      comments: NO_COMMENTS,
     });
 
     expect(result).toEqual({ outcome: "submitted" });
@@ -278,7 +306,7 @@ describe("submitFeedbackAction", () => {
       classKind: "Student",
       name: "Siti",
       ratings: FINE,
-      comment: null,
+      comments: NO_COMMENTS,
     });
 
     expect(result).toEqual({ outcome: "gone" });
@@ -296,7 +324,7 @@ describe("submitFeedbackAction", () => {
       classKind: "Student",
       name: "Siti",
       ratings: FINE,
-      comment: null,
+      comments: NO_COMMENTS,
     });
 
     expect(result).toEqual({ outcome: "gone" });

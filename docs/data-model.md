@@ -697,8 +697,10 @@ create table participant_feedback (
   instructor  smallint not null check (instructor between 1 and 10),
   relevance   smallint not null check (relevance  between 1 and 10),
 
-  comment       text,
-  submitted_at  timestamptz not null default now()
+  materials_comment   text,
+  instructor_comment  text,
+  relevance_comment   text,
+  submitted_at        timestamptz not null default now()
 );
 
 create index participant_feedback_concerns_idx
@@ -718,6 +720,15 @@ the Class Record for that same cohort.
 **No elaboration rule applies to Participants.** The `CHECK` forcing prose on a low Rating is on
 `class_record` and `session_record` only. A Participant owes nothing and is not signed in;
 refusing their 3 because they did not justify it would simply lose the 3.
+
+**One optional comment per Aspect**, `materials_comment` / `instructor_comment` /
+`relevance_comment`, rather than one shared `comment`
+([#102](https://github.com/mafiefa02/sugt/issues/102),
+[ADR-0017](./adr/0017-participant-feedback-has-a-comment-per-aspect.md)). A single comment could
+not say which of the three Aspects it was about, so the concerns list could show a low
+`instructor` Rating beside prose that was really about the materials. Pairing each comment with its
+Aspect lets the list show the comment for the Aspect that was actually Rated low — or none, when
+that box was left blank. All three stay nullable; the no-elaboration rule above is unchanged.
 
 **One token per Session, shared.** The primary key is `session_id`, so issuing a new one replaces
 it. `expires_at` defaults 24 hours out and is stored rather than derived: the token is issued at
@@ -879,12 +890,14 @@ select 'Session Record', sch.name, r.aspect, r.rating, p.full_name, s.problems, 
 union all
 
 select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
-       f.name, f.comment, f.submitted_at
+       f.name, r.said, f.submitted_at
   from participant_feedback f
   join session sn on sn.id = f.session_id
   join school sch on sch.id = sn.school_id
-  cross join lateral (values ('materials',  f.materials), ('instructor', f.instructor),
-                             ('relevance',  f.relevance)) as r(aspect, rating)
+  cross join lateral (values ('materials',  f.materials,  f.materials_comment),
+                             ('instructor', f.instructor, f.instructor_comment),
+                             ('relevance',  f.relevance,  f.relevance_comment))
+                     as r(aspect, rating, said)
  where r.rating <= 7
 
 union all
@@ -1610,7 +1623,7 @@ cascade and the deferred PIC foreign key resolve against each other rather than 
   but it is the Aspect most likely to be noise.
 - **Whether a Perjadin Evaluation is required of anyone.** Nothing currently is — unlike a
   Session Record, where the PIC's is expected. The PIC is the obvious candidate.
-- **What else the Participant form asks for.** Right now: Class, three Ratings, comment, name.
+- **What else the Participant form asks for.** Right now: Class, three Ratings, a comment on each Aspect, name.
   A role or year group would be a column, not a redesign.
 - **The four Cluster Problems are placeholders.** Invented here to be plausible per Cluster and
   workable from both Streams; they are not DITSAMA's. Replace them by editing
