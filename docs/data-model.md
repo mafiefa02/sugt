@@ -1007,10 +1007,17 @@ Two declarative constraints replace what would otherwise be trigger code:
 **`sub_cluster_id` is where a Perjadin goes, and `destination` is what the paperwork calls it.**
 They are not redundant, and dropping either would cost something real. The Sub-Cluster is
 structural: it decides which Schools may appear on the trip at all, and the composite key on
-`session` makes that unbreakable. `destination` stays free text because it is prose that ends up
-on a Surat Tugas — "Kab. Sorong, Papua Barat Daya" — written for a reader who has never heard of
-a Sub-Cluster and is not a foreign key to anything. Deriving it from `sub_cluster.name` would
-put an internal planning label on external paperwork.
+`session` makes that unbreakable. `destination` is the prose that ends up on a Surat Tugas —
+`Kelompok 18: Samarinda dan Balikpapan` — the Sub-Cluster's own label followed by the distinct
+Kabupaten/Kota of **all** its Schools, joined with `" dan "` before the last
+([#105](https://github.com/mafiefa02/sugt/issues/105)). It is **derived server-side at insert**
+by `planPerjadin`, from the Sub-Cluster and its Schools rather than typed, so a Surat Tugas cannot
+disagree with the trip the form already shows. Once written it is a **snapshot** and is never
+recomputed on read: Sub-Clusters are editable ([ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md)),
+so a live read would silently rewrite an already-issued Surat Tugas when Schools are later
+regrouped or the Sub-Cluster renamed. (The column began as free text; the earlier note here
+rejected deriving it from `sub_cluster.name` _alone_ — naming the concrete places, prefixed by the
+Kelompok label, is what a destination line is for.)
 
 The Schools **actually** visited remain the structural truth and are still reached through
 `session.perjadin_id`. A Perjadin covers several, but no longer an arbitrary several: the

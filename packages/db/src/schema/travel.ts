@@ -45,11 +45,15 @@ export const perjadin = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     // Where the Perjadin goes: it fixes the Schools that may appear on the trip at all.
     // NOT NULL immediately — no Perjadin exists in any live database, so there is nothing
-    // to backfill. `destination` beside it is free-text prose for the Surat Tugas and is
-    // deliberately not derived from this; see `docs/data-model.md`'s Travel section.
+    // to backfill.
     subClusterId: uuid("sub_cluster_id")
       .notNull()
       .references(() => subCluster.id),
+    // The Surat Tugas destination line. Derived server-side at insert from this Sub-Cluster's
+    // label and its Schools' Kabupaten/Kota, then frozen here — a **snapshot**, never recomputed
+    // on read, because Sub-Clusters are editable (ADR-0016) and a live read would rewrite an
+    // already-issued Surat Tugas. See `planPerjadin` in `queries/perjadin-planning.ts` and
+    // `docs/data-model.md`'s Travel section.
     destination: text("destination").notNull(),
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
