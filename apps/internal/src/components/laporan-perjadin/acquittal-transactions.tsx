@@ -398,7 +398,15 @@ function RecordTransaction({
               }}
             >
               <SelectTrigger id={`${fields}-incurred-by`}>
-                <SelectValue placeholder="Tidak atas nama siapa pun" />
+                {/*
+                  A function-child, because the `SelectItem` value is the `personId` while the
+                  visible label is the `fullName` — without this the trigger would show the raw
+                  id. Scoped to this call site on purpose (#101); the shared wrapper's general
+                  value≠label handling is a separate cross-cutting change.
+                */}
+                <SelectValue placeholder="Tidak atas nama siapa pun">
+                  {(value) => group.find((member) => member.personId === value)?.fullName}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {group.map((member) => (
