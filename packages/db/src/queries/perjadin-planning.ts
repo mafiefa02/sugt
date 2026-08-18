@@ -55,12 +55,12 @@ export type PlannedSession = {
  *
  * **`subClusterId` is the trip's, picked in the form.** Every School on the trip must belong
  * to it — the rule ADR-0016 explains cannot be a foreign key, checked below at the one place
- * it can be violated. `destination` stays free-text prose for the Surat Tugas and is **not**
- * derived from the Sub-Cluster's name.
+ * it can be violated. `destination` is **not** here: it is derived server-side from the
+ * Sub-Cluster and its Schools' Kabupaten/Kota at insert ([#105](https://github.com/mafiefa02/sugt/issues/105)),
+ * so the form has no Tujuan box to drift from what it already shows.
  */
 export type PlanPerjadinInput = {
   subClusterId: string;
-  destination: string;
   startsOn: string;
   endsOn: string;
   advanceIdr: number;
@@ -202,12 +202,19 @@ export async function planPerjadin(
   const clashes = [...slots.values()].filter((slot) => slot.schoolIds.length > 1);
   if (clashes.length > 0) return { outcome: "session-time-clash", clashes };
 
+  // The destination is derived, not typed: the planner has already picked the Sub-Cluster and
+  // seen its Schools, so a free-text box would only restate that and could drift from it (#105).
+  // A **snapshot** into the write-once column, computed once here and never on read — Sub-Clusters
+  // are editable (ADR-0016), so a live read would silently rewrite an already-issued Surat Tugas
+  // when Schools are later regrouped or the Sub-Cluster is renamed.
+  const destination = await derivePerjadinDestination(input.subClusterId);
+
   const perjadinId = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(perjadin)
       .values({
         subClusterId: input.subClusterId,
-        destination: input.destination,
+        destination,
         startsOn: input.startsOn,
         endsOn: input.endsOn,
         advanceIdr: input.advanceIdr,
@@ -244,6 +251,40 @@ export async function planPerjadin(
   });
 
   return { outcome: "planned", perjadinId };
+}
+
+/**
+ * The destination line the Surat Tugas is written against: the Sub-Cluster's own label, then the
+ * distinct Kabupaten/Kota its Schools sit in — e.g. `Kelompok 18: Samarinda, Bontang dan Balikpapan`.
+ *
+ * **The whole Sub-Cluster, not only the visited Schools:** the line names where the trip's
+ * Kelompok is, which does not change because one School was dropped this time. Distinct
+ * Kabupaten/Kota in School order (first appearance wins), so several Schools in one regency
+ * collapse to one entry. The Sub-Cluster name is used verbatim — it already reads "Kelompok 18".
+ */
+async function derivePerjadinDestination(subClusterId: string): Promise<string> {
+  const rows = await db
+    .select({ name: subCluster.name, kabupatenKota: school.kabupatenKota })
+    .from(subCluster)
+    .innerJoin(school, eq(school.subClusterId, subCluster.id))
+    .where(eq(subCluster.id, subClusterId))
+    .orderBy(asc(school.name));
+
+  const places: string[] = [];
+  for (const row of rows) {
+    if (!places.includes(row.kabupatenKota)) places.push(row.kabupatenKota);
+  }
+  return `${rows[0]?.name ?? ""}: ${joinWithDan(places)}`;
+}
+
+/**
+ * Join a list the way an Indonesian sentence does: comma-separated, with `" dan "` before the
+ * last and no serial comma. One item is itself; none is the empty string.
+ * `["Samarinda", "Bontang", "Balikpapan"]` → `"Samarinda, Bontang dan Balikpapan"`.
+ */
+function joinWithDan(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} dan ${items[items.length - 1]}`;
 }
 
 /**

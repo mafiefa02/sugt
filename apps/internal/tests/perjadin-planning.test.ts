@@ -52,7 +52,7 @@ async function professors() {
  * school-outside-Sub-Cluster test builds a stray School in a sibling Sub-Cluster of the same
  * Cluster.
  */
-async function twoSchools() {
+async function twoSchools(kabupatenKota: [string, string] = ["Kota Bandung", "Kota Cimahi"]) {
   await addProvince("JB", "Jawa Barat");
   const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
   const subCluster = await addSubCluster({
@@ -67,6 +67,7 @@ async function twoSchools() {
       clusterId: cluster.id,
       subClusterId: subCluster.id,
       provinceCode: "JB",
+      kabupatenKota: kabupatenKota[0],
     }),
     addSchool({
       slug: "sman-2",
@@ -74,20 +75,20 @@ async function twoSchools() {
       clusterId: cluster.id,
       subClusterId: subCluster.id,
       provinceCode: "JB",
+      kabupatenKota: kabupatenKota[1],
     }),
   ]);
   return { cluster, subCluster, schools };
 }
 
 /** Everything a valid trip needs, so each test below can spoil exactly one thing. */
-async function validPlan() {
+async function validPlan(kabupatenKota?: [string, string]) {
   const pic = await staff();
   const [bagus, sari] = await professors();
-  const { cluster, subCluster, schools } = await twoSchools();
+  const { cluster, subCluster, schools } = await twoSchools(kabupatenKota);
 
   const input: PlanPerjadinInput = {
     subClusterId: subCluster.id,
-    destination: "Bandung",
     startsOn: "2026-09-01",
     endsOn: "2026-09-03",
     advanceIdr: 5_000_000,
@@ -473,6 +474,74 @@ describe("Rencanakan Perjadin", () => {
   });
 });
 
+describe("the derived Perjadin destination", () => {
+  beforeEach(resetDatabase);
+
+  it("names every Kabupaten/Kota in the Sub-Cluster, not only the visited Schools", async () => {
+    const { pic, input, schools } = await validPlan();
+    // Visit only the first School; the destination still names both Kabupaten/Kota, because the
+    // line is where the Kelompok is, not this trip's itinerary.
+    const planned = await planPerjadin(pic, {
+      ...input,
+      sessions: [{ schoolId: schools[0]!.id, heldOn: "2026-09-01", startsAt: "09:00" }],
+    });
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const [row] = await db
+      .select({ destination: schema.perjadin.destination })
+      .from(schema.perjadin);
+    expect(row?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi");
+  });
+
+  it('collapses Schools in one Kabupaten/Kota to a single entry, with no "dan"', async () => {
+    const { pic, input } = await validPlan(["Kota Bandung", "Kota Bandung"]);
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const [row] = await db
+      .select({ destination: schema.perjadin.destination })
+      .from(schema.perjadin);
+    expect(row?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung");
+  });
+
+  it('joins three Kabupaten/Kota with commas and a final "dan"', async () => {
+    const pic = await staff();
+    const [bagus, sari] = await professors();
+    const { cluster, subCluster, schools } = await twoSchools(["Kota Samarinda", "Kota Bontang"]);
+    // A third School, in a third Kabupaten/Kota, so the comma-separated join before the final
+    // "dan" is exercised — the two-place case only reaches the "dan".
+    await addSchool({
+      slug: "sman-3",
+      name: "SMAN 3 Bandung",
+      clusterId: cluster.id,
+      subClusterId: subCluster.id,
+      provinceCode: "JB",
+      kabupatenKota: "Kota Balikpapan",
+    });
+
+    const planned = await planPerjadin(pic, {
+      subClusterId: subCluster.id,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-03",
+      advanceIdr: 5_000_000,
+      picPersonId: pic.id,
+      teachers: [
+        { personId: bagus.id, stream: "STEM" },
+        { personId: sari.id, stream: "Research" },
+      ],
+      sessions: [{ schoolId: schools[0]!.id, heldOn: "2026-09-01", startsAt: "09:00" }],
+    });
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const [row] = await db
+      .select({ destination: schema.perjadin.destination })
+      .from(schema.perjadin);
+    expect(row?.destination).toBe(
+      "Kelompok Sekolah Bandung: Kota Samarinda, Kota Bontang dan Kota Balikpapan",
+    );
+  });
+});
+
 describe("the Perjadin list and detail", () => {
   beforeEach(resetDatabase);
 
@@ -481,7 +550,6 @@ describe("the Perjadin list and detail", () => {
     await planPerjadin(pic, input);
     await planPerjadin(pic, {
       ...input,
-      destination: "Cirebon",
       startsOn: "2026-10-01",
       endsOn: "2026-10-02",
       sessions: [
@@ -491,7 +559,12 @@ describe("the Perjadin list and detail", () => {
 
     const trips = await perjadinDirectory(bagus);
 
-    expect(trips.map((trip) => trip.destination)).toEqual(["Cirebon", "Bandung"]);
+    // Both trips are on the same Sub-Cluster, so the derived destination is the same string; the
+    // schoolCount (the later trip visits one School, the earlier two) is what proves the order.
+    expect(trips.map((trip) => trip.destination)).toEqual([
+      "Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi",
+      "Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi",
+    ]);
     expect(trips[0]?.schoolCount).toBe(1);
     expect(trips[1]?.schoolCount).toBe(2);
   });
@@ -509,7 +582,7 @@ describe("the Perjadin list and detail", () => {
 
     const detail = await perjadinDetail(bagus, planned.perjadinId);
 
-    expect(detail?.destination).toBe("Bandung");
+    expect(detail?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi");
     expect(detail?.picFullName).toBe("Rina Nurhayati");
     expect(detail?.group).toHaveLength(3);
     expect(detail?.sessions).toHaveLength(2);

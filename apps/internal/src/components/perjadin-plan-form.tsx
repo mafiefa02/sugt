@@ -57,7 +57,6 @@ function PerjadinPlanForm({
   const router = useRouter();
   const [subClusterId, setSubClusterId] = useState("");
   const [trip, setTrip] = useState({
-    destination: "",
     startsOn: "",
     endsOn: "",
     advanceIdr: "",
@@ -75,7 +74,6 @@ function PerjadinPlanForm({
   const [saving, startSaving] = useTransition();
 
   const subClusterFieldId = useId();
-  const destinationId = useId();
   const startsId = useId();
   const endsId = useId();
   const advanceId = useId();
@@ -102,7 +100,6 @@ function PerjadinPlanForm({
   /** Every field the database needs before a trip can be written at all. */
   const incomplete =
     subClusterId === "" ||
-    trip.destination.trim() === "" ||
     trip.startsOn === "" ||
     trip.endsOn === "" ||
     trip.advanceIdr === "" ||
@@ -120,7 +117,6 @@ function PerjadinPlanForm({
 
       const result = await planPerjadinAction({
         subClusterId,
-        destination: trip.destination.trim(),
         startsOn: trip.startsOn,
         endsOn: trip.endsOn,
         advanceIdr: Number(trip.advanceIdr),
@@ -181,21 +177,6 @@ function PerjadinPlanForm({
               ))}
             </SelectContent>
           </Select>
-        </Field>
-
-        <Field
-          id={destinationId}
-          label="Tujuan"
-        >
-          {/* Free-text prose for the Surat Tugas, written for a reader who has never heard of a
-              Sub-Cluster — deliberately not derived from the Sub-Cluster's name. */}
-          <Input
-            id={destinationId}
-            value={trip.destination}
-            onChange={(event) => {
-              setTrip((previous) => ({ ...previous, destination: event.target.value }));
-            }}
-          />
         </Field>
 
         <Field
