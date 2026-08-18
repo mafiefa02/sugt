@@ -111,6 +111,7 @@ export {
   type ReplaceGroupResult,
 } from "./perjadin-detail";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
+export { onlineSessionDirectory, type DirectoryOnlineSession } from "./online-session-directory";
 export {
   addPerson,
   revokePerson,
