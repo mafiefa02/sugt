@@ -7,6 +7,7 @@ import {
   CalendarPlus,
   LayoutDashboard,
   LayoutGrid,
+  ListVideo,
   Newspaper,
   Plane,
   School,
@@ -50,6 +51,7 @@ const NAV = [
     icon: CalendarPlus,
     staffOnly: true,
   },
+  { href: "/sesi-daring", label: "Sesi daring", icon: ListVideo, staffOnly: false },
   {
     href: "/jadwalkan-sesi-daring",
     label: "Jadwalkan Sesi daring",
