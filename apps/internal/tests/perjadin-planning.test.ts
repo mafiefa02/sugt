@@ -7,6 +7,7 @@ import {
   perjadinDirectory,
   planPerjadin,
   replacePerjadinGroup,
+  updatePerjadinLogistics,
   type PlanPerjadinInput,
 } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
@@ -81,6 +82,10 @@ async function twoSchools(kabupatenKota: [string, string] = ["Kota Bandung", "Ko
   return { cluster, subCluster, schools };
 }
 
+/** The travel logistics a valid plan carries. The zones are the server's — WIB out, derived back. */
+const DEPARTURE = { date: "2026-09-01", time: "07:30", mode: "Pesawat" } as const;
+const RETURN = { date: "2026-09-03", time: "18:00", mode: "Pesawat" } as const;
+
 /** Everything a valid trip needs, so each test below can spoil exactly one thing. */
 async function validPlan(kabupatenKota?: [string, string]) {
   const pic = await staff();
@@ -101,6 +106,8 @@ async function validPlan(kabupatenKota?: [string, string]) {
       { schoolId: schools[0].id, heldOn: "2026-09-01", startsAt: "09:00" },
       { schoolId: schools[1].id, heldOn: "2026-09-03", startsAt: "09:00" },
     ],
+    departure: DEPARTURE,
+    return: RETURN,
   };
 
   return { pic, bagus, sari, cluster, subCluster, schools, input };
@@ -530,6 +537,8 @@ describe("the derived Perjadin destination", () => {
         { personId: sari.id, stream: "Research" },
       ],
       sessions: [{ schoolId: schools[0]!.id, heldOn: "2026-09-01", startsAt: "09:00" }],
+      departure: DEPARTURE,
+      return: RETURN,
     });
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
@@ -760,6 +769,49 @@ describe("replacing a Group", () => {
     expect(await groupOf(perjadinId)).toHaveLength(3);
   });
 
+  /**
+   * A substitution rewrites the whole Group, so it must carry the extra Staff too or it would
+   * silently drop them (#106). The dialog seeds those slots from the current Group and passes
+   * them back; here the query keeps whoever it is given.
+   */
+  it("keeps the extra Staff across a substitution when they are passed back", async () => {
+    const { pic, bagus, sari, perjadinId } = await plannedTrip();
+    const coordinator = await staff("Dewi Koordinator", "dewi@ditsama.itb.ac.id");
+    // Add the coordinator by substituting the same professors plus the extra Staff.
+    await replacePerjadinGroup(
+      pic,
+      perjadinId,
+      [
+        { personId: bagus.id, stream: "STEM" },
+        { personId: sari.id, stream: "Research" },
+      ],
+      [coordinator.id],
+    );
+
+    const group = await groupOf(perjadinId);
+    const staffMember = group.find((member) => member.personId === coordinator.id);
+    expect(staffMember).toEqual({ personId: coordinator.id, role: "Staff", stream: null });
+    // PIC + coordinator + two professors.
+    expect(group).toHaveLength(4);
+  });
+
+  it("refuses a substitution repeating an extra Staff or naming the PIC, and changes nothing", async () => {
+    const { pic, bagus, sari, perjadinId } = await plannedTrip();
+
+    const result = await replacePerjadinGroup(
+      pic,
+      perjadinId,
+      [
+        { personId: bagus.id, stream: "STEM" },
+        { personId: sari.id, stream: "Research" },
+      ],
+      [pic.id],
+    );
+
+    expect(result).toEqual({ outcome: "duplicate-staff", personIds: [pic.id] });
+    expect(await groupOf(perjadinId)).toHaveLength(3);
+  });
+
   it("refuses a Teaching Team caller", async () => {
     const { bagus, sari, perjadinId } = await plannedTrip();
 
@@ -768,6 +820,190 @@ describe("replacing a Group", () => {
         { personId: bagus.id, stream: "STEM" },
         { personId: sari.id, stream: "Research" },
       ]),
+    ).rejects.toSatisfy(isNotStaffError);
+  });
+});
+
+describe("extra Staff and travel logistics", () => {
+  beforeEach(resetDatabase);
+
+  async function logisticsOf(perjadinId: string) {
+    const [row] = await db
+      .select({
+        departureAt: schema.perjadin.departureAt,
+        departureZone: schema.perjadin.departureZone,
+        departureMode: schema.perjadin.departureMode,
+        returnAt: schema.perjadin.returnAt,
+        returnZone: schema.perjadin.returnZone,
+        returnMode: schema.perjadin.returnMode,
+      })
+      .from(schema.perjadin)
+      .where(eq(schema.perjadin.id, perjadinId));
+    return row;
+  }
+
+  it("inserts up to three extra Staff as group_member rows, Staff with no Stream", async () => {
+    const { pic, input } = await validPlan();
+    const coordinator = await staff("Dewi Koordinator", "dewi@ditsama.itb.ac.id");
+    const treasurer = await staff("Budi Bendahara", "budi@ditsama.itb.ac.id");
+
+    const planned = await planPerjadin(pic, {
+      ...input,
+      extraStaffPersonIds: [coordinator.id, treasurer.id],
+    });
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const group = await groupOf(planned.perjadinId);
+    // PIC + two extra Staff + two professors.
+    expect(group).toHaveLength(5);
+    const staffMembers = group.filter((member) => member.role === "Staff");
+    expect(staffMembers).toHaveLength(3);
+    expect(staffMembers.every((member) => member.stream === null)).toBe(true);
+    expect(
+      group.filter(
+        (member) => member.personId === coordinator.id || member.personId === treasurer.id,
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("plans with no extra Staff — the field is optional", async () => {
+    const { pic, input } = await validPlan();
+
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    // PIC + two professors only.
+    expect(await groupOf(planned.perjadinId)).toHaveLength(3);
+  });
+
+  it("refuses an extra Staff equal to the PIC, and writes nothing", async () => {
+    const { pic, input } = await validPlan();
+
+    const result = await planPerjadin(pic, { ...input, extraStaffPersonIds: [pic.id] });
+
+    expect(result).toEqual({ outcome: "duplicate-staff", personIds: [pic.id] });
+    expect(await perjadinRows()).toEqual([]);
+  });
+
+  it("refuses a duplicated extra Staff, and writes nothing", async () => {
+    const { pic, input } = await validPlan();
+    const coordinator = await staff("Dewi Koordinator", "dewi@ditsama.itb.ac.id");
+
+    const result = await planPerjadin(pic, {
+      ...input,
+      extraStaffPersonIds: [coordinator.id, coordinator.id],
+    });
+
+    expect(result).toEqual({ outcome: "duplicate-staff", personIds: [coordinator.id] });
+    expect(await perjadinRows()).toEqual([]);
+  });
+
+  it("writes the six logistics columns, WIB out and the wall-clock times back", async () => {
+    const { pic, input } = await validPlan();
+
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const log = await logisticsOf(planned.perjadinId);
+    expect(log?.departureAt).toBe("2026-09-01 07:30:00");
+    expect(log?.departureZone).toBe("WIB");
+    expect(log?.departureMode).toBe("Pesawat");
+    expect(log?.returnAt).toBe("2026-09-03 18:00:00");
+    expect(log?.returnMode).toBe("Pesawat");
+  });
+
+  it("derives return_zone from the last-visited School's Province, not Bandung's", async () => {
+    const pic = await staff();
+    const [bagus, sari] = await professors();
+    await addProvince("JB", "Jawa Barat", "WIB");
+    await addProvince("KT", "Kalimantan Timur", "WITA");
+    const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
+    const subCluster = await addSubCluster({
+      slug: "kalimantan",
+      name: "Kelompok Kalimantan",
+      clusterId: cluster.id,
+    });
+    const bandung = await addSchool({
+      slug: "sman-bandung",
+      name: "SMAN Bandung",
+      clusterId: cluster.id,
+      subClusterId: subCluster.id,
+      provinceCode: "JB",
+      kabupatenKota: "Kota Bandung",
+    });
+    const samarinda = await addSchool({
+      slug: "sman-samarinda",
+      name: "SMAN Samarinda",
+      clusterId: cluster.id,
+      subClusterId: subCluster.id,
+      provinceCode: "KT",
+      kabupatenKota: "Kota Samarinda",
+    });
+
+    const planned = await planPerjadin(pic, {
+      subClusterId: subCluster.id,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-05",
+      advanceIdr: 5_000_000,
+      picPersonId: pic.id,
+      teachers: [
+        { personId: bagus.id, stream: "STEM" },
+        { personId: sari.id, stream: "Research" },
+      ],
+      sessions: [
+        { schoolId: bandung.id, heldOn: "2026-09-02", startsAt: "09:00" },
+        // The last School visited — its Province is WITA, so the return zone is WITA, not WIB.
+        { schoolId: samarinda.id, heldOn: "2026-09-04", startsAt: "09:00" },
+      ],
+      departure: DEPARTURE,
+      return: { date: "2026-09-05", time: "20:00", mode: "Pesawat" },
+    });
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const log = await logisticsOf(planned.perjadinId);
+    expect(log?.returnZone).toBe("WITA");
+    expect(log?.departureZone).toBe("WIB");
+  });
+
+  it("updates the logistics, fixing departure to WIB and taking the given return zone", async () => {
+    const { pic, input } = await validPlan();
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const result = await updatePerjadinLogistics(pic, planned.perjadinId, {
+      departureDate: "2026-09-01",
+      departureTime: "06:00",
+      departureMode: "Kereta",
+      returnDate: "2026-09-03",
+      returnTime: "22:00",
+      returnMode: "Travel",
+      returnZone: "WIT",
+    });
+
+    expect(result).toEqual({ outcome: "updated" });
+    const log = await logisticsOf(planned.perjadinId);
+    expect(log?.departureAt).toBe("2026-09-01 06:00:00");
+    expect(log?.departureZone).toBe("WIB");
+    expect(log?.departureMode).toBe("Kereta");
+    expect(log?.returnZone).toBe("WIT");
+    expect(log?.returnMode).toBe("Travel");
+  });
+
+  it("refuses a Teaching Team caller on the logistics edit", async () => {
+    const { pic, bagus, input } = await validPlan();
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    await expect(
+      updatePerjadinLogistics(bagus, planned.perjadinId, {
+        departureDate: "2026-09-01",
+        departureTime: "06:00",
+        departureMode: "Kereta",
+        returnDate: "2026-09-03",
+        returnTime: "22:00",
+        returnMode: "Travel",
+        returnZone: "WIT",
+      }),
     ).rejects.toSatisfy(isNotStaffError);
   });
 });

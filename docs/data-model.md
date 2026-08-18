@@ -959,6 +959,13 @@ create table perjadin (
 
   advance_idr                 bigint not null check (advance_idr >= 0),
 
+  departure_at                timestamp,
+  departure_zone              text check (departure_zone in ('WIB', 'WITA', 'WIT')),
+  departure_mode              text check (departure_mode in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')),
+  return_at                   timestamp,
+  return_zone                 text check (return_zone in ('WIB', 'WITA', 'WIT')),
+  return_mode                 text check (return_mode in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')),
+
   pic_person_id               uuid not null,
   pic_role                    text not null default 'Staff' check (pic_role = 'Staff'),
 
@@ -973,6 +980,24 @@ create table perjadin (
   foreign key (pic_person_id, pic_role) references person (id, role)
 );
 ```
+
+**The six travel-logistics columns are nullable and store wall-clock, not instants**
+([#106](https://github.com/mafiefa02/sugt/issues/106)). Nullable so the Perjadins that predate
+them stay valid — no backfill, no invented travel — while the plan form requires all six on a new
+trip. Each `*_at` is a `timestamp` **without** a time zone: a date and a wall-clock time, carrying
+its zone in a separate `*_zone` tag exactly as `session.starts_at` does, because the Surat Tugas
+says "07:30 WIB", not a UTC moment. `departure_zone` is always `WIB` (the origin is Bandung) and
+`return_zone` is derived at insert from the Province of the last School visited — both snapshots
+set server-side, never recomputed on read, so an edited Sub-Cluster cannot rewrite an issued Surat
+Tugas. The zone columns still admit all three `TIME_ZONES` because the detail page's edit surface
+can correct a return zone; `*_mode` CHECKs `TRANSPORT_MODES`. Both value lists live in
+`@sugt/domain` and are written out character for character here, for the reason
+`transaction_category_check` gives.
+
+A Group also carries **up to three extra Staff beyond the PIC** — a coordinator, a treasurer, a
+documentarian — as ordinary `group_member` rows (`role = 'Staff'`, `stream = null`), the same shape
+the PIC's row has. No new table and no order: they are a set of up to three, each distinct from the
+PIC and each other, and a substitution carries them rather than dropping them.
 
 `perjadin` and `group_member` reference each other, so the second half cannot be inline — it
 is added once both tables exist:

@@ -1,6 +1,7 @@
 import { PerjadinDates } from "-/components/perjadin-dates";
 import { PerjadinEvaluationDialog } from "-/components/perjadin-evaluation-form";
 import { PerjadinGroup } from "-/components/perjadin-group";
+import { PerjadinLogistics } from "-/components/perjadin-logistics";
 import { SessionStatusBadge } from "-/components/session-labels";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
@@ -116,8 +117,17 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
       <PerjadinGroup
         perjadinId={trip.id}
         group={trip.group}
+        picPersonId={trip.picPersonId}
         teachingTeam={trip.teachingTeam}
+        staff={trip.staff}
         canSubstitute={person.role === "Staff"}
+      />
+
+      <PerjadinLogistics
+        perjadinId={trip.id}
+        departure={trip.departure}
+        returnLeg={trip.return}
+        canEdit={person.role === "Staff"}
       />
 
       {/*

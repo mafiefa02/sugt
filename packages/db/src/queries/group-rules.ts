@@ -42,6 +42,28 @@ export function duplicatedTeachers(teachers: PlannedTeacher[]): string[] {
 }
 
 /**
+ * The extra Staff a Group names more than once, or that repeat the PIC. Empty when the up-to-three
+ * extra Staff are all distinct and none is the PIC.
+ *
+ * Same reason as `duplicatedTeachers`: the `(perjadin_id, person_id)` primary key holds each
+ * person once, so a repeat would be a key violation from inside the transaction rather than a
+ * message a form can show. The PIC is always on the Group, so an extra Staff slot naming them is a
+ * repeat too — which is why `picPersonId` seeds the `seen` set.
+ *
+ * Shared by the write that plans a trip and the one that substitutes its Group, the same way the
+ * two rules above are.
+ */
+export function duplicatedStaff(picPersonId: string, extraStaffPersonIds: string[]): string[] {
+  const seen = new Set<string>([picPersonId]);
+  const twice = new Set<string>();
+  for (const personId of extraStaffPersonIds) {
+    if (seen.has(personId)) twice.add(personId);
+    seen.add(personId);
+  }
+  return [...twice];
+}
+
+/**
  * Which Streams a Group leaves with no professor at all. Empty when both are covered.
  *
  * `docs/data-model.md` lists this as the one Group rule that is not declarative, and says

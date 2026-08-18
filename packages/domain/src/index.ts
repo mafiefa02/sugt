@@ -298,3 +298,15 @@ export const TRANSACTION_CATEGORIES = [
   "Lainnya",
 ] as const;
 export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number];
+
+/**
+ * How a Group travels to and from a Perjadin — the mode on the Keberangkatan and Kepulangan
+ * legs. A closed set of four, in Indonesian because that is what goes on the Surat Tugas, the
+ * same reasoning as `TRANSACTION_CATEGORIES` above.
+ *
+ * Like the categories, these are **values a column may hold, not terms `CONTEXT.md` defines** —
+ * so they live here and not in the glossary. Both `departure_mode` and `return_mode` on
+ * `perjadin` CHECK this list character for character; see `packages/db/src/schema/travel.ts`.
+ */
+export const TRANSPORT_MODES = ["Pesawat", "Kereta", "Travel", "Mobil Dalam Kota"] as const;
+export type TransportMode = (typeof TRANSPORT_MODES)[number];

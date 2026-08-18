@@ -1,12 +1,17 @@
-import type { Stream } from "@sugt/domain";
+import type { Stream, TimeZone, TransportMode } from "@sugt/domain";
 import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
-import { cluster, school, subCluster } from "../schema/reference";
+import { cluster, province, school, subCluster } from "../schema/reference";
 import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
-import { duplicatedTeachers, streamsUncovered, type PlannedTeacher } from "./group-rules";
+import {
+  duplicatedStaff,
+  duplicatedTeachers,
+  streamsUncovered,
+  type PlannedTeacher,
+} from "./group-rules";
 import { activeRosters, type RosterPerson, type SelectedSchool } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
@@ -59,6 +64,19 @@ export type PlannedSession = {
  * Sub-Cluster and its Schools' Kabupaten/Kota at insert ([#105](https://github.com/mafiefa02/sugt/issues/105)),
  * so the form has no Tujuan box to drift from what it already shows.
  */
+/**
+ * One leg of the trip's travel, as the form submits it: a wall-clock date and time and a mode.
+ * The zone is not here — `departure_zone` is fixed to WIB (the origin is Bandung) and
+ * `return_zone` is derived from the last School visited, both server-side (#106).
+ */
+export type PlannedTravelLeg = {
+  /** `YYYY-MM-DD`. */
+  date: string;
+  /** `HH:MM`, wall-clock in the leg's zone. */
+  time: string;
+  mode: TransportMode;
+};
+
 export type PlanPerjadinInput = {
   subClusterId: string;
   startsOn: string;
@@ -66,8 +84,19 @@ export type PlanPerjadinInput = {
   advanceIdr: number;
   /** A Staff member. `perjadin_pic_is_staff` refuses anyone else, at the database. */
   picPersonId: string;
+  /**
+   * Up to three optional extra Staff on the Group, beyond the PIC — a coordinator, a treasurer, a
+   * documentarian. Each must be a distinct Staff member, none equal to the PIC; they are written
+   * as ordinary `group_member` rows (Staff, no Stream) and neither satisfy nor weaken the
+   * Stream-cover rule.
+   */
+  extraStaffPersonIds?: string[];
   teachers: PlannedTeacher[];
   sessions: PlannedSession[];
+  /** Departure from Bandung. Its zone is always WIB. */
+  departure: PlannedTravelLeg;
+  /** Return. Its zone is derived from the last School visited. */
+  return: PlannedTravelLeg;
 };
 
 /** Two Schools planned for the same date and the same time — physically impossible on one trip. */
@@ -93,6 +122,12 @@ export type PlanPerjadinResult =
   | { outcome: "ends-before-starts" }
   /** One professor named on both Streams. A Group holds each person once, by primary key. */
   | { outcome: "duplicate-teacher"; personIds: string[] }
+  /**
+   * An extra Staff member repeated, or the same as the PIC. A Group holds each person once by
+   * `(perjadin_id, person_id)`, so this is refused up front rather than left to a PK violation
+   * inside the transaction.
+   */
+  | { outcome: "duplicate-staff"; personIds: string[] }
   /** A trip with no School on it teaches nobody, and would write no Session. */
   | { outcome: "no-schools" }
   /** A Session dated outside the trip it happens on. */
@@ -156,6 +191,13 @@ export async function planPerjadin(
   const duplicated = duplicatedTeachers(input.teachers);
   if (duplicated.length > 0) return { outcome: "duplicate-teacher", personIds: duplicated };
 
+  // Extra Staff must be distinct from each other and from the PIC — the Group primary key
+  // `(perjadin_id, person_id)` holds each person once, so a repeat is a plan to question rather
+  // than a row to write. Refused up front, not left to a PK violation inside the transaction.
+  const extraStaff = input.extraStaffPersonIds ?? [];
+  const duplicateStaff = duplicatedStaff(input.picPersonId, extraStaff);
+  if (duplicateStaff.length > 0) return { outcome: "duplicate-staff", personIds: duplicateStaff };
+
   // The second of the three places a Session's date is written, and the invariant
   // [#28](https://github.com/mafiefa02/sugt/issues/28) stated: an arranged offline Session
   // lies inside its Perjadin. No CHECK can carry it, because the range is on this row and
@@ -209,6 +251,11 @@ export async function planPerjadin(
   // when Schools are later regrouped or the Sub-Cluster is renamed.
   const destination = await derivePerjadinDestination(input.subClusterId);
 
+  // The return zone is the last-visited School's — the Group returns from that city, so its
+  // wall-clock time means that city's zone, not Bandung's. Snapshot at insert, like the
+  // destination, for the same ADR-0016 reason. Departure is always WIB (the origin is Bandung).
+  const returnZone = await deriveReturnZone(input.sessions);
+
   const perjadinId = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(perjadin)
@@ -219,6 +266,12 @@ export async function planPerjadin(
         endsOn: input.endsOn,
         advanceIdr: input.advanceIdr,
         picPersonId: input.picPersonId,
+        departureAt: `${input.departure.date} ${input.departure.time}`,
+        departureZone: "WIB",
+        departureMode: input.departure.mode,
+        returnAt: `${input.return.date} ${input.return.time}`,
+        returnZone,
+        returnMode: input.return.mode,
       })
       .returning({ id: perjadin.id });
 
@@ -226,9 +279,16 @@ export async function planPerjadin(
 
     // The PIC's own row first in the list rather than as a separate statement: they are a
     // Group member like any other, and the only thing that distinguishes them here is that
-    // Staff carry no Stream — `group_member_stream_iff_teaching` refuses one that does.
+    // Staff carry no Stream — `group_member_stream_iff_teaching` refuses one that does. The
+    // extra Staff are the same row shape, sitting between the PIC and the professors.
     await tx.insert(groupMember).values([
       { perjadinId: id, personId: input.picPersonId, role: "Staff" as const, stream: null },
+      ...extraStaff.map((personId) => ({
+        perjadinId: id,
+        personId,
+        role: "Staff" as const,
+        stream: null,
+      })),
       ...input.teachers.map((teacher) => ({
         perjadinId: id,
         personId: teacher.personId,
@@ -285,6 +345,29 @@ async function derivePerjadinDestination(subClusterId: string): Promise<string> 
 function joinWithDan(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   return `${items.slice(0, -1).join(", ")} dan ${items[items.length - 1]}`;
+}
+
+/**
+ * The Time Zone of the **last School visited** — the Session with the greatest `(held_on,
+ * starts_at)`. The Group returns from that School's city, so `return_at`'s wall-clock time is
+ * meaningful only in that Province's zone, which is why the return zone is not fixed to Bandung's.
+ *
+ * `sessions` is non-empty here (the `no-schools` refusal ran first) and each `schoolId` is real
+ * and in the Sub-Cluster (the `school-outside-sub-cluster` refusal ran too), so the join returns a
+ * row.
+ */
+async function deriveReturnZone(sessions: PlannedSession[]): Promise<TimeZone> {
+  const last = [...sessions].sort((a, b) => {
+    const byDate = b.heldOn.localeCompare(a.heldOn);
+    return byDate !== 0 ? byDate : b.startsAt.localeCompare(a.startsAt);
+  })[0]!;
+
+  const [row] = await db
+    .select({ timeZone: province.timeZone })
+    .from(school)
+    .innerJoin(province, eq(province.code, school.provinceCode))
+    .where(eq(school.id, last.schoolId));
+  return row!.timeZone;
 }
 
 /**
