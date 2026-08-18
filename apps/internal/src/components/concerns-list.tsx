@@ -1,5 +1,6 @@
 "use client";
 
+import { groupConcernsByAuthor } from "-/lib/concerns-grouping";
 import type { Concern, ConcernAspect, ConcernSource } from "@sugt/db/queries";
 import { Badge } from "@sugt/ui/components/badge";
 import { Tabs, TabsList, TabsTrigger } from "@sugt/ui/components/tabs";
@@ -69,6 +70,10 @@ function ConcernsList({ concerns }: { concerns: Concern[] }) {
     [concerns, filter],
   );
 
+  // Group the shown cards by author, client-side like the tab filter above. Grouping tells one
+  // noisy rater flagging everything apart from many voices each flagging one thing.
+  const groups = useMemo(() => groupConcernsByAuthor(shown), [shown]);
+
   return (
     <div className="flex min-h-full flex-col p-7">
       <Tabs
@@ -97,14 +102,29 @@ function ConcernsList({ concerns }: { concerns: Concern[] }) {
             : "Tidak ada catatan bernilai rendah untuk sumber ini."}
         </p>
       ) : (
-        <ul className="space-y-2.5">
-          {shown.map((concern, index) => (
-            <ConcernRow
-              key={`${concern.source}-${concern.aspect}-${index}`}
-              concern={concern}
-            />
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <section key={`${group.source}-${group.who}`}>
+              {/*
+                One header per author group: the name, the source label only under "Semua" (a
+                single-source tab already names it), and the count. Cards stay newest-first within.
+              */}
+              <h2 className="mb-2 text-xs font-medium text-muted-foreground">
+                {group.who}
+                {filter === "all" && ` · ${SOURCE_LABELS[group.source]}`}
+                {` · ${group.concerns.length}`}
+              </h2>
+              <ul className="space-y-2.5">
+                {group.concerns.map((concern, index) => (
+                  <ConcernRow
+                    key={`${concern.aspect}-${index}`}
+                    concern={concern}
+                  />
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
