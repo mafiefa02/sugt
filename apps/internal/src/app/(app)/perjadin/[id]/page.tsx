@@ -4,7 +4,7 @@ import { PerjadinGroup } from "-/components/perjadin-group";
 import { SessionStatusBadge } from "-/components/session-labels";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
-import { formatSessionStartTimeWithWib } from "@sugt/domain";
+import { formatIdr, formatSessionStartTimeWithWib } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -178,7 +178,7 @@ function Figure({ label, amountIdr }: { label: string; amountIdr: number }) {
   return (
     <div>
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="tabular-nums">Rp {amountIdr.toLocaleString("id-ID")}</dd>
+      <dd className="tabular-nums">Rp {formatIdr(amountIdr)}</dd>
     </div>
   );
 }

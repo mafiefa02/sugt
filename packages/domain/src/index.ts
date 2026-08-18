@@ -121,6 +121,17 @@ export function formatSessionStartTimeWithWib(time: string, zone: TimeZone): str
 }
 
 /**
+ * Group a Rupiah amount the way every screen shows it: `id-ID` locale, dot separators,
+ * `formatIdr(1000000) === "1.000.000"`. Returns the grouped digits only — each call site
+ * keeps its own literal `Rp ` prefix, so this is exactly the `n.toLocaleString("id-ID")` the
+ * display sites used inline, named once so the plan form's masked input and every read-back
+ * amount cannot drift apart.
+ */
+export function formatIdr(n: number): string {
+  return n.toLocaleString("id-ID");
+}
+
+/**
  * The two roles in the internal tool. The Programme's leadership are senior
  * Staff, not a third role — see `docs/adr/0004-delivery-data-is-open-internally-money-is-not.md`.
  */

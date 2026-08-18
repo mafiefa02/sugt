@@ -1,4 +1,5 @@
 import type { StaffDashboard } from "@sugt/db/queries";
+import { formatIdr } from "@sugt/domain";
 import Link from "next/link";
 
 /**
@@ -70,7 +71,7 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
           <span className="text-xs text-muted-foreground">Hanya Staff</span>
         </div>
         <p className="mt-1 font-heading text-2xl font-semibold tabular-nums">
-          Rp {dashboard.advanceOutstandingIdr.toLocaleString("id-ID")}
+          Rp {formatIdr(dashboard.advanceOutstandingIdr)}
         </p>
       </section>
 
@@ -143,7 +144,7 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
                   </span>
                   <span className="text-muted-foreground">
                     <span className="text-foreground tabular-nums">
-                      Rp {report.remainderIdr.toLocaleString("id-ID")}
+                      Rp {formatIdr(report.remainderIdr)}
                     </span>{" "}
                     Sisa untuk dikembalikan
                   </span>
