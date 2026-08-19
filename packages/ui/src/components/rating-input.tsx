@@ -6,10 +6,11 @@ import { cn } from "@sugt/ui/lib/utils";
 /**
  * The control that files a Rating: one cell per point on the scale, one of them picked.
  *
- * Native radios rather than buttons, so the control needs no state of its own, arrow
- * keys work, and a `<form>` posts the value without JavaScript. Pass `value` and
- * `onValueChange` to drive it from a form library instead; pass neither and
- * `defaultValue` leaves it uncontrolled.
+ * Native radios rather than buttons, so arrow keys work and a `<form>` posts the value.
+ * It is **always controlled**: `value` drives which cell is checked and `onValueChange`
+ * reports a pick. `value === undefined` is "nothing rated yet" — no cell checked — which
+ * is exactly how every consumer starts an aspect, so the radios never flip from
+ * uncontrolled to controlled (React's warning, and the input glitch that rode with it).
  *
  * The bounds arrive as props with no defaults, for the reason `RatingBounds` gives.
  * The cells are `max - min + 1`, and which of them read as a concern follows from
@@ -27,7 +28,6 @@ function RatingInput({
   max,
   concernAtOrBelow,
   value,
-  defaultValue,
   onValueChange,
   size = "default",
   disabled,
@@ -36,7 +36,6 @@ function RatingInput({
 }: RatingBounds & {
   name: string;
   value?: number;
-  defaultValue?: number;
   onValueChange?: (value: number) => void;
   size?: "default" | "sm";
   disabled?: boolean;
@@ -44,8 +43,6 @@ function RatingInput({
   "aria-label"?: string;
   "aria-labelledby"?: string;
 }) {
-  const controlled = value !== undefined;
-
   return (
     <div
       data-slot="rating-input"
@@ -72,9 +69,7 @@ function RatingInput({
               value={cell}
               disabled={disabled}
               className="peer sr-only"
-              {...(controlled
-                ? { checked: value === cell }
-                : { defaultChecked: defaultValue === cell })}
+              checked={value === cell}
               onChange={() => onValueChange?.(cell)}
             />
             <span
