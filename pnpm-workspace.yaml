@@ -37,6 +37,10 @@ catalog:
   qrcode: ^1.5.4
   react: 19.2.4
   react-dom: 19.2.4
+  # The public Story renderer (@sugt/story-format/story-body). v9's peer is react >=18, which
+  # 19.2.4 satisfies; it bundles the remark→hast pipeline so the render allowlist needs no
+  # separate unified stack.
+  react-markdown: ^9.1.0
   shadcn: ^4.16.1
   tailwind-merge: ^3.6.0
   tailwindcss: ^4

@@ -35,7 +35,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
-import { storyEditorAllowlist, storyToolbar } from "./story-editor-allowlist";
+import { storyEditorAllowlist, storyToolbar } from "@sugt/story-format/allowlist";
 import {
   type HeadingValue,
   type ToggleState,

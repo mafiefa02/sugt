@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@sugt/domain": "workspace:*",
+    "@sugt/story-format": "workspace:*",
     "@sugt/ui": "workspace:*",
     "lucide-react": "catalog:",
     "next": "catalog:",

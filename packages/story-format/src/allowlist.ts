@@ -89,11 +89,14 @@ import { Bold, Italic, Link2, List, ListOrdered, Quote } from "lucide-react";
  * plus its schema), the input rules, the commands, the keymaps, and the remark transformers that
  * make the Markdown round trip lossless — **minus the nodes named absent below**.
  *
- * **When the public renderer lands ([#37]), it must be configured from this list** — that is the
- * "one list, not two" property. Sharing it across the app boundary (a package both `@sugt/public`
- * and `@sugt/internal` can import) is #37's call: today there is no public renderer to share with,
- * and ADR-0015 puts the editor in `apps/internal`, not `@sugt/ui`. Relocating this module is a move,
- * not a rewrite, when that day comes.
+ * **This module now lives in `@sugt/story-format`, a package both apps import** — the relocation
+ * ADR-0015 and the module's earlier home anticipated ("a package both `@sugt/public` and
+ * `@sugt/internal` can import"). The internal editor imports this array; the public renderer
+ * (`./story-body.tsx`) permits exactly the elements these nodes produce, named against them in
+ * `./nodes.ts`. That co-location is the "one list, not two" property: both halves are one file apart,
+ * so a drift between them is a one-package review. `@milkdown/kit` sits in this package's graph, but
+ * the public app imports only `./story-body`, which never reaches this file — so the editor's weight
+ * stays out of the public bundle, the concern ADR-0015 raised about `@sugt/ui`.
  *
  * **What is deliberately absent, and why — the other half of an allowlist.**
  *
@@ -108,8 +111,6 @@ import { Bold, Italic, Link2, List, ListOrdered, Quote } from "lucide-react";
  * - **Code block and inline code** (`codeBlockSchema`, `inlineCodeSchema`, and their attrs). A
  *   field account is not source code; the code block also pulls in a language picker and CodeMirror
  *   weight for a feature Staff do not need. Omitted rather than styled away.
- *
- * [#37]: https://github.com/mafiefa02/sugt/issues/37
  */
 export const storyEditorAllowlist: MilkdownPlugin[] = [
   // The schema group. Each node's `*Attr` slice is injected before its schema, because a schema's
