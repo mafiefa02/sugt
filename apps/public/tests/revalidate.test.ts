@@ -42,13 +42,16 @@ describe("the public revalidation route", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("revalidates the detail page, then the list, then the School page — in that order", async () => {
+  it("revalidates the detail page, then both lists, then the School page — in that order", async () => {
     const res = await POST(post({ slug: "kunjungan", school: "sman-1" }, `Bearer ${SECRET}`));
 
     expect(res.status).toBe(200);
+    // Both `/cerita` and `/final-project` are refreshed: the route does not know the Story's kind, so
+    // it cannot tell which list gained it, and missing that list would hide a published piece.
     expect(vi.mocked(revalidatePath).mock.calls.map((call) => call[0])).toEqual([
       "/cerita/kunjungan",
       "/cerita",
+      "/final-project",
       "/sekolah/sman-1",
     ]);
 
@@ -56,6 +59,7 @@ describe("the public revalidation route", () => {
     expect(body.revalidated).toEqual([
       { target: "detail", outcome: "ok" },
       { target: "list", outcome: "ok" },
+      { target: "final-project-list", outcome: "ok" },
       { target: "school", outcome: "ok" },
     ]);
   });

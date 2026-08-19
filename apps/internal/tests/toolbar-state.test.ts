@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
  * this file out untouched. (That split is a separate ticket; the marker is this comment.)
  *
  * **The schema is transcribed, not booted.** The node and mark specs below are copied from
- * `@milkdown/preset-commonmark` 7.22.1 (`lib/index.js`) — the same package `story-editor-allowlist.ts`
+ * `@milkdown/preset-commonmark` 7.22.1 (`lib/index.js`) — the same package `@sugt/story-format/allowlist`
  * composes — so the names, groups and content expressions the derivation reads match what the real
  * editor produces. It is a transcription of that source, kept minimal to what the derivation looks at.
  */

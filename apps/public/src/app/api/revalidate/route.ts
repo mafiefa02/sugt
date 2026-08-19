@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
  *
  * A wrong or missing `REVALIDATE_SECRET` answers **401 and revalidates nothing**: the authorization
  * check runs before any `revalidatePath`. With a valid secret it refreshes the Story's detail page,
- * then the list, then the School page — in that order — and answers with a per-step status so a
+ * then both lists, then the School page — in that order — and answers with a per-step status so a
  * partial failure is visible to the operator who triggered it rather than collapsed into one code.
  */
 export async function POST(request: Request) {

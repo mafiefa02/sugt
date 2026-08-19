@@ -4,13 +4,17 @@ Instructions for AI agents working in this repository.
 
 ## Workspace
 
-A pnpm workspace with two apps and three shared packages:
+A pnpm workspace with two apps and four shared packages:
 
 - `apps/public` (`@sugt/public`) — the public site, port 3000
 - `apps/internal` (`@sugt/internal`) — the internal tool, port 3001
 - `packages/db` (`@sugt/db`) — the Drizzle schema, migrations, connection and queries
 - `packages/domain` (`@sugt/domain`) — vocabulary shared by both
 - `packages/ui` (`@sugt/ui`) — shadcn primitives and the design tokens, shared by both
+- `packages/story-format` (`@sugt/story-format`) — the Story-body allowlist and public
+  renderer, ADR-0015's one list. Its `./allowlist` (the Milkdown editor schema) is imported by
+  `@sugt/internal`; its `./story-body` (the `react-markdown` renderer) by `@sugt/public`, which
+  never reaches `@milkdown/kit` through it.
 
 Four rules to work within:
 
@@ -29,8 +33,8 @@ Four rules to work within:
    reach, the public app can reach — see [ADR-0010](./docs/adr/0010-one-shared-ui-package-not-shadcn-per-app.md).
    No data fetching, no `@sugt/domain` import, no environment variables.
 
-`@sugt/db`, `@sugt/domain` and `@sugt/ui` are Just-in-Time packages: their `exports` point
-straight at `./src`, they have no build step, and Turbopack compiles them as part
+`@sugt/db`, `@sugt/domain`, `@sugt/ui` and `@sugt/story-format` are Just-in-Time packages: their
+`exports` point straight at `./src`, they have no build step, and Turbopack compiles them as part
 of whichever app imports them (so no `transpilePackages` entry is needed — Next
 only requires that for `node_modules` dependencies shipping raw TS). The tradeoff
 is that turbo has no build output to cache for them; it does still hash their

@@ -8,16 +8,21 @@ import { requireEnv } from "-/lib/env";
  * decides whether the caller may, and names the pages to refresh and the order to refresh them in.
  */
 
-/** The three pages a publish or withdrawal invalidates, and the order they must run. */
-export type RevalidationTarget = "detail" | "list" | "school";
+/** The pages a publish or withdrawal invalidates, and the order they must run. */
+export type RevalidationTarget = "detail" | "list" | "final-project-list" | "school";
 
 /**
- * What the route revalidates, given a Story slug and its School's slug. **Detail first, then the
- * list, then the School page** — the list must never be rebuilt pointing at a detail page the
- * refresh has not reached, and the School page carries the Story too.
+ * What the route revalidates, given a Story slug and its School's slug. **Detail first, then the two
+ * lists, then the School page** — a list must never be rebuilt pointing at a detail page the refresh
+ * has not reached, and the School page carries the Story too.
  *
- * These are the public path shapes `@sugt/public` uses; the pages themselves are built in #38, and
- * this is where their paths are named. Revalidating a path that does not exist yet is harmless.
+ * **Both lists are refreshed, because the request does not carry the Story's kind.** A field Story
+ * shows on `/cerita` and a Final Project piece on `/final-project` (#38 made Final Project its own
+ * section), so the route cannot tell which list gained or lost this Story from `{slug, school}` alone.
+ * Refreshing the list the Story is *not* on is a harmless re-render of unchanged content; missing the
+ * one it *is* on would leave a published piece invisible until the revalidate window. So it does both.
+ *
+ * Revalidating a path that does not exist yet is harmless.
  */
 export function revalidationTargets(
   slug: string,
@@ -26,6 +31,7 @@ export function revalidationTargets(
   return [
     { target: "detail", path: `/cerita/${slug}` },
     { target: "list", path: "/cerita" },
+    { target: "final-project-list", path: "/final-project" },
     { target: "school", path: `/sekolah/${school}` },
   ];
 }

@@ -5,7 +5,7 @@ import type { Command, EditorState } from "@milkdown/kit/prose/state";
 /**
  * **The formatting toolbar's state, derived from the editor state and nothing else.**
  *
- * ADR-0015 gives the toolbar its commands (see `story-editor-allowlist.ts`); this gives it what the
+ * ADR-0015 gives the toolbar its commands (see `@sugt/story-format/allowlist`); this gives it what the
  * buttons should *show*. It is deliberately a **pure function** — `EditorState → ToolbarState` — and
  * lives apart from the React component so it can be tested against ProseMirror states built by hand,
  * with no DOM, no jsdom and no editor to boot. The genuinely error-prone part of the feature (does a

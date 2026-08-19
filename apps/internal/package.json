@@ -16,6 +16,7 @@
     "@milkdown/react": "catalog:",
     "@sugt/db": "workspace:*",
     "@sugt/domain": "workspace:*",
+    "@sugt/story-format": "workspace:*",
     "@sugt/ui": "workspace:*",
     "@supabase/supabase-js": "catalog:",
     "better-auth": "catalog:",
