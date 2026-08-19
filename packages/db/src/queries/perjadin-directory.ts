@@ -3,8 +3,9 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
-import { perjadin } from "../schema/travel";
+import { groupMember, perjadin, perjadinPreparationItem } from "../schema/travel";
 import type { Person } from "./caller";
+import { PREPARATION_FIXED_KEYS } from "./preparation-checklist";
 
 /**
  * **The Perjadin list** — every trip, open to anyone signed in.
@@ -26,6 +27,14 @@ export type DirectoryPerjadin = {
   /** How many Schools the Group teaches at. The trip's size, in the only unit that matters. */
   schoolCount: number;
   picFullName: string;
+  /**
+   * The Preparation Checklist pill's `x` and `N` ([#114](https://github.com/mafiefa02/sugt/issues/114)).
+   * `preparationTotal` is `6 + (Teaching Team members)`; `preparationDone` counts the present ticks
+   * that still map to a live item — every fixed tick, plus each `dosen:` tick whose person is still
+   * on the Group. Orphan `dosen:` ticks are excluded, so the pill never reads past `N`.
+   */
+  preparationDone: number;
+  preparationTotal: number;
 };
 
 /**
@@ -49,6 +58,34 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
       // precisely so a cancelled Session and the one that replaced it coexist on one trip.
       // Counting Sessions would report a two-School trip as three the first time that happens.
       schoolCount: sql<number>`count(distinct ${session.schoolId})`.mapWith(Number),
+      // **The pill, as two correlated scalar subqueries** — the style `./dashboard.ts` uses for its
+      // PIC-report counts: interpolate the table refs (`${groupMember}`, `${perjadinPreparationItem}`)
+      // so a rename propagates, correlate on the outer `${perjadin.id}` (a grouping column here), and
+      // keep the whole thing off the `session` left join above so it never fans out. `N` is the six
+      // fixed items plus this trip's Teaching Team members; `x` counts the ticks that still map to a
+      // live item — every fixed tick, and each `dosen:` tick whose person is still a Teaching Team
+      // member (an orphan is skipped, so `x` never exceeds `N`). The fixed keys are bound from the one
+      // list so they cannot drift from the strings the rows hold.
+      preparationTotal: sql<number>`6 + (
+        select count(*) from ${groupMember} gm
+        where gm.perjadin_id = ${perjadin.id} and gm.role = 'Teaching Team'
+      )`.mapWith(Number),
+      preparationDone: sql<number>`(
+        select count(*) from ${perjadinPreparationItem} pi
+        where pi.perjadin_id = ${perjadin.id}
+        and (
+          pi.item_key in (${sql.join(
+            PREPARATION_FIXED_KEYS.map((key) => sql`${key}`),
+            sql`, `,
+          )})
+          or exists (
+            select 1 from ${groupMember} gm
+            where gm.perjadin_id = pi.perjadin_id
+            and gm.role = 'Teaching Team'
+            and pi.item_key = 'dosen:' || gm.person_id::text
+          )
+        )
+      )`.mapWith(Number),
     })
     .from(perjadin)
     .innerJoin(person, eq(person.id, perjadin.picPersonId))

@@ -205,6 +205,41 @@ export const transaction = pgTable(
 );
 
 /**
+ * The Preparation Checklist's ticks — **one row per ticked item, and nothing else**
+ * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
+ *
+ * The *set of items that exists* is not stored: it is the six fixed items plus one per
+ * Teaching Team member of the Group, derived at read time in the query layer. This table
+ * holds only which of those a Staff member has hand-ticked, so an un-tick is a `DELETE`
+ * and there is no "unchecked" row to keep in sync with a moving Group.
+ *
+ * `itemKey` is a fixed key (`sk_perjalanan`, …, `staff`) or a per-teacher `dosen:{personId}`.
+ * A `dosen:` tick is glued to that Person by their id — the professor's name is rendered live
+ * and never stored, so a rename never disturbs a box. A tick whose teacher later leaves the
+ * Group is an **orphan**: read-time derivation only counts `dosen:` rows whose person is still a
+ * Teaching Team member, so an orphan is silently ignored and reappears if they rejoin. Nothing
+ * cleans it up, and `replacePerjadinGroup` is unchanged. See ADR-0018 and `docs/data-model.md`.
+ *
+ * The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent: the
+ * write upserts on it, so ticking twice is one row. `checked_by`/`checked_at` record who and when
+ * for later use; nothing renders them yet.
+ */
+export const perjadinPreparationItem = pgTable(
+  "perjadin_preparation_item",
+  {
+    perjadinId: uuid("perjadin_id")
+      .notNull()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    itemKey: text("item_key").notNull(),
+    checkedBy: uuid("checked_by")
+      .notNull()
+      .references(() => person.id),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.perjadinId, t.itemKey] })],
+);
+
+/**
  * Many per transaction. `storagePath` is the object key in the private `receipts` bucket,
  * and it is **opaque** — a bare UUID naming no Perjadin, no transaction and no person.
  * A signed URL carries its object path inside the JWT it is signed with, so a structured

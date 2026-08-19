@@ -50,7 +50,11 @@ export default async function Page() {
                 {trip.startsOn} – {trip.endsOn}
               </span>
               <span className="text-xs text-muted-foreground">PIC {trip.picFullName}</span>
-              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+              <PreparationPill
+                done={trip.preparationDone}
+                total={trip.preparationTotal}
+              />
+              <span className="text-xs text-muted-foreground tabular-nums">
                 {trip.schoolCount} Sekolah
               </span>
             </li>
@@ -58,5 +62,24 @@ export default async function Page() {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * **The `Persiapan: x/N` pill**, coloured by progress ([#114](https://github.com/mafiefa02/sugt/issues/114)):
+ * neutral before anything is ticked, amber part-way, green when every item is done. `N` is at least
+ * the six fixed items, so it is never zero and "complete" is `done === total`.
+ */
+function PreparationPill({ done, total }: { done: number; total: number }) {
+  const tone =
+    done === total
+      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+      : done > 0
+        ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+        : "bg-muted text-muted-foreground";
+  return (
+    <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium tabular-nums ${tone}`}>
+      Persiapan: {done}/{total}
+    </span>
   );
 }

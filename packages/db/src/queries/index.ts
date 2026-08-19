@@ -115,6 +115,14 @@ export {
   type UpdatePerjadinLogisticsResult,
 } from "./perjadin-detail";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
+export {
+  togglePreparationItem,
+  type TogglePreparationItemInput,
+  type TogglePreparationItemResult,
+} from "./perjadin-preparation";
+// The derived checklist's item shape rides on `PerjadinDetail`; the rest of
+// `./preparation-checklist.ts` is a helper beneath the queries, like `./group-rules.ts`.
+export type { PreparationItem } from "./preparation-checklist";
 export { onlineSessionDirectory, type DirectoryOnlineSession } from "./online-session-directory";
 export {
   addPerson,

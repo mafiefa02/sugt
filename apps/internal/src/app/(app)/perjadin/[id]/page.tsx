@@ -2,6 +2,7 @@ import { PerjadinDates } from "-/components/perjadin-dates";
 import { PerjadinEvaluationDialog } from "-/components/perjadin-evaluation-form";
 import { PerjadinGroup } from "-/components/perjadin-group";
 import { PerjadinLogistics } from "-/components/perjadin-logistics";
+import { PerjadinPreparation } from "-/components/perjadin-preparation";
 import { SessionStatusBadge } from "-/components/session-labels";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
@@ -128,6 +129,16 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         departure={trip.departure}
         returnLeg={trip.return}
         canEdit={person.role === "Staff"}
+      />
+
+      {/*
+        The Preparation Checklist — an internal Staff monitoring aid. Shown to everyone (it carries
+        no money), interactive for Staff, whom `togglePreparationItem` re-checks.
+      */}
+      <PerjadinPreparation
+        perjadinId={trip.id}
+        items={trip.preparation}
+        canToggle={person.role === "Staff"}
       />
 
       {/*

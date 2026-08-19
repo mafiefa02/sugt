@@ -6,6 +6,7 @@ import {
   filePerjadinEvaluation,
   movePerjadinDates,
   replacePerjadinGroup,
+  togglePreparationItem,
   updatePerjadinLogistics,
   type FilePerjadinEvaluationResult,
   type MovePerjadinDatesResult,
@@ -13,6 +14,7 @@ import {
   type PerjadinLogisticsInput,
   type PlannedTeacher,
   type ReplaceGroupResult,
+  type TogglePreparationItemResult,
   type UpdatePerjadinLogisticsResult,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
@@ -105,5 +107,32 @@ export async function updatePerjadinLogisticsAction(
 
   const result = await staffSurface(() => updatePerjadinLogistics(person, perjadinId, input));
   if (result.outcome === "updated") revalidatePath(`/perjadin/${perjadinId}`);
+  return result;
+}
+
+/**
+ * **Tick or un-tick one Preparation Checklist box.** Staff-only, wrapped in `staffSurface` for the
+ * same reason the writes above are — `togglePreparationItem` throws `NotStaffError`, sanitized on
+ * the way to the client, so the 403 translation happens here.
+ *
+ * **This revalidates two routes**, which the convention this file states otherwise forbids. The
+ * `/perjadin` list carries a `Persiapan: x/N` pill genuinely derived from this write, so the list
+ * is stale the moment a box is ticked from the detail page — a deliberate exception, not a route's
+ * action reaching into an unrelated one.
+ */
+export async function togglePreparationItemAction(
+  perjadinId: string,
+  itemKey: string,
+  checked: boolean,
+): Promise<TogglePreparationItemResult> {
+  const person = await requirePerson();
+
+  const result = await staffSurface(() =>
+    togglePreparationItem(person, { perjadinId, itemKey, checked }),
+  );
+  if (result.outcome === "toggled") {
+    revalidatePath(`/perjadin/${perjadinId}`);
+    revalidatePath("/perjadin");
+  }
   return result;
 }
