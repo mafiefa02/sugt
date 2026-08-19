@@ -14,6 +14,7 @@ import { TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { callCommand } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor, useInstance } from "@milkdown/react";
+import { storyEditorAllowlist, storyToolbar } from "@sugt/story-format/allowlist";
 import { Button } from "@sugt/ui/components/button";
 import {
   Dialog,
@@ -35,7 +36,6 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 
-import { storyEditorAllowlist, storyToolbar } from "@sugt/story-format/allowlist";
 import {
   type HeadingValue,
   type ToggleState,

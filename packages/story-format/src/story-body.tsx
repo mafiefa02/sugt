@@ -1,6 +1,5 @@
-import Markdown from "react-markdown";
-
 import { STORY_BODY_ELEMENTS } from "@sugt/story-format/nodes";
+import Markdown from "react-markdown";
 
 /**
  * **The public renderer for a Story's Markdown body — the render half of ADR-0015's one list.**

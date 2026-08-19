@@ -1,6 +1,10 @@
+import type {
+  DeliveryPayload,
+  ScopeCluster,
+  ScopePayload,
+  ScopeSchool,
+} from "-/lib/aggregates-types";
 import { TOTAL_SESSIONS_PER_SCHOOL } from "@sugt/domain";
-
-import type { DeliveryPayload, ScopeSchool } from "-/lib/aggregates-types";
 
 /**
  * **The figures the site derives rather than fetches.**
@@ -33,4 +37,33 @@ export function deliveryDenominator(schoolCount: number): number {
  */
 export function hasDelivery(delivery: DeliveryPayload): boolean {
   return delivery.deliveredTotal > 0;
+}
+
+/** One Cluster with the two figures the list and detail surfaces show beside it. */
+export type ClusterFigures = {
+  cluster: ScopeCluster;
+  schoolCount: number;
+  delivered: number;
+};
+
+/**
+ * **Join scope and delivery into per-Cluster figures.** The scope payload has the Clusters and their
+ * Schools; the delivery payload has the delivered count per Cluster (zero for a Cluster that has
+ * delivered nothing, which the producer keeps in the list rather than dropping). This pairs them by
+ * slug so a card can show both without either surface re-counting — the derivation lives once here.
+ * Clusters come back in the scope payload's order.
+ */
+export function clusterFigures(scope: ScopePayload, delivery: DeliveryPayload): ClusterFigures[] {
+  const deliveredBySlug = new Map(
+    delivery.perCluster.map((entry) => [entry.clusterSlug, entry.delivered]),
+  );
+  const schoolCountBySlug = new Map<string, number>();
+  for (const school of scope.schools) {
+    schoolCountBySlug.set(school.clusterSlug, (schoolCountBySlug.get(school.clusterSlug) ?? 0) + 1);
+  }
+  return scope.clusters.map((cluster) => ({
+    cluster,
+    schoolCount: schoolCountBySlug.get(cluster.slug) ?? 0,
+    delivered: deliveredBySlug.get(cluster.slug) ?? 0,
+  }));
 }

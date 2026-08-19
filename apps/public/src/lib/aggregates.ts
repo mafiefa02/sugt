@@ -1,10 +1,10 @@
-import { requireEnv } from "-/lib/env";
 import type {
   DeliveryPayload,
   ScopePayload,
   StoriesPayload,
   StoryPayload,
 } from "-/lib/aggregates-types";
+import { requireEnv } from "-/lib/env";
 
 /**
  * **Reading the four aggregates endpoints, the one way `@sugt/public` touches data.**
@@ -62,7 +62,9 @@ async function fetchPayload<T extends { version: number }>(
     next: { revalidate },
   });
   if (!response.ok) {
-    throw new Error(`Aggregates ${path} responded ${response.status}. The internal app is down or refused the secret.`);
+    throw new Error(
+      `Aggregates ${path} responded ${response.status}. The internal app is down or refused the secret.`,
+    );
   }
   const payload = (await response.json()) as T;
   if (payload.version !== expectedVersion) {
@@ -90,7 +92,11 @@ export function getDelivery(): Promise<DeliveryPayload> {
 
 /** The Stories list: every published Story, newest first, bodies excluded. Cached an hour. */
 export function getStories(): Promise<StoriesPayload> {
-  return fetchPayload<StoriesPayload>("/api/aggregates/stories", ONE_HOUR, EXPECTED_VERSION.stories);
+  return fetchPayload<StoriesPayload>(
+    "/api/aggregates/stories",
+    ONE_HOUR,
+    EXPECTED_VERSION.stories,
+  );
 }
 
 /**
@@ -106,7 +112,9 @@ export async function getStory(slug: string): Promise<StoryPayload | null> {
   });
   if (response.status === 404) return null;
   if (!response.ok) {
-    throw new Error(`Aggregates story ${slug} responded ${response.status}. The internal app is down or refused the secret.`);
+    throw new Error(
+      `Aggregates story ${slug} responded ${response.status}. The internal app is down or refused the secret.`,
+    );
   }
   const payload = (await response.json()) as StoryPayload;
   if (payload.version !== EXPECTED_VERSION.story) {
