@@ -1,5 +1,6 @@
 import { AppShell } from "-/components/app-shell";
 import { SignOutButton } from "-/components/sign-out-button";
+import { ThemeToggle } from "-/components/theme-toggle";
 import { getPerson } from "-/lib/person";
 import { redirect } from "next/navigation";
 
@@ -40,7 +41,16 @@ export default async function SignedInLayout({
     <AppShell
       role={person.role}
       personName={person.fullName}
-      footerAction={<SignOutButton />}
+      footerAction={
+        /* The theme toggle sits beside sign-out in the shell's footer. That footer is the
+           one `SidebarBody` the desktop sidebar and the mobile drawer both render (#122),
+           so placing the toggle here makes it reachable in both without touching the
+           shell. */
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <SignOutButton />
+        </div>
+      }
     >
       {children}
     </AppShell>

@@ -1,4 +1,5 @@
 import { SiteShell } from "-/components/site-shell";
+import { ThemeProvider } from "-/components/theme-provider";
 import { cn } from "@sugt/ui/lib/utils";
 import type { Metadata } from "next";
 
@@ -22,15 +23,20 @@ export default function RootLayout({
   return (
     /* Montserrat is loaded here rather than in `@sugt/ui`: `next/font` self-hosts it and
        belongs to the app that renders `<html>`. `.dark` belongs on this element for the
-       same reason, and is deliberately not set — `@sugt/ui` ships the token block and
-       the `dark` variant, and no surface asks for the class yet. See
-       `packages/ui/README.md`. */
+       same reason — `next-themes` toggles it here, client-side from `localStorage`
+       (ADR-0014: the server HTML is shared across visitors and stays theme-agnostic), so
+       `suppressHydrationWarning` covers the one attribute its pre-paint script writes
+       before React hydrates. `@sugt/ui` still ships the token block and the `dark`
+       variant and stops there; see `packages/ui/README.md`. */
     <html
       lang="id"
+      suppressHydrationWarning
       className={cn("h-full", "antialiased", "font-sans", sans.variable)}
     >
       <body className="flex min-h-full flex-col">
-        <SiteShell>{children}</SiteShell>
+        <ThemeProvider>
+          <SiteShell>{children}</SiteShell>
+        </ThemeProvider>
       </body>
     </html>
   );
