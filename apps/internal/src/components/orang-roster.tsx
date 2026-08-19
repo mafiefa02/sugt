@@ -2,7 +2,7 @@
 
 import { addPersonAction, revokePersonAction } from "-/app/(app)/orang/actions";
 import type { RosterEntry } from "@sugt/db/queries";
-import { ROLES, type Role } from "@sugt/domain";
+import { ROLES, ROLE_LABELS, type Role } from "@sugt/domain";
 import { Badge } from "@sugt/ui/components/badge";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
@@ -110,7 +110,7 @@ function PersonRow({ entry, canWrite }: { entry: RosterEntry; canWrite: boolean 
               : "Peran masih bisa diubah dengan menonaktifkan lalu menambahkan ulang"
           }
         >
-          {entry.role}
+          {ROLE_LABELS[entry.role]}
           {entry.used && (
             <Lock
               className="size-3.5 text-muted-foreground"
@@ -237,7 +237,7 @@ function AddPersonForm() {
                 setError(null);
               }}
             >
-              {option}
+              {ROLE_LABELS[option]}
             </Button>
           ))}
         </div>
