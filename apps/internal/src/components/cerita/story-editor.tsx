@@ -54,7 +54,7 @@ import {
  * Formatting is visual, not syntax: the toolbar above the prose, the mark keymaps (`mod-b`/`mod-i`),
  * and the input rules (`## `, `- `, `> `) are three doors to the same commands. Staff describe a
  * school visit; they do not learn Markdown. The toolbar's controls are bound to the allowlist's
- * command values (see `story-editor-allowlist.ts`) and reflect the caret through the pure
+ * command values (see `@sugt/story-format/allowlist`) and reflect the caret through the pure
  * `EditorState → ToolbarState` function in `toolbar-state.ts`.
  *
  * **The body is reported up, never held here.** `onChange` fires on every `markdownUpdated`; the
