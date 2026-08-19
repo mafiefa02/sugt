@@ -1,11 +1,8 @@
+import { AppBrand } from "-/components/app-brand";
 import { AppShellMobileBar } from "-/components/app-shell-mobile-bar";
 import { AppSidebarNav } from "-/components/app-sidebar";
 import type { Role } from "@sugt/domain";
 import { Avatar, AvatarFallback } from "@sugt/ui/components/avatar";
-import Image from "next/image";
-import Link from "next/link";
-
-import logoSekolahGaruda from "../../public/logo-sekolah-garuda.png";
 
 /**
  * The internal tool's shell: a fixed 240px sidebar beside a fluid main on a wide
@@ -77,15 +74,7 @@ function SidebarBody({
   return (
     <>
       <div className="flex h-16 items-center gap-2.5 border-b border-sidebar-border px-5">
-        <Link href="/">
-          <Image
-            src={logoSekolahGaruda}
-            alt="Sekolah Garuda"
-            className="h-6 w-auto"
-            priority
-          />
-        </Link>
-        <span className="text-[10.5px] font-medium text-muted-foreground">Internal</span>
+        <AppBrand />
       </div>
 
       <AppSidebarNav role={role} />

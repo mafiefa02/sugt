@@ -1,5 +1,6 @@
 "use client";
 
+import { AppBrand } from "-/components/app-brand";
 import { Button } from "@sugt/ui/components/button";
 import {
   Sheet,
@@ -9,12 +10,8 @@ import {
   SheetTrigger,
 } from "@sugt/ui/components/sheet";
 import { Menu } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-
-import logoSekolahGaruda from "../../public/logo-sekolah-garuda.png";
 
 /**
  * The shell's phone header: a top bar carrying the logo, the `Internal` wordmark and a
@@ -28,7 +25,12 @@ import logoSekolahGaruda from "../../public/logo-sekolah-garuda.png";
  *
  * A route change does not dismiss a dialog on its own, and the drawer holds the nav
  * links, so it would outlive every tap. The effect closes it on navigation — browser
- * back and forward included — the way `apps/public`'s `SiteNav` does.
+ * back and forward included — the way `apps/public`'s `SiteNav` does. `SiteNav` pairs
+ * that effect with a per-link `onClick` for the one case the effect cannot see: a tap
+ * on the link for the page already open, where the pathname never changes. The drawer's
+ * links come from the shared `AppSidebarNav`, which has no handle on this drawer's
+ * state, so `closeOnLinkTap` covers that case by delegation instead — any tap that
+ * lands on a link is navigation intent.
  */
 function AppShellMobileBar({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -38,17 +40,13 @@ function AppShellMobileBar({ children }: { children: React.ReactNode }) {
     setOpen(false);
   }, [pathname]);
 
+  function closeOnLinkTap(event: React.MouseEvent) {
+    if ((event.target as HTMLElement).closest("a")) setOpen(false);
+  }
+
   return (
     <div className="flex h-16 items-center gap-2.5 border-b border-border bg-background px-5 md:hidden">
-      <Link href="/">
-        <Image
-          src={logoSekolahGaruda}
-          alt="Sekolah Garuda"
-          className="h-6 w-auto"
-          priority
-        />
-      </Link>
-      <span className="text-[10.5px] font-medium text-muted-foreground">Internal</span>
+      <AppBrand />
 
       <Sheet
         open={open}
@@ -75,7 +73,14 @@ function AppShellMobileBar({ children }: { children: React.ReactNode }) {
           <SheetHeader className="sr-only">
             <SheetTitle>Menu</SheetTitle>
           </SheetHeader>
-          {children}
+          {/* `flex flex-1 flex-col` so the shared SidebarBody's `mt-auto` footer still
+              pins to the drawer's bottom, exactly as it does inside the desktop aside. */}
+          <div
+            className="flex flex-1 flex-col"
+            onClick={closeOnLinkTap}
+          >
+            {children}
+          </div>
         </SheetContent>
       </Sheet>
     </div>
