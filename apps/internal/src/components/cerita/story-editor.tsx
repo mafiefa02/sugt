@@ -10,7 +10,7 @@ import {
 } from "@milkdown/kit/core";
 import { history } from "@milkdown/kit/plugin/history";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
-import { TextSelection } from "@milkdown/kit/prose/state";
+import { type EditorState, TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { callCommand } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor, useInstance } from "@milkdown/react";
@@ -95,8 +95,18 @@ function StoryEditorInner({
             spellcheck: "false",
           },
         }));
-        const refresh = (context: typeof ctx) =>
-          setToolbarState(deriveToolbarState(context.get(editorViewCtx).state));
+        const refresh = (context: typeof ctx) => {
+          // `selectionUpdated` fires **synchronously while the `EditorView` is still being
+          // constructed**, and at that instant `editorViewCtx` still holds Milkdown's default
+          // `{}` stub — its `state` is `undefined` at runtime, though the type says `EditorState`.
+          // `deriveToolbarState` dereferences `state.schema`, so handing it the stub throws
+          // "can't access property schema, state is undefined". Skip the update until the real
+          // view resolves; the `mounted`/`updated` events that follow refresh the toolbar
+          // correctly, and `deriveToolbarState` keeps its non-null contract. (#118)
+          const state = context.get(editorViewCtx).state as EditorState | undefined;
+          if (state === undefined) return;
+          setToolbarState(deriveToolbarState(state));
+        };
         ctx
           .get(listenerCtx)
           .mounted(refresh)
