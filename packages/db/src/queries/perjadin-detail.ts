@@ -200,13 +200,12 @@ export async function perjadinDetail(
 
   if (!trip) return null;
 
-  // The per-teacher boxes are the Group's Teaching Team members; the fixed six need no data. A
-  // member carries a Stream by `group_member_stream_iff_teaching`, so the filter narrows the type.
-  const teachers: PreparationTeacher[] = group.flatMap((member) =>
-    member.stream === null
-      ? []
-      : [{ personId: member.personId, fullName: member.fullName, stream: member.stream }],
-  );
+  // The per-teacher boxes are the Group's Teaching Team members; the fixed six need no data. Keyed
+  // on `role` — the same test the directory pill's subquery uses (`role = 'Teaching Team'`) — so the
+  // two layers agree on which members earn a box.
+  const teachers: PreparationTeacher[] = group
+    .filter((member) => member.role === "Teaching Team")
+    .map((member) => ({ personId: member.personId, fullName: member.fullName }));
   const preparation = derivePreparationChecklist(teachers, preparationTicks);
 
   const { departureAt, departureZone, departureMode, returnAt, returnZone, returnMode, ...header } =

@@ -122,6 +122,46 @@ describe("the derived checklist", () => {
     expect((await pillOf(pic, perjadinId))?.preparationTotal).toBe(9);
   });
 
+  it("orders the per-teacher boxes by name, matching the Group list on the same screen", async () => {
+    const pic = await addPerson({
+      fullName: "Rina Nurhayati",
+      email: "rina@ditsama.itb.ac.id",
+      role: "Staff",
+    });
+    // Names deliberately in the opposite order to the Streams: the STEM teacher sorts last by name,
+    // the Research teacher first. Stream-primary ordering would put STEM ("Zulaikha") first; the
+    // checklist must instead follow the Group list, which is name-ascending.
+    const zulaikha = await addPerson({
+      fullName: "Zulaikha Rahmawati",
+      email: "zulaikha@itb.ac.id",
+      role: "Teaching Team",
+    });
+    const andi = await addPerson({
+      fullName: "Andi Pratama",
+      email: "andi@itb.ac.id",
+      role: "Teaching Team",
+    });
+    const perjadin = await addPerjadin({
+      advanceIdr: 5_000_000,
+      picPersonId: pic.id,
+      teachers: [
+        { personId: zulaikha.id, stream: "STEM" },
+        { personId: andi.id, stream: "Research" },
+      ],
+    });
+
+    const detail = await perjadinDetail(pic, perjadin.id);
+    // Andi (Research) before Zulaikha (STEM): name order, not Stream order.
+    expect(detail?.preparation.slice(6).map((item) => item.itemKey)).toEqual([
+      `dosen:${andi.id}`,
+      `dosen:${zulaikha.id}`,
+    ]);
+    // And it is the very order the Group list shows its Teaching Team members in.
+    expect(
+      detail?.group.filter((member) => member.stream !== null).map((member) => member.personId),
+    ).toEqual([andi.id, zulaikha.id]);
+  });
+
   it("keeps a per-teacher tick with its Person, and re-labels it live when the name changes", async () => {
     const { pic, bagus, perjadinId } = await trip();
 

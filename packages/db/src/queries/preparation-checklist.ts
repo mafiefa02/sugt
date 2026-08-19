@@ -1,5 +1,3 @@
-import { STREAMS, type Stream } from "@sugt/domain";
-
 /**
  * The Preparation Checklist's shape, **derived and never stored**
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
@@ -11,11 +9,15 @@ import { STREAMS, type Stream } from "@sugt/domain";
  * reason: no screen renders these constants, only the payloads built from them.
  */
 
-/** One member of the Group whose per-teacher box is derived. Ordered Stream, then name. */
+/**
+ * One member of the Group whose per-teacher box is derived. Ordered **by name**, matching the
+ * Group the detail screen renders directly above the checklist — `perjadinDetail` orders that list
+ * `asc(role), asc(fullName)`, so among the Teaching Team members the order is name-ascending, and
+ * this reproduces it so the two lists on one page agree.
+ */
 export type PreparationTeacher = {
   personId: string;
   fullName: string;
-  stream: Stream;
 };
 
 /** One derived checklist item, in render order: the six fixed items, then one per teacher. */
@@ -65,8 +67,8 @@ export type PreparationTick = {
 
 /**
  * The derived checklist for one Perjadin: the six fixed items, then one per Teaching Team member
- * of the Group, each carrying its current tick state. Teachers are ordered by Stream (the
- * `STREAMS` order) then name, matching the Group the detail screen renders above it.
+ * of the Group, each carrying its current tick state. Teachers are ordered by name, matching the
+ * Group the detail screen renders above it (see `PreparationTeacher`).
  *
  * `N` is `fixed + teachers.length`; `x` is the number of these that are ticked. A `dosen:` tick
  * for somebody no longer on the Group has no item here, so it never counts — orphans are left in
@@ -88,10 +90,7 @@ export function derivePreparationChecklist(
     };
   };
 
-  const ordered = [...teachers].sort(
-    (a, b) =>
-      STREAMS.indexOf(a.stream) - STREAMS.indexOf(b.stream) || a.fullName.localeCompare(b.fullName),
-  );
+  const ordered = [...teachers].sort((a, b) => a.fullName.localeCompare(b.fullName));
 
   return [
     ...PREPARATION_FIXED_ITEMS.map((item) => at(item.itemKey, item.label)),
