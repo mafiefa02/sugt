@@ -8,6 +8,12 @@ The site runs on a domain we own rather than an `itb.ac.id` subdomain, so no ins
 
 ## The gate is two-tier, and the invite list is both halves of it
 
+> **The second tier is gone.** [#115](https://github.com/mafiefa02/sugt/issues/115) dropped the
+> Staff `@ditsama.itb.ac.id` domain rule: the gate is now the active `person` row alone, for
+> everyone. The section below records the original two-tier design and stays as written; read it
+> against [Amendment: the gate is single-tier — the active `person` row
+> alone](#amendment-the-gate-is-single-tier--the-active-person-row-alone).
+
 Staff sign in with an `@ditsama.itb.ac.id` Google account; Teaching Team members sign in with whatever Google account they have. **A `person` row is required either way** — the domain check on the email is an additional assertion for Staff, never a replacement for the list.
 
 Stated because the design prototype had it the other way round, gating sign-in on the domain alone. That would exclude exactly the people the paragraph above chose Google for: a professor without an ITB account could not sign in at all, and Class Records are the largest single source of data in the system.
@@ -58,3 +64,33 @@ more time before they land, so a mis-pick is caught by them rather than by the g
 for a refresh token: nothing is persisted from Google, and the invite list is re-read by email
 every request. Sessions persist, so sign-in is rare, and one extra click beats an unrecoverable
 dead end.
+
+## Amendment: the gate is single-tier — the active `person` row alone
+
+**The Staff `@ditsama.itb.ac.id` domain rule is dropped ([#115](https://github.com/mafiefa02/sugt/issues/115)).**
+The gate above was two-tier: an active `person` row for everyone, **and** a Staff row's email
+having to end in `@ditsama.itb.ac.id`. The Programme now onboards staff who hold no ITB address,
+so the second tier is removed. The gate becomes purely: **your Google account's email matches an
+active `person` row.** Staff may be listed under, and sign in with, any email; Teaching Team was
+already this way, so the two roles now gate identically.
+
+**The domain rule only ever constrained the roster, not real sign-ins.** Because all three
+enforcement points look a Person up by the presented Google address (`where lower(email) = $1 and
+active`), a Staff row reading `alice@ditsama.itb.ac.id` and a Google account of `alice@gmail.com`
+matched no row at all — the domain assertion in the sign-in hook only fired on a roster row that
+was _itself_ wrong (`role = 'Staff'` against a non-DITSAMA address). Removing it drops that
+roster-integrity backstop and the add-form validation that produced the `"staff-needs-domain"`
+outcome; both are gone, along with the `STAFF_EMAIL_DOMAIN` constant.
+
+**The "personal Gmail out of habit" case the Consequences name dissolves into "uninvited."** With
+no domain tier, a Staff member reaching for a personal Gmail is refused for exactly one reason if
+that address is not on the roster — no matching active Person — the same as any stranger, and is
+admitted if it is. There is no longer a distinct third refusal _cause_; there was never a third
+_message_.
+
+**Everything else is untouched.** All three enforcement points still read `person.active` (the
+invite gate at user creation, the revocation check at session creation, and `requirePerson()` /
+the query-layer `Person` caller on every request), so revocation and the active-row requirement are
+exactly as before. The `/masuk` indistinguishability property holds by the same construction: one
+Indonesian sentence for every value of `?error`, never echoed — this change only removes refusal
+_causes_, not the single message.

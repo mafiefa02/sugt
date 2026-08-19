@@ -2,7 +2,7 @@
 
 import { addPersonAction, revokePersonAction } from "-/app/(app)/orang/actions";
 import type { RosterEntry } from "@sugt/db/queries";
-import { ROLES, STAFF_EMAIL_DOMAIN, type Role } from "@sugt/domain";
+import { ROLES, type Role } from "@sugt/domain";
 import { Badge } from "@sugt/ui/components/badge";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
@@ -172,9 +172,9 @@ function RevokeButton({ personId }: { personId: string }) {
 }
 
 /**
- * The single-row add form above the table. It validates the Staff-domain rule for the message;
- * `addPerson` validates it again for the fact, and the database's partial index refuses a
- * duplicate active email behind both.
+ * The single-row add form above the table. The gate is the invite list alone (ADR-0003, amended
+ * by #115) — any Google address may be listed for either role — so the only failures the form
+ * surfaces are an incomplete row and a duplicate active email the database's partial index refuses.
  */
 function AddPersonForm() {
   const [fullName, setFullName] = useState("");
@@ -187,13 +187,6 @@ function AddPersonForm() {
 
   function submit() {
     if (!canSubmit) return;
-
-    // Checked here so the message lands before a round trip, and again in `addPerson` so it is a
-    // rule rather than a convenience. A Teaching Team member needs no particular domain.
-    if (role === "Staff" && !email.trim().toLowerCase().endsWith(STAFF_EMAIL_DOMAIN)) {
-      setError(MESSAGES["staff-needs-domain"]);
-      return;
-    }
 
     startSaving(async () => {
       const result = await addPersonAction({ fullName, email, role });
@@ -264,7 +257,6 @@ function AddPersonForm() {
 
 const MESSAGES = {
   incomplete: "Nama dan email wajib diisi.",
-  "staff-needs-domain": `Staff harus memakai alamat ${STAFF_EMAIL_DOMAIN}.`,
   "email-taken": "Email itu sudah dipakai oleh orang yang masih aktif.",
 } as const;
 

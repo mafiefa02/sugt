@@ -6,13 +6,13 @@ import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
 
 import { requireEnv } from "./env";
-import { findActivePersonByEmail, satisfiesStaffDomainRule } from "./invite-list";
+import { findActivePersonByEmail } from "./invite-list";
 
 /**
  * The one code a rejected visitor's browser ever carries back.
  *
- * Uninvited, revoked, and Staff on a personal Gmail all fail identically, because
- * they fail for the same reason: no matching active Person. `/masuk` renders one
+ * Uninvited and revoked fail identically, because they fail for the same reason: no
+ * matching active Person. `/masuk` renders one
  * Indonesian sentence for **every** value of `?error` and never echoes it, so the
  * indistinguishability is true by construction — this constant only makes the two
  * routes agree on the wire as well.
@@ -133,7 +133,6 @@ export const auth = betterAuth({
         before: async (user) => {
           const person = await findActivePersonByEmail(user.email);
           if (!person) refuse();
-          if (!satisfiesStaffDomainRule(person)) refuse();
 
           return { data: { ...user, personId: person.id } };
         },

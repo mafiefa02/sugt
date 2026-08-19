@@ -1,4 +1,4 @@
-import { STAFF_EMAIL_DOMAIN, type Role } from "@sugt/domain";
+import { type Role } from "@sugt/domain";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
@@ -121,19 +121,15 @@ export type AddPersonResult =
   | { outcome: "added"; personId: string }
   /** A blank name or email. The form requires both, so this is a stale or hand-edited submit. */
   | { outcome: "incomplete" }
-  /** A Staff member without an `@ditsama.itb.ac.id` address — the rule this screen enforces daily. */
-  | { outcome: "staff-needs-domain" }
   /** An active Person already holds this email. `person_email_key` (partial, `where active`) refuses it. */
   | { outcome: "email-taken" };
 
 /**
  * Add a Person — an invitation.
  *
- * Staff-only, and it holds the Staff-domain rule beside the write: a Staff member must hold an
- * `@ditsama.itb.ac.id` address. **This is where that rule does its day-to-day work**; the
- * sign-in hook is a backstop that only fires on a row already wrong (ADR-0003, #24). A Teaching
- * Team member needs no such address — Google sign-in was chosen so a professor with a personal
- * account can be invited.
+ * Staff-only. The gate is the invite list alone (ADR-0003, amended by #115): a row's email is
+ * simply whatever the person signs in with, and Staff no longer need any particular address —
+ * the `@ditsama.itb.ac.id` domain rule that used to sit beside this write is gone.
  *
  * The duplicate-email refusal is caught outside the insert, as the record writes catch theirs.
  * The index is **partial** (`where active`), which is what lets revoke-and-re-add leave two rows
@@ -145,9 +141,6 @@ export async function addPerson(caller: Person, input: NewPerson): Promise<AddPe
   const fullName = input.fullName.trim();
   const email = input.email.trim();
   if (fullName === "" || email === "") return { outcome: "incomplete" };
-  if (input.role === "Staff" && !email.toLowerCase().endsWith(STAFF_EMAIL_DOMAIN)) {
-    return { outcome: "staff-needs-domain" };
-  }
 
   try {
     const [row] = await db
