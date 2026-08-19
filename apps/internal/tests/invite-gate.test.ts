@@ -95,30 +95,32 @@ describe("the invite gate", () => {
     await expect(authUsers()).resolves.toHaveLength(0);
   });
 
-  it("refuses a Staff roster row that carries a non-DITSAMA address", async () => {
+  it("lets an invited Staff member in with a non-DITSAMA address", async () => {
     /**
-     * The fixture is the point. The Person's **own** email has to be the non-DITSAMA
-     * one, or the hook finds no row at all and this is the uninvited case again with
-     * the domain branch never running. So the only way to reach that branch is a
-     * roster row that is itself wrong — which is what makes it a backstop against a
-     * bad row rather than the working gate. The place the rule does day-to-day work is
-     * validation on the People screen's add form.
+     * The gate is the invite list alone (ADR-0003, amended by #115): the domain rule is
+     * gone, so a `Staff` row listed under a personal Gmail is admitted exactly as a
+     * Teaching Team row would be. This is the behaviour the ticket adds — the same
+     * fixture that used to be refused as a "roster row that is itself wrong" now signs
+     * in.
      */
-    await addPerson({
-      fullName: "Wrongly Rostered",
-      email: "wrongly.rostered@gmail.com",
+    const person = await addPerson({
+      fullName: "Staf Gmail",
+      email: "staf@gmail.com",
       role: "Staff",
     });
 
     const result = await signInWithGoogle({
-      googleId: "google-wrong",
-      email: "wrongly.rostered@gmail.com",
-      name: "Wrongly Rostered",
+      googleId: "google-staf-gmail",
+      email: "staf@gmail.com",
+      name: "Staf Gmail",
     });
 
-    expect(result.sessionCookie).toBeNull();
-    expect(result.location.pathname).toBe(SIGN_IN_PATH);
-    await expect(authUsers()).resolves.toHaveLength(0);
+    expect(result.sessionCookie).not.toBeNull();
+    expect(result.location.pathname).toBe("/");
+
+    const users = await authUsers();
+    expect(users).toHaveLength(1);
+    expect(users[0]!.personId).toBe(person.id);
   });
 
   it("refuses a revoked Person who has never signed in", async () => {
@@ -149,10 +151,11 @@ describe("the invite gate", () => {
      * `lower(email) = $1 and active`.
      *
      * **The two rows are arranged so that only one of them can succeed.** The revoked
-     * row is the wrong one — `Staff` against a personal Gmail — so matching it would
-     * be refused by the domain backstop. The active row is `Teaching Team`, which any
-     * Google address satisfies. Sign-in therefore succeeds only if the lookup skipped
-     * the revoked row, and `person_id` names which row it landed on.
+     * row carries `active = false`, and the lookup's `and active` skips it — so sign-in
+     * succeeds only by landing on the active row, and `person_id` names which one it was.
+     * The two rows also differ in `role` (revoked `Staff`, active `Teaching Team`), which
+     * is incidental to the invite gate now the domain rule is gone but keeps the fixture
+     * a faithful revoke-and-re-add.
      */
     await addPerson({
       fullName: "Salah Peran",

@@ -26,9 +26,11 @@
 --
 -- ## Two rules the rows below have to obey
 --
--- 1. **Staff must hold an `@ditsama.itb.ac.id` address.** A row saying `Staff` against
---    any other domain is refused at sign-in by the invite hook's backstop, so it is a
---    row nobody can ever use. Teaching Team may hold any Google address.
+-- 1. **Each row's email is simply the Google account that person signs in with.** Any
+--    address, either role — the sign-in gate is the active `person` row alone. The old
+--    `@ditsama.itb.ac.id` requirement on Staff was dropped in ADR-0003's amendment
+--    ("the gate is single-tier", #115), so a founding-Staff row may hold any Google
+--    address.
 -- 2. **`role` is write-once.** Six composite foreign keys point at `person (id, role)`
 --    and none declares `on update`, so Postgres refuses to change it the moment the
 --    Person has been used anywhere. A wrong role is corrected by revoking that row and

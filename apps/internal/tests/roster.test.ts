@@ -1,6 +1,5 @@
 import { db, schema } from "@sugt/db";
 import { addPerson, isNotStaffError, revokePerson, roster } from "@sugt/db/queries";
-import { STAFF_EMAIL_DOMAIN } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -17,9 +16,10 @@ import { signInAsPerson } from "./support/sign-in";
 
 /**
  * **Orang** — the roster and the invite list. The rules under test are the ones ADR-0013 draws:
- * revoking is one write, a duplicate active email is refused by the partial index, a Staff member
- * must hold a DITSAMA address, and `used` — the write-once lock — is computed from all **seven**
- * composite foreign keys, the Story author included.
+ * revoking is one write, a duplicate active email is refused by the partial index, and `used` —
+ * the write-once lock — is computed from all **seven** composite foreign keys, the Story author
+ * included. The gate is the invite list alone (ADR-0003, amended by #115): any email may be
+ * listed for either role, so `addPerson` no longer refuses a Staff member on a non-DITSAMA address.
  */
 
 /** A Staff Person to hand the writes as their caller. */
@@ -76,7 +76,7 @@ describe("addPerson", () => {
     expect(result.outcome).toBe("added");
   });
 
-  it("refuses a Staff member without a DITSAMA address, and writes nothing", async () => {
+  it("adds a Staff member on a non-DITSAMA address — the domain rule is gone", async () => {
     const staff = await staffCaller();
 
     const result = await addPerson(staff, {
@@ -85,12 +85,12 @@ describe("addPerson", () => {
       role: "Staff",
     });
 
-    expect(result).toEqual({ outcome: "staff-needs-domain" });
+    expect(result.outcome).toBe("added");
     const rows = await db
       .select()
       .from(schema.person)
       .where(eq(schema.person.email, "doni@gmail.com"));
-    expect(rows).toHaveLength(0);
+    expect(rows).toHaveLength(1);
   });
 
   it("adds a Staff member with a DITSAMA address", async () => {
@@ -98,7 +98,7 @@ describe("addPerson", () => {
 
     const result = await addPerson(staff, {
       fullName: "Dewi",
-      email: `dewi${STAFF_EMAIL_DOMAIN}`,
+      email: "dewi@ditsama.itb.ac.id",
       role: "Staff",
     });
 
@@ -239,7 +239,7 @@ describe("roster", () => {
     const staff = await staffCaller();
     const author = await seedPerson({
       fullName: "Penulis",
-      email: `penulis${STAFF_EMAIL_DOMAIN}`,
+      email: "penulis@ditsama.itb.ac.id",
       role: "Staff",
     });
     const school = await oneSchool();
@@ -252,6 +252,6 @@ describe("roster", () => {
     });
 
     const list = await roster(staff);
-    expect(byEmail(list, `penulis${STAFF_EMAIL_DOMAIN}`)?.used).toBe(true);
+    expect(byEmail(list, "penulis@ditsama.itb.ac.id")?.used).toBe(true);
   });
 });

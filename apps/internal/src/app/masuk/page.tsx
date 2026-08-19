@@ -1,4 +1,3 @@
-import { STAFF_EMAIL_DOMAIN } from "-/lib/invite-list";
 import { getPerson } from "-/lib/person";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -55,8 +54,8 @@ export default async function SignInPage({
         <GoogleSignInButton />
 
         <p className="text-xs text-muted-foreground">
-          Gunakan akun Google yang terdaftar. Tim DITSAMA memakai akun
-          {` ${STAFF_EMAIL_DOMAIN}`}; Tim Pengajar memakai akun Google apa pun.
+          Gunakan akun Google yang terdaftar. Baik Tim DITSAMA maupun Tim Pengajar memakai akun
+          Google apa pun yang sudah terdaftar.
         </p>
       </div>
     </main>

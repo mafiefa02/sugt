@@ -1,6 +1,5 @@
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
-import { STAFF_EMAIL_DOMAIN } from "@sugt/domain";
 import { and, eq, sql } from "drizzle-orm";
 
 /**
@@ -34,13 +33,6 @@ import { and, eq, sql } from "drizzle-orm";
 export type { Person };
 
 /**
- * Re-exported from `@sugt/domain`, where it now lives so `addPerson` in `@sugt/db` and this
- * backstop share one constant. Kept exported here so `/masuk` and any other app consumer need
- * not learn a new import path.
- */
-export { STAFF_EMAIL_DOMAIN };
-
-/**
  * `where lower(email) = $1 and active`.
  *
  * Both halves matter. Better Auth lowercases the address before any hook sees it, so
@@ -67,25 +59,4 @@ export async function findActivePersonByEmail(email: string): Promise<Person | n
     .limit(1);
 
   return (person as Person | undefined) ?? null;
-}
-
-/**
- * The Staff-domain rule, as a **roster-integrity backstop rather than the working
- * gate**.
- *
- * It is narrower than it looks. The hook that calls this has already found the Person
- * by the Google address presented, so a Staff member whose roster row reads
- * `alice@ditsama.itb.ac.id` signing in with `alice@gmail.com` matches no row at all
- * and is refused as uninvited — this never runs. The only way to reach a `false` here
- * is a roster row that is itself wrong: `role = 'Staff'` against a non-DITSAMA
- * address.
- *
- * So this earns its keep as a last line of defence against a bad row. The place the
- * rule does day-to-day work is validation on the People screen's add form.
- * ADR-0003 is explicit that gating on the domain **alone** would exclude exactly the
- * people Google was chosen for: a professor with no ITB account.
- */
-export function satisfiesStaffDomainRule(person: Person): boolean {
-  if (person.role !== "Staff") return true;
-  return person.email.toLowerCase().endsWith(STAFF_EMAIL_DOMAIN);
 }
