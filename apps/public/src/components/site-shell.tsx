@@ -1,5 +1,6 @@
 import { SiteContainer } from "-/components/site-container";
 import { SiteNav } from "-/components/site-nav";
+import { ThemeToggle } from "-/components/theme-toggle";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -50,7 +51,10 @@ function SiteShell({ children }: { children: React.ReactNode }) {
               priority
             />
           </Link>
-          <SiteNav />
+          <div className="flex items-center gap-2">
+            <SiteNav />
+            <ThemeToggle />
+          </div>
         </SiteContainer>
       </header>
 
