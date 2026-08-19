@@ -3,7 +3,7 @@
 import { replacePerjadinGroupAction } from "-/app/(app)/perjadin/[id]/actions";
 import { PersonSelect } from "-/components/person-select";
 import type { GroupMemberEntry, PlannedTeacher } from "@sugt/db/queries";
-import { STREAMS, type Stream } from "@sugt/domain";
+import { ROLE_LABELS, STREAMS, type Stream } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -71,13 +71,14 @@ function PerjadinGroup({
             {/*
               Staff carry no Stream and Teaching Team always carry one, by
               `group_member_stream_iff_teaching`. A professor is labelled by their Stream; among
-              the stream-less Staff, the PIC is named as such and the rest are extra Staff.
+              the stream-less Staff, the PIC is named as such and the rest carry the Staff role
+              label (`ROLE_LABELS.Staff`, "DITSAMA" — #116), the same one the acquittal list shows.
             */}
             {member.stream !== null
               ? ` · ${member.stream}`
               : member.personId === picPersonId
                 ? " · PIC"
-                : " · Staf"}
+                : ` · ${ROLE_LABELS.Staff}`}
           </li>
         ))}
       </ul>

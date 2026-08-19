@@ -93,6 +93,7 @@ _Avoid_: user (a sign-in identity, which a Person may or may not yet have), memb
 
 **Staff**:
 A DITSAMA ITB employee working on the Programme, the Programme's leadership included.
+The internal UI labels this role **DITSAMA**; the domain term is still **Staff** (like the Indonesian website copy, a presentation concern — the stored value stays `Staff`).
 _Avoid_: leadership, admin, organiser (senior Staff are Staff; there is no separate role)
 
 **Teaching Team**:

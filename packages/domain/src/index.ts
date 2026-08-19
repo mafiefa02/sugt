@@ -139,6 +139,19 @@ export const ROLES = ["Staff", "Teaching Team"] as const;
 export type Role = (typeof ROLES)[number];
 
 /**
+ * How each role is **labelled in the UI**. Presentation only: the stored value stays `"Staff"`
+ * everywhere — the DB column, the CHECK constraints, the composite FKs pinned by ADR-0013, and
+ * every `role === "Staff"` comparison. The Programme calls its own people "DITSAMA", so that is
+ * what the internal screens show; renaming the stored value would be a history-touching migration
+ * across the `*_role` columns, deliberately avoided ([#116](https://github.com/mafiefa02/sugt/issues/116)).
+ * Route any rendered role string through this map; never through the raw value.
+ */
+export const ROLE_LABELS: Record<Role, string> = {
+  Staff: "DITSAMA",
+  "Teaching Team": "Teaching Team",
+};
+
+/**
  * The two kinds a Story may be. They share one editor and one upload path; they differ only
  * in where the public site lists them — a Final Project reaches the public this way without
  * becoming a tracked record (see `docs/adr/0009-the-tool-tracks-delivery-not-outcomes.md`).

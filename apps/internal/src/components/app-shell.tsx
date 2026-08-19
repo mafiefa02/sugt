@@ -1,7 +1,7 @@
 import { AppBrand } from "-/components/app-brand";
 import { AppShellMobileBar } from "-/components/app-shell-mobile-bar";
 import { AppSidebarNav } from "-/components/app-sidebar";
-import type { Role } from "@sugt/domain";
+import { ROLE_LABELS, type Role } from "@sugt/domain";
 import { Avatar, AvatarFallback } from "@sugt/ui/components/avatar";
 
 /**
@@ -87,7 +87,7 @@ function SidebarBody({
         </Avatar>
         <div className="leading-tight">
           <div className="text-sm font-medium">{personName}</div>
-          <div className="text-xs text-muted-foreground">{role}</div>
+          <div className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</div>
         </div>
         {footerAction ? <div className="ml-auto">{footerAction}</div> : null}
       </div>
