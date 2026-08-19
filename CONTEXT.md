@@ -111,6 +111,14 @@ _Avoid_: team, squad, class
 The Staff member accountable for one piece of work being filed. A Perjadin has one, answerable for its administrative reporting; an online Session has one of its own, since it has no Group. The PIC files the Session Record — the account of the visit — and no Class Records, because they organised the Session rather than taught it.
 _Avoid_: lead, owner, manager
 
+**Preparation Checklist**:
+A Perjadin's private, hand-ticked list of pre-departure to-dos — an internal-monitoring aid for Staff, shown only on the Perjadin's own screen. It carries no money, no deadline and no record; nothing ever ticks a box automatically. Every Perjadin has the same six fixed **Preparation Items** plus one per Teaching Team member of its Group, and its completion shows on the Perjadin list as a `Persiapan: x/N` count.
+_Avoid_: preparation status, readiness, onboarding, workflow (it tracks nothing but hand-ticked boxes and blocks nothing)
+
+**Preparation Item**:
+One line of a **Preparation Checklist**. Six are fixed for every Perjadin — SK Perjalanan, the two tickets, lodging, local transport and a single "confirmed with the Staff" box; the rest are one per Teaching Team member, each glued to that Person so a name change never disturbs it and a member who leaves the Group leaves their tick behind, ignored until they return. Only the ticked items are stored; the set of items is derived from the fixed list and the current Group.
+_Avoid_: task, step, todo (it is neither assigned nor sequenced)
+
 ### Reporting
 
 **Advance**:

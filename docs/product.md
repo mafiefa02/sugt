@@ -235,6 +235,15 @@ Offline Sessions happen during a Perjadin. **Online Sessions have no Perjadin at
 which is why counting trips never tells you how much teaching has happened, and why six
 of every ten Sessions are invisible to anything trip-shaped.
 
+**A Perjadin's screen carries a Preparation Checklist** — a private, hand-ticked list of
+pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid and nothing more:
+no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Every trip has
+the same six fixed boxes — SK Perjalanan, the two tickets, lodging, local transport and one
+"confirmed with the Staff" — plus one per Teaching Team member of the Group. Any Staff member may
+tick any box; the boxes flip optimistically. On the Perjadin list each trip shows a
+`Persiapan: x/N` pill that greys at zero, ambers part-way and greens when everything is done — the
+one place the checklist's state leaves the trip's own screen.
+
 ### The acquittal — the most important screen
 
 The PIC accounts for the whole Group. They enter each transaction that consumed the

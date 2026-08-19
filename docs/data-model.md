@@ -1093,6 +1093,43 @@ That is what makes the last Group rule cheap. See
 rather than something derived, because a member with no transactions is genuinely ambiguous
 between _spent nothing_ and _has not handed anything over yet_.
 
+### The Preparation Checklist
+
+```sql
+create table perjadin_preparation_item (
+  perjadin_id   uuid not null references perjadin (id) on delete cascade,
+  item_key      text not null,
+  checked_by    uuid not null references person (id),
+  checked_at    timestamptz not null default now(),
+
+  primary key (perjadin_id, item_key)
+);
+```
+
+**Only the ticks are stored** ([#114](https://github.com/mafiefa02/sugt/issues/114)). The
+Preparation Checklist is an internal-monitoring aid — Staff hand-tick a pre-departure to-do list,
+nothing ticks a box automatically, and it gates nothing. The _set of items that exists_ is **not**
+a table: it is the six fixed items (keys `sk_perjalanan`, `tiket_keberangkatan`,
+`tiket_kepulangan`, `booking_penginapan`, `transportasi_lokal`, `staff`) plus one per Teaching Team
+member of the Group, assembled in the query layer at read time. A row here means one of those is
+ticked; un-ticking is a `DELETE`, so there is no "unchecked" row to keep in step with a moving
+Group.
+
+`item_key` is a fixed key or a per-teacher `dosen:{person_id}`. A `dosen:` key **glues the tick to
+the Person by their id** — the professor's name is rendered live and never stored, so a rename
+leaves the box alone. A tick whose teacher later leaves the Group is an **orphan**: read-time
+derivation only counts `dosen:` rows whose person is still a Teaching Team member, so an orphan is
+silently ignored and reappears if they rejoin. **Nothing cleans orphans up** — the Group is
+replaced wholesale ([The Group](#the-group)) and `replacePerjadinGroup` is deliberately unchanged;
+see [ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md).
+
+The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent — the write
+upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than duplicating a row.
+`checked_by` and `checked_at` record who and when for later use; nothing renders them yet. **`staff`
+is a single box** — "confirmed with the Staff", not one row per Staff member — so the extra Staff a
+Group carries never add items. `N` is therefore `6 + (Teaching Team members)`, and the Perjadin
+list's `Persiapan: x/N` pill counts the ticks that still map to a live item.
+
 ---
 
 ## Money

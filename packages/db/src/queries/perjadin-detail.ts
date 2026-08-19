@@ -6,7 +6,7 @@ import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
 import { province, school } from "../schema/reference";
-import { groupMember, perjadin } from "../schema/travel";
+import { groupMember, perjadin, perjadinPreparationItem } from "../schema/travel";
 import type { Person } from "./caller";
 import {
   duplicatedStaff,
@@ -14,6 +14,11 @@ import {
   streamsUncovered,
   type PlannedTeacher,
 } from "./group-rules";
+import {
+  derivePreparationChecklist,
+  type PreparationItem,
+  type PreparationTeacher,
+} from "./preparation-checklist";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -98,6 +103,14 @@ export type PerjadinDetail = {
    * rather than silently drop them.
    */
   staff: { id: string; fullName: string }[];
+  /**
+   * The Preparation Checklist — the six fixed items then one per Teaching Team member, each with
+   * its tick state ([#114](https://github.com/mafiefa02/sugt/issues/114)). **Derived here, not
+   * stored**: `perjadin_preparation_item` holds only the ticks, and the set is assembled from the
+   * fixed list and the current Group, so an orphaned `dosen:` tick is silently dropped. No money,
+   * so it rides on this open payload rather than the Staff-only acquittal.
+   */
+  preparation: PreparationItem[];
 };
 
 /**
@@ -114,7 +127,7 @@ export async function perjadinDetail(
 ): Promise<PerjadinDetail | null> {
   const pic = alias(person, "pic");
 
-  const [[trip], group, sessions, teachingTeam, staff] = await Promise.all([
+  const [[trip], group, sessions, teachingTeam, staff, preparationTicks] = await Promise.all([
     db
       .select({
         id: perjadin.id,
@@ -173,9 +186,28 @@ export async function perjadinDetail(
       .from(person)
       .where(and(eq(person.active, true), eq(person.role, "Staff")))
       .orderBy(asc(person.fullName)),
+    // The Preparation Checklist's ticks — one row per ticked item. The set of items is derived
+    // from the fixed list and the Group below, so this is only which of them are on.
+    db
+      .select({
+        itemKey: perjadinPreparationItem.itemKey,
+        checkedBy: perjadinPreparationItem.checkedBy,
+        checkedAt: perjadinPreparationItem.checkedAt,
+      })
+      .from(perjadinPreparationItem)
+      .where(eq(perjadinPreparationItem.perjadinId, perjadinId)),
   ]);
 
   if (!trip) return null;
+
+  // The per-teacher boxes are the Group's Teaching Team members; the fixed six need no data. A
+  // member carries a Stream by `group_member_stream_iff_teaching`, so the filter narrows the type.
+  const teachers: PreparationTeacher[] = group.flatMap((member) =>
+    member.stream === null
+      ? []
+      : [{ personId: member.personId, fullName: member.fullName, stream: member.stream }],
+  );
+  const preparation = derivePreparationChecklist(teachers, preparationTicks);
 
   const { departureAt, departureZone, departureMode, returnAt, returnZone, returnMode, ...header } =
     trip;
@@ -198,6 +230,7 @@ export async function perjadinDetail(
     sessions,
     teachingTeam,
     staff,
+    preparation,
   };
 }
 
