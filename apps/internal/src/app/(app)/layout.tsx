@@ -42,12 +42,16 @@ export default async function SignedInLayout({
       role={person.role}
       personName={person.fullName}
       footerAction={
-        /* The theme toggle sits beside sign-out in the shell's footer. That footer is the
-           one `SidebarBody` the desktop sidebar and the mobile drawer both render (#122),
-           so placing the toggle here makes it reachable in both without touching the
-           shell. */
+        /* Sign-out sits in the shell's footer — the one `SidebarBody` the desktop sidebar and
+           the mobile drawer both render (#122), so it is reachable in both. The theme toggle is
+           beside it on **desktop only** (`hidden md:flex`): on a phone it would repeat the toggle
+           now in the top bar (`app-shell-mobile-bar.tsx`, #127), so the footer copy is hidden
+           below `md`. Exactly one toggle shows per breakpoint — top bar on mobile, footer on
+           desktop. */
         <div className="flex items-center gap-1">
-          <ThemeToggle />
+          <div className="hidden md:flex">
+            <ThemeToggle />
+          </div>
           <SignOutButton />
         </div>
       }

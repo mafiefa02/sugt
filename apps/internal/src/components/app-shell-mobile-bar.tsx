@@ -1,6 +1,7 @@
 "use client";
 
 import { AppBrand } from "-/components/app-brand";
+import { ThemeToggle } from "-/components/theme-toggle";
 import { Button } from "@sugt/ui/components/button";
 import {
   Sheet,
@@ -14,9 +15,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /**
- * The shell's phone header: a top bar carrying the logo, the `Internal` wordmark and a
- * hamburger, shown only below `md` (`md:hidden`). At `md` and up it is gone and the
- * fixed sidebar in `AppShell` is what renders — desktop is untouched.
+ * The shell's phone header: a top bar carrying the logo and `Internal` wordmark on the
+ * left, and the theme toggle beside a hamburger on the right (#127) — shown only below
+ * `md` (`md:hidden`). At `md` and up it is gone and the fixed sidebar in `AppShell` is
+ * what renders — desktop is untouched, its toggle staying in the sidebar footer.
  *
  * The hamburger opens the drawer, whose contents are handed in as `children`: the same
  * `SidebarBody` the desktop `<aside>` renders, so the two never drift. That body is a
@@ -48,41 +50,48 @@ function AppShellMobileBar({ children }: { children: React.ReactNode }) {
     <div className="flex h-16 items-center gap-2.5 border-b border-border bg-background px-5 md:hidden">
       <AppBrand />
 
-      <Sheet
-        open={open}
-        onOpenChange={setOpen}
-      >
-        <SheetTrigger
-          render={
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              className="ml-auto"
-              aria-label="Buka menu"
-            >
-              <Menu />
-            </Button>
-          }
-        />
-        <SheetContent
-          side="left"
-          className="bg-sidebar p-0"
+      {/* Toggle and hamburger grouped on the right, mirroring the public header
+          (`site-shell.tsx`, where `<ThemeToggle/>` sits beside `<SiteNav/>`). The theme
+          control is reachable from the top bar so a phone user need not open the drawer to
+          change it (#127); on desktop it lives in the sidebar footer instead. */}
+      <div className="ml-auto flex items-center gap-2">
+        <ThemeToggle />
+
+        <Sheet
+          open={open}
+          onOpenChange={setOpen}
         >
-          {/* The drawer shows the sidebar's own logo header; this title only labels the
-              dialog for a screen reader. */}
-          <SheetHeader className="sr-only">
-            <SheetTitle>Menu</SheetTitle>
-          </SheetHeader>
-          {/* `flex flex-1 flex-col` so the shared SidebarBody's `mt-auto` footer still
-              pins to the drawer's bottom, exactly as it does inside the desktop aside. */}
-          <div
-            className="flex flex-1 flex-col"
-            onClick={closeOnLinkTap}
+          <SheetTrigger
+            render={
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Buka menu"
+              >
+                <Menu />
+              </Button>
+            }
+          />
+          <SheetContent
+            side="left"
+            className="bg-sidebar p-0"
           >
-            {children}
-          </div>
-        </SheetContent>
-      </Sheet>
+            {/* The drawer shows the sidebar's own logo header; this title only labels the
+                dialog for a screen reader. */}
+            <SheetHeader className="sr-only">
+              <SheetTitle>Menu</SheetTitle>
+            </SheetHeader>
+            {/* `flex flex-1 flex-col` so the shared SidebarBody's `mt-auto` footer still
+                pins to the drawer's bottom, exactly as it does inside the desktop aside. */}
+            <div
+              className="flex flex-1 flex-col"
+              onClick={closeOnLinkTap}
+            >
+              {children}
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
     </div>
   );
 }
