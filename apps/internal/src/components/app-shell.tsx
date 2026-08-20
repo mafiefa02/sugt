@@ -47,7 +47,16 @@ function AppShell({
     <div className="flex min-h-full flex-1 flex-col md:flex-row">
       <AppShellMobileBar>{sidebarBody}</AppShellMobileBar>
 
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+      {/*
+        Clamp the sidebar to the viewport and pin it: `h-dvh` + `sticky top-0` keep the footer
+        (name + sign-out) on screen while `<main>` scrolls under it. Without this the `<aside>`
+        stretches to the full document height and `mt-auto` drops the footer below the fold on any
+        tall page (#119). The explicit `h-dvh` also defeats the flex row's default `align-items:
+        stretch` — a fixed cross-size is never stretched — so the aside stays viewport-height, and
+        `overflow-y-auto` lets it scroll internally if its own nav + footer ever exceed the
+        viewport, keeping the footer reachable rather than pushed off-screen.
+      */}
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar md:flex">
         {sidebarBody}
       </aside>
 
