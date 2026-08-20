@@ -10,51 +10,49 @@ import { describe, expect, it } from "vitest";
  * Vitest project today; whoever later splits the pure tests off can lift it out untouched.
  */
 describe("nextTheme", () => {
-  it("rotates System → Light → Dark → System", () => {
-    expect(nextTheme("system")).toBe("light");
+  it("rotates Light ⇄ Dark", () => {
     expect(nextTheme("light")).toBe("dark");
-    expect(nextTheme("dark")).toBe("system");
+    expect(nextTheme("dark")).toBe("light");
   });
 
-  it("folds an unknown or pre-mount value to the System step, so the first tap lands on Light", () => {
+  it("folds an unknown, stale, or pre-mount value to Light", () => {
     expect(nextTheme(undefined)).toBe("light");
     expect(nextTheme("")).toBe("light");
     expect(nextTheme("garbage")).toBe("light");
+    // A theme stored as "system" before #126 is unknown now — one tap heals it to Light.
+    expect(nextTheme("system")).toBe("light");
   });
 
-  it("cycles back to its start in exactly three taps", () => {
-    let theme: string = "system";
+  it("returns to its start in exactly two taps", () => {
+    let theme: string = "light";
     theme = nextTheme(theme);
     theme = nextTheme(theme);
-    theme = nextTheme(theme);
-    expect(theme).toBe("system");
+    expect(theme).toBe("light");
   });
 });
 
 describe("themeToggleLabel", () => {
   it("names the current mode and the mode a tap moves to", () => {
-    expect(themeToggleLabel("system")).toBe("Tema: ikuti sistem. Ganti ke terang.");
     expect(themeToggleLabel("light")).toBe("Tema: terang. Ganti ke gelap.");
-    expect(themeToggleLabel("dark")).toBe("Tema: gelap. Ganti ke ikuti sistem.");
+    expect(themeToggleLabel("dark")).toBe("Tema: gelap. Ganti ke terang.");
   });
 
-  it("labels an unknown or pre-mount value as the System state", () => {
-    expect(themeToggleLabel(undefined)).toBe("Tema: ikuti sistem. Ganti ke terang.");
-    expect(themeToggleLabel("garbage")).toBe("Tema: ikuti sistem. Ganti ke terang.");
+  it("labels an unknown, stale, or pre-mount value as Light", () => {
+    expect(themeToggleLabel(undefined)).toBe("Tema: terang. Ganti ke gelap.");
+    expect(themeToggleLabel("garbage")).toBe("Tema: terang. Ganti ke gelap.");
+    expect(themeToggleLabel("system")).toBe("Tema: terang. Ganti ke gelap.");
   });
 
   it("the label's promised next mode matches nextTheme for every state", () => {
     const spoken: Record<string, string> = {
-      system: "terang",
       light: "gelap",
-      dark: "ikuti sistem",
+      dark: "terang",
     };
     const named: Record<string, string> = {
       light: "terang",
       dark: "gelap",
-      system: "ikuti sistem",
     };
-    for (const state of ["system", "light", "dark"]) {
+    for (const state of ["light", "dark"]) {
       expect(themeToggleLabel(state)).toContain(`Ganti ke ${spoken[state]}`);
       expect(named[nextTheme(state)]).toBe(spoken[state]);
     }
