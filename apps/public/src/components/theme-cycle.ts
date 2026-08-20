@@ -7,34 +7,33 @@
  * string rotation living in both apps is the cost of that boundary, chosen over widening
  * `@sugt/ui`.
  *
- * The toggle rotates **System → Light → Dark → System**; `nextTheme` is that rotation and
- * `themeToggleLabel` is the button's `aria-label`. Both take `next-themes`' `theme`, which
- * is `"system" | "light" | "dark"` once mounted but `undefined` before — an unknown value
- * folds to `system` so the first tap always lands on `light`.
+ * The toggle rotates **Light ⇄ Dark** — two states, no "System" (the provider sets
+ * `enableSystem={false}`, so the stored `theme` is always concrete). `nextTheme` is that
+ * rotation and `themeToggleLabel` is the button's `aria-label`. Both take `next-themes`'
+ * `theme`, `"light" | "dark"` once mounted but `undefined` before — an unknown value folds to
+ * `light`, which also absorbs a stale persisted `"system"` from before #126 in a single tap.
  */
-type ThemeSetting = "system" | "light" | "dark";
+type ThemeSetting = "light" | "dark";
 
 const NEXT: Record<ThemeSetting, ThemeSetting> = {
-  system: "light",
   light: "dark",
-  dark: "system",
+  dark: "light",
 };
 
-/** The next setting in the System → Light → Dark → System cycle. */
+/** The other of the two themes — Light ⇄ Dark — folding any unknown/stale value to `light`. */
 function nextTheme(current: string | undefined): ThemeSetting {
-  return NEXT[(current ?? "system") as ThemeSetting] ?? "light";
+  return NEXT[current as ThemeSetting] ?? "light";
 }
 
 /** The button's `aria-label`: the current mode, then the mode a tap moves to. Indonesian,
  *  like the rest of the public UI. */
 const LABEL: Record<ThemeSetting, string> = {
-  system: "Tema: ikuti sistem. Ganti ke terang.",
   light: "Tema: terang. Ganti ke gelap.",
-  dark: "Tema: gelap. Ganti ke ikuti sistem.",
+  dark: "Tema: gelap. Ganti ke terang.",
 };
 
 function themeToggleLabel(current: string | undefined): string {
-  return LABEL[(current ?? "system") as ThemeSetting] ?? LABEL.system;
+  return LABEL[current as ThemeSetting] ?? LABEL.light;
 }
 
 export { nextTheme, themeToggleLabel };

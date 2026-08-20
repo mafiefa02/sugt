@@ -174,16 +174,17 @@ it from a form library instead.
 
 **An app owns what only it uses.** This package owns what both use.
 
-| Thing                                           | Where                                                                     | Why                                                                                                                                                   |
-| ----------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The internal tool's shell — fixed 240px sidebar | `apps/internal/src/components/app-shell.tsx`                              | Only that app is shaped this way, and the sidebar is filtered by `Role`, which comes from `@sugt/domain`.                                             |
-| The public site's shell — centred 1120px column | `apps/public/src/components/site-shell.tsx`                               | Only that app is centred.                                                                                                                             |
-| Montserrat                                      | each app's `src/app/layout.tsx`, via `next/font`                          | `next/font` self-hosts the family and belongs to whichever app renders `<html>`. The prototype's Google Fonts `@import` is a prototype-only shortcut. |
-| The `.dark` class                               | nowhere yet — each app's `src/app/layout.tsx`, on `<html>`, when it lands | This package ships the token block and the `dark` variant, and stops there. The class goes on the element, and the app owns the element.              |
+| Thing                                           | Where                                                                        | Why                                                                                                                                                   |
+| ----------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The internal tool's shell — fixed 240px sidebar | `apps/internal/src/components/app-shell.tsx`                                 | Only that app is shaped this way, and the sidebar is filtered by `Role`, which comes from `@sugt/domain`.                                             |
+| The public site's shell — centred 1120px column | `apps/public/src/components/site-shell.tsx`                                  | Only that app is centred.                                                                                                                             |
+| Montserrat                                      | each app's `src/app/layout.tsx`, via `next/font`                             | `next/font` self-hosts the family and belongs to whichever app renders `<html>`. The prototype's Google Fonts `@import` is a prototype-only shortcut. |
+| The `.dark` class                               | each app's `<html>`, set by `next-themes` from the stored theme (#123, #126) | This package ships the token block and the `dark` variant, and stops there. The class goes on the element, and the app owns the element.              |
 
-**Neither app sets `.dark` today, and there is no theme toggle** — none of the thirty
-surfaces is one. Dark mode is therefore unreachable, which is a decision rather than a
-gap: the tokens are ready, and the class is one attribute away whenever a surface asks
-for it.
-The handoff's Theme control belongs to the HTML canvas the designs were drawn on, not to
-the product. When one is wanted it is an app's component, for the reason in the table.
+**Each app ships its own theme toggle — a two-state Light ⇄ Dark control**
+(`src/components/theme-toggle.tsx`, with the pure rotation and its `aria-label` in
+`theme-cycle.ts`), added in #123 and narrowed from a three-state System→Light→Dark cycle to
+two states in #126. `next-themes` sets `.dark` on `<html>` from the stored choice; there is no
+"System" state and the apps do not follow the OS preference. The toggle is an app's component,
+not a `@sugt/ui` primitive, for the reason in the table: this package ships the token block and
+the `dark` variant and stops there, and the app owns the element the class goes on.
