@@ -3,13 +3,41 @@ import {
   isNotStaffError,
   perjadinDetail,
   perjadinDirectory,
-  replacePerjadinGroup,
   togglePreparationItem,
 } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { addPerjadin, addPerson, resetDatabase } from "./support/fixtures";
+
+/**
+ * Rewrite a Perjadin's Group wholesale — the way the removed `replacePerjadinGroup` did.
+ *
+ * Editing the Group through the app is Staff-only and no longer moves Teaching Team members
+ * (ADR-0020, #138): they have left `group_member` for `perjadin_teacher`. But the Preparation
+ * Checklist's per-teacher derivation still reads Teaching Team members off the Group (its redefinition
+ * is T4/#139), so these tests reach past the app to move one under a tick. In a transaction because
+ * `perjadin_pic_is_a_group_member` is DEFERRED — the PIC's row is deleted and re-inserted, and the
+ * pair is consistent only at COMMIT.
+ */
+async function setGroup(
+  perjadinId: string,
+  picId: string,
+  teachers: { personId: string; stream: "STEM" | "Research" }[],
+) {
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.groupMember).where(eq(schema.groupMember.perjadinId, perjadinId));
+    await tx.insert(schema.groupMember).values([
+      { perjadinId, personId: picId, role: "Staff", stream: null },
+      ...teachers.map((teacher) => ({
+        perjadinId,
+        personId: teacher.personId,
+        role: "Teaching Team" as const,
+        stream: teacher.stream,
+      })),
+    ]);
+  });
+}
 
 /**
  * **The Preparation Checklist** ([#114](https://github.com/mafiefa02/sugt/issues/114)).
@@ -110,7 +138,7 @@ describe("the derived checklist", () => {
     expect((await perjadinDetail(pic, perjadinId))?.preparation).toHaveLength(8);
     expect((await pillOf(pic, perjadinId))?.preparationTotal).toBe(8);
 
-    await replacePerjadinGroup(pic, perjadinId, [
+    await setGroup(perjadinId, pic.id, [
       { personId: bagus.id, stream: "STEM" },
       { personId: rian.id, stream: "STEM" },
       { personId: sari.id, stream: "Research" },
@@ -197,7 +225,7 @@ describe("orphaned per-teacher ticks", () => {
     await togglePreparationItem(pic, { perjadinId, itemKey: `dosen:${sari.id}`, checked: true });
 
     // Substitute Sari out for Rian. Her tick is now an orphan.
-    await replacePerjadinGroup(pic, perjadinId, [
+    await setGroup(perjadinId, pic.id, [
       { personId: bagus.id, stream: "STEM" },
       { personId: rian.id, stream: "Research" },
     ]);
@@ -213,7 +241,7 @@ describe("orphaned per-teacher ticks", () => {
     expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).toEqual([`dosen:${sari.id}`]);
 
     // Re-adding Sari brings her old tick back, because it was never deleted.
-    await replacePerjadinGroup(pic, perjadinId, [
+    await setGroup(perjadinId, pic.id, [
       { personId: bagus.id, stream: "STEM" },
       { personId: sari.id, stream: "Research" },
     ]);

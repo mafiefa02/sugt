@@ -14,7 +14,7 @@ import { session, sessionTeachingTeam } from "../schema/delivery";
 import { cluster, province, school, subCluster } from "../schema/reference";
 import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
-import { duplicatedStaff, type PlannedTeacher } from "./group-rules";
+import { duplicatedStaff } from "./group-rules";
 import { activeRosters, type RosterPerson, type SelectedSchool } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
@@ -34,8 +34,6 @@ import { requireStaff } from "./staff-only";
  * the trip at all; the plan says which are visited this time (`docs/product.md`, the Perjadin
  * section).
  */
-
-export type { PlannedTeacher };
 
 /**
  * One offline Session on the trip: the School, the day and time it runs, the Stream it teaches,
