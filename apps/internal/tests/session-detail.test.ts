@@ -459,6 +459,66 @@ describe("Tandai terlaksana", () => {
   });
 });
 
+describe("Tandai terlaksana — offline", () => {
+  beforeEach(resetDatabase);
+
+  async function arrangedOfflineSession() {
+    const pic = await staff();
+    const [bagus, sari] = await professors();
+    const school = await oneSchool();
+    const perjadin = await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: 5_000_000,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-03",
+    });
+    const session = await addOfflineSession({
+      schoolId: school.id,
+      heldOn: "2026-09-02",
+      perjadinId: perjadin.id,
+    });
+    return { pic, bagus, sari, session };
+  }
+
+  it("marks an offline Session delivered with status only, writing no session_teacher", async () => {
+    const { pic, session } = await arrangedOfflineSession();
+
+    const result = await markSessionDelivered(pic, session.id, []);
+
+    expect(result).toEqual({ outcome: "delivered" });
+    expect(await statusOf(session.id)).toBe("delivered");
+    // The Stream is on the Session and the teachers are session_teaching_team names — nobody is
+    // named here, so no Person-based teacher row is written.
+    expect(await teachersOf(session.id)).toEqual([]);
+  });
+
+  it("ignores any teachers passed for an offline Session — it never writes session_teacher", async () => {
+    const { pic, bagus, sari, session } = await arrangedOfflineSession();
+
+    // A hand-edited payload naming People: an offline Session must still write no session_teacher.
+    const result = await markSessionDelivered(pic, session.id, [
+      { stream: "STEM", personId: bagus.id },
+      { stream: "Research", personId: sari.id },
+    ]);
+
+    expect(result).toEqual({ outcome: "delivered" });
+    expect(await teachersOf(session.id)).toEqual([]);
+  });
+
+  it("refuses to correct teachers on an offline Session, writing no session_teacher", async () => {
+    const { pic, bagus, sari, session } = await arrangedOfflineSession();
+    await markSessionDelivered(pic, session.id, []);
+
+    const result = await correctSessionTeachers(pic, session.id, [
+      { stream: "STEM", personId: bagus.id },
+      { stream: "Research", personId: sari.id },
+    ]);
+
+    expect(result).toEqual({ outcome: "offline-not-correctable" });
+    expect(await teachersOf(session.id)).toEqual([]);
+  });
+});
+
 describe("correcting who taught", () => {
   beforeEach(resetDatabase);
 
