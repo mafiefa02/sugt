@@ -1,78 +1,87 @@
-import type { Stream, TimeZone, TransportMode } from "@sugt/domain";
+import {
+  MAX_EXTRA_STAFF_PER_GROUP,
+  MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN,
+  MAX_TEACHING_TEAM_PER_PERJADIN,
+  PIMPINAN,
+  type Stream,
+  type TimeZone,
+  type TransportMode,
+} from "@sugt/domain";
 import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
-import { session } from "../schema/delivery";
+import { session, sessionTeachingTeam } from "../schema/delivery";
 import { cluster, province, school, subCluster } from "../schema/reference";
-import { groupMember, perjadin } from "../schema/travel";
+import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
-import {
-  duplicatedStaff,
-  duplicatedTeachers,
-  streamsUncovered,
-  type PlannedTeacher,
-} from "./group-rules";
+import { duplicatedStaff, type PlannedTeacher } from "./group-rules";
 import { activeRosters, type RosterPerson, type SelectedSchool } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
 /**
  * **Rencanakan Perjadin** — the form that plans a trip, and the write that brings the
- * Perjadin, its Group and one Session per School into existence together.
+ * Perjadin, its Group, its Teaching Team names, its Pimpinan and its Sessions into existence
+ * together.
  *
  * Staff-only, by the surface list and by ADR-0004 alike: this one writes the Advance, so
  * both of `./staff-only.ts`'s two reasons apply rather than only the second.
  *
  * **Planning starts from a Sub-Cluster**, not from a Coverage selection
  * ([#69](https://github.com/mafiefa02/sugt/issues/69)). The screen picks a Sub-Cluster and
- * reveals its Schools — all eligible, each droppable — and asks for a date **and a time** per
- * kept School. The Sub-Cluster says which Schools may appear on the trip at all; the plan says
- * which are visited this time (`docs/product.md`, the Perjadin section).
+ * reveals its Schools — all eligible — and lets each kept School hold **several** Sessions, each
+ * with its own date, time and Stream (ADR-0019). The Sub-Cluster says which Schools may appear on
+ * the trip at all; the plan says which are visited this time (`docs/product.md`, the Perjadin
+ * section).
  */
 
 export type { PlannedTeacher };
 
-/** One School on the trip, and the day and time the Group teaches there. */
+/**
+ * One offline Session on the trip: the School, the day and time it runs, the Stream it teaches,
+ * and which of the trip's Teaching Team names staffed it.
+ *
+ * A School gets **many** of these now (ADR-0019) — the form repeats a Session per School, each on
+ * its own date and time, each single-Stream — so a School appears once per Session it holds rather
+ * than once overall. A School is "kept" on the trip exactly when it has at least one Session.
+ */
 export type PlannedSession = {
   schoolId: string;
-  /** `YYYY-MM-DD`, and inside the trip's window — see the refusal below. */
+  /** `YYYY-MM-DD`, and inside the trip's window — see the `session-outside-perjadin` refusal. */
   heldOn: string;
   /**
-   * Local wall-clock start time (`HH:MM`), in the School's Time Zone. The form supplies one per
-   * School ([#69](https://github.com/mafiefa02/sugt/issues/69)); `session.starts_at` is NOT
-   * NULL, so a value is always written. Two Schools may share a date, but not a date **and** a
-   * time — see the `session-time-clash` refusal.
+   * Local wall-clock start time (`HH:MM`), in the School's Time Zone. `session.starts_at` is NOT
+   * NULL, so a value is always written. Two **different** Schools may share a date, but not a date
+   * **and** a time — see the `session-time-clash` refusal; two Sessions at the *same* School and
+   * moment are allowed (ADR-0019).
    */
   startsAt: string;
   /**
-   * The Session's Stream — STEM or Research (ADR-0019). Optional here **only as a foundation
-   * seam**: the schema now requires every offline Session to carry one (`session_offline_iff_stream`),
-   * but the planning form that supplies streams per Session is T2 ([#137](https://github.com/mafiefa02/sugt/issues/137)).
-   * Until it lands, a caller that omits this gets the `DEFAULT_PLANNED_STREAM` placeholder below so the
-   * insert satisfies the CHECK. Remove the default and make this required when T2 wires the form.
+   * The Session's Stream — STEM or Research (ADR-0019). Required: the schema forces every offline
+   * Session to carry one (`session_offline_iff_stream`), and the form supplies it per Session.
    */
-  stream?: Stream;
+  stream: Stream;
+  /**
+   * "Diajar oleh" — indexes into this trip's `teacherNames`, naming which of the Perjadin's
+   * trip-scoped teacher names staffed this Session's parallel rooms. Each index is written as a
+   * `session_teaching_team` link to the matching `perjadin_teacher` row. May be empty: a Session's
+   * teachers can be assigned later on `/perjadin/[id]` (T3).
+   */
+  taughtByTeacherIndexes: number[];
 };
-
-/**
- * Placeholder Stream for offline Sessions until T2's planning form supplies one per Session
- * ([#137](https://github.com/mafiefa02/sugt/issues/137), ADR-0019). This exists so #136 can land the
- * `session.stream` column and its CHECK without rewriting the planning mutation — it is **not** a
- * modelling claim that every offline Session is STEM.
- */
-const DEFAULT_PLANNED_STREAM: Stream = "STEM";
 
 /**
  * A whole trip, submitted at once.
  *
- * **The Group travels as one value and not as a series of additions**, which is what lets
- * "at least one Teaching Team member per Stream" be checked at all: it is a count across
- * sibling rows, no CHECK can see them, and ADR-0005's amendment records that this is why
- * it is validated where the Group is submitted whole.
+ * **The whole payload arrives as one value and not as a series of additions**, which is what lets
+ * the caps be checked at all: each is a count across sibling rows, no CHECK can see them, and
+ * ADR-0005's amendment records that this is why they are validated where the trip is submitted
+ * whole.
  *
- * The PIC is **not** in `teachers`. They are Staff, they carry no Stream, and their
- * membership row is written for them — leaving it to the caller would make the deferred
- * foreign key below a thing a form could forget.
+ * The PIC is **not** in `extraStaffPersonIds`. They are Staff, they carry no Stream, and their
+ * `group_member` row is written for them — leaving it to the caller would make the deferred
+ * foreign key below a thing a form could forget. The Teaching Team are **not** Group members at
+ * all now (ADR-0020): they are `teacherNames`, trip-scoped strings, and the Group is Staff-only.
  *
  * **`subClusterId` is the trip's, picked in the form.** Every School on the trip must belong
  * to it — the rule ADR-0016 explains cannot be a foreign key, checked below at the one place
@@ -101,13 +110,25 @@ export type PlanPerjadinInput = {
   /** A Staff member. `perjadin_pic_is_staff` refuses anyone else, at the database. */
   picPersonId: string;
   /**
-   * Up to three optional extra Staff on the Group, beyond the PIC — a coordinator, a treasurer, a
-   * documentarian. Each must be a distinct Staff member, none equal to the PIC; they are written
-   * as ordinary `group_member` rows (Staff, no Stream) and neither satisfy nor weaken the
-   * Stream-cover rule.
+   * The extra Staff on the Group, beyond the PIC — a coordinator, a treasurer, a documentarian.
+   * Each must be a distinct Staff member, none equal to the PIC; they are written as ordinary
+   * `group_member` rows (Staff, no Stream). Up to ten (`MAX_EXTRA_STAFF_PER_GROUP`), so the Group
+   * is the PIC plus up to ten others (ADR-0020). Optional; empty when the PIC travels alone.
    */
   extraStaffPersonIds?: string[];
-  teachers: PlannedTeacher[];
+  /**
+   * The Teaching Team as **trip-scoped names** (ADR-0020) — plain strings, not `person` rows, each
+   * written as a `perjadin_teacher` row. Zero to twenty (`MAX_TEACHING_TEAM_PER_PERJADIN`); may be
+   * empty, since a Group's minimum at planning is just the PIC and the team can be filled in later.
+   * A Session's `taughtByTeacherIndexes` index into this list.
+   */
+  teacherNames: string[];
+  /**
+   * The **Pimpinan** recorded on the trip — a subset of the fixed `PIMPINAN` set (ADR-0020). Each
+   * is written as a `perjadin_pimpinan` row; record-only, never a `group_member`. Optional, zero or
+   * more; a name outside `PIMPINAN` is refused (`unknown-pimpinan`).
+   */
+  pimpinan: string[];
   sessions: PlannedSession[];
   /** Departure from Bandung. Its zone is always WIB. */
   departure: PlannedTravelLeg;
@@ -133,18 +154,33 @@ export type SessionTimeClash = {
  */
 export type PlanPerjadinResult =
   | { outcome: "planned"; perjadinId: string }
-  /** No professor covers a Stream. The Group rule, checked against the whole payload. */
-  | { outcome: "stream-uncovered"; missing: Stream[] }
   | { outcome: "ends-before-starts" }
-  /** One professor named on both Streams. A Group holds each person once, by primary key. */
-  | { outcome: "duplicate-teacher"; personIds: string[] }
   /**
    * An extra Staff member repeated, or the same as the PIC. A Group holds each person once by
    * `(perjadin_id, person_id)`, so this is refused up front rather than left to a PK violation
    * inside the transaction.
    */
   | { outcome: "duplicate-staff"; personIds: string[] }
-  /** A trip with no School on it teaches nobody, and would write no Session. */
+  /** More than `MAX_EXTRA_STAFF_PER_GROUP` extra Staff — the Group is the PIC plus up to ten. */
+  | { outcome: "too-many-extra-staff"; count: number; limit: number }
+  /** More than `MAX_TEACHING_TEAM_PER_PERJADIN` trip-scoped teacher names. */
+  | { outcome: "too-many-teachers"; count: number; limit: number }
+  /**
+   * A School with more than `MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN` Sessions on the trip —
+   * a safety ceiling, never reached in practice. Names each offending School and its count.
+   */
+  | { outcome: "too-many-sessions-per-school"; offending: { schoolId: string; count: number }[] }
+  /** A named Pimpinan that is not one of the fixed `PIMPINAN` three. Not reachable through the form. */
+  | { outcome: "unknown-pimpinan"; offending: string[] }
+  /**
+   * A Session's "Diajar oleh" naming a teacher slot that does not exist — a `taughtByTeacherIndexes`
+   * value outside `[0, teacherNames.length)`. Not reachable through the form, which reindexes the
+   * Sessions when a name is removed; checked anyway so a hand-edited payload gets a refusal value
+   * rather than a `perjadin_teacher_id` NOT NULL violation from inside the transaction — the same
+   * disposition as `unknown-pimpinan` and `school-outside-sub-cluster`.
+   */
+  | { outcome: "unknown-teacher-index"; offending: { schoolId: string; indexes: number[] }[] }
+  /** A trip with no Session on it teaches nobody, and would write nothing. */
   | { outcome: "no-schools" }
   /** A Session dated outside the trip it happens on. */
   | {
@@ -169,11 +205,12 @@ export type PlanPerjadinResult =
   | { outcome: "session-time-clash"; clashes: SessionTimeClash[] };
 
 /**
- * Plan a Perjadin: the trip, its Group and one Session per School, in one transaction.
+ * Plan a Perjadin: the trip, its Staff-only Group, its trip-scoped Teaching Team names, its
+ * Pimpinan and its Sessions — with each Session's "Diajar oleh" links — in one transaction.
  *
  * **Creating the Perjadin is what arranges its Sessions**, per ADR-0006 — there are no
  * planned rows waiting to be filled in, so this form is the arranging and there is no
- * second step. The three writes are one act and commit together.
+ * second step. The writes are one act and commit together.
  *
  * Everything the application has to check is checked **before** the transaction opens.
  * That is not an optimisation: each of these is a rule the database cannot hold, so
@@ -187,9 +224,9 @@ export type PlanPerjadinResult =
  * at COMMIT — neither the Perjadin nor its membership row can go first, and this
  * transaction is the reason that constraint has the form it does.
  *
- * **No `session_teacher` rows are written.** The Group is the plan and Tandai terlaksana
- * pre-fills from it; a Group is replaced wholesale, so rows copied out of it now would be
- * stranded by a substitution, silently, with no constraint to catch it.
+ * **No `session_teacher` rows are written**, and no `group_member` rows for the Teaching Team.
+ * Offline teaching is name-based now (ADR-0019, ADR-0020): each Session records who taught it
+ * through `session_teaching_team` links into `perjadin_teacher`, and the Group is Staff-only.
  */
 export async function planPerjadin(
   caller: Person,
@@ -203,18 +240,68 @@ export async function planPerjadin(
 
   if (input.sessions.length === 0) return { outcome: "no-schools" };
 
-  const missing = streamsUncovered(input.teachers);
-  if (missing.length > 0) return { outcome: "stream-uncovered", missing };
+  // The app-enforced caps the database deliberately does not hold (ADR-0019, ADR-0020): they are
+  // counts across sibling rows, the same shape as the Group rules, so they are checked here where
+  // the whole payload is in hand rather than left to a constraint that cannot see the set.
+  const extraStaff = input.extraStaffPersonIds ?? [];
+  if (extraStaff.length > MAX_EXTRA_STAFF_PER_GROUP) {
+    return {
+      outcome: "too-many-extra-staff",
+      count: extraStaff.length,
+      limit: MAX_EXTRA_STAFF_PER_GROUP,
+    };
+  }
 
-  const duplicated = duplicatedTeachers(input.teachers);
-  if (duplicated.length > 0) return { outcome: "duplicate-teacher", personIds: duplicated };
+  if (input.teacherNames.length > MAX_TEACHING_TEAM_PER_PERJADIN) {
+    return {
+      outcome: "too-many-teachers",
+      count: input.teacherNames.length,
+      limit: MAX_TEACHING_TEAM_PER_PERJADIN,
+    };
+  }
+
+  // A Pimpinan is one of a fixed three (`PIMPINAN`); `perjadin_pimpinan_name_check` refuses any
+  // other at the database too, but the form only ever offers the three, so a stray name is a
+  // hand-edited payload — named here rather than surfaced as a raw constraint violation.
+  const unknownPimpinan = [...new Set(input.pimpinan)].filter(
+    (name) => !(PIMPINAN as readonly string[]).includes(name),
+  );
+  if (unknownPimpinan.length > 0)
+    return { outcome: "unknown-pimpinan", offending: unknownPimpinan };
 
   // Extra Staff must be distinct from each other and from the PIC — the Group primary key
   // `(perjadin_id, person_id)` holds each person once, so a repeat is a plan to question rather
   // than a row to write. Refused up front, not left to a PK violation inside the transaction.
-  const extraStaff = input.extraStaffPersonIds ?? [];
   const duplicateStaff = duplicatedStaff(input.picPersonId, extraStaff);
   if (duplicateStaff.length > 0) return { outcome: "duplicate-staff", personIds: duplicateStaff };
+
+  // A School's Session count is an app ceiling, not a DB rule (ADR-0019): the exact-duplicate index
+  // is all the database holds, so the ten-per-School cap is checked here against the whole payload.
+  const sessionCounts = new Map<string, number>();
+  for (const planned of input.sessions) {
+    sessionCounts.set(planned.schoolId, (sessionCounts.get(planned.schoolId) ?? 0) + 1);
+  }
+  const overCap = [...sessionCounts.entries()]
+    .filter(([, count]) => count > MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN)
+    .map(([schoolId, count]) => ({ schoolId, count }));
+  if (overCap.length > 0) return { outcome: "too-many-sessions-per-school", offending: overCap };
+
+  // "Diajar oleh" is a list of indexes into `teacherNames`. An index past the end of that list —
+  // or negative, or non-integer — would map to no `perjadin_teacher` row and insert an undefined
+  // `perjadin_teacher_id`, a NOT NULL violation surfacing from inside the transaction. The form
+  // reindexes the Sessions when a name is removed, so it cannot produce one; a hand-edited payload
+  // can, so it is refused up front like `unknown-pimpinan`, naming each School and its bad indexes.
+  const unknownTeacherIndexes = input.sessions
+    .map((planned) => ({
+      schoolId: planned.schoolId,
+      indexes: planned.taughtByTeacherIndexes.filter(
+        (index) => !Number.isInteger(index) || index < 0 || index >= input.teacherNames.length,
+      ),
+    }))
+    .filter((entry) => entry.indexes.length > 0);
+  if (unknownTeacherIndexes.length > 0) {
+    return { outcome: "unknown-teacher-index", offending: unknownTeacherIndexes };
+  }
 
   // The second of the three places a Session's date is written, and the invariant
   // [#28](https://github.com/mafiefa02/sugt/issues/28) stated: an arranged offline Session
@@ -248,23 +335,27 @@ export async function planPerjadin(
   // once. Since ADR-0019 no index refuses it — the old `session_one_school_at_a_time_per_perjadin`
   // was dropped so parallel Sessions at one School become possible — so this app check is the only
   // guard for the different-Schools rule. It groups planned Sessions by `(date, time)` and flags a
-  // slot holding more than one. Note it still flags two Sessions at the *same* School too, which
-  // ADR-0019 now permits; that does not arise yet because the current form plans one Session per
-  // School, and T2 ([#137](https://github.com/mafiefa02/sugt/issues/137)) refines this to compare
-  // distinct Schools when it introduces several Sessions per School. Sharing a date alone stays
-  // legal: that is exactly what the per-School start time exists to serve.
-  const slots = new Map<string, SessionTimeClash>();
+  // slot holding two or more **distinct** Schools. Two Sessions at the *same* School and moment are
+  // now allowed (parallel Streams or split rooms), so same-School rows collapse to one entry and do
+  // not clash; sharing a date alone stays legal too — that is what the per-School start time serves.
+  const slots = new Map<string, { heldOn: string; startsAt: string; schoolIds: Set<string> }>();
   for (const planned of input.sessions) {
     const key = `${planned.heldOn} ${planned.startsAt}`;
     const slot = slots.get(key) ?? {
       heldOn: planned.heldOn,
       startsAt: planned.startsAt,
-      schoolIds: [],
+      schoolIds: new Set<string>(),
     };
-    slot.schoolIds.push(planned.schoolId);
+    slot.schoolIds.add(planned.schoolId);
     slots.set(key, slot);
   }
-  const clashes = [...slots.values()].filter((slot) => slot.schoolIds.length > 1);
+  const clashes: SessionTimeClash[] = [...slots.values()]
+    .filter((slot) => slot.schoolIds.size > 1)
+    .map((slot) => ({
+      heldOn: slot.heldOn,
+      startsAt: slot.startsAt,
+      schoolIds: [...slot.schoolIds],
+    }));
   if (clashes.length > 0) return { outcome: "session-time-clash", clashes };
 
   // The destination is derived, not typed: the planner has already picked the Sub-Cluster and
@@ -300,10 +391,10 @@ export async function planPerjadin(
 
     const id = created!.id;
 
-    // The PIC's own row first in the list rather than as a separate statement: they are a
-    // Group member like any other, and the only thing that distinguishes them here is that
-    // Staff carry no Stream — `group_member_stream_iff_teaching` refuses one that does. The
-    // extra Staff are the same row shape, sitting between the PIC and the professors.
+    // The Group is **Staff and only Staff** now (ADR-0020): the PIC plus the extra Staff, none
+    // carrying a Stream — `group_member_stream_iff_teaching` refuses one that does. The Teaching
+    // Team have left this table entirely for `perjadin_teacher` below; the PIC's row is first so the
+    // DEFERRABLE `perjadin_pic_is_a_group_member` is satisfied at COMMIT.
     await tx.insert(groupMember).values([
       { perjadinId: id, personId: input.picPersonId, role: "Staff" as const, stream: null },
       ...extraStaff.map((personId) => ({
@@ -312,26 +403,61 @@ export async function planPerjadin(
         role: "Staff" as const,
         stream: null,
       })),
-      ...input.teachers.map((teacher) => ({
-        perjadinId: id,
-        personId: teacher.personId,
-        role: "Teaching Team" as const,
-        stream: teacher.stream,
-      })),
     ]);
 
-    await tx.insert(session).values(
-      input.sessions.map((planned) => ({
-        schoolId: planned.schoolId,
-        perjadinId: id,
-        mode: "offline" as const,
-        // Foundation seam: a Stream is required on every offline Session now; T2 supplies it per
-        // Session, and until then the placeholder keeps `session_offline_iff_stream` satisfied.
-        stream: planned.stream ?? DEFAULT_PLANNED_STREAM,
-        heldOn: planned.heldOn,
-        startsAt: planned.startsAt,
+    // The Teaching Team as trip-scoped names (ADR-0020) — one `perjadin_teacher` row per name.
+    // RETURNING keeps the inserted ids in the order the names were given, which is what a Session's
+    // `taughtByTeacherIndexes` indexes into. Skipped entirely when the team is empty, since an
+    // INSERT with no rows is not a statement Postgres accepts.
+    const teacherIds =
+      input.teacherNames.length > 0
+        ? (
+            await tx
+              .insert(perjadinTeacher)
+              .values(input.teacherNames.map((name) => ({ perjadinId: id, name })))
+              .returning({ id: perjadinTeacher.id })
+          ).map((row) => row.id)
+        : [];
+
+    // The Sessions, each carrying its Stream (ADR-0019). RETURNING keeps them in input order, so
+    // `sessionIds[i]` is the row for `input.sessions[i]` — the join key the teaching-team links use.
+    const sessionIds = (
+      await tx
+        .insert(session)
+        .values(
+          input.sessions.map((planned) => ({
+            schoolId: planned.schoolId,
+            perjadinId: id,
+            mode: "offline" as const,
+            stream: planned.stream,
+            heldOn: planned.heldOn,
+            startsAt: planned.startsAt,
+          })),
+        )
+        .returning({ id: session.id })
+    ).map((row) => row.id);
+
+    // "Diajar oleh" — each Session's `taughtByTeacherIndexes` become `session_teaching_team` links
+    // from the Session to the `perjadin_teacher` rows those indexes name. A Session with no teachers
+    // yet contributes nothing; the whole insert is skipped when there are no links at all.
+    const teachingLinks = input.sessions.flatMap((planned, i) =>
+      planned.taughtByTeacherIndexes.map((teacherIndex) => ({
+        sessionId: sessionIds[i]!,
+        perjadinTeacherId: teacherIds[teacherIndex]!,
       })),
     );
+    if (teachingLinks.length > 0) {
+      await tx.insert(sessionTeachingTeam).values(teachingLinks);
+    }
+
+    // The Pimpinan recorded on the trip — record-only rows, never `group_member` (ADR-0020). Deduped
+    // so `(perjadin_id, name)` cannot collide; skipped when none join.
+    const pimpinanNames = [...new Set(input.pimpinan)];
+    if (pimpinanNames.length > 0) {
+      await tx
+        .insert(perjadinPimpinan)
+        .values(pimpinanNames.map((name) => ({ perjadinId: id, name })));
+    }
 
     return id;
   });
@@ -420,10 +546,12 @@ export type PlannablePerson = RosterPerson;
 export type PerjadinPlan = {
   /** Every Sub-Cluster that has at least one School — an empty one cannot host a trip. */
   subClusters: PlannableSubCluster[];
-  /** Staff, for the PIC. */
+  /**
+   * Staff, for the PIC and the extra-Staff combobox. There is **no Teaching Team roster** here any
+   * more (ADR-0020): a Perjadin's Teaching Team are trip-scoped names typed on the form, not People
+   * chosen from a list, so the form needs no roster for them.
+   */
   staff: PlannablePerson[];
-  /** Teaching Team, for the Group. */
-  teachingTeam: PlannablePerson[];
 };
 
 /**
@@ -468,17 +596,18 @@ async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
 }
 
 /**
- * The form's payload: the Sub-Clusters to plan around, and the two rosters its pickers name.
+ * The form's payload: the Sub-Clusters to plan around, and the Staff roster its PIC and extra-Staff
+ * pickers name.
  *
  * **Staff-only, so the read is too** — a Teaching Team member reaching the URL directly would
  * otherwise be shown the whole form and refused only on submit. `Promise.all` keeps the
- * Sub-Cluster read and the roster read concurrent; the rosters come from `./rosters.ts`, of
- * which this is the second caller — the second is what earns the shared helper.
+ * Sub-Cluster read and the roster read concurrent; the roster comes from `./rosters.ts`. Only the
+ * `staff` half is kept — the Teaching Team are trip-scoped names now, not a roster (ADR-0020).
  */
 export async function perjadinPlan(caller: Person): Promise<PerjadinPlan> {
   requireStaff(caller);
 
-  const [subClusters, rosters] = await Promise.all([plannableSubClusters(), activeRosters()]);
+  const [subClusters, { staff }] = await Promise.all([plannableSubClusters(), activeRosters()]);
 
-  return { subClusters, ...rosters };
+  return { subClusters, staff };
 }
