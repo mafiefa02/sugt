@@ -313,3 +313,37 @@ export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number];
  */
 export const TRANSPORT_MODES = ["Pesawat", "Kereta", "Travel", "Mobil Dalam Kota"] as const;
 export type TransportMode = (typeof TRANSPORT_MODES)[number];
+
+/**
+ * The leaders of DITSAMA ITB — a **fixed set of three named people** — one of whom may, rarely,
+ * join a Perjadin's Kelompok Perjalanan to monitor the offline Sessions. They are recorded on the
+ * Perjadin (optional, editable, chosen from this set) and named on the Laporan Perjadin, but are
+ * **record-only**: a Pimpinan is not a working Group member and files nothing
+ * (see the Pimpinan entry in `CONTEXT.md` and [ADR-0020](../../../docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)).
+ *
+ * Like `TRANSACTION_CATEGORIES` and `TRANSPORT_MODES`, these are **values a column may hold** — the
+ * names go in `perjadin_pimpinan.name`, whose CHECK repeats this list character for character; see
+ * `packages/db/src/schema/travel.ts`. The exact strings are the paperwork's, so they are shared
+ * from here rather than retyped.
+ */
+export const PIMPINAN = [
+  "Prof. Dr. Fatimah Arofiati Noor, S.Si., M.Si.",
+  "Oktofa Yudha Sudrajad, S.T., M.S.M., Ph.D.",
+  "Dr. Anton Timur Jaelani, S.Si., M.Si.",
+] as const;
+export type Pimpinan = (typeof PIMPINAN)[number];
+
+/**
+ * The app-enforced caps on the new Perjadin model — ceilings the database deliberately does not
+ * hold, in the same spirit as the Group rules that live in the application rather than a CHECK
+ * ([ADR-0019](../../../docs/adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
+ * [ADR-0020](../../../docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)).
+ *
+ * - `MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN` — a safety ceiling; six or seven is the real
+ *   maximum, ten is practically unreachable.
+ * - `MAX_TEACHING_TEAM_PER_PERJADIN` — trip-scoped teacher names entered on the trip.
+ * - `MAX_EXTRA_STAFF_PER_GROUP` — DITSAMA Staff on a Group besides the PIC; the PIC plus up to ten.
+ */
+export const MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN = 10;
+export const MAX_TEACHING_TEAM_PER_PERJADIN = 20;
+export const MAX_EXTRA_STAFF_PER_GROUP = 10;

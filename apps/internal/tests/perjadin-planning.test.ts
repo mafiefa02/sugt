@@ -631,6 +631,7 @@ describe("the Perjadin list and detail", () => {
       schoolId: schools[0]!.id,
       perjadinId: planned.perjadinId,
       mode: "offline",
+      stream: "STEM",
       heldOn: "2026-09-02",
       startsAt: "09:00",
     });

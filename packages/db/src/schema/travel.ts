@@ -130,6 +130,12 @@ export const perjadin = pgTable(
  * `receiptsSettledAt` is the PIC's checklist. It has to be an explicit mark rather
  * than something derived, because a member with no transactions is ambiguous between
  * *spent nothing* and *has not handed anything over yet*.
+ *
+ * **Under the new model this table is Staff-only** (ADR-0020): the Group is the PIC plus up to ten
+ * other DITSAMA Staff, and the Teaching Team have left it entirely for `perjadin_teacher`. The CHECK
+ * is unchanged on purpose — all-Staff rows satisfy `group_member_stream_iff_teaching` since Staff
+ * carry no Stream — so nothing here narrows; `stream` is simply always null now, and T2/T3 stop
+ * inserting Teaching Team rows. See `docs/data-model.md`'s Group section.
  */
 export const groupMember = pgTable(
   "group_member",
@@ -159,6 +165,56 @@ export const groupMember = pgTable(
       columns: [t.personId, t.role],
       foreignColumns: [person.id, person.role],
     }),
+  ],
+);
+
+/**
+ * A Perjadin's **Teaching Team as trip-scoped names** — plain strings entered on the trip, up to
+ * twenty, not `person` rows (ADR-0020). They are never invited, hold no sign-in, carry no Stream and
+ * are not `group_member` rows; the professors who deliver offline Sessions are external to DITSAMA
+ * and will not sign in. Editing is per-member — names are added, renamed and removed one at a time on
+ * `/perjadin/[id]` (T3), not by wholesale replacement — which is why this is a table of its own rather
+ * than a column on `perjadin`.
+ *
+ * The cap of twenty is an app rule (`MAX_TEACHING_TEAM_PER_PERJADIN`), not a DB one, in the same
+ * spirit as the Group caps. `on delete cascade`: the names are the trip's and outlive nothing.
+ * Which of them taught each offline Session is recorded through `session_teaching_team`.
+ */
+export const perjadinTeacher = pgTable("perjadin_teacher", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  perjadinId: uuid("perjadin_id")
+    .notNull()
+    .references(() => perjadin.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+});
+
+/**
+ * The **Pimpinan** recorded on a Perjadin — record-only (ADR-0020, and the Pimpinan entry in
+ * `CONTEXT.md`). A leader of DITSAMA ITB who rarely joins the Kelompok Perjalanan to monitor the
+ * offline Sessions is noted here and named on the Laporan Perjadin, but is **not a working Group
+ * member**: they file no Perjadin Evaluation and add nothing to the Preparation Checklist, so they
+ * are deliberately not a `group_member` row.
+ *
+ * `name` CHECKs the three `PIMPINAN` values character for character — the same discipline as the
+ * `transaction.category` and `perjadin.*_mode` CHECKs, and for the same reason (`@sugt/domain`'s
+ * header): a composed constraint string is not the one the drizzle-kit snapshot holds, and the two
+ * would then diff forever. The primary key `(perjadin_id, name)` makes a Pimpinan recordable at most
+ * once per trip.
+ */
+export const perjadinPimpinan = pgTable(
+  "perjadin_pimpinan",
+  {
+    perjadinId: uuid("perjadin_id")
+      .notNull()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.perjadinId, t.name] }),
+    check(
+      "perjadin_pimpinan_name_check",
+      sql`${t.name} in ('Prof. Dr. Fatimah Arofiati Noor, S.Si., M.Si.', 'Oktofa Yudha Sudrajad, S.T., M.S.M., Ph.D.', 'Dr. Anton Timur Jaelani, S.Si., M.Si.')`,
+    ),
   ],
 );
 
