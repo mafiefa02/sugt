@@ -67,7 +67,7 @@ function needsProse(ratings: number[]): boolean {
  * One Session's status.
  *
  * **A missing row throws rather than returning a value**, and that is the same rule
- * `lockedStatus` states on `./session-detail.ts`: Detail Sesi 404s on an unknown id before
+ * `lockedSession` states on `./session-detail.ts`: Detail Sesi 404s on an unknown id before
  * offering either form, and nothing deletes a Session, so an id naming nothing here arrived
  * by a bug or a hand-edited request and is not a user state to be helpful about.
  */

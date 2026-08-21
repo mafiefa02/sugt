@@ -383,7 +383,14 @@ export type CorrectTeachersResult =
   | { outcome: "corrected" }
   | { outcome: "stream-unnamed"; missing: Stream[] }
   /** The Session was cancelled, so there is no teaching to correct the record of. */
-  | { outcome: "not-correctable"; status: "cancelled" };
+  | { outcome: "not-correctable"; status: "cancelled" }
+  /**
+   * An offline Session, whose teachers are trip-scoped `session_teaching_team` names edited on the
+   * Perjadin, not `session_teacher` People (ADR-0020, #140). The detail-page surface never offers
+   * this for offline; the guard is a backstop against a hand-edited request, so no `session_teacher`
+   * row is ever written for an offline Session.
+   */
+  | { outcome: "offline-not-correctable" };
 
 export type CancelSessionResult =
   | { outcome: "cancelled" }
@@ -438,12 +445,12 @@ async function replaceTeachers(
  * offers a single one of these writes — so an id that names nothing here arrived by a
  * hand-edited request, which is not a user state to be helpful about.
  */
-async function lockedStatus(
+async function lockedSession(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   sessionId: string,
-): Promise<SessionStatus> {
+): Promise<{ status: SessionStatus; mode: SessionMode }> {
   const [row] = await tx
-    .select({ status: session.status })
+    .select({ status: session.status, mode: session.mode })
     .from(session)
     .where(eq(session.id, sessionId))
     .for("update");
@@ -454,23 +461,29 @@ async function lockedStatus(
         "any write, and nothing deletes a Session, so this is a bug or a hand-edited request.",
     );
   }
-  return row.status;
+  return row;
 }
 
 /**
- * **Tandai terlaksana** — one act writing `session.status` and `session_teacher`.
+ * **Tandai terlaksana** — mark a Session delivered. What it writes turns on the mode.
  *
- * The two are deliberately not two steps. "Who still owes what" is computed from who
- * taught, so a Session marked delivered with nobody recorded owes nothing and the chase
- * list is silently empty — the worst failure available to a tool whose only enforcement
- * is naming who has not filed.
+ * **Online** — one act writing `session.status` and `session_teacher`, deliberately not two
+ * steps. "Who still owes what" is computed from who taught, so a Session marked delivered with
+ * nobody recorded owes nothing and the chase list is silently empty — the worst failure
+ * available to a tool whose only enforcement is naming who has not filed. So an online Session
+ * names a Person per Stream and the both-Streams rule is enforced here.
  *
- * The transaction is here and not in the Server Action, by convention 5 beside this
- * package: the status and the teacher rows commit together or not at all.
+ * **Offline** — **status only** (ADR-0019, ADR-0020, #140). An offline Session already carries
+ * its Stream (`session.stream`) and its teachers are trip-scoped names recorded through
+ * `session_teaching_team`, edited on the Perjadin — not People, so `session_teacher` cannot and
+ * must not hold them. There is no who-taught prompt and no teacher row is written; `teachers` is
+ * ignored. Offline Class Records and the offline progress metric are deferred (T8, the `CONTEXT.md`
+ * open question), so nothing here is owed off the back of it.
  *
- * `for update` on the Session is what makes the status check mean something. Without it,
- * two Staff pressing the button at once both read `arranged` and the second overwrites
- * the first's teacher rows.
+ * The transaction is here and not in the Server Action, by convention 5 beside this package: for
+ * online the status and the teacher rows commit together or not at all. `for update` on the Session
+ * is what makes the status check mean something — two Staff pressing the button at once both read
+ * `arranged` otherwise, and the second overwrites the first.
  */
 export async function markSessionDelivered(
   caller: Person,
@@ -479,12 +492,19 @@ export async function markSessionDelivered(
 ): Promise<MarkDeliveredResult> {
   requireStaff(caller);
 
-  const missing = streamsUnnamed(teachers);
-  if (missing.length > 0) return { outcome: "stream-unnamed", missing };
-
   return db.transaction(async (tx) => {
-    const status = await lockedStatus(tx, sessionId);
+    const { status, mode } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
+
+    if (mode === "offline") {
+      // Status only — no who-taught, no `session_teacher`. The Stream is on the Session and the
+      // teachers are `session_teaching_team` names, not People.
+      await tx.update(session).set({ status: "delivered" }).where(eq(session.id, sessionId));
+      return { outcome: "delivered" };
+    }
+
+    const missing = streamsUnnamed(teachers);
+    if (missing.length > 0) return { outcome: "stream-unnamed", missing };
 
     await replaceTeachers(tx, sessionId, teachers);
     await tx.update(session).set({ status: "delivered" }).where(eq(session.id, sessionId));
@@ -514,7 +534,10 @@ export async function correctSessionTeachers(
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
-    const status = await lockedStatus(tx, sessionId);
+    const { status, mode } = await lockedSession(tx, sessionId);
+    // Offline teaching is `session_teaching_team` names, corrected on the Perjadin — never
+    // `session_teacher`. Refuse before any write so an offline Session gets no teacher row.
+    if (mode === "offline") return { outcome: "offline-not-correctable" };
     // Nobody taught a Session that was called off, so there is nothing to correct the
     // record of. The rows this would otherwise write are invisible as well as meaningless
     // — `owed` reports nothing until a Session is delivered — which is what would make
@@ -554,7 +577,7 @@ export async function cancelSession(
   if (cancelledReason === "") return { outcome: "reason-required" };
 
   return db.transaction(async (tx) => {
-    const status = await lockedStatus(tx, sessionId);
+    const { status } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
     await tx
@@ -607,7 +630,7 @@ export async function moveSessionDate(
         .leftJoin(perjadin, eq(perjadin.id, session.perjadinId))
         .where(eq(session.id, sessionId))
         .for("update", { of: session });
-      // The one status read that is not `lockedStatus`, because it needs the Perjadin's
+      // The one status read that is not `lockedSession`, because it needs the Perjadin's
       // window in the same locked read. A missing row throws for the same reason.
       if (!row) {
         throw new Error(

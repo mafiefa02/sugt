@@ -511,6 +511,17 @@ A Session exists only once arranged
 no target dates and nothing is ever overdue. Progress is `count(*) where status = 'delivered'`
 against `TOTAL_SESSIONS_PER_SCHOOL`, a constant that already lives in `@sugt/domain`.
 
+**Marking a Session delivered turns on the mode** (#140). An **online** Session's "Tandai
+terlaksana" names a Teaching-Team Person per Stream and writes `session_teacher` in the same act,
+because its Class Records are owed against them. An **offline** Session's is **status only**: it
+already carries its Stream, its teachers are trip-scoped `session_teaching_team` names edited on the
+Perjadin, and it writes no `session_teacher` (ADR-0019, ADR-0020). Two consequences are
+**deferred** and not modelled here — see the offline open question in `CONTEXT.md` and T8:
+**offline Class Records** (their filer would be a name, not a Person who can sign in) and the
+**offline progress metric** (the fixed `delivered / TOTAL_SESSIONS_PER_SCHOOL` no longer holds for
+the offline half, whose Session count per School is now variable — ADR-0019). Online progress —
+six per School — is untouched.
+
 ### Who taught
 
 ```sql
