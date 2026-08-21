@@ -31,8 +31,9 @@ export default async function Page() {
       <header className="border-b border-border px-7 py-5">
         <h1 className="font-heading text-lg font-medium">Rencanakan Perjadin</h1>
         <p className="text-sm text-muted-foreground">
-          Pilih Kelompok Sekolah, lalu tentukan tanggal dan jam untuk tiap Sekolah yang dikunjungi.
-          Setiap tanggal harus berada di dalam rentang Perjadin.
+          Pilih Kelompok Sekolah, lalu tambahkan Sesi untuk tiap Sekolah yang dikunjungi —
+          masing-masing dengan tanggal, jam, dan Aliran sendiri. Setiap tanggal harus berada di
+          dalam rentang Perjadin.
         </p>
       </header>
 
@@ -53,7 +54,6 @@ export default async function Page() {
         <PerjadinPlanForm
           subClusters={plan.subClusters}
           staff={plan.staff}
-          teachingTeam={plan.teachingTeam}
         />
       )}
     </div>

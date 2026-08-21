@@ -1,15 +1,25 @@
 "use client";
 
 import { planPerjadinAction } from "-/app/(app)/rencanakan-perjadin/actions";
+import { MultiSelectCombobox } from "-/components/multi-select-combobox";
 import { PersonSelect } from "-/components/person-select";
 import type {
   PlannablePerson,
   PlannableSchool,
   PlannableSubCluster,
   PlanPerjadinResult,
-  PlannedTeacher,
 } from "@sugt/db/queries";
-import { formatIdr, STREAMS, TRANSPORT_MODES, type Stream, type TransportMode } from "@sugt/domain";
+import {
+  formatIdr,
+  MAX_EXTRA_STAFF_PER_GROUP,
+  MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN,
+  MAX_TEACHING_TEAM_PER_PERJADIN,
+  PIMPINAN,
+  STREAMS,
+  TRANSPORT_MODES,
+  type Stream,
+  type TransportMode,
+} from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { Checkbox } from "@sugt/ui/components/checkbox";
@@ -23,36 +33,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@sugt/ui/components/select";
+import { XIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
 
-/** One School's row on the form: kept on the trip, and when the Group teaches there. */
-type SchoolRow = { kept: boolean; date: string; time: string };
+/** One offline Session on a School's list: its date, time, Stream and "Diajar oleh" teacher indexes. */
+type SessionDraft = {
+  date: string;
+  time: string;
+  /** `""` until a Stream is chosen; the submit guard proves it is set before the cast. */
+  stream: Stream | "";
+  /** Indexes into `teacherNames` — which of the trip's teachers staffed this Session. May be empty. */
+  taughtBy: number[];
+};
+
+function emptySession(): SessionDraft {
+  return { date: "", time: "", stream: "", taughtBy: [] };
+}
 
 /**
- * The trip, its Group and a date and time per School, on one form and one submit.
+ * The trip, its Staff-only Group, its trip-scoped Teaching Team names, its Pimpinan and its
+ * Sessions, on one form and one submit (#137, ADR-0019, ADR-0020).
  *
- * **Planning starts from a Sub-Cluster** (#69): pick one, and its Schools appear — all kept by
- * default, each individually droppable. The Sub-Cluster fixes which Schools may appear; the
- * plan fixes which are visited this time, so a School sitting exams that week is dropped from
- * the trip rather than a reason to abandon it. Each kept School gets its own date and start
- * time.
+ * **Planning starts from a Sub-Cluster** (#69): pick one, and its Schools appear. Each School holds
+ * a repeatable list of Sessions — a School is "kept" on the trip exactly when it has at least one —
+ * and each Session carries its own date, start time, Stream and the subset of the trip's Teaching
+ * Team who taught it. The Teaching Team are **free-text names**, not People (ADR-0020): typed in one
+ * at a time and shown as removable chips. Pimpinan are chosen from the fixed three.
  *
  * A client component because every row is editable and none of that state is worth a URL. The
- * Sub-Clusters and rosters arrive as props; nothing here fetches. The action is called with a
- * typed value rather than through a `<form action>`, because the payload is nested — a Group
- * and a list of Sessions — and `FormData` would mean flattening it out and parsing it back
- * with the type checker helping at neither end.
+ * Sub-Clusters and Staff roster arrive as props; nothing here fetches. The action is called with a
+ * typed value rather than through a `<form action>`, because the payload is nested — Sessions with
+ * teacher references — and `FormData` would mean flattening it out and parsing it back.
  */
 function PerjadinPlanForm({
   subClusters,
   staff,
-  teachingTeam,
 }: {
   subClusters: PlannableSubCluster[];
   staff: PlannablePerson[];
-  teachingTeam: PlannablePerson[];
 }) {
   const router = useRouter();
   const [subClusterId, setSubClusterId] = useState("");
@@ -62,17 +82,16 @@ function PerjadinPlanForm({
     advanceIdr: "",
     picPersonId: "",
   });
-  // One picker per Stream, which is the shape the rule is stated in: at least one Teaching
-  // Team member per Stream. A Group may hold more, and the substitution screen is where that
-  // is edited — offering an unbounded roster on the planning form would make the common case
-  // the awkward one.
-  const [group, setGroup] = useState<Record<Stream, string>>({ STEM: "", Research: "" });
-  // Three optional extra-Staff slots, each a Person id or "" for empty. A set, not an order —
-  // slot position is not stored, so which slot holds whom does not matter.
-  const [extraStaff, setExtraStaff] = useState<[string, string, string]>(["", "", ""]);
-  // Departure/return logistics, all six required to submit. `mode` is a `TransportMode` once
-  // chosen; "" until then. The zones are not here — WIB and the derived return zone are the
-  // server's to set.
+  // The Teaching Team as trip-scoped names (ADR-0020): a list of plain strings, added one at a time
+  // from `teacherDraft` and shown as removable chips. Optional, capped at twenty.
+  const [teacherNames, setTeacherNames] = useState<string[]>([]);
+  const [teacherDraft, setTeacherDraft] = useState("");
+  // Extra Staff on the Group beyond the PIC — a searchable multi-select of Person ids, capped at ten.
+  const [extraStaff, setExtraStaff] = useState<string[]>([]);
+  // The Pimpinan recorded on the trip — a subset of the fixed three. Record-only (ADR-0020).
+  const [pimpinan, setPimpinan] = useState<string[]>([]);
+  // Departure/return logistics, all six required to submit. The zones are the server's — WIB out,
+  // derived back.
   const [logistics, setLogistics] = useState({
     departureDate: "",
     departureTime: "",
@@ -81,9 +100,9 @@ function PerjadinPlanForm({
     returnTime: "",
     returnMode: "" as TransportMode | "",
   });
-  // Keyed by School id, seeded when a Sub-Cluster is picked. A School absent from the current
-  // Sub-Cluster has no row, so switching Sub-Cluster starts its Schools fresh.
-  const [rows, setRows] = useState<Record<string, SchoolRow>>({});
+  // Sessions keyed by School id, seeded empty when a Sub-Cluster is picked. A School with no Sessions
+  // is simply not kept, so there is no separate "include" toggle any more.
+  const [sessions, setSessions] = useState<Record<string, SessionDraft[]>>({});
   const [refusal, setRefusal] = useState<PlanPerjadinResult | null>(null);
   const [saving, startSaving] = useTransition();
 
@@ -92,63 +111,123 @@ function PerjadinPlanForm({
   const endsId = useId();
   const advanceId = useId();
   const picId = useId();
-  // One prefix for the ids built per row and per Stream. `useId` cannot be called inside a
-  // `map`, and a bare `group-STEM` would collide if this form were ever rendered twice.
+  const teacherDraftId = useId();
+  const extraStaffId = useId();
+  // One prefix for the ids built per School and per Session in a `map`. `useId` cannot be called
+  // inside one, and a bare key would collide if this form were ever rendered twice.
   const idPrefix = useId();
 
   const selected = subClusters.find((entry) => entry.id === subClusterId);
   const schools = selected?.schools ?? [];
-  const kept = schools.filter((school) => rows[school.id]?.kept);
+  const keptSchools = schools.filter((school) => (sessions[school.id]?.length ?? 0) > 0);
+  const totalSessions = Object.values(sessions).reduce((sum, list) => sum + list.length, 0);
+
+  // "Diajar oleh" offers this trip's teacher names, referenced by their index. A blank name has no
+  // chip and cannot be referenced, so options are the non-blank names paired with their real index.
+  const teacherOptions = teacherNames
+    .map((name, index) => ({ value: String(index), label: name.trim() }))
+    .filter((option) => option.label !== "");
+
+  // The Staff roster minus the PIC — a Group holds each person once, and the PIC is already on it.
+  const extraStaffOptions = staff
+    .filter((person) => person.id !== trip.picPersonId)
+    .map((person) => ({ value: person.id, label: person.fullName }));
 
   function pickSubCluster(id: string) {
     setSubClusterId(id);
     const picked = subClusters.find((entry) => entry.id === id);
-    setRows(
-      Object.fromEntries(
-        (picked?.schools ?? []).map((school) => [school.id, { kept: true, date: "", time: "" }]),
-      ),
-    );
+    setSessions(Object.fromEntries((picked?.schools ?? []).map((school) => [school.id, []])));
     setRefusal(null);
   }
 
-  /** Every field the database needs before a trip can be written at all. Extra Staff are optional. */
+  function addTeacher() {
+    const name = teacherDraft.trim();
+    if (name === "" || teacherNames.length >= MAX_TEACHING_TEAM_PER_PERJADIN) return;
+    setTeacherNames((previous) => [...previous, name]);
+    setTeacherDraft("");
+  }
+
+  /** Removing a teacher drops its chip and rewrites every Session's `taughtBy` so the indexes hold. */
+  function removeTeacher(index: number) {
+    setTeacherNames((previous) => previous.filter((_, i) => i !== index));
+    setSessions((previous) =>
+      Object.fromEntries(
+        Object.entries(previous).map(([schoolId, list]) => [
+          schoolId,
+          list.map((draft) => ({
+            ...draft,
+            taughtBy: draft.taughtBy.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)),
+          })),
+        ]),
+      ),
+    );
+  }
+
+  function addSession(schoolId: string) {
+    setSessions((previous) => {
+      const list = previous[schoolId] ?? [];
+      if (list.length >= MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN) return previous;
+      return { ...previous, [schoolId]: [...list, emptySession()] };
+    });
+  }
+
+  function removeSession(schoolId: string, index: number) {
+    setSessions((previous) => ({
+      ...previous,
+      [schoolId]: (previous[schoolId] ?? []).filter((_, i) => i !== index),
+    }));
+  }
+
+  function patchSession(schoolId: string, index: number, patch: Partial<SessionDraft>) {
+    setSessions((previous) => ({
+      ...previous,
+      [schoolId]: (previous[schoolId] ?? []).map((draft, i) =>
+        i === index ? { ...draft, ...patch } : draft,
+      ),
+    }));
+  }
+
+  /** Every field the database needs before a trip can be written. Teaching Team, Staff, Pimpinan are optional. */
   const incomplete =
     subClusterId === "" ||
     trip.startsOn === "" ||
     trip.endsOn === "" ||
     trip.advanceIdr === "" ||
     trip.picPersonId === "" ||
-    STREAMS.some((stream) => group[stream] === "") ||
     logistics.departureDate === "" ||
     logistics.departureTime === "" ||
     logistics.departureMode === "" ||
     logistics.returnDate === "" ||
     logistics.returnTime === "" ||
     logistics.returnMode === "" ||
-    kept.length === 0 ||
-    kept.some((school) => rows[school.id]!.date === "" || rows[school.id]!.time === "");
+    totalSessions === 0 ||
+    Object.values(sessions).some((list) =>
+      list.some((draft) => draft.date === "" || draft.time === "" || draft.stream === ""),
+    );
 
   function submit() {
     startSaving(async () => {
-      const teachers: PlannedTeacher[] = STREAMS.map((stream) => ({
-        stream,
-        personId: group[stream],
-      }));
-
       const result = await planPerjadinAction({
         subClusterId,
         startsOn: trip.startsOn,
         endsOn: trip.endsOn,
         advanceIdr: Number(trip.advanceIdr),
         picPersonId: trip.picPersonId,
-        extraStaffPersonIds: extraStaff.filter((personId) => personId !== ""),
-        teachers,
-        sessions: kept.map((school) => ({
-          schoolId: school.id,
-          heldOn: rows[school.id]!.date,
-          startsAt: rows[school.id]!.time,
-        })),
-        // The guard above proves the six are set, so the `mode` casts hold.
+        extraStaffPersonIds: extraStaff,
+        teacherNames: teacherNames.map((name) => name.trim()).filter((name) => name !== ""),
+        pimpinan,
+        // Flatten each kept School's Sessions. The guard above proves date, time and stream are set,
+        // so the `stream` cast holds.
+        sessions: keptSchools.flatMap((school) =>
+          (sessions[school.id] ?? []).map((draft) => ({
+            schoolId: school.id,
+            heldOn: draft.date,
+            startsAt: draft.time,
+            stream: draft.stream as Stream,
+            taughtByTeacherIndexes: draft.taughtBy,
+          })),
+        ),
+        // The guard proves the six logistics fields are set, so the `mode` casts hold.
         departure: {
           date: logistics.departureDate,
           time: logistics.departureTime,
@@ -263,11 +342,9 @@ function PerjadinPlanForm({
             unfunded state — which is why this is on the planning form rather than the acquittal.
 
             A masked text input, not `type="number"`: it groups the thousands as they type so
-            a seven-figure advance's magnitude is legible at the point of entry, which a numeric
-            spinner cannot show. `advanceIdr` stays a plain digit string in state — every
-            non-digit (the `Rp` affix, the dot separators) is stripped back out on change — so
-            submit's `Number(...)` and the empty-value guard are unchanged. `inputMode="numeric"`
-            keeps the mobile keypad; only the desktop spinner is lost, which nobody uses here.
+            a seven-figure advance's magnitude is legible at the point of entry. `advanceIdr` stays
+            a plain digit string in state — every non-digit is stripped back out on change — so
+            submit's `Number(...)` and the empty-value guard are unchanged.
           */}
           <Input
             id={advanceId}
@@ -283,78 +360,124 @@ function PerjadinPlanForm({
       </div>
 
       <div className="border-b border-border px-7 py-5">
-        <h2 className="font-heading text-sm font-medium">Group</h2>
+        <h2 className="font-heading text-sm font-medium">Teaching Team</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Setiap Stream harus punya pengajar. PIC otomatis menjadi anggota Group.
+          Nama pengajar untuk Perjadin ini (opsional). Tambahkan satu per satu; hingga{" "}
+          {MAX_TEACHING_TEAM_PER_PERJADIN} nama.
         </p>
 
-        <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          {STREAMS.map((stream) => (
-            <Field
-              key={stream}
-              id={`${idPrefix}-group-${stream}`}
-              label={stream}
-            >
-              {/*
-                The roster minus whoever holds the other Stream. A Group holds each person once,
-                by primary key, and the write refuses a duplicate — this keeps the form from
-                offering the mistake in the first place.
-              */}
-              <PersonSelect
-                id={`${idPrefix}-group-${stream}`}
-                people={teachingTeam.filter(
-                  (entry) =>
-                    entry.id === group[stream] ||
-                    !STREAMS.some((other) => other !== stream && group[other] === entry.id),
-                )}
-                value={group[stream]}
-                placeholder="Pilih pengajar"
-                onSelect={(personId) => {
-                  setGroup((previous) => ({ ...previous, [stream]: personId }));
-                }}
-              />
-            </Field>
-          ))}
+        <div className="mt-3 flex max-w-md gap-2">
+          <Input
+            id={teacherDraftId}
+            aria-label="Nama pengajar"
+            placeholder="Nama pengajar"
+            value={teacherDraft}
+            disabled={teacherNames.length >= MAX_TEACHING_TEAM_PER_PERJADIN}
+            onChange={(event) => {
+              setTeacherDraft(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addTeacher();
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={
+              teacherDraft.trim() === "" || teacherNames.length >= MAX_TEACHING_TEAM_PER_PERJADIN
+            }
+            onClick={addTeacher}
+          >
+            Tambah pengajar
+          </Button>
         </div>
 
-        <p className="mt-4 text-sm text-muted-foreground">
-          Staf tambahan (opsional) — koordinator, bendahara, atau dokumentator. Hingga tiga orang,
-          selain PIC.
-        </p>
-        <div className="mt-3 grid gap-4 sm:grid-cols-3">
-          {extraStaff.map((chosen, slot) => (
-            <Field
-              // Three fixed slots that are never reordered, so the position is a stable key.
-              key={`extra-staff-slot-${slot}`}
-              id={`${idPrefix}-extra-staff-${slot}`}
-              label={`Staf ${slot + 1}`}
-            >
-              {/*
-                The Staff roster minus the PIC and minus whoever the other slots hold, so a
-                duplicate is never offered — the write refuses one too. Clearable back to empty via
-                the unassigned item, because each slot is optional.
-              */}
-              <PersonSelect
-                id={`${idPrefix}-extra-staff-${slot}`}
-                people={staff.filter(
-                  (entry) =>
-                    entry.id === chosen ||
-                    (entry.id !== trip.picPersonId &&
-                      !extraStaff.some((other, index) => index !== slot && other === entry.id)),
-                )}
-                value={chosen}
-                placeholder="Pilih Staf"
-                unassignedLabel="Tanpa Staf"
-                onSelect={(personId) => {
-                  setExtraStaff((previous) => {
-                    const next = [...previous] as [string, string, string];
-                    next[slot] = personId;
-                    return next;
-                  });
-                }}
-              />
-            </Field>
-          ))}
+        {teacherNames.length > 0 && (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {teacherNames.map((name, index) => (
+              <li
+                // The list is reordered only by removal, which rewrites the references too, so the
+                // index is a stable enough key for a chip that carries no editable state of its own.
+                key={`teacher-${index}`}
+                className="flex items-center gap-1 rounded-2xl bg-input px-2.5 py-1 text-xs font-medium dark:bg-input/60"
+              >
+                {name}
+                <button
+                  type="button"
+                  aria-label={`Hapus ${name}`}
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    removeTeacher(index);
+                  }}
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <Field
+            id={extraStaffId}
+            label="Staf tambahan (opsional)"
+          >
+            <p className="-mt-0.5 mb-1 text-xs text-muted-foreground">
+              Koordinator, bendahara, atau dokumentator — selain PIC, hingga{" "}
+              {MAX_EXTRA_STAFF_PER_GROUP} orang.
+            </p>
+            <MultiSelectCombobox
+              id={extraStaffId}
+              aria-label="Staf tambahan"
+              placeholder="Cari Staf…"
+              emptyLabel="Tidak ada Staf."
+              options={extraStaffOptions}
+              value={extraStaff}
+              onValueChange={(next) => {
+                // The cap is refused at the write too; this keeps the form from offering the mistake.
+                if (next.length <= MAX_EXTRA_STAFF_PER_GROUP) setExtraStaff(next);
+              }}
+            />
+          </Field>
+
+          <div className="grid gap-1.5">
+            <Label>Pimpinan (opsional)</Label>
+            <p className="-mt-0.5 text-xs text-muted-foreground">
+              Pimpinan DITSAMA yang ikut memantau — tercatat saja, bukan anggota Group.
+            </p>
+            <ul className="mt-1 grid gap-2">
+              {PIMPINAN.map((name) => {
+                const checkboxId = `${idPrefix}-pimpinan-${name}`;
+                return (
+                  <li
+                    key={name}
+                    className="flex items-center gap-2.5"
+                  >
+                    <Checkbox
+                      id={checkboxId}
+                      checked={pimpinan.includes(name)}
+                      onCheckedChange={(checked) => {
+                        setPimpinan((previous) =>
+                          checked === true
+                            ? [...previous, name]
+                            : previous.filter((entry) => entry !== name),
+                        );
+                      }}
+                    />
+                    <Label
+                      htmlFor={checkboxId}
+                      className="text-sm font-normal"
+                    >
+                      {name}
+                    </Label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </div>
       </div>
 
@@ -400,75 +523,145 @@ function PerjadinPlanForm({
       ) : (
         <ul className="border-b border-border">
           {schools.map((school) => {
-            const row = rows[school.id] ?? { kept: true, date: "", time: "" };
+            const list = sessions[school.id] ?? [];
             return (
               <li
                 key={school.id}
-                className="flex flex-wrap items-end gap-x-5 gap-y-2 border-b border-border px-7 py-3 last:border-b-0"
+                className="border-b border-border px-7 py-4 last:border-b-0"
               >
-                <div className="flex min-w-52 items-start gap-3">
-                  <Checkbox
-                    checked={row.kept}
-                    onCheckedChange={(checked) => {
-                      setRows((previous) => ({
-                        ...previous,
-                        [school.id]: { ...row, kept: checked === true },
-                      }));
-                    }}
-                    aria-label={`Sertakan ${school.name}`}
-                    className="mt-0.5"
-                  />
-                  <div className={row.kept ? undefined : "text-muted-foreground"}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className={list.length === 0 ? "text-muted-foreground" : undefined}>
                     <p className="text-sm font-medium">{school.name}</p>
                     <p className="text-xs text-muted-foreground">{school.kabupatenKota}</p>
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={list.length >= MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN}
+                    onClick={() => {
+                      addSession(school.id);
+                    }}
+                  >
+                    Tambah Sesi
+                  </Button>
                 </div>
 
-                <Field
-                  id={`${idPrefix}-date-${school.id}`}
-                  label="Tanggal Sesi"
-                >
-                  {/*
-                    `min`/`max` follow the trip, so the picker will not offer a day outside it.
-                    The write checks it again — this is the browser being helpful, not the rule.
-                  */}
-                  <Input
-                    id={`${idPrefix}-date-${school.id}`}
-                    type="date"
-                    className="w-44"
-                    disabled={!row.kept}
-                    min={trip.startsOn || undefined}
-                    max={trip.endsOn || undefined}
-                    value={row.date}
-                    onChange={(event) => {
-                      setRows((previous) => ({
-                        ...previous,
-                        [school.id]: { ...row, date: event.target.value },
-                      }));
-                    }}
-                  />
-                </Field>
+                {list.length > 0 && (
+                  <ul className="mt-3 grid gap-3">
+                    {list.map((draft, index) => (
+                      <li
+                        // A Session row carries editable state, but the list only grows at the end or
+                        // shrinks by removal, so a positional key does not swap one row's state for
+                        // another's between renders.
+                        key={`${school.id}-session-${index}`}
+                        className="flex flex-wrap items-end gap-x-5 gap-y-2 rounded-2xl bg-muted/40 px-4 py-3"
+                      >
+                        <Field
+                          id={`${idPrefix}-date-${school.id}-${index}`}
+                          label="Tanggal Sesi"
+                        >
+                          <Input
+                            id={`${idPrefix}-date-${school.id}-${index}`}
+                            type="date"
+                            className="w-44"
+                            min={trip.startsOn || undefined}
+                            max={trip.endsOn || undefined}
+                            value={draft.date}
+                            onChange={(event) => {
+                              patchSession(school.id, index, { date: event.target.value });
+                            }}
+                          />
+                        </Field>
 
-                <Field
-                  id={`${idPrefix}-time-${school.id}`}
-                  label="Jam Mulai"
-                >
-                  {/* Local wall-clock time, in the School's Time Zone. Two Schools may share a
-                      date but not a date and a time — the write names the pair if they do. */}
-                  <Input
-                    id={`${idPrefix}-time-${school.id}`}
-                    type="time"
-                    className="w-32"
-                    disabled={!row.kept}
-                    value={row.time}
-                    onChange={(event) => {
-                      setRows((previous) => ({
-                        ...previous,
-                        [school.id]: { ...row, time: event.target.value },
-                      }));
-                    }}
-                  />
-                </Field>
+                        <Field
+                          id={`${idPrefix}-time-${school.id}-${index}`}
+                          label="Jam Mulai"
+                        >
+                          <Input
+                            id={`${idPrefix}-time-${school.id}-${index}`}
+                            type="time"
+                            className="w-32"
+                            value={draft.time}
+                            onChange={(event) => {
+                              patchSession(school.id, index, { time: event.target.value });
+                            }}
+                          />
+                        </Field>
+
+                        <Field
+                          id={`${idPrefix}-stream-${school.id}-${index}`}
+                          label="Aliran"
+                        >
+                          <Select
+                            items={Object.fromEntries(STREAMS.map((stream) => [stream, stream]))}
+                            value={draft.stream === "" ? null : draft.stream}
+                            onValueChange={(value) => {
+                              patchSession(school.id, index, {
+                                stream: (value as Stream | null) ?? "",
+                              });
+                            }}
+                          >
+                            <SelectTrigger
+                              id={`${idPrefix}-stream-${school.id}-${index}`}
+                              aria-label="Aliran"
+                              className="w-36"
+                            >
+                              <SelectValue placeholder="Pilih Aliran" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STREAMS.map((stream) => (
+                                <SelectItem
+                                  key={stream}
+                                  value={stream}
+                                >
+                                  {stream}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Field>
+
+                        <Field
+                          id={`${idPrefix}-taught-${school.id}-${index}`}
+                          label="Diajar oleh"
+                        >
+                          <div className="w-64">
+                            <MultiSelectCombobox
+                              id={`${idPrefix}-taught-${school.id}-${index}`}
+                              aria-label="Diajar oleh"
+                              placeholder={
+                                teacherOptions.length === 0
+                                  ? "Belum ada pengajar"
+                                  : "Pilih pengajar…"
+                              }
+                              emptyLabel="Tidak ada pengajar."
+                              options={teacherOptions}
+                              value={draft.taughtBy.map(String)}
+                              onValueChange={(next) => {
+                                patchSession(school.id, index, {
+                                  taughtBy: next.map(Number),
+                                });
+                              }}
+                            />
+                          </div>
+                        </Field>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Hapus Sesi"
+                          onClick={() => {
+                            removeSession(school.id, index);
+                          }}
+                        >
+                          <XIcon className="size-4" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             );
           })}
@@ -477,7 +670,7 @@ function PerjadinPlanForm({
 
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-7 py-3.5 shadow-lg">
         <p className="text-sm">
-          <b>{kept.length}</b> Sesi luring akan dijadwalkan
+          <b>{totalSessions}</b> Sesi luring di <b>{keptSchools.length}</b> Sekolah akan dijadwalkan
         </p>
 
         <div className="flex gap-2.5">
@@ -503,8 +696,7 @@ function PerjadinPlanForm({
  * What a refused plan says.
  *
  * **Nothing was written**, and each of these says which field to fix rather than that something
- * went wrong. The per-School cases name the Schools, because the fix is per row: change that
- * School's date or time, or drop it.
+ * went wrong. The per-School cases name the Schools, because the fix is per row.
  */
 function Refused({ result, schools }: { result: PlanPerjadinResult; schools: PlannableSchool[] }) {
   const nameOf = (schoolId: string) =>
@@ -515,18 +707,37 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
       <Alert variant="destructive">
         <AlertTitle>Perjadin belum dibuat.</AlertTitle>
         <AlertDescription>
-          {result.outcome === "stream-uncovered" && (
-            <p>Stream berikut belum punya pengajar: {result.missing.join(", ")}.</p>
-          )}
           {result.outcome === "ends-before-starts" && (
             <p>Tanggal selesai tidak boleh mendahului tanggal mulai.</p>
           )}
-          {result.outcome === "no-schools" && <p>Tidak ada Sekolah pada Perjadin ini.</p>}
-          {result.outcome === "duplicate-teacher" && (
-            <p>Satu pengajar tidak bisa mengampu dua Stream sekaligus.</p>
-          )}
+          {result.outcome === "no-schools" && <p>Belum ada Sesi pada Perjadin ini.</p>}
           {result.outcome === "duplicate-staff" && (
             <p>Setiap Staf tambahan harus berbeda, dan bukan PIC.</p>
+          )}
+          {result.outcome === "too-many-extra-staff" && (
+            <p>
+              Staf tambahan terlalu banyak: maksimal {result.limit}, bukan {result.count}.
+            </p>
+          )}
+          {result.outcome === "too-many-teachers" && (
+            <p>
+              Nama pengajar terlalu banyak: maksimal {result.limit}, bukan {result.count}.
+            </p>
+          )}
+          {result.outcome === "too-many-sessions-per-school" && (
+            <>
+              <p>Terlalu banyak Sesi pada satu Sekolah (maksimal per Sekolah terlampaui):</p>
+              <ul className="mt-1.5 list-disc pl-4">
+                {result.offending.map((entry) => (
+                  <li key={entry.schoolId}>
+                    {nameOf(entry.schoolId)} · {entry.count} Sesi
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {result.outcome === "unknown-pimpinan" && (
+            <p>Nama Pimpinan tidak dikenal: {result.offending.join(", ")}.</p>
           )}
           {result.outcome === "session-outside-perjadin" && (
             <>
@@ -535,7 +746,7 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
               </p>
               <ul className="mt-1.5 list-disc pl-4">
                 {result.offending.map((offending) => (
-                  <li key={offending.schoolId}>
+                  <li key={`${offending.schoolId}-${offending.heldOn}-${offending.startsAt}`}>
                     {nameOf(offending.schoolId)} · {offending.heldOn}
                   </li>
                 ))}
@@ -554,7 +765,7 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
           )}
           {result.outcome === "session-time-clash" && (
             <>
-              <p>Dua Sekolah tidak bisa berada di tanggal dan jam yang sama:</p>
+              <p>Dua Sekolah yang berbeda tidak bisa berada di tanggal dan jam yang sama:</p>
               <ul className="mt-1.5 list-disc pl-4">
                 {result.clashes.map((clash) => (
                   <li key={`${clash.heldOn} ${clash.startsAt}`}>
