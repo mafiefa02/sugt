@@ -6,7 +6,6 @@ import {
   perjadinDetail,
   perjadinDirectory,
   planPerjadin,
-  replacePerjadinGroup,
   updatePerjadinLogistics,
   type PlanPerjadinInput,
 } from "@sugt/db/queries";
@@ -20,7 +19,6 @@ import {
   addProvince,
   addSchool,
   addSubCluster,
-  addTransaction,
   constraintOf,
   resetDatabase,
 } from "./support/fixtures";
@@ -42,8 +40,9 @@ async function staff(fullName = "Rina Nurhayati", email = "rina@ditsama.itb.ac.i
 }
 
 /**
- * Two Teaching Team People, kept for the `replacePerjadinGroup` block, which still names People
- * (T3's to change). `planPerjadin` no longer takes them — its Teaching Team are trip-scoped names.
+ * Two Teaching Team People, kept for the callers the plan tests need — a non-Staff caller to be
+ * refused, and a professor to name as an illegal PIC. `planPerjadin` no longer takes them as Group
+ * members: its Teaching Team are trip-scoped names on `perjadin_teacher`.
  */
 async function professors() {
   return Promise.all([
@@ -921,163 +920,6 @@ describe("the Perjadin list and detail", () => {
 
     await expect(perjadinAcquittal(bagus, planned.perjadinId)).rejects.toSatisfy(isNotStaffError);
     await expect(perjadinAcquittal(pic, planned.perjadinId)).resolves.not.toBeNull();
-  });
-});
-
-describe("replacing a Group", () => {
-  beforeEach(resetDatabase);
-
-  /**
-   * `replacePerjadinGroup` still names People and writes Teaching Team `group_member` rows (T3's to
-   * change). Planning no longer leaves the Group with professors, so this seeds them by substituting
-   * once, then the tests below exercise the substitution from a full Group.
-   */
-  async function plannedTrip() {
-    const { pic, bagus, sari, schools, input } = await validPlan();
-    const planned = await planPerjadin(pic, input);
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
-    await replacePerjadinGroup(pic, planned.perjadinId, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: sari.id, stream: "Research" },
-    ]);
-    return { pic, bagus, sari, schools, perjadinId: planned.perjadinId };
-  }
-
-  it("deletes every member row and inserts the new set, leaving Sessions and money alone", async () => {
-    const { pic, bagus, perjadinId } = await plannedTrip();
-    const rian = await addPerson({
-      fullName: "Rian Saputra",
-      email: "rian@itb.ac.id",
-      role: "Teaching Team",
-    });
-    await addTransaction({ perjadinId, amountIdr: 250_000, createdByPersonId: pic.id });
-
-    const result = await replacePerjadinGroup(pic, perjadinId, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: rian.id, stream: "Research" },
-    ]);
-
-    expect(result.outcome).toBe("replaced");
-    const group = await groupOf(perjadinId);
-    expect(group.map((member) => member.personId).sort()).toEqual(
-      [pic.id, bagus.id, rian.id].sort(),
-    );
-    expect(await sessionsOf(perjadinId)).toHaveLength(2);
-    const [acquittal] = [await perjadinAcquittal(pic, perjadinId)];
-    expect(acquittal?.spentIdr).toBe(250_000);
-    expect(acquittal?.advanceIdr).toBe(5_000_000);
-  });
-
-  it("refuses a replacement that leaves a Stream uncovered, and changes nothing", async () => {
-    const { pic, bagus, perjadinId } = await plannedTrip();
-
-    const result = await replacePerjadinGroup(pic, perjadinId, [
-      { personId: bagus.id, stream: "STEM" },
-    ]);
-
-    expect(result).toEqual({ outcome: "stream-uncovered", missing: ["Research"] });
-    expect(await groupOf(perjadinId)).toHaveLength(3);
-  });
-
-  it("keeps the PIC on the Group without being asked to", async () => {
-    const { pic, bagus, sari, perjadinId } = await plannedTrip();
-
-    await replacePerjadinGroup(pic, perjadinId, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: sari.id, stream: "Research" },
-    ]);
-
-    const group = await groupOf(perjadinId);
-    expect(group.find((member) => member.personId === pic.id)?.role).toBe("Staff");
-  });
-
-  it("keeps a staying member's receipt mark, and gives a new member none", async () => {
-    const { pic, bagus, sari, perjadinId } = await plannedTrip();
-    const rian = await addPerson({
-      fullName: "Rian Saputra",
-      email: "rian@itb.ac.id",
-      role: "Teaching Team",
-    });
-    await db
-      .update(schema.groupMember)
-      .set({ receiptsSettledAt: new Date("2026-09-04T00:00:00Z") })
-      .where(eq(schema.groupMember.personId, bagus.id));
-
-    await replacePerjadinGroup(pic, perjadinId, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: rian.id, stream: "Research" },
-    ]);
-
-    const settled = await db
-      .select({
-        personId: schema.groupMember.personId,
-        receiptsSettledAt: schema.groupMember.receiptsSettledAt,
-      })
-      .from(schema.groupMember)
-      .where(eq(schema.groupMember.perjadinId, perjadinId));
-
-    expect(settled.find((row) => row.personId === bagus.id)?.receiptsSettledAt).not.toBeNull();
-    expect(settled.find((row) => row.personId === rian.id)?.receiptsSettledAt).toBeNull();
-    expect(settled.find((row) => row.personId === sari.id)).toBeUndefined();
-  });
-
-  it("refuses a replacement naming one professor on both Streams, and changes nothing", async () => {
-    const { pic, bagus, perjadinId } = await plannedTrip();
-
-    const result = await replacePerjadinGroup(pic, perjadinId, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: bagus.id, stream: "Research" },
-    ]);
-
-    expect(result).toEqual({ outcome: "duplicate-teacher", personIds: [bagus.id] });
-    expect(await groupOf(perjadinId)).toHaveLength(3);
-  });
-
-  it("keeps the extra Staff across a substitution when they are passed back", async () => {
-    const { pic, bagus, sari, perjadinId } = await plannedTrip();
-    const coordinator = await staff("Dewi Koordinator", "dewi@ditsama.itb.ac.id");
-    await replacePerjadinGroup(
-      pic,
-      perjadinId,
-      [
-        { personId: bagus.id, stream: "STEM" },
-        { personId: sari.id, stream: "Research" },
-      ],
-      [coordinator.id],
-    );
-
-    const group = await groupOf(perjadinId);
-    const staffMember = group.find((member) => member.personId === coordinator.id);
-    expect(staffMember).toEqual({ personId: coordinator.id, role: "Staff", stream: null });
-    expect(group).toHaveLength(4);
-  });
-
-  it("refuses a substitution repeating an extra Staff or naming the PIC, and changes nothing", async () => {
-    const { pic, bagus, sari, perjadinId } = await plannedTrip();
-
-    const result = await replacePerjadinGroup(
-      pic,
-      perjadinId,
-      [
-        { personId: bagus.id, stream: "STEM" },
-        { personId: sari.id, stream: "Research" },
-      ],
-      [pic.id],
-    );
-
-    expect(result).toEqual({ outcome: "duplicate-staff", personIds: [pic.id] });
-    expect(await groupOf(perjadinId)).toHaveLength(3);
-  });
-
-  it("refuses a Teaching Team caller", async () => {
-    const { bagus, sari, perjadinId } = await plannedTrip();
-
-    await expect(
-      replacePerjadinGroup(bagus, perjadinId, [
-        { personId: bagus.id, stream: "STEM" },
-        { personId: sari.id, stream: "Research" },
-      ]),
-    ).rejects.toSatisfy(isNotStaffError);
   });
 });
 

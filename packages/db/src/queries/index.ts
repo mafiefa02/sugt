@@ -101,19 +101,40 @@ export {
   type SchoolOption,
 } from "./arrange-online-session";
 export {
+  changePerjadinPic,
   movePerjadinDates,
   perjadinDetail,
-  replacePerjadinGroup,
+  setPerjadinPimpinan,
+  setPerjadinStaff,
   updatePerjadinLogistics,
+  type ChangePerjadinPicResult,
+  type EligibleSchool,
   type GroupMemberEntry,
   type MovePerjadinDatesResult,
   type PerjadinDetail,
   type PerjadinLogisticsInput,
   type PerjadinSession,
   type PerjadinTravelLeg,
-  type ReplaceGroupResult,
+  type SetPerjadinPimpinanResult,
+  type SetPerjadinStaffResult,
   type UpdatePerjadinLogisticsResult,
 } from "./perjadin-detail";
+export {
+  addPerjadinTeacher,
+  removePerjadinTeacher,
+  renamePerjadinTeacher,
+  type AddPerjadinTeacherResult,
+  type RemovePerjadinTeacherResult,
+  type RenamePerjadinTeacherResult,
+} from "./perjadin-teachers";
+export {
+  addPerjadinSession,
+  editPerjadinSession,
+  type AddPerjadinSessionResult,
+  type EditPerjadinSessionResult,
+  type PerjadinSessionInput,
+  type SessionPlacementRefusal,
+} from "./perjadin-sessions";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
   togglePreparationItem,
@@ -156,7 +177,6 @@ export {
   type PlannableSchool,
   type PlannableSubCluster,
   type PlannedSession,
-  type PlannedTeacher,
   type PlannedTravelLeg,
   type PlanPerjadinInput,
   type PlanPerjadinResult,

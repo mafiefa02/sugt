@@ -2,12 +2,14 @@ import { PerjadinDates } from "-/components/perjadin-dates";
 import { PerjadinEvaluationDialog } from "-/components/perjadin-evaluation-form";
 import { PerjadinGroup } from "-/components/perjadin-group";
 import { PerjadinLogistics } from "-/components/perjadin-logistics";
+import { PerjadinPimpinan } from "-/components/perjadin-pimpinan";
 import { PerjadinPreparation } from "-/components/perjadin-preparation";
-import { SessionStatusBadge } from "-/components/session-labels";
+import { PerjadinSessions } from "-/components/perjadin-sessions";
+import { PerjadinTeachingTeam } from "-/components/perjadin-teaching-team";
 import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
-import { formatIdr, formatSessionStartTimeWithWib } from "@sugt/domain";
+import { formatIdr } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -122,9 +124,20 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         perjadinId={trip.id}
         group={trip.group}
         picPersonId={trip.picPersonId}
-        teachingTeam={trip.teachingTeam}
         staff={trip.staff}
-        canSubstitute={person.role === "Staff"}
+        canEdit={person.role === "Staff"}
+      />
+
+      <PerjadinTeachingTeam
+        perjadinId={trip.id}
+        teachers={trip.teachers}
+        canEdit={person.role === "Staff"}
+      />
+
+      <PerjadinPimpinan
+        perjadinId={trip.id}
+        pimpinan={trip.pimpinan}
+        canEdit={person.role === "Staff"}
       />
 
       <PerjadinLogistics
@@ -162,34 +175,15 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         </div>
       )}
 
-      <div className="px-7 py-5">
-        <h2 className="font-heading text-sm font-medium">Sesi</h2>
-        <ul className="mt-2.5 space-y-1.5">
-          {trip.sessions.map((session) => (
-            <li
-              key={session.sessionId}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
-            >
-              <Link
-                href={`/sesi/${session.sessionId}`}
-                className="tabular-nums hover:underline"
-              >
-                {session.heldOn}
-              </Link>
-              <span className="text-muted-foreground tabular-nums">
-                {formatSessionStartTimeWithWib(session.startsAt, session.timeZone)}
-              </span>
-              <Link
-                href={`/sekolah/${session.schoolSlug}`}
-                className="text-muted-foreground hover:underline"
-              >
-                {session.schoolName}
-              </Link>
-              <SessionStatusBadge status={session.status} />
-            </li>
-          ))}
-        </ul>
-      </div>
+      <PerjadinSessions
+        perjadinId={trip.id}
+        sessions={trip.sessions}
+        eligibleSchools={trip.eligibleSchools}
+        teachers={trip.teachers}
+        startsOn={trip.startsOn}
+        endsOn={trip.endsOn}
+        canEdit={person.role === "Staff"}
+      />
     </div>
   );
 }
