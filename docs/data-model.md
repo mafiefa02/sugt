@@ -362,6 +362,7 @@ create table session (
   school_id         uuid not null references school (id),
   perjadin_id       uuid references perjadin (id),
   mode              text not null check (mode in ('offline', 'online')),
+  stream            text check (stream in ('STEM', 'Research')),
   held_on           date not null,
   starts_at         time not null,
   status            text not null default 'arranged'
@@ -374,6 +375,7 @@ create table session (
   created_at        timestamptz not null default now(),
 
   check ((mode = 'offline') = (perjadin_id is not null)),
+  check ((mode = 'offline') = (stream is not null)),
   check ((mode = 'online') = (online_pic_person_id is not null)),
   check ((online_pic_person_id is null) = (online_pic_role is null)),
   check ((status = 'cancelled') = (cancelled_reason is not null)),
@@ -381,42 +383,45 @@ create table session (
   foreign key (online_pic_person_id, online_pic_role) references person (id, role)
 );
 
-create unique index session_one_per_school_per_perjadin
-  on session (perjadin_id, school_id)
-  where status <> 'cancelled';
-
 create unique index session_one_online_per_school_per_day
   on session (school_id, held_on)
   where perjadin_id is null and status <> 'cancelled';
 
-create unique index session_one_school_at_a_time_per_perjadin
-  on session (perjadin_id, held_on, starts_at)
+create unique index session_no_duplicate_offline_per_school_per_perjadin
+  on session (perjadin_id, school_id, held_on, starts_at, stream)
   where status <> 'cancelled';
 ```
 
-That index is `product.md`'s "creating a Perjadin is what brings its Sessions into existence
-— **one per School on the trip**". It is partial for the same reason the Session cap is not
-enforced at all: cancelled Sessions persist and accumulate, so a School whose visit was
-called off and re-arranged on the same trip must not collide with its own cancelled row.
-Online Sessions are untouched, since `perjadin_id` is NULL and Postgres treats NULLs in a
-unique index as distinct.
+**`stream` carries the STEM/Research division of an offline Session, and is null for an online
+one** ([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md)).
+The split used to be a property of who taught — the two `session_teacher` rows, one per Stream —
+but an offline Session now teaches _one_ Stream in parallel rooms, so the Stream moved onto the
+Session itself. The second CHECK is its equivalence, an exact mirror of the `mode`/`perjadin_id`
+one directly above: offline carries a Stream, online never does. Online Sessions still teach both
+Streams at once and name a teacher per Stream through `session_teacher`, which is why `stream`
+stays null for them.
 
-**The second index closes exactly that gap.** Online Sessions are arranged from the coverage
-view in a batch — one date and one PIC applied across a multi-selection — so "the same School
-twice on the same day" moved from theoretical to one mis-click away. The first index cannot
-catch it, because it keys on `perjadin_id` and every online Session has none. Partial in the
-same two ways and for the same reasons: cancelled rows accumulate and must not collide, and
-offline Sessions are untouched because their `perjadin_id` is not null.
+**The online index is the one unchanged rule here.** Online Sessions are arranged from the
+coverage view in a batch — one date and one PIC applied across a multi-selection — so "the same
+School twice on the same day" is one mis-click away. It keys on `(school_id, held_on)` where
+`perjadin_id is null`, so it touches online Sessions only; offline ones are untouched because
+their `perjadin_id` is not null. Partial the usual way: cancelled rows accumulate and must not
+collide with their replacements.
 
-**The third index is the Group being in one place at a time.** A Perjadin reaches several
-Schools and each gets its own date, but nothing stopped two of them being written for the same
-moment, and with a start time on the row that stopped being theoretical: morning at one School
-and afternoon at another is exactly the case the time column exists to serve, so the tool
-cannot simply forbid two Schools on one day. What it forbids is the same day _and_ the same
-time on one trip, which is physically impossible and is a typo every time it appears. Partial
-in the same way and for the same reason as the other two — cancelled rows accumulate and must
-not collide with their own replacements — and online Sessions are untouched, because their
-`perjadin_id` is null and Postgres treats nulls in a unique index as distinct.
+**Two offline-Session indexes were dropped, and this one replaces them
+([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md)).**
+`session_one_per_school_per_perjadin` — "one Session per School on the trip" — is gone, because a
+School now has _several_ offline Sessions per Perjadin, each single-Stream, on its own date and
+time. `session_one_school_at_a_time_per_perjadin`, on `(perjadin_id, held_on, starts_at)`, forbade
+_any_ two Sessions sharing a moment on one trip; but parallel rooms at one School run at the same
+moment on purpose, so it was too strict and had to go. What survives at the database is only the
+rejection of an _exact_ duplicate — the same School, date, time **and** Stream — while parallel
+Streams, or split rooms in the same Stream, are allowed. The count of Sessions per School is an
+app cap (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule. The rule that **two
+_different_ Schools cannot share a date and time** on one trip — the Group is one travelling party
+— cannot be a plain unique index, because it must ignore same-School rows; it moves to the
+application (enforced when a trip is planned) and is listed in
+[what the database does not hold](#what-the-database-does-not-hold).
 
 **There is no `sub_cluster_id` on a Session, and the reason is worth stating because the column
 is an obvious thing to reach for.** The rule it would enforce — every School a Perjadin teaches
@@ -524,9 +529,34 @@ The primary key gives at most one teacher per Stream per Session. The composite 
 into `person (id, role)` — using the pinned `person_role` column — makes it impossible to
 record a Staff member as having taught a Stream, without a trigger.
 
-This table records who was in the room, whether or not there was a Group. It no longer decides
-who owes what — Session Records are owed by the PIC, not by the teacher of a Stream — but it
-is what tells you whose account is missing when a Session has only one.
+**This table is now scoped to online Sessions in practice**
+([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
+[ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)). It names
+**People**, and offline teaching is no longer delivered by People — a Perjadin's teachers are
+trip-scoped names (`perjadin_teacher` below), not `person` rows — so nothing offline writes here.
+The table is kept, not dropped, because online Class Records depend on it: an online Session names
+a Person per Stream, and that is who owes the Class Record. For an online Session it still records
+who was in the room, and is what tells you whose account is missing when a Session has only one.
+
+Offline Sessions record who taught through a name-based link instead:
+
+```sql
+create table session_teaching_team (
+  session_id           uuid not null references session (id) on delete cascade,
+  perjadin_teacher_id  uuid not null references perjadin_teacher (id) on delete cascade,
+
+  primary key (session_id, perjadin_teacher_id)
+);
+```
+
+"Diajar oleh" — the _set_ of a Perjadin's trip-scoped teacher names who staffed one offline
+Session's parallel rooms. A plain many-to-many with no Stream (the Session already carries it) and
+no Person. Both sides cascade: a link means nothing once either the Session or the teacher name is
+gone. It is the offline counterpart to `session_teacher`, and touches no `person` row, which is the
+whole point of the name-based model ([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)).
+
+**Offline Class Records fall out of scope** as a consequence: their filers would be the teachers,
+and a name is not a Person who can sign in and file. See the open question in `CONTEXT.md`.
 
 ---
 
@@ -994,10 +1024,15 @@ can correct a return zone; `*_mode` CHECKs `TRANSPORT_MODES`. Both value lists l
 `@sugt/domain` and are written out character for character here, for the reason
 `transaction_category_check` gives.
 
-A Group also carries **up to three extra Staff beyond the PIC** — a coordinator, a treasurer, a
-documentarian — as ordinary `group_member` rows (`role = 'Staff'`, `stream = null`), the same shape
-the PIC's row has. No new table and no order: they are a set of up to three, each distinct from the
-PIC and each other, and a substitution carries them rather than dropping them.
+A Group also carries **extra Staff beyond the PIC** — a coordinator, a treasurer, a documentarian —
+as ordinary `group_member` rows (`role = 'Staff'`, `stream = null`), the same shape the PIC's row
+has. Under the new model
+([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)) the Group is
+**Staff and only Staff** — the PIC plus up to ten others (`MAX_EXTRA_STAFF_PER_GROUP`, an app cap,
+not a DB one) — and the Teaching Team have left it entirely for `perjadin_teacher` below. No new
+table and no order: they are a set, each distinct from the PIC and each other, and a substitution
+carries them rather than dropping them. Wiring the ten-Staff, name-based-teacher planning writes is
+T2/T3 ([#137](https://github.com/mafiefa02/sugt/issues/137), [#138](https://github.com/mafiefa02/sugt/issues/138)).
 
 `perjadin` and `group_member` reference each other, so the second half cannot be inline — it
 is added once both tables exist:
@@ -1077,9 +1112,14 @@ create table group_member (
 into `person (id, role)` means a row can only exist if the pair is true there. Carrying it is
 what makes the next constraint expressible.
 
-That constraint says **exactly the Teaching Team members carry a Stream assignment.** A
-professor is assigned to a Stream when a Group is formed, not permanently; Staff never are.
-Both halves of that sentence are now enforced by the database.
+That constraint says **exactly the Teaching Team members carry a Stream assignment** — Staff never
+do. **Under the new model it is unchanged but now vacuous on one side**
+([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)): the Group is
+Staff-only, so every row is a Staff row with `stream = null`, and the CHECK is kept precisely
+because all-Staff rows satisfy it — nothing had to narrow. `group_member.stream` is therefore
+**always null now**; the column and its two CHECKs stay so the table needs no migration, and so the
+old Teaching-Team-with-a-Stream shape remains expressible if it ever returns. The professors
+themselves have moved to `perjadin_teacher`, which carries no Stream at all.
 
 **A Group is replaced wholesale, never edited.** There is no "remove one member" operation.
 Substituting a professor submits an entire replacement Group, and one transaction deletes
@@ -1092,6 +1132,46 @@ That is what makes the last Group rule cheap. See
 `receipts_settled_at` is the PIC's checklist from `product.md`. It has to be an explicit mark
 rather than something derived, because a member with no transactions is genuinely ambiguous
 between _spent nothing_ and _has not handed anything over yet_.
+
+### The Teaching Team and Pimpinan on a Perjadin
+
+```sql
+create table perjadin_teacher (
+  id           uuid primary key default gen_random_uuid(),
+  perjadin_id  uuid not null references perjadin (id) on delete cascade,
+  name         text not null
+);
+
+create table perjadin_pimpinan (
+  perjadin_id  uuid not null references perjadin (id) on delete cascade,
+  name         text not null check (name in (
+                 'Prof. Dr. Fatimah Arofiati Noor, S.Si., M.Si.',
+                 'Oktofa Yudha Sudrajad, S.T., M.S.M., Ph.D.',
+                 'Dr. Anton Timur Jaelani, S.Si., M.Si.')),
+
+  primary key (perjadin_id, name)
+);
+```
+
+**`perjadin_teacher` is a Perjadin's Teaching Team as trip-scoped names**
+([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)) — plain
+strings entered on the trip, up to twenty (`MAX_TEACHING_TEAM_PER_PERJADIN`, an app cap), **not
+`person` rows**. The professors who deliver offline Sessions are external to DITSAMA and will not
+sign in; modelling them as People needed an email and implied they could authenticate and file
+records, none of which is true. It is a table of its own, not a column on `perjadin`, because names
+are added, renamed and removed one at a time (T3), and each row has an `id` so
+`session_teaching_team` can link the ones who taught a given offline Session. It carries **no
+Stream and no Person FK** — a name is not a Person and a Stream lives on the Session now. `on delete
+cascade`: the names are the trip's and outlive nothing.
+
+**`perjadin_pimpinan` records a Pimpinan on a Perjadin — record-only.** A leader of DITSAMA ITB (one
+of the fixed three) who rarely joins the Kelompok Perjalanan to monitor the offline Sessions is
+noted here and named on the Laporan Perjadin, but is **not a working Group member**: they file no
+Perjadin Evaluation and add nothing to the Preparation Checklist, which is exactly why they are not
+a `group_member` row. `name` CHECKs the three `PIMPINAN` values from `@sugt/domain` character for
+character, the same discipline as `transaction.category`; the primary key `(perjadin_id, name)`
+makes a Pimpinan recordable at most once per trip. Writing and rendering them is T3/T7
+([#138](https://github.com/mafiefa02/sugt/issues/138), [#142](https://github.com/mafiefa02/sugt/issues/142)).
 
 ### The Preparation Checklist
 
@@ -1487,16 +1567,32 @@ non-browser-reachable.
 
 Stated plainly, because an absent constraint reads as an oversight otherwise.
 
-**"At least one Teaching Team member assigned to each Stream."** This is the one Group rule
-that is not declarative — it is a cross-row count, and no CHECK can see sibling rows. Because
-a Group is submitted whole, the check runs once against the complete payload before anything
-is written, and there is no partial state for it to miss. The gap is that raw SQL can still
-produce a Group with no Research professor. If that ever happens for real, the upgrade is a
-`deferrable initially deferred` constraint trigger, which was rejected here only because
-wholesale replacement made it unnecessary.
+**"At least one Teaching Team member assigned to each Stream."** This Group rule is **gone**
+([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)): the Group is
+Staff-only and its minimum at planning is just the PIC, so there is no per-Stream teaching-team rule
+left to hold. A Perjadin _should_ end with a teaching team, but nothing blocks it — completeness is
+the hand-ticked "Pengajar sudah lengkap" box, not a constraint.
 
-**"Both Streams were taught."** Same shape: `session_teacher` guarantees at most one teacher
-per Stream, not that both rows exist. Required at the point a Session is marked delivered.
+**"Two _different_ Schools cannot share a date and time on one Perjadin."** The Group is one
+travelling party and cannot be in two places at once. This used to be the
+`session_one_school_at_a_time_per_perjadin` index, but ADR-0019 dropped it — parallel Sessions at
+one School run at the same moment on purpose, and a plain unique index cannot forbid two _different_
+Schools while allowing two rows at the _same_ School. So it is now the application's, checked when a
+trip is planned (`planPerjadin` groups the planned Sessions by `(date, time)` and refuses any slot
+holding more than one distinct School, naming the pair). The database still rejects an _exact_
+duplicate — same School, date, time and Stream — through `session_no_duplicate_offline_per_school_per_perjadin`.
+
+**Three app caps on the new Perjadin model.** None is a DB constraint, all live in the application in
+the same spirit as the Group rules: **ten** offline Sessions per School per Perjadin
+(`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`, a safety ceiling never reached in practice),
+**twenty** trip-scoped teacher names per Perjadin (`MAX_TEACHING_TEAM_PER_PERJADIN`), and **ten**
+extra Staff beyond the PIC on a Group (`MAX_EXTRA_STAFF_PER_GROUP`). All three constants are in
+`@sugt/domain`; the writes that enforce them are T2/T3.
+
+**"Both Streams were taught."** For an online Session, `session_teacher` guarantees at most one
+teacher per Stream, not that both rows exist. Required at the point an online Session is marked
+delivered. An offline Session now teaches one Stream (the `stream` column), so the two-Streams
+expectation is an online-only rule.
 
 **That an arranged offline Session falls inside its Perjadin.** `session.held_on` and
 `perjadin.starts_on`/`ends_on` are unrelated columns as far as the database is concerned. The
@@ -1668,7 +1764,10 @@ exists at all.
 
 `group_member` cascades. `transaction` cascades, and `transaction_evidence` cascades from
 that — so deleting a Perjadin destroys its acquittal, objects in the `receipts` bucket
-included, and nothing warns you.
+included, and nothing warns you. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
+trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive nothing — and
+`session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
+links go with the names.
 
 `session.perjadin_id` deliberately does **not** cascade and has no `on delete` action at all,
 so an offline Session blocks the delete. A trip that produced teaching cannot be quietly

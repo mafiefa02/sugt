@@ -44,7 +44,23 @@ export type PlannedSession = {
    * time — see the `session-time-clash` refusal.
    */
   startsAt: string;
+  /**
+   * The Session's Stream — STEM or Research (ADR-0019). Optional here **only as a foundation
+   * seam**: the schema now requires every offline Session to carry one (`session_offline_iff_stream`),
+   * but the planning form that supplies streams per Session is T2 ([#137](https://github.com/mafiefa02/sugt/issues/137)).
+   * Until it lands, a caller that omits this gets the `DEFAULT_PLANNED_STREAM` placeholder below so the
+   * insert satisfies the CHECK. Remove the default and make this required when T2 wires the form.
+   */
+  stream?: Stream;
 };
+
+/**
+ * Placeholder Stream for offline Sessions until T2's planning form supplies one per Session
+ * ([#137](https://github.com/mafiefa02/sugt/issues/137), ADR-0019). This exists so #136 can land the
+ * `session.stream` column and its CHECK without rewriting the planning mutation — it is **not** a
+ * modelling claim that every offline Session is STEM.
+ */
+const DEFAULT_PLANNED_STREAM: Stream = "STEM";
 
 /**
  * A whole trip, submitted at once.
@@ -144,9 +160,11 @@ export type PlanPerjadinResult =
    */
   | { outcome: "school-outside-sub-cluster"; offending: string[] }
   /**
-   * Two Schools sharing a date **and** a time. The Group is in one place at a time, so this is
-   * impossible; `session_one_school_at_a_time_per_perjadin` is the database's backstop, but a
-   * named pair up front beats a constraint violation surfacing from inside the transaction.
+   * Two **different** Schools sharing a date **and** a time. The Group is in one place at a time,
+   * so this is impossible. Since ADR-0019 there is **no database backstop** — the old
+   * `session_one_school_at_a_time_per_perjadin` index forbade parallel Sessions at one School too
+   * and had to go, so this rule is the application's alone (see `data-model.md`'s "what the
+   * database does not hold"). Two Sessions at the *same* School and moment are allowed.
    */
   | { outcome: "session-time-clash"; clashes: SessionTimeClash[] };
 
@@ -226,10 +244,15 @@ export async function planPerjadin(
   );
   if (outside.length > 0) return { outcome: "school-outside-sub-cluster", offending: outside };
 
-  // Two Schools on the same date and the same time is the Group being in two places at once —
-  // `session_one_school_at_a_time_per_perjadin` refuses it, but a named pair up front is a
-  // better message than a constraint violation from inside the transaction. Sharing a date
-  // alone stays legal: that is exactly what the per-School start time exists to serve.
+  // Two *different* Schools on the same date and the same time is the Group being in two places at
+  // once. Since ADR-0019 no index refuses it — the old `session_one_school_at_a_time_per_perjadin`
+  // was dropped so parallel Sessions at one School become possible — so this app check is the only
+  // guard for the different-Schools rule. It groups planned Sessions by `(date, time)` and flags a
+  // slot holding more than one. Note it still flags two Sessions at the *same* School too, which
+  // ADR-0019 now permits; that does not arise yet because the current form plans one Session per
+  // School, and T2 ([#137](https://github.com/mafiefa02/sugt/issues/137)) refines this to compare
+  // distinct Schools when it introduces several Sessions per School. Sharing a date alone stays
+  // legal: that is exactly what the per-School start time exists to serve.
   const slots = new Map<string, SessionTimeClash>();
   for (const planned of input.sessions) {
     const key = `${planned.heldOn} ${planned.startsAt}`;
@@ -302,6 +325,9 @@ export async function planPerjadin(
         schoolId: planned.schoolId,
         perjadinId: id,
         mode: "offline" as const,
+        // Foundation seam: a Stream is required on every offline Session now; T2 supplies it per
+        // Session, and until then the placeholder keeps `session_offline_iff_stream` satisfied.
+        stream: planned.stream ?? DEFAULT_PLANNED_STREAM,
         heldOn: planned.heldOn,
         startsAt: planned.startsAt,
       })),

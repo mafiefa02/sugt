@@ -52,3 +52,29 @@ ticket, not a filed confirmation — and nothing in the tool waits on the checkl
 is an internal-monitoring aid for Staff, and any signed-in Staff may tick any Perjadin's boxes; the
 write opens with the Staff-only choke point for the usual reason (a Server Action is a public
 endpoint), not because it touches money, which it does not.
+
+## Amendment — the per-teacher boxes are gone, and one box auto-un-ticks
+
+Two things changed when the teaching team stopped being People
+([ADR-0020](./0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)).
+
+**The per-teacher `Konfirmasi dengan {name}` boxes are removed.** They were keyed `dosen:{person_id}`,
+and a Perjadin's teaching team no longer has person ids — it is a list of trip-scoped names, now up to
+twenty of them, which would have been twenty boxes. In their place is a single fixed item
+**`pengajar_lengkap`**, labelled **"Pengajar sudah lengkap"**. The set of items is therefore now a
+flat, fixed seven — the original six plus this one — with **no per-member derivation left**. `N = 7`
+for every Perjadin, and the read-time assembly no longer reads the Group at all.
+
+**`pengajar_lengkap` is the one box the tool un-ticks by itself**, and this is a deliberate exception to
+the rule stated above that nothing ticks a box automatically. It is ticked by hand like any other, but
+**any change to the teaching team — a name added, removed or renamed — deletes the tick**. The reason
+is exactly the mental-load argument the checklist exists to serve: every change to the roster is a
+thing whoever manages the trip must re-confirm, so the box drops to unticked and forces a fresh manual
+check that the team is, in fact, complete.
+
+Mechanically this couples the teaching-team write to the checklist — a `DELETE` of the
+`(perjadin_id, 'pengajar_lengkap')` row inside whatever mutates the team. That is the coupling this ADR
+originally _declined_ for orphaned per-teacher ticks, and the trade is the opposite one on purpose:
+there, leaving a tick alone lost nothing; here, un-ticking is the entire point. The exception is
+narrow — one fixed key, cleared on one class of write — and does not generalise. No other box is ever
+touched by anything but a hand.

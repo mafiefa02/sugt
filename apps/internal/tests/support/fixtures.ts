@@ -170,11 +170,18 @@ export type OfflineSessionFixture = {
   schoolId: string;
   heldOn: string;
   /**
-   * Local wall-clock start time. Defaults to a mid-morning hour. Two offline Sessions on the
-   * same Perjadin and date must differ here — `session_one_school_at_a_time_per_perjadin`
-   * forbids the Group being at two Schools at the same moment.
+   * Local wall-clock start time. Defaults to a mid-morning hour. Two offline Sessions at
+   * *different* Schools on one Perjadin must differ here — the Group cannot be at two Schools at
+   * once — but that rule now lives in the application (ADR-0019), not a unique index. What the DB
+   * still forbids is an *exact* duplicate: same School, date, time **and** Stream.
    */
   startsAt?: string;
+  /**
+   * The Session's Stream — STEM or Research (ADR-0019). An offline Session must carry one
+   * (`session_offline_iff_stream`); defaults to STEM so tests that do not care about the Stream
+   * stay terse, and is overridable for the ones that do.
+   */
+  stream?: Stream;
   status?: SessionStatus;
   /** The Perjadin the Session happens on. `addPerjadin` builds one. */
   perjadinId: string;
@@ -200,6 +207,7 @@ export async function addOfflineSession(fixture: OfflineSessionFixture) {
     .values({
       schoolId: fixture.schoolId,
       mode: "offline",
+      stream: fixture.stream ?? "STEM",
       heldOn: fixture.heldOn,
       startsAt: fixture.startsAt ?? "09:00",
       status,

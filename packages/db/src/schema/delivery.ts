@@ -15,7 +15,7 @@ import {
 
 import { person } from "./people";
 import { school } from "./reference";
-import { perjadin } from "./travel";
+import { perjadin, perjadinTeacher } from "./travel";
 
 /**
  * Which rows `session_one_online_per_school_per_day` covers: an online Session that has
@@ -60,6 +60,12 @@ export const session = pgTable(
     // guarantee rather than this module's hope. `$type<>()` comes before `.default()` so
     // that the default is checked against the set too.
     mode: text("mode").$type<SessionMode>().notNull(),
+    // An offline Session carries one Stream — STEM or Research — and an online one none:
+    // the STEM/Research split is now a property of the Session, not of who teaches
+    // (ADR-0019). Nullable so online rows can hold null; `session_stream_check` pins the
+    // two allowed values and `session_offline_iff_stream` pins when it may be null at all,
+    // exactly mirroring the `mode`/`perjadin_id` equivalence below.
+    stream: text("stream").$type<Stream>(),
     heldOn: date("held_on").notNull(),
     // A wall-clock start time local to the School, in the School's Time Zone. NOT NULL
     // immediately — no Session exists in any live database, so there is nothing to
@@ -80,6 +86,10 @@ export const session = pgTable(
   (t) => [
     check("session_mode_check", sql`${t.mode} in ('offline', 'online')`),
     check("session_status_check", sql`${t.status} in ('arranged', 'delivered', 'cancelled')`),
+    check("session_stream_check", sql`${t.stream} in ('STEM', 'Research')`),
+    // An offline Session carries a Stream; an online one never does — the mirror of the
+    // `mode`/`perjadin_id` equivalence, and set in the same commit as the column (ADR-0019).
+    check("session_offline_iff_stream", sql`(${t.mode} = 'offline') = (${t.stream} is not null)`),
     // The sharpest rule in the delivery half, and an equivalence in both directions:
     // an offline Session has a Perjadin and an online Session has none.
     check(
@@ -109,14 +119,7 @@ export const session = pgTable(
       columns: [t.onlinePicPersonId, t.onlinePicRole],
       foreignColumns: [person.id, person.role],
     }),
-    // "Creating a Perjadin is what brings its Sessions into existence — one per
-    // School on the trip." Partial, because cancelled Sessions accumulate: a School
-    // whose visit was called off and re-arranged on the same trip must not collide
-    // with its own cancelled row.
-    uniqueIndex("session_one_per_school_per_perjadin")
-      .on(t.perjadinId, t.schoolId)
-      .where(sql`status <> 'cancelled'`),
-    // The gap the index above cannot close. It keys on `perjadin_id`, which is NULL for
+    // The gap the online index below cannot close. It keys on `perjadin_id`, which is NULL for
     // every online Session, and Postgres treats NULLs in a unique index as distinct — so
     // nothing stopped two online Sessions for one School on one day. Jadwalkan Sesi
     // daring arranges them from Coverage in a batch, one date across a multi-selection,
@@ -128,26 +131,39 @@ export const session = pgTable(
     uniqueIndex("session_one_online_per_school_per_day")
       .on(t.schoolId, t.heldOn)
       .where(ONLINE_SESSION_STILL_STANDS),
-    // The Group is in one place at a time. A Perjadin reaches several Schools, each on its
-    // own date, and morning-at-one / afternoon-at-another is exactly what the start time
-    // exists to serve — so two Schools may share a date, but not a date AND a time on one
-    // trip, which is physically impossible and a typo every time it appears. Partial in the
-    // same way as the other two: cancelled rows accumulate and must not collide with their
-    // own replacements. Online Sessions are untouched — their `perjadin_id` is null and
-    // Postgres treats nulls in a unique index as distinct.
-    uniqueIndex("session_one_school_at_a_time_per_perjadin")
-      .on(t.perjadinId, t.heldOn, t.startsAt)
+    // Many offline Sessions per School per trip are now the point, not a collision (ADR-0019):
+    // a School's participants are too many for one room, so a period splits into parallel rooms
+    // — same School, same date, same start time, same Stream — each staffed by different
+    // teachers. So the only thing forbidden here is an *exact* duplicate: two live offline
+    // Sessions identical in Stream as well as School, date and time. Parallel rooms differ by
+    // nothing the row records, so this index does not separate them; that count is an
+    // app-level cap (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule.
+    //
+    // The old `session_one_school_at_a_time_per_perjadin` — one that forbade two Sessions at
+    // one moment across the *whole* trip — is dropped: "two DIFFERENT Schools cannot share a
+    // date and time" survives as a rule but is not expressible as a plain unique index (it
+    // must ignore same-School rows), so it moves to the application (see T2) and to
+    // `data-model.md`'s "what the database does not hold". Partial in the same way as the
+    // online index: cancelled rows accumulate and must not collide with their replacements,
+    // and online Sessions are untouched because their `perjadin_id` and `stream` are null.
+    uniqueIndex("session_no_duplicate_offline_per_school_per_perjadin")
+      .on(t.perjadinId, t.schoolId, t.heldOn, t.startsAt, t.stream)
       .where(sql`status <> 'cancelled'`),
   ],
 );
 
 /**
- * Who taught which Stream. The primary key gives at most one teacher per Stream per
- * Session; the composite foreign key makes it impossible to record a Staff member as
- * having taught one.
+ * Who taught which Stream — **online Sessions only, in practice** (ADR-0019, ADR-0020).
+ * The primary key gives at most one teacher per Stream per Session; the composite foreign
+ * key makes it impossible to record a Staff member as having taught one.
  *
- * This is also the denominator for who owes a Class Record: these two people crossed
- * with the three Class kinds is the six a Session expects.
+ * This is also the denominator for who owes a Class Record: these two People crossed
+ * with the three Class kinds is the six an online Session expects.
+ *
+ * Offline Sessions no longer write here: their teachers are trip-scoped names, not People,
+ * recorded through `session_teaching_team` below. The table is kept — online Class Records
+ * depend on it — but nothing offline inserts a row; see `docs/data-model.md`'s Delivery
+ * section for that scoping.
  */
 export const sessionTeacher = pgTable(
   "session_teacher",
@@ -168,5 +184,40 @@ export const sessionTeacher = pgTable(
       columns: [t.personId, t.personRole],
       foreignColumns: [person.id, person.role],
     }),
+  ],
+);
+
+/**
+ * "Diajar oleh" — which of a Perjadin's trip-scoped teacher names taught one offline
+ * Session, in parallel (ADR-0019, ADR-0020). A set, not one-per-Stream: the Session already
+ * carries its Stream, and several `perjadin_teacher` names may have staffed its parallel
+ * rooms, so this is a plain many-to-many with no Stream and no Person.
+ *
+ * Both sides cascade on delete — a link is meaningless once either the Session or the
+ * teacher name is gone. It is the offline counterpart to `session_teacher`; nothing here
+ * touches a `person` row, which is the whole point of the name-based model.
+ */
+export const sessionTeachingTeam = pgTable(
+  "session_teaching_team",
+  {
+    sessionId: uuid("session_id").notNull(),
+    perjadinTeacherId: uuid("perjadin_teacher_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.sessionId, t.perjadinTeacherId] }),
+    // Explicit FK names, like every other foreign key in the schema: the drizzle default here —
+    // `session_teaching_team_perjadin_teacher_id_perjadin_teacher_id_fk` — is 63 characters and
+    // Postgres truncates it to 62, so the name in the database would not match the one the snapshot
+    // holds. Short, intentional names sidestep that and read better.
+    foreignKey({
+      name: "session_teaching_team_session_fk",
+      columns: [t.sessionId],
+      foreignColumns: [session.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "session_teaching_team_teacher_fk",
+      columns: [t.perjadinTeacherId],
+      foreignColumns: [perjadinTeacher.id],
+    }).onDelete("cascade"),
   ],
 );

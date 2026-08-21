@@ -83,8 +83,8 @@ export type ArrangeOnlineSessionResult =
  * `on conflict do nothing` names `session_one_online_per_school_per_day` as its arbiter and
  * repeats its predicate verbatim from `ONLINE_SESSION_STILL_STANDS` — Postgres refuses to infer
  * an index whose predicate does not match, which is a runtime failure. With no target it would
- * also swallow a violation of `session_one_per_school_per_perjadin` or the primary key, and
- * neither of those is a user state. **The index keys on `(school_id, held_on)` and not
+ * also swallow a violation of the primary key, which is not a user state. **The index keys on
+ * `(school_id, held_on)` and not
  * `starts_at`**: two online Sessions at one School on one day is a mistake whatever the hour, so
  * a returned collision means the day is taken, not the slot.
  */

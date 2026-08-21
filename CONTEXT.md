@@ -82,7 +82,7 @@ A small set of students within the Student Class who produce one Final Project t
 _Avoid_: group (reserved for the travelling party), sub-group, team, squad
 
 **Session**:
-A single teaching occasion at one School — one date, one start time, one mode, offline or online — at which all three of its Classes are taught. Its start time is local to the School, in the School's Time Zone, whichever mode it is and wherever the people teaching it are. Comes into existence when it is arranged, not before. The team says _Sesi_; it translates cleanly.
+A single teaching occasion at one School — one date, one start time, one mode. Its start time is local to the School, in the School's Time Zone, whichever mode it is and wherever the people teaching it are. Comes into existence when it is arranged, not before. The team says _Sesi_; it translates cleanly. **The two modes are now shaped differently** (see [ADR-0019](./docs/adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md)): an **online** Session teaches all three Classes in both Streams, and a School has six; an **offline** Session carries one **Stream** — STEM or Research — and a School may have several on one Perjadin, each on its own date and time, taught by a set of that Perjadin's Teaching Team in parallel.
 _Avoid_: visit, teaching, meeting, class (a Session is an occurrence; a Class is people)
 
 ### People and travel
@@ -97,27 +97,31 @@ The internal UI labels this role **DITSAMA**; the domain term is still **Staff**
 _Avoid_: leadership, admin, organiser (senior Staff are Staff; there is no separate role)
 
 **Teaching Team**:
-The professors and instructors who deliver Sessions — a maintained roster of named People, not simply whoever happened to teach. A member is assigned to a Stream when a Group is formed, not permanently; someone able to teach both is available for both.
-_Avoid_: lecturers, trainers, facilitators
+The professors and instructors who deliver Sessions. On a **Perjadin** they are **trip-scoped names**, not People — entered on the trip, up to twenty, never invited and never signed in, carrying no Stream and no Group membership (see [ADR-0020](./docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)). An offline **Session** records the set of them who taught it in parallel. Online **Sessions** are the exception: they still name a **Person** per **Stream** through `session_teacher`, so the `Person` role `Teaching Team` lives on for them alone.
+_Avoid_: lecturers, trainers, facilitators; roster (the Perjadin list is per-trip, not maintained)
 
 **Perjadin**:
-An authorised duty travel — one Group, one date range, one Sub-Cluster — that must be accounted for administratively afterwards. The Sub-Cluster is what the Group goes to; the Schools it teaches at are that Sub-Cluster's, each on its own date and at its own time inside the range.
+An authorised duty travel — one Group, one date range, one Sub-Cluster — that must be accounted for administratively afterwards. The Sub-Cluster is what the Group goes to; the Schools it teaches at are that Sub-Cluster's, each with one or more offline **Sessions** on their own dates and times inside the range.
 _Avoid_: trip, visit, travel, duty travel (a Perjadin is the authorisation and its accounting, not the journey; the English translations name something vaguer)
 
 **Group**:
-The people who travel on one Perjadin — around four, drawn from Staff and Teaching Team for that Perjadin alone. Groups are not standing teams and are not tied to a Cluster.
+The **Staff** who travel on one Perjadin — the **PIC** plus up to ten other DITSAMA Staff, for that Perjadin alone. Groups are not standing teams and are not tied to a Cluster. **Teaching Team no longer belong to the Group** — they are trip-scoped names ([ADR-0020](./docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)), recorded on the Perjadin but not `group_member` rows — so a Group is now Staff and only Staff. **Pimpinan** who join a trip are recorded alongside it but are not working Group members. The team calls the travelling party _Kelompok Perjalanan_.
 _Avoid_: team, squad, class
+
+**Pimpinan**:
+A leader of DITSAMA ITB — one of a fixed set of three named people — who, rarely, joins a Perjadin's **Kelompok Perjalanan** for the offline Sessions to monitor and evaluate. Recorded on the Perjadin (optional, editable, chosen from the fixed set) and named on the **Laporan Perjadin**, but **record-only**: a Pimpinan is not a working **Group** member, files no **Perjadin Evaluation** and adds nothing to the **Preparation Checklist**.
+_Avoid_: leadership (that is the Staff role generally), chairman, director
 
 **PIC**:
 The Staff member accountable for one piece of work being filed. A Perjadin has one, answerable for its administrative reporting; an online Session has one of its own, since it has no Group. The PIC files the Session Record — the account of the visit — and no Class Records, because they organised the Session rather than taught it.
 _Avoid_: lead, owner, manager
 
 **Preparation Checklist**:
-A Perjadin's private, hand-ticked list of pre-departure to-dos — an internal-monitoring aid for Staff, shown only on the Perjadin's own screen. It carries no money, no deadline and no record; nothing ever ticks a box automatically. Every Perjadin has the same six fixed **Preparation Items** plus one per Teaching Team member of its Group, and its completion shows on the Perjadin list as a `Persiapan: x/N` count.
+A Perjadin's private, hand-ticked list of pre-departure to-dos — an internal-monitoring aid for Staff, shown only on the Perjadin's own screen. It carries no money, no deadline and no record. Every Perjadin has the **same seven fixed Preparation Items** — no per-member derivation any more — and its completion shows on the Perjadin list as a `Persiapan: x/N` count, `N = 7`.
 _Avoid_: preparation status, readiness, onboarding, workflow (it tracks nothing but hand-ticked boxes and blocks nothing)
 
 **Preparation Item**:
-One line of a **Preparation Checklist**. Six are fixed for every Perjadin — SK Perjalanan, the two tickets, lodging, local transport and a single "confirmed with the Staff" box; the rest are one per Teaching Team member, each glued to that Person so a name change never disturbs it and a member who leaves the Group leaves their tick behind, ignored until they return. Only the ticked items are stored; the set of items is derived from the fixed list and the current Group.
+One line of a **Preparation Checklist**. Seven are fixed for every Perjadin — SK Perjalanan, the two tickets, lodging, local transport, a single "confirmed with DITSAMA" box, and **"Pengajar sudah lengkap"**. Only the ticked items are stored. Every box is ticked by hand; every box stays ticked until a hand un-ticks it — **except "Pengajar sudah lengkap"**, the one box the tool clears by itself whenever the Teaching Team changes (a name added, removed or renamed), so that each change forces a fresh manual confirmation that the team is complete (see the amendment to [ADR-0018](./docs/adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md)).
 _Avoid_: task, step, todo (it is neither assigned nor sequenced)
 
 ### Reporting
@@ -192,27 +196,27 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - Each **Class** is taught in both **Streams** — six teaching threads per **School**
 - The **Student Class** divides into ten to thirty **Project Teams**; each produces exactly one **Final Project**
 - A **School** therefore ends the Programme with many **Final Projects**, not one
-- A **Session** is held at exactly one **School** and teaches all three of its **Classes**
-- A **School** receives ten **Sessions**: four offline and six online, the same for every **School**
+- A **Session** is held at exactly one **School**. An **online Session** teaches all three of its **Classes** in both **Streams**; an **offline Session** carries one **Stream** ([ADR-0019](./docs/adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md))
+- A **School** receives **six online Sessions**, the same for every **School**. Its **offline Sessions** are no longer a fixed four — a **Perjadin** may hold several at one **School**, each single-**Stream** (capped at ten per **School** per trip as a safety ceiling, never reached in practice)
 - A **Session** exists only once arranged, and is then either delivered or cancelled
 - A **School**'s progress is delivered **Sessions** against that fixed number; a cancelled **Session** counts for nothing but stays visible as an attempt that failed
 - A **Perjadin** carries exactly one **Group** and has exactly one **PIC**
 - A **Group** exists for one **Perjadin** only — no **Cluster** has a standing team
-- A **Group** must contain one **PIC** and at least one **Teaching Team** member assigned to each **Stream**
-- A person is **Staff** or **Teaching Team**, never both, so a valid **Group** is always at least three people
-- A **Session** records which **Teaching Team** member taught each **Stream**, whether or not it had a **Group** — which is how an online **Session** still knows who was in the room and therefore who might file a **Session Record**
+- A **Group** contains one **PIC** and up to ten other **Staff**, and nothing else; its minimum is just the **PIC**. **Teaching Team** are trip-scoped names recorded on the **Perjadin**, not **Group** members, and **Pimpinan** who join are recorded but do not travel as working members
+- The **Person** role is still exclusive — a **Person** is **Staff** or **Teaching Team**, never both — but that now only bears on online **Sessions**, since a **Group** holds no **Teaching Team**
+- An **online Session** records which **Teaching Team** **Person** taught each **Stream** through `session_teacher`, which is how it still knows who was in the room and therefore who might file a **Session Record**. An **offline Session** carries one **Stream** and records the set of the **Perjadin**'s **Teaching Team** names who taught it in parallel — plain names, filing nothing
 - Offline **Sessions** happen during a **Perjadin**; online **Sessions** have no **Perjadin** at all
 - A **Perjadin** goes to exactly one **Sub-Cluster**, and every **School** it teaches at belongs to that **Sub-Cluster**
 - A **Perjadin** need not reach every **School** in its **Sub-Cluster** — the **Sub-Cluster** says which **Schools** are eligible, the plan says which are visited this time
-- Each of those **Schools** gets its own **Session**, on its own date and at its own start time inside the **Perjadin**'s range — the **Group** travels once and teaches on several days
-- No two **Sessions** on one **Perjadin** share a date _and_ a start time; the **Group** cannot be at two **Schools** at once
+- Each of those **Schools** gets one or more offline **Sessions**, each on its own date and start time inside the **Perjadin**'s range — the **Group** travels once and teaches on several days
+- Two offline **Sessions** at **different Schools** cannot share a date _and_ a start time; the **Group** cannot be at two **Schools** at once. Two at the **same School** and the same moment are allowed — parallel **Streams** or split rooms ([ADR-0019](./docs/adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md))
 - Online **Sessions** are arranged one **School** at a time, because each is held at a moment of its own — there is nothing a batch of them would share
 - A **Perjadin** is funded by an **Advance**, fixed when the trip is planned and transferred to the **PIC** before departure
 - A **Perjadin** yields exactly one **Perjadin Report** covering the whole **Group**, filed by its **PIC**, itemising every transaction with evidence and reconciling them against the **Advance**
 - Whatever is left of an **Advance** is returned to the **Treasurer**
 - An offline **Session**'s **PIC** is its **Perjadin**'s; an online **Session** has a **PIC** of its own, drawn from **Staff**
 - A **Session** is judged from three vantage points, each with its own **Aspects**: the **PIC** files one **Session Record**, each **Teaching Team** member files a **Class Record** per **Class**, and **Participants** leave **Participant Feedback** on the **Class** they sat in
-- Six **Class Records** are the full set for a **Session** — two professors, one per **Stream**, each filing for all three **Classes**
+- Six **Class Records** are the full set for an **online Session** — two professors, one per **Stream**, each filing for all three **Classes**. **Offline Sessions no longer produce Class Records**: their **Teaching Team** are names, not signed-in People, so nobody files (see Open questions)
 - **Stream** needs no field on a **Class Record**: it follows from who filed it. Two **Class Records** on one **Class** are STEM and Research disagreeing, which is worth having
 - A **Rating** of 7 or below cannot be filed on a **Class Record** or a **Session Record** without saying what went wrong. A **Participant** owes nothing and is held to no such rule
 - Nothing is required and nothing is blocked. The tool names who has not filed so they can be chased; **Participants** cannot be named, because nobody knows who was in the room
@@ -256,9 +260,13 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - **Sub-Cluster** was very nearly called a "school group", which is unusable: **Group** is the travelling party, so "the group goes to the school group" names two different kinds of thing with one word in one sentence. _Kelompok Sekolah_ — what the team says — was the other candidate and was rejected on the rule stated at the top of this file: Indonesian is kept only where no English term means the same thing, and unlike **Perjadin** or **GTK**, this concept translates. "Sub-Cluster" also carries its relationship to the **Cluster**, which "Kelompok Sekolah" does not.
 - A **Session** was a calendar day and nothing finer, on the ground that Indonesia spans three time zones and a date needs no zone to be unambiguous. Resolved: a **Session** now carries a start time as well, and the reasoning is preserved rather than overturned — the time is local to the **School**, and the **Time Zone** that makes it meaningful comes from the **Province**, which is a fact the Programme already held. What was rejected is storing a Session as an _instant_, which would have made every reader convert before they could read it.
 - The source spreadsheet groups **Schools** by island (Sumatera, Jawa, Kalimantan, Sulawesi/Maluku/Papua) and separately by numbered **Cluster**, and the two do not agree — Jawa splits across two **Clusters** and Kalimantan merges with Sulawesi into one — resolved: only the **Cluster** is a level the Programme is organised by. The island grouping is a way of reading a spreadsheet and has no term here.
+- **Stream** was a property of the **Teaching Team** — a professor was assigned to STEM or Research when a **Group** formed — and a **Session** taught both at once. Resolved: for **offline Sessions**, **Stream** is now a property of the **Session** itself, and one occasion is one Stream; the same people may teach a Research Session then a STEM one. Online Sessions are unchanged. See [ADR-0019](./docs/adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md).
+- **Teaching Team** was "a maintained roster of named People". Resolved: on a **Perjadin** they are **trip-scoped names**, never People and never invited, because the professors who teach offline will not sign in. The **Person** role `Teaching Team` survives only for online **Sessions**, so the term now names two things that must be read by context. See [ADR-0020](./docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md).
+- **Staff** vs **DITSAMA**: previously only the **role label** rendered as "DITSAMA" (the stored value staying `Staff`, #116). Resolved: **every** string displayed as "Staff"/"staff" now reads "DITSAMA", the "confirmed with the Staff" **Preparation Item** included; the **stored** value is still `Staff` and no data migrates.
 
 ## Open questions
 
+- **What replaces Class Records and the ten-Session progress metric for the offline half?** Making offline **Sessions** single-**Stream** and their **Teaching Team** plain names ([ADR-0019](./docs/adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md), [ADR-0020](./docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)) leaves two things unanswered and **deliberately deferred**: offline Sessions produce no **Class Records** (their teachers cannot sign in to file), and `delivered / 10` no longer describes a School whose offline count is now variable. Online Class Records and the six online Sessions are untouched. How offline delivery is evaluated and counted is a later decision, not an oversight.
 - When is a **Final Project** due? Still unset.
 - Each **Cluster**'s **Problem** — the specific challenge drawn from its **Topic**. The four **Topics** are set (Mitigasi Bencana, Smart City, Ketahanan Pangan, Waste Management). The **Problems** currently in the seed are **invented placeholders**, plausible for each **Cluster**'s geography but not DITSAMA's. They exist so screens have something real-shaped to render; treat any of them appearing in a design or a document as unconfirmed.
 - No stages are defined between a **School**'s first and last **Session**, and **Final Projects** are not tracked at all. Progress is therefore delivered **Sessions** out of ten, and nothing else — this is the deliberate position, not an oversight.

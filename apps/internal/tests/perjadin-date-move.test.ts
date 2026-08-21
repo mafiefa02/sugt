@@ -33,8 +33,10 @@ async function oneSchool(slug = "sman-1-bandung") {
 }
 
 /**
- * Three Schools under one Cluster. A trip visits a School at most once —
- * `session_one_per_school_per_perjadin` — so a trip with three Sessions needs three Schools.
+ * Three Schools under one Cluster, so these tests can put a Session at each and move the trip's
+ * dates across all three. (Since ADR-0019 a School may hold several offline Sessions per trip, so
+ * three Sessions no longer *need* three Schools — this fixture just keeps one Session per School,
+ * which is what the current planning form produces.)
  */
 async function threeSchools() {
   await addProvince("JB", "Jawa Barat");
