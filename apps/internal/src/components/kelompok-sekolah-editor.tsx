@@ -6,6 +6,7 @@ import {
   moveSchoolAction,
   renameSubClusterAction,
 } from "-/app/(app)/kelompok-sekolah/actions";
+import { shortenKabupaten } from "-/lib/format-destination";
 import type {
   BlockingPerjadin,
   ClusterWithSubClusters,
@@ -371,7 +372,7 @@ function SchoolRow({
           <ul className="mt-1 list-disc pl-4">
             {blocking.map((perjadin) => (
               <li key={perjadin.id}>
-                {perjadin.destination} ({perjadin.startsOn} – {perjadin.endsOn})
+                {shortenKabupaten(perjadin.destination)} ({perjadin.startsOn} – {perjadin.endsOn})
               </li>
             ))}
           </ul>

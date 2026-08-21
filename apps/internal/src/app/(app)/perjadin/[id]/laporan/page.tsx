@@ -1,6 +1,7 @@
 import { AcquittalReceipts } from "-/components/laporan-perjadin/acquittal-receipts";
 import { AcquittalTransactions } from "-/components/laporan-perjadin/acquittal-transactions";
 import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-report";
+import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
 import { signedReceiptUrl } from "-/lib/receipt-media";
 import { staffSurface } from "-/lib/staff-surface";
@@ -47,7 +48,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
           href={`/perjadin/${id}`}
           className="text-sm text-muted-foreground hover:underline"
         >
-          {acquittal.destination}
+          {shortenKabupaten(acquittal.destination)}
         </Link>
         <h1 className="mt-1 font-heading text-lg font-medium">Laporan Perjadin</h1>
         <p className="text-sm text-muted-foreground tabular-nums">

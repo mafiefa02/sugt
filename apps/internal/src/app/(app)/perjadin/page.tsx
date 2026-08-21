@@ -1,3 +1,4 @@
+import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
 import { perjadinDirectory } from "@sugt/db/queries";
 import Link from "next/link";
@@ -44,7 +45,7 @@ export default async function Page() {
                 href={`/perjadin/${trip.id}`}
                 className="text-sm font-medium hover:underline"
               >
-                {trip.destination}
+                {shortenKabupaten(trip.destination)}
               </Link>
               <span className="text-sm text-muted-foreground tabular-nums">
                 {trip.startsOn} – {trip.endsOn}
