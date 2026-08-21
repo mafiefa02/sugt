@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../client";
 import { perjadin, perjadinPreparationItem, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
+import { PENGAJAR_LENGKAP_KEY } from "./preparation-checklist";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -18,32 +19,22 @@ import { requireStaff } from "./staff-only";
  * still throws.
  *
  * **Each of the three clears the "Pengajar sudah lengkap" Preparation tick** so that changing the
- * team forces a fresh manual confirmation it is complete (the amendment to ADR-0018). This ticket
- * (#138) only issues the DELETE; the Preparation Item's *definition* and its auto-untick rendering
- * are T4 ([#139](https://github.com/mafiefa02/sugt/issues/139)). Until then the row does not exist,
- * so the DELETE is a harmless no-op — which is exactly why it is safe to write it now.
+ * team forces a fresh manual confirmation it is complete (the amendment to ADR-0018). The Item is
+ * now defined and derived as one of the fixed seven (T4/#139, `./preparation-checklist.ts`); this is
+ * the one place in the system that clears a tick automatically. A `DELETE` matching no row is not an
+ * error, so clearing an already-unticked box is a harmless no-op.
  */
-
-/**
- * The `item_key` of the "Pengajar sudah lengkap" Preparation Item. A fixed key, written out here
- * character for character the same way `preparation-checklist.ts`'s keys are — the Teaching-Team
- * writes clear it, and T4/#139 owns the item's definition and its place in the derived list.
- */
-const PENGAJAR_LENGKAP_ITEM_KEY = "pengajar_lengkap";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/**
- * Clear the "Pengajar sudah lengkap" tick for one trip. A `DELETE` with no row to delete is not an
- * error, so this is a no-op until T4 defines the item and a Staff member ticks it.
- */
+/** Clear the "Pengajar sudah lengkap" tick for one trip — keyed by the shared canonical constant. */
 async function clearPengajarLengkap(tx: Tx, perjadinId: string): Promise<void> {
   await tx
     .delete(perjadinPreparationItem)
     .where(
       and(
         eq(perjadinPreparationItem.perjadinId, perjadinId),
-        eq(perjadinPreparationItem.itemKey, PENGAJAR_LENGKAP_ITEM_KEY),
+        eq(perjadinPreparationItem.itemKey, PENGAJAR_LENGKAP_KEY),
       ),
     );
 }
