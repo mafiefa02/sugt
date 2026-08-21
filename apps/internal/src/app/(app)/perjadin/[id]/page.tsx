@@ -4,6 +4,7 @@ import { PerjadinGroup } from "-/components/perjadin-group";
 import { PerjadinLogistics } from "-/components/perjadin-logistics";
 import { PerjadinPreparation } from "-/components/perjadin-preparation";
 import { SessionStatusBadge } from "-/components/session-labels";
+import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
 import { formatIdr, formatSessionStartTimeWithWib } from "@sugt/domain";
@@ -52,7 +53,9 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         >
           Perjadin
         </Link>
-        <h1 className="mt-1 font-heading text-lg font-medium">{trip.destination}</h1>
+        <h1 className="mt-1 font-heading text-lg font-medium">
+          {shortenKabupaten(trip.destination)}
+        </h1>
         {/*
           The dates and, for Staff, the one write that corrects them. Moving the trip offset-shifts
           its arranged Sessions; delivered and cancelled ones stay, and the times do not move.

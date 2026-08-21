@@ -1,3 +1,4 @@
+import { shortenKabupaten } from "-/lib/format-destination";
 import type { StaffDashboard } from "@sugt/db/queries";
 import { formatIdr } from "@sugt/domain";
 import Link from "next/link";
@@ -125,7 +126,9 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
                 className="rounded-lg border border-border p-4"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-medium">Perjadin Report — {report.destination}</p>
+                  <p className="font-medium">
+                    Perjadin Report — {shortenKabupaten(report.destination)}
+                  </p>
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {report.startsOn} – {report.endsOn} · {report.groupCount} anggota Group
                   </span>
