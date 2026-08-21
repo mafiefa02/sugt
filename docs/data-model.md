@@ -1188,27 +1188,29 @@ create table perjadin_preparation_item (
 
 **Only the ticks are stored** ([#114](https://github.com/mafiefa02/sugt/issues/114)). The
 Preparation Checklist is an internal-monitoring aid — Staff hand-tick a pre-departure to-do list,
-nothing ticks a box automatically, and it gates nothing. The _set of items that exists_ is **not**
-a table: it is the six fixed items (keys `sk_perjalanan`, `tiket_keberangkatan`,
-`tiket_kepulangan`, `booking_penginapan`, `transportasi_lokal`, `staff`) plus one per Teaching Team
-member of the Group, assembled in the query layer at read time. A row here means one of those is
-ticked; un-ticking is a `DELETE`, so there is no "unchecked" row to keep in step with a moving
-Group.
+and it gates nothing. The _set of items that exists_ is **not** a table: since the amendment to
+[ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md) it is a **flat
+fixed seven** — `sk_perjalanan`, `tiket_keberangkatan`, `tiket_kepulangan`, `booking_penginapan`,
+`transportasi_lokal`, `staff`, and `pengajar_lengkap` ("Pengajar sudah lengkap") — assembled in the
+query layer at read time with **no per-member part**, so it no longer reads the Group at all. A row
+here means one of those is ticked; un-ticking is a `DELETE`, so there is no "unchecked" row to keep.
 
-`item_key` is a fixed key or a per-teacher `dosen:{person_id}`. A `dosen:` key **glues the tick to
-the Person by their id** — the professor's name is rendered live and never stored, so a rename
-leaves the box alone. A tick whose teacher later leaves the Group is an **orphan**: read-time
-derivation only counts `dosen:` rows whose person is still a Teaching Team member, so an orphan is
-silently ignored and reappears if they rejoin. **Nothing cleans orphans up** — the Group is
-replaced wholesale ([The Group](#the-group)) and `replacePerjadinGroup` is deliberately unchanged;
-see [ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md).
+**`pengajar_lengkap` is the one box the tool clears by itself**, and the single exception to "nothing
+ticks a box automatically". It replaced the old per-teacher `dosen:{person_id}` boxes when the
+Teaching Team stopped being People (ADR-0020): with up to twenty trip-scoped names, per-name boxes
+made no sense. It is ticked by hand like the rest, but **any Teaching-Team change — a name added,
+renamed or removed — deletes its tick**, so each change forces a fresh manual confirmation that the
+team is complete. That `DELETE` lives inside the teacher-mutation queries
+(`queries/perjadin-teachers.ts`), which is what makes it impossible to change the team without
+clearing the box. No other item is ever touched automatically. `dosen:` ticks the old model left in
+the table are **orphans**: no item derives them, so they are silently ignored and never cleaned up.
 
 The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent — the write
 upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than duplicating a row.
 `checked_by` and `checked_at` record who and when for later use; nothing renders them yet. **`staff`
-is a single box** — "confirmed with the Staff", not one row per Staff member — so the extra Staff a
-Group carries never add items. `N` is therefore `6 + (Teaching Team members)`, and the Perjadin
-list's `Persiapan: x/N` pill counts the ticks that still map to a live item.
+is a single box** — "confirmed with the Staff", not one row per Staff member. `N` is therefore the
+constant **7**, and the Perjadin list's `Persiapan: x/N` pill counts the ticks whose key is one of
+the seven fixed items.
 
 ---
 

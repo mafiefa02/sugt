@@ -264,17 +264,17 @@ export const transaction = pgTable(
  * The Preparation Checklist's ticks — **one row per ticked item, and nothing else**
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
- * The *set of items that exists* is not stored: it is the six fixed items plus one per
- * Teaching Team member of the Group, derived at read time in the query layer. This table
- * holds only which of those a Staff member has hand-ticked, so an un-tick is a `DELETE`
- * and there is no "unchecked" row to keep in sync with a moving Group.
+ * The *set of items that exists* is not stored: since the amendment to ADR-0018 it is a **flat
+ * fixed seven** — `sk_perjalanan`, the two tickets, lodging, local transport, `staff`, and
+ * `pengajar_lengkap` — derived at read time in the query layer with no per-member part. This table
+ * holds only which of those a Staff member has hand-ticked, so an un-tick is a `DELETE` and there is
+ * no "unchecked" row to keep in sync.
  *
- * `itemKey` is a fixed key (`sk_perjalanan`, …, `staff`) or a per-teacher `dosen:{personId}`.
- * A `dosen:` tick is glued to that Person by their id — the professor's name is rendered live
- * and never stored, so a rename never disturbs a box. A tick whose teacher later leaves the
- * Group is an **orphan**: read-time derivation only counts `dosen:` rows whose person is still a
- * Teaching Team member, so an orphan is silently ignored and reappears if they rejoin. Nothing
- * cleans it up, and `replacePerjadinGroup` is unchanged. See ADR-0018 and `docs/data-model.md`.
+ * `itemKey` is one of those seven fixed keys. `pengajar_lengkap` is the one box the tool clears by
+ * itself: the Teaching-Team mutation queries (`./queries/perjadin-teachers.ts`) delete its tick on
+ * any add/rename/remove, so each change forces a fresh manual confirmation the team is complete.
+ * `dosen:{personId}` ticks the **old** per-teacher model left behind are orphans — no item derives
+ * them, so they are silently ignored and never cleaned up. See ADR-0018 and `docs/data-model.md`.
  *
  * The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent: the
  * write upserts on it, so ticking twice is one row. `checked_by`/`checked_at` record who and when

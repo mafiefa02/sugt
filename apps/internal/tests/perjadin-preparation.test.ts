@@ -1,8 +1,11 @@
 import { db, schema } from "@sugt/db";
 import {
+  addPerjadinTeacher,
   isNotStaffError,
   perjadinDetail,
   perjadinDirectory,
+  removePerjadinTeacher,
+  renamePerjadinTeacher,
   togglePreparationItem,
 } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
@@ -11,43 +14,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addPerjadin, addPerson, resetDatabase } from "./support/fixtures";
 
 /**
- * Rewrite a Perjadin's Group wholesale — the way the removed `replacePerjadinGroup` did.
- *
- * Editing the Group through the app is Staff-only and no longer moves Teaching Team members
- * (ADR-0020, #138): they have left `group_member` for `perjadin_teacher`. But the Preparation
- * Checklist's per-teacher derivation still reads Teaching Team members off the Group (its redefinition
- * is T4/#139), so these tests reach past the app to move one under a tick. In a transaction because
- * `perjadin_pic_is_a_group_member` is DEFERRED — the PIC's row is deleted and re-inserted, and the
- * pair is consistent only at COMMIT.
- */
-async function setGroup(
-  perjadinId: string,
-  picId: string,
-  teachers: { personId: string; stream: "STEM" | "Research" }[],
-) {
-  await db.transaction(async (tx) => {
-    await tx.delete(schema.groupMember).where(eq(schema.groupMember.perjadinId, perjadinId));
-    await tx.insert(schema.groupMember).values([
-      { perjadinId, personId: picId, role: "Staff", stream: null },
-      ...teachers.map((teacher) => ({
-        perjadinId,
-        personId: teacher.personId,
-        role: "Teaching Team" as const,
-        stream: teacher.stream,
-      })),
-    ]);
-  });
-}
-
-/**
  * **The Preparation Checklist** ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
- * The substance is that the *set of items* is derived and never stored: the six fixed boxes plus
- * one per Teaching Team member, assembled at read time from the fixed list and the current Group.
- * Only the ticks are stored, so the interesting behaviour is what the derivation does when the
- * Group moves under a tick — a name change, a dropped teacher, a re-added one — and none of that
- * is reachable through a test that only reads back what it wrote. Each block drives the query
- * functions against a real Postgres.
+ * Since the amendment to ADR-0018 the *set of items* is a **flat fixed seven** — the six original
+ * boxes plus `pengajar_lengkap` — derived at read time with no per-member part, so `N = 7` for every
+ * Perjadin and the derivation never reads the Group. Only the ticks are stored. The interesting
+ * behaviour is therefore the one automatic un-tick in the whole system: any Teaching-Team change
+ * clears `pengajar_lengkap`, and that is not reachable through a test that only reads back what it
+ * wrote. Each block drives the query functions against a real Postgres.
  */
 
 async function trip() {
@@ -56,25 +30,8 @@ async function trip() {
     email: "rina@ditsama.itb.ac.id",
     role: "Staff",
   });
-  const bagus = await addPerson({
-    fullName: "Bagus Prakoso",
-    email: "bagus@itb.ac.id",
-    role: "Teaching Team",
-  });
-  const sari = await addPerson({
-    fullName: "Sari Dewi",
-    email: "sari@itb.ac.id",
-    role: "Teaching Team",
-  });
-  const perjadin = await addPerjadin({
-    advanceIdr: 5_000_000,
-    picPersonId: pic.id,
-    teachers: [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: sari.id, stream: "Research" },
-    ],
-  });
-  return { pic, bagus, sari, perjadinId: perjadin.id };
+  const perjadin = await addPerjadin({ advanceIdr: 5_000_000, picPersonId: pic.id });
+  return { pic, perjadinId: perjadin.id };
 }
 
 /** The stored ticks for one Perjadin, straight from the table — orphans included. */
@@ -94,6 +51,7 @@ async function pillOf(caller: Parameters<typeof perjadinDirectory>[0], perjadinI
   return trips.find((row) => row.id === perjadinId);
 }
 
+/** The seven fixed keys, in render order — `pengajar_lengkap` last. */
 const FIXED_KEYS = [
   "sk_perjalanan",
   "tiket_keberangkatan",
@@ -101,166 +59,116 @@ const FIXED_KEYS = [
   "booking_penginapan",
   "transportasi_lokal",
   "staff",
+  "pengajar_lengkap",
 ];
 
 describe("the derived checklist", () => {
   beforeEach(resetDatabase);
 
-  it("is the six fixed items then one per Teaching Team member, none ticked at first", async () => {
-    const { pic, bagus, sari, perjadinId } = await trip();
+  it("is the seven fixed items, in order, none ticked at first — regardless of team size", async () => {
+    const { pic, perjadinId } = await trip();
+    // A team of any size adds no boxes: the derivation no longer reads the Teaching Team.
+    await addPerjadinTeacher(pic, perjadinId, "Prof. Satu");
+    await addPerjadinTeacher(pic, perjadinId, "Prof. Dua");
 
-    const detail = await perjadinDetail(pic, perjadinId);
-    const items = detail?.preparation ?? [];
+    const items = (await perjadinDetail(pic, perjadinId))?.preparation ?? [];
 
-    // The fixed six first, in order, and `staff` is a single box — not one per Staff member.
-    expect(items.slice(0, 6).map((item) => item.itemKey)).toEqual(FIXED_KEYS);
-    // Then one per teacher, glued to the Person and labelled with their live name.
-    expect(items.slice(6).map((item) => item.itemKey)).toEqual([
-      `dosen:${bagus.id}`,
-      `dosen:${sari.id}`,
-    ]);
-    expect(items.find((item) => item.itemKey === `dosen:${bagus.id}`)?.label).toBe(
-      "Konfirmasi dengan Bagus Prakoso",
+    expect(items.map((item) => item.itemKey)).toEqual(FIXED_KEYS);
+    expect(items.find((item) => item.itemKey === "pengajar_lengkap")?.label).toBe(
+      "Pengajar sudah lengkap",
     );
-    // N = 6 + teacher count, and nothing is ticked until someone ticks it.
-    expect(items).toHaveLength(8);
+    expect(items).toHaveLength(7);
     expect(items.every((item) => !item.checked)).toBe(true);
   });
 
-  it("grows N by one when the Group gains a teacher, and derives it rather than storing it", async () => {
-    const { pic, bagus, sari, perjadinId } = await trip();
-    const rian = await addPerson({
-      fullName: "Rian Saputra",
-      email: "rian@itb.ac.id",
-      role: "Teaching Team",
-    });
-
-    expect((await perjadinDetail(pic, perjadinId))?.preparation).toHaveLength(8);
-    expect((await pillOf(pic, perjadinId))?.preparationTotal).toBe(8);
-
-    await setGroup(perjadinId, pic.id, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: rian.id, stream: "STEM" },
-      { personId: sari.id, stream: "Research" },
-    ]);
-
-    // No prep row was written or moved — N changed purely because the Group did.
-    expect(await ticksOf(perjadinId)).toEqual([]);
-    expect((await perjadinDetail(pic, perjadinId))?.preparation).toHaveLength(9);
-    expect((await pillOf(pic, perjadinId))?.preparationTotal).toBe(9);
-  });
-
-  it("orders the per-teacher boxes by name, matching the Group list on the same screen", async () => {
-    const pic = await addPerson({
-      fullName: "Rina Nurhayati",
-      email: "rina@ditsama.itb.ac.id",
-      role: "Staff",
-    });
-    // Names deliberately in the opposite order to the Streams: the STEM teacher sorts last by name,
-    // the Research teacher first. Stream-primary ordering would put STEM ("Zulaikha") first; the
-    // checklist must instead follow the Group list, which is name-ascending.
-    const zulaikha = await addPerson({
-      fullName: "Zulaikha Rahmawati",
-      email: "zulaikha@itb.ac.id",
-      role: "Teaching Team",
-    });
-    const andi = await addPerson({
-      fullName: "Andi Pratama",
-      email: "andi@itb.ac.id",
-      role: "Teaching Team",
-    });
-    const perjadin = await addPerjadin({
-      advanceIdr: 5_000_000,
-      picPersonId: pic.id,
-      teachers: [
-        { personId: zulaikha.id, stream: "STEM" },
-        { personId: andi.id, stream: "Research" },
-      ],
-    });
-
-    const detail = await perjadinDetail(pic, perjadin.id);
-    // Andi (Research) before Zulaikha (STEM): name order, not Stream order.
-    expect(detail?.preparation.slice(6).map((item) => item.itemKey)).toEqual([
-      `dosen:${andi.id}`,
-      `dosen:${zulaikha.id}`,
-    ]);
-    // And it is the very order the Group list shows its Teaching Team members in.
-    expect(
-      detail?.group.filter((member) => member.stream !== null).map((member) => member.personId),
-    ).toEqual([andi.id, zulaikha.id]);
-  });
-
-  it("keeps a per-teacher tick with its Person, and re-labels it live when the name changes", async () => {
-    const { pic, bagus, perjadinId } = await trip();
-
-    await togglePreparationItem(pic, {
-      perjadinId,
-      itemKey: `dosen:${bagus.id}`,
-      checked: true,
-    });
-    await db
-      .update(schema.person)
-      .set({ fullName: "Bagus Prakoso Wijaya" })
-      .where(eq(schema.person.id, bagus.id));
-
-    const box = (await perjadinDetail(pic, perjadinId))?.preparation.find(
-      (item) => item.itemKey === `dosen:${bagus.id}`,
-    );
-    // Same key, still ticked, and the label follows the current name — the name is never stored.
-    expect(box?.checked).toBe(true);
-    expect(box?.label).toBe("Konfirmasi dengan Bagus Prakoso Wijaya");
-  });
-});
-
-describe("orphaned per-teacher ticks", () => {
-  beforeEach(resetDatabase);
-
-  it("drops a ticked teacher from x and N without deleting the row, and restores it on re-add", async () => {
-    const { pic, bagus, sari, perjadinId } = await trip();
-    const rian = await addPerson({
-      fullName: "Rian Saputra",
-      email: "rian@itb.ac.id",
-      role: "Teaching Team",
-    });
-    await togglePreparationItem(pic, { perjadinId, itemKey: `dosen:${sari.id}`, checked: true });
-
-    // Substitute Sari out for Rian. Her tick is now an orphan.
-    await setGroup(perjadinId, pic.id, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: rian.id, stream: "Research" },
-    ]);
-
-    const detail = await perjadinDetail(pic, perjadinId);
-    // The derivation drops the orphan: no box for Sari, N is back to 8, and x counts nothing.
-    expect(detail?.preparation.some((item) => item.itemKey === `dosen:${sari.id}`)).toBe(false);
-    expect(detail?.preparation).toHaveLength(8);
-    expect(detail?.preparation.filter((item) => item.checked)).toHaveLength(0);
-    expect((await pillOf(pic, perjadinId))?.preparationDone).toBe(0);
-    expect((await pillOf(pic, perjadinId))?.preparationTotal).toBe(8);
-    // But the row is left in place — `replacePerjadinGroup` never touches it.
-    expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).toEqual([`dosen:${sari.id}`]);
-
-    // Re-adding Sari brings her old tick back, because it was never deleted.
-    await setGroup(perjadinId, pic.id, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: sari.id, stream: "Research" },
-    ]);
-    const restored = (await perjadinDetail(pic, perjadinId))?.preparation.find(
-      (item) => item.itemKey === `dosen:${sari.id}`,
-    );
-    expect(restored?.checked).toBe(true);
-    expect((await pillOf(pic, perjadinId))?.preparationDone).toBe(1);
-  });
-
-  it("counts every fixed tick in the pill, since a fixed item is always live", async () => {
+  it("counts N as 7 and x as the fixed ticks, ignoring an orphan `dosen:` tick from the old model", async () => {
     const { pic, perjadinId } = await trip();
 
     await togglePreparationItem(pic, { perjadinId, itemKey: "staff", checked: true });
-    await togglePreparationItem(pic, { perjadinId, itemKey: "sk_perjalanan", checked: true });
+    await togglePreparationItem(pic, { perjadinId, itemKey: "pengajar_lengkap", checked: true });
+    // A leftover per-teacher tick from before the redefinition. No item derives it, so it must not
+    // count — and it is left in the table, not cleaned up (ADR-0018).
+    await db.insert(schema.perjadinPreparationItem).values({
+      perjadinId,
+      itemKey: `dosen:${pic.id}`,
+      checkedBy: pic.id,
+    });
 
     const pill = await pillOf(pic, perjadinId);
+    expect(pill?.preparationTotal).toBe(7);
     expect(pill?.preparationDone).toBe(2);
-    expect(pill?.preparationTotal).toBe(8);
+
+    const detail = await perjadinDetail(pic, perjadinId);
+    expect(detail?.preparation.some((item) => item.itemKey.startsWith("dosen:"))).toBe(false);
+    expect(detail?.preparation.filter((item) => item.checked).map((item) => item.itemKey)).toEqual([
+      "staff",
+      "pengajar_lengkap",
+    ]);
+    // And the orphan row is left in the table, not cleaned up (ADR-0018) — nothing ever deletes it.
+    expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).toContain(`dosen:${pic.id}`);
+  });
+});
+
+describe("the one automatic un-tick — Pengajar sudah lengkap", () => {
+  beforeEach(resetDatabase);
+
+  async function tickPengajarLengkap(
+    pic: Parameters<typeof togglePreparationItem>[0],
+    perjadinId: string,
+  ) {
+    await togglePreparationItem(pic, { perjadinId, itemKey: "pengajar_lengkap", checked: true });
+    expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).toContain("pengajar_lengkap");
+  }
+
+  it("clears when a Teaching-Team name is added", async () => {
+    const { pic, perjadinId } = await trip();
+    await tickPengajarLengkap(pic, perjadinId);
+
+    await addPerjadinTeacher(pic, perjadinId, "Prof. Baru");
+
+    expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).not.toContain(
+      "pengajar_lengkap",
+    );
+  });
+
+  it("clears when a Teaching-Team name is renamed", async () => {
+    const { pic, perjadinId } = await trip();
+    const added = await addPerjadinTeacher(pic, perjadinId, "Prof. Lama");
+    if (added.outcome !== "added") throw new Error("fixture failed to add a teacher");
+    await tickPengajarLengkap(pic, perjadinId);
+
+    await renamePerjadinTeacher(pic, added.teacherId, "Prof. Baru");
+
+    expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).not.toContain(
+      "pengajar_lengkap",
+    );
+  });
+
+  it("clears when a Teaching-Team name is removed", async () => {
+    const { pic, perjadinId } = await trip();
+    const added = await addPerjadinTeacher(pic, perjadinId, "Prof. Pergi");
+    if (added.outcome !== "added") throw new Error("fixture failed to add a teacher");
+    await tickPengajarLengkap(pic, perjadinId);
+
+    await removePerjadinTeacher(pic, added.teacherId);
+
+    expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).not.toContain(
+      "pengajar_lengkap",
+    );
+  });
+
+  it("leaves the other six boxes alone when the team changes", async () => {
+    const { pic, perjadinId } = await trip();
+    await togglePreparationItem(pic, { perjadinId, itemKey: "staff", checked: true });
+    await togglePreparationItem(pic, { perjadinId, itemKey: "booking_penginapan", checked: true });
+
+    await addPerjadinTeacher(pic, perjadinId, "Prof. Baru");
+
+    // Only `pengajar_lengkap` is ever cleared automatically; the rest are untouched.
+    expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey).sort()).toEqual([
+      "booking_penginapan",
+      "staff",
+    ]);
   });
 });
 
@@ -309,7 +217,12 @@ describe("toggling a box", () => {
   });
 
   it("refuses a Teaching Team caller", async () => {
-    const { bagus, perjadinId } = await trip();
+    const { perjadinId } = await trip();
+    const bagus = await addPerson({
+      fullName: "Bagus Prakoso",
+      email: "bagus@itb.ac.id",
+      role: "Teaching Team",
+    });
 
     await expect(
       togglePreparationItem(bagus, { perjadinId, itemKey: "staff", checked: true }),

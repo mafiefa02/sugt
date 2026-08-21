@@ -23,11 +23,7 @@ import {
 } from "../schema/travel";
 import type { Person } from "./caller";
 import { duplicatedStaff } from "./group-rules";
-import {
-  derivePreparationChecklist,
-  type PreparationItem,
-  type PreparationTeacher,
-} from "./preparation-checklist";
+import { derivePreparationChecklist, type PreparationItem } from "./preparation-checklist";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -257,13 +253,9 @@ export async function perjadinDetail(
     taughtBySession.set(link.sessionId, list);
   }
 
-  // The Preparation Checklist's per-teacher boxes are still keyed off the Group's Teaching Team
-  // members, which is empty now that the Group is Staff-only — redefining the item is T4/#139, so
-  // this is left as it stands and yields the six fixed items.
-  const preparationTeachers: PreparationTeacher[] = group
-    .filter((member) => member.role === "Teaching Team")
-    .map((member) => ({ personId: member.personId, fullName: member.fullName }));
-  const preparation = derivePreparationChecklist(preparationTeachers, preparationTicks);
+  // The Preparation Checklist is a flat fixed seven now (amendment to ADR-0018) — no per-member
+  // derivation, so it does not read the Group at all.
+  const preparation = derivePreparationChecklist(preparationTicks);
 
   const { departureAt, departureZone, departureMode, returnAt, returnZone, returnMode, ...header } =
     trip;

@@ -19,9 +19,12 @@ import { requireStaff } from "./staff-only";
  */
 
 /**
- * The box to flip. `checked: true` records the tick, `false` clears it. `itemKey` is a fixed key
- * or a `dosen:{personId}`; it is not validated against the current Group, because an orphan tick
- * is deliberately allowed to persist (ADR-0018).
+ * The box to flip. `checked: true` records the tick, `false` clears it. `itemKey` is one of the
+ * seven fixed keys (`./preparation-checklist.ts`); it is not validated here, because an orphan
+ * `dosen:` tick the old model left behind is deliberately allowed to persist, ignored by the
+ * derivation (ADR-0018). `pengajar_lengkap` is toggled here by hand like any other box — the one
+ * thing that clears it *automatically* is a Teaching-Team change, and that DELETE lives in the
+ * teacher-mutation queries, not here.
  */
 export type TogglePreparationItemInput = {
   perjadinId: string;

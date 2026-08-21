@@ -3,7 +3,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
-import { groupMember, perjadin, perjadinPreparationItem } from "../schema/travel";
+import { perjadin, perjadinPreparationItem } from "../schema/travel";
 import type { Person } from "./caller";
 import { PREPARATION_FIXED_KEYS } from "./preparation-checklist";
 
@@ -29,9 +29,10 @@ export type DirectoryPerjadin = {
   picFullName: string;
   /**
    * The Preparation Checklist pill's `x` and `N` ([#114](https://github.com/mafiefa02/sugt/issues/114)).
-   * `preparationTotal` is `6 + (Teaching Team members)`; `preparationDone` counts the present ticks
-   * that still map to a live item — every fixed tick, plus each `dosen:` tick whose person is still
-   * on the Group. Orphan `dosen:` ticks are excluded, so the pill never reads past `N`.
+   * `preparationTotal` is the constant **7** — the flat fixed item set (amendment to ADR-0018), with
+   * no per-member derivation; `preparationDone` counts the present ticks whose key is one of the
+   * seven fixed items. An orphan `dosen:` tick from the old model matches none, so the pill never
+   * reads past `N`.
    */
   preparationDone: number;
   preparationTotal: number;
@@ -58,33 +59,22 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
       // precisely so a cancelled Session and the one that replaced it coexist on one trip.
       // Counting Sessions would report a two-School trip as three the first time that happens.
       schoolCount: sql<number>`count(distinct ${session.schoolId})`.mapWith(Number),
-      // **The pill, as two correlated scalar subqueries** — the style `./dashboard.ts` uses for its
-      // PIC-report counts: interpolate the table refs (`${groupMember}`, `${perjadinPreparationItem}`)
-      // so a rename propagates, correlate on the outer `${perjadin.id}` (a grouping column here), and
-      // keep the whole thing off the `session` left join above so it never fans out. `N` is the six
-      // fixed items plus this trip's Teaching Team members; `x` counts the ticks that still map to a
-      // live item — every fixed tick, and each `dosen:` tick whose person is still a Teaching Team
-      // member (an orphan is skipped, so `x` never exceeds `N`). The fixed keys are bound from the one
-      // list so they cannot drift from the strings the rows hold.
-      preparationTotal: sql<number>`6 + (
-        select count(*) from ${groupMember} gm
-        where gm.perjadin_id = ${perjadin.id} and gm.role = 'Teaching Team'
-      )`.mapWith(Number),
+      // **The pill's `x`, as one correlated scalar subquery** — the style `./dashboard.ts` uses for
+      // its PIC-report counts: interpolate the table ref (`${perjadinPreparationItem}`) so a rename
+      // propagates, correlate on the outer `${perjadin.id}` (a grouping column here), and keep it off
+      // the `session` left join above so it never fans out. Since the amendment to ADR-0018 the
+      // checklist is a flat fixed seven — no per-member derivation — so `N` is the constant 7 and `x`
+      // counts the ticks whose key is one of the seven fixed items. A `dosen:` tick the old model left
+      // behind matches none of them, so it never counts and `x` never exceeds `N`. The fixed keys are
+      // bound from the one list so they cannot drift from the strings the rows hold.
+      preparationTotal: sql<number>`${PREPARATION_FIXED_KEYS.length}`.mapWith(Number),
       preparationDone: sql<number>`(
         select count(*) from ${perjadinPreparationItem} pi
         where pi.perjadin_id = ${perjadin.id}
-        and (
-          pi.item_key in (${sql.join(
-            PREPARATION_FIXED_KEYS.map((key) => sql`${key}`),
-            sql`, `,
-          )})
-          or exists (
-            select 1 from ${groupMember} gm
-            where gm.perjadin_id = pi.perjadin_id
-            and gm.role = 'Teaching Team'
-            and pi.item_key = 'dosen:' || gm.person_id::text
-          )
-        )
+        and pi.item_key in (${sql.join(
+          PREPARATION_FIXED_KEYS.map((key) => sql`${key}`),
+          sql`, `,
+        )})
       )`.mapWith(Number),
     })
     .from(perjadin)
