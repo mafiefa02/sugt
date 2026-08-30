@@ -19,7 +19,7 @@ export default async function Page() {
       <header className="border-b border-border px-7 py-5">
         <h1 className="font-heading text-lg font-medium">Orang</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Roster sekaligus daftar undangan. Siapa pun yang masuk bisa membacanya; hanya Staff yang
+          Roster sekaligus daftar undangan. Siapa pun yang masuk bisa membacanya; hanya DITSAMA yang
           menambah dan menonaktifkan. Peran terkunci setelah seseorang dipakai.
         </p>
       </header>

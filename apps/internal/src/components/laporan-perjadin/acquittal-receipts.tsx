@@ -2,7 +2,7 @@
 
 import { markReceiptsSettledAction } from "-/app/(app)/perjadin/[id]/laporan/actions";
 import type { AcquittalReceipt } from "@sugt/db/queries";
-import { ROLE_LABELS } from "@sugt/domain";
+import { PERJADIN_ROLE_LABELS } from "@sugt/domain";
 import { Checkbox } from "@sugt/ui/components/checkbox";
 import { Label } from "@sugt/ui/components/label";
 import { useId, useState, useTransition } from "react";
@@ -79,10 +79,11 @@ function SettledMark({ perjadinId, member }: { perjadinId: string; member: Acqui
       <Label htmlFor={field}>{member.fullName}</Label>
       {/*
         Staff carry no Stream and Teaching Team always carry one, so the role is what
-        distinguishes members here. Shown through `ROLE_LABELS` like every other role render
-        (#116), so a Staff member reads "DITSAMA" — the same label the Group list gives them.
+        distinguishes members here. This is a Perjadin surface, so it renders through
+        `PERJADIN_ROLE_LABELS` (#141): a Staff member reads "Pendamping" — the same label the
+        Group list gives them — while off-Perjadin surfaces read "DITSAMA" (#116).
       */}
-      <span className="text-muted-foreground">{ROLE_LABELS[member.role]}</span>
+      <span className="text-muted-foreground">{PERJADIN_ROLE_LABELS[member.role]}</span>
       {refusal !== null && <span className="text-destructive">{refusal}</span>}
     </li>
   );
