@@ -104,6 +104,17 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
         </dl>
       </div>
 
+      {acquittal.pimpinan.length > 0 && (
+        <section className="border-b border-border px-7 py-5">
+          <h2 className="font-heading text-sm font-medium">Pimpinan yang turut serta</h2>
+          <ul className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
+            {acquittal.pimpinan.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <AcquittalTransactions
         perjadinId={id}
         transactions={transactions}

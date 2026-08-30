@@ -7,7 +7,7 @@ import {
   perjadinAcquittal,
   recordTransaction,
 } from "@sugt/db/queries";
-import { REPORT_DEADLINE_DAYS_AFTER_RETURN, TRANSACTION_CATEGORIES } from "@sugt/domain";
+import { PIMPINAN, REPORT_DEADLINE_DAYS_AFTER_RETURN, TRANSACTION_CATEGORIES } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -218,6 +218,28 @@ describe("the acquittal payload", () => {
     await expect(
       perjadinAcquittal(staff, "00000000-0000-0000-0000-000000000000"),
     ).resolves.toBeNull();
+  });
+
+  it("names the Pimpinan who joined the trip, ordered, and reads none as an empty list", async () => {
+    /**
+     * The Laporan names who travelled (#142). A Pimpinan is record-only — just a name from the
+     * fixed three — so the acquittal carries the names and nothing more, ordered so the screen
+     * and its CSV read the same on every load.
+     */
+    const staff = await pic();
+    const [fatimah, , anton] = PIMPINAN;
+    const trip = await addPerjadin({
+      advanceIdr: 1_000_000,
+      picPersonId: staff.id,
+      pimpinan: [fatimah, anton],
+    });
+
+    const acquittal = await perjadinAcquittal(staff, trip.id);
+    expect(acquittal?.pimpinan).toEqual([fatimah, anton].sort());
+
+    const noneTrip = await addPerjadin({ advanceIdr: 1_000_000, picPersonId: staff.id });
+    const none = await perjadinAcquittal(staff, noneTrip.id);
+    expect(none?.pimpinan).toEqual([]);
   });
 });
 
