@@ -422,6 +422,11 @@ export type PerjadinFixture = {
   picPersonId: string;
   /** Teaching Team, each carrying the Stream they cover. Staff never carry one. */
   teachers?: { personId: string; stream: Stream }[];
+  /**
+   * The Pimpinan recorded on the trip — record-only names, each a member of the fixed `PIMPINAN`
+   * three (`perjadin_pimpinan_name_check` refuses anything else). Empty or absent by default.
+   */
+  pimpinan?: string[];
 };
 
 /**
@@ -480,6 +485,12 @@ export async function addPerjadin(fixture: PerjadinFixture) {
         stream: teacher.stream,
       })),
     ]);
+
+    if (fixture.pimpinan && fixture.pimpinan.length > 0) {
+      await tx
+        .insert(schema.perjadinPimpinan)
+        .values(fixture.pimpinan.map((name) => ({ perjadinId: perjadin!.id, name })));
+    }
 
     return perjadin!;
   });

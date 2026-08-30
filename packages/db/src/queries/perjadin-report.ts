@@ -7,7 +7,13 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { person } from "../schema/people";
-import { groupMember, perjadin, transaction, transactionEvidence } from "../schema/travel";
+import {
+  groupMember,
+  perjadin,
+  perjadinPimpinan,
+  transaction,
+  transactionEvidence,
+} from "../schema/travel";
 import type { Person } from "./caller";
 import { requireStaff } from "./staff-only";
 
@@ -122,6 +128,13 @@ export type PerjadinAcquittal = {
   daysRemaining: number;
   transactions: AcquittalTransaction[];
   receipts: AcquittalReceipt[];
+  /**
+   * The Pimpinan who joined this trip — record-only names from the fixed three, ordered so the
+   * Report and its CSV read the same on every load. A printed trip report names who travelled;
+   * these carry no money, so they belong on the Laporan rather than a delivery surface ([#142],
+   * ADR-0004). Empty when none joined.
+   */
+  pimpinan: string[];
   returnedToTreasurerIdr: number | null;
   returnedAt: Date | null;
   reportFiledAt: Date | null;
@@ -172,9 +185,10 @@ export async function perjadinAcquittal(
 
   if (!trip) return null;
 
-  const [transactions, receipts] = await Promise.all([
+  const [transactions, receipts, pimpinan] = await Promise.all([
     transactionsOf(perjadinId),
     receiptsOf(perjadinId),
+    pimpinanOf(perjadinId),
   ]);
 
   // Summed here rather than in a second `sum()` round trip: every row is already loaded, and
@@ -187,6 +201,7 @@ export async function perjadinAcquittal(
     remainderIdr: trip.advanceIdr - spentIdr,
     transactions,
     receipts,
+    pimpinan,
   };
 }
 
@@ -265,6 +280,20 @@ async function receiptsOf(perjadinId: string): Promise<AcquittalReceipt[]> {
     .innerJoin(person, eq(person.id, groupMember.personId))
     .where(eq(groupMember.perjadinId, perjadinId))
     .orderBy(asc(person.fullName));
+}
+
+/**
+ * The Pimpinan recorded on the trip, ordered by name. Record-only — a `perjadin_pimpinan` row is
+ * just a name from the fixed three ([ADR-0020]) — so this returns the plain strings. Ordering
+ * here rather than at the render sites keeps the Report and its CSV in step on every load.
+ */
+async function pimpinanOf(perjadinId: string): Promise<string[]> {
+  const rows = await db
+    .select({ name: perjadinPimpinan.name })
+    .from(perjadinPimpinan)
+    .where(eq(perjadinPimpinan.perjadinId, perjadinId))
+    .orderBy(asc(perjadinPimpinan.name));
+  return rows.map((row) => row.name);
 }
 
 /** What the acquittal form collects for one line item. */
