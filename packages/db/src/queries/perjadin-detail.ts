@@ -460,93 +460,6 @@ export async function setPerjadinPimpinan(
   });
 }
 
-// Calendar-day arithmetic on the `YYYY-MM-DD` strings the `date` columns hold. Both helpers
-// work at UTC midnight, so the calculation stays in one zone and a Session — a calendar day,
-// not an instant — never drifts across a boundary.
-const MS_PER_DAY = 86_400_000;
-
-function daysBetween(from: string, to: string): number {
-  return (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY;
-}
-
-function shiftDate(date: string, days: number): string {
-  return new Date(Date.parse(`${date}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
-}
-
-export type MovePerjadinDatesResult =
-  | { outcome: "moved"; sessionsShifted: number }
-  /** At least one arranged Session would fall outside the new window; nothing was changed. */
-  | { outcome: "would-strand"; strandedCount: number; startsOn: string; endsOn: string }
-  | { outcome: "no-such-perjadin" };
-
-/**
- * Moving a trip's dates shifts its arranged Sessions, or is refused whole.
- *
- * The offset is measured from the trip's **start**: each arranged Session moves by the same
- * number of days `startsOn` moved, so a Session on day two of the trip stays on day two. A pure
- * translation (start and end move together) keeps every arranged Session inside the new window by
- * construction; a resize can push one out, and then the whole edit is refused rather than
- * stranding it — one write must not leave a trip whose dates moved but whose Sessions did not.
- *
- * Only **arranged** Sessions move. A delivered or cancelled Session records something that
- * already happened, so it may legitimately sit outside the window its trip now claims — which is
- * why the invariant is scoped to arranged (see `docs/data-model.md`, Delivery). Online Sessions
- * carry no `perjadin_id` and so are never among these.
- *
- * An inverted window (`startsOn` after `endsOn`) is a precondition violation, not a user state:
- * the edit surface validates it and `perjadin_dates_check` would refuse it, so it throws rather
- * than returning an outcome.
- */
-export async function movePerjadinDates(
-  caller: Person,
-  perjadinId: string,
-  startsOn: string,
-  endsOn: string,
-): Promise<MovePerjadinDatesResult> {
-  requireStaff(caller);
-  if (startsOn > endsOn) {
-    throw new Error(
-      `movePerjadinDates got startsOn ${startsOn} after endsOn ${endsOn}. The edit surface ` +
-        "validates the window before calling, and perjadin_dates_check would refuse it, so this " +
-        "is a bug or a hand-edited request rather than a user state.",
-    );
-  }
-
-  return db.transaction(async (tx) => {
-    const [trip] = await tx
-      .select({ startsOn: perjadin.startsOn, endsOn: perjadin.endsOn })
-      .from(perjadin)
-      .where(eq(perjadin.id, perjadinId))
-      .for("update");
-    if (!trip) return { outcome: "no-such-perjadin" };
-
-    const offsetDays = daysBetween(trip.startsOn, startsOn);
-
-    // Offline arranged Sessions on this trip; online ones carry no `perjadin_id`, so the
-    // `perjadin_id` match already excludes them.
-    const arranged = await tx
-      .select({ id: session.id, heldOn: session.heldOn })
-      .from(session)
-      .where(and(eq(session.perjadinId, perjadinId), eq(session.status, "arranged")))
-      .for("update", { of: session });
-
-    const window = { startsOn, endsOn };
-    const shifted = arranged.map((s) => ({ id: s.id, heldOn: shiftDate(s.heldOn, offsetDays) }));
-    const stranded = shifted.filter((s) => !heldOnWithinPerjadin(s.heldOn, window));
-    if (stranded.length > 0) {
-      // Return before any write: the transaction commits, but it carries only the locking
-      // reads, so the trip and its Sessions are left exactly as they were.
-      return { outcome: "would-strand", strandedCount: stranded.length, startsOn, endsOn };
-    }
-
-    await tx.update(perjadin).set({ startsOn, endsOn }).where(eq(perjadin.id, perjadinId));
-    for (const shift of shifted) {
-      await tx.update(session).set({ heldOn: shift.heldOn }).where(eq(session.id, shift.id));
-    }
-    return { outcome: "moved", sessionsShifted: shifted.length };
-  });
-}
-
 /**
  * The six logistics fields as the edit surface submits them. Unlike the plan form, the return
  * **zone is explicit here** — it was derived from the last School at plan time, but a correction
@@ -565,16 +478,39 @@ export type PerjadinLogisticsInput = {
 
 export type UpdatePerjadinLogisticsResult =
   | { outcome: "updated" }
+  /**
+   * The return date lands before the departure date, so the derived `[starts_on … ends_on]` range
+   * would be inverted (ADR-0021). Same-day is allowed. Refused before the transaction opens.
+   */
+  | { outcome: "return-before-departure" }
+  /**
+   * At least one **arranged** Session would fall outside the new `[departure … return]` window; the
+   * range is not resized and nothing is written. The same shape the retired `movePerjadinDates`
+   * used — this is the resize-and-clamp guard that replaced the auto-shift (ADR-0021).
+   */
+  | { outcome: "would-strand"; strandedCount: number; startsOn: string; endsOn: string }
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" };
 
 /**
- * Correct a Perjadin's departure/return logistics after planning. Staff-only, like the date edit.
+ * Correct a Perjadin's departure/return logistics after planning — and, with them, the trip's
+ * range. Staff-only.
  *
- * Writes all six columns at once. `departure_zone` is fixed to WIB and never taken from the
- * caller; `return_zone` is the caller's, because a return from a WITA/WIT city is read in that
- * city's wall-clock and the derivation at plan time can be wrong. The `*_at` values are wall-clock
- * `date time` strings, the same shape planning wrote — no instant, no conversion.
+ * **The range is the leg dates now (ADR-0021).** `starts_on`/`ends_on` are no longer typed; they
+ * are `departure.date` and `return.date`, so editing a leg date *is* editing the range. This write
+ * therefore sets all six logistics columns **plus** `starts_on`/`ends_on`, in one transaction.
+ *
+ * **Resize and clamp, never auto-shift.** Moving a leg date resizes the window; it does not move any
+ * Session. If the new `[departure … return]` window would leave an **arranged** Session outside it,
+ * the whole edit is refused (`would-strand`) rather than stranding it — the mirror of planning's
+ * `session-outside-perjadin`. Only arranged Sessions are checked: a delivered or cancelled Session
+ * records something that already happened and may legitimately sit outside the window its trip now
+ * claims (`docs/data-model.md`, Delivery). Online Sessions carry no `perjadin_id` and are excluded.
+ *
+ * `departure_zone` is fixed to WIB and never taken from the caller; `return_zone` is the caller's,
+ * because a return from a WITA/WIT city is read in that city's wall-clock and the derivation at plan
+ * time can be wrong. The `*_at` values are wall-clock `date time` strings, the same shape planning
+ * wrote — no instant, no conversion.
  */
 export async function updatePerjadinLogistics(
   caller: Person,
@@ -583,18 +519,60 @@ export async function updatePerjadinLogistics(
 ): Promise<UpdatePerjadinLogisticsResult> {
   requireStaff(caller);
 
-  const [updated] = await db
-    .update(perjadin)
-    .set({
-      departureAt: `${input.departureDate} ${input.departureTime}`,
-      departureZone: "WIB",
-      departureMode: input.departureMode,
-      returnAt: `${input.returnDate} ${input.returnTime}`,
-      returnZone: input.returnZone,
-      returnMode: input.returnMode,
-    })
-    .where(eq(perjadin.id, perjadinId))
-    .returning({ id: perjadin.id });
+  // The derived range: departure date opens it, return date closes it (ADR-0021).
+  const newStartsOn = input.departureDate;
+  const newEndsOn = input.returnDate;
 
-  return updated ? { outcome: "updated" } : { outcome: "no-such-perjadin" };
+  // An inverted range is refused before the transaction opens — same-day allowed. `perjadin_dates_check`
+  // holds `ends_on >= starts_on` at the database too, but returning a value lets the edit surface point
+  // at the return field rather than surfacing a raw constraint violation.
+  if (newEndsOn < newStartsOn) return { outcome: "return-before-departure" };
+
+  return db.transaction(async (tx) => {
+    const [trip] = await tx
+      .select({ id: perjadin.id })
+      .from(perjadin)
+      .where(eq(perjadin.id, perjadinId))
+      .for("update");
+    if (!trip) return { outcome: "no-such-perjadin" };
+
+    // Offline arranged Sessions on this trip; online ones carry no `perjadin_id`, so the
+    // `perjadin_id` match already excludes them. Delivered and cancelled ones are left out on
+    // purpose — the invariant is scoped to arranged.
+    const arranged = await tx
+      .select({ id: session.id, heldOn: session.heldOn })
+      .from(session)
+      .where(and(eq(session.perjadinId, perjadinId), eq(session.status, "arranged")))
+      .for("update", { of: session });
+
+    const window = { startsOn: newStartsOn, endsOn: newEndsOn };
+    const stranded = arranged.filter((s) => !heldOnWithinPerjadin(s.heldOn, window));
+    if (stranded.length > 0) {
+      // Return before any write: the transaction commits, but it carries only the locking reads, so
+      // the trip and its Sessions are left exactly as they were. No Session is shifted.
+      return {
+        outcome: "would-strand",
+        strandedCount: stranded.length,
+        startsOn: newStartsOn,
+        endsOn: newEndsOn,
+      };
+    }
+
+    await tx
+      .update(perjadin)
+      .set({
+        departureAt: `${input.departureDate} ${input.departureTime}`,
+        departureZone: "WIB",
+        departureMode: input.departureMode,
+        returnAt: `${input.returnDate} ${input.returnTime}`,
+        returnZone: input.returnZone,
+        returnMode: input.returnMode,
+        // The range rides along, derived from the leg dates it was just given (ADR-0021).
+        startsOn: newStartsOn,
+        endsOn: newEndsOn,
+      })
+      .where(eq(perjadin.id, perjadinId));
+
+    return { outcome: "updated" };
+  });
 }

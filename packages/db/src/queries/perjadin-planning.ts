@@ -102,8 +102,6 @@ export type PlannedTravelLeg = {
 
 export type PlanPerjadinInput = {
   subClusterId: string;
-  startsOn: string;
-  endsOn: string;
   advanceIdr: number;
   /** A Staff member. `perjadin_pic_is_staff` refuses anyone else, at the database. */
   picPersonId: string;
@@ -128,9 +126,17 @@ export type PlanPerjadinInput = {
    */
   pimpinan: string[];
   sessions: PlannedSession[];
-  /** Departure from Bandung. Its zone is always WIB. */
+  /**
+   * Departure from Bandung. Its zone is always WIB. Its **date is the trip's `starts_on`**: the
+   * range is no longer typed in but derived from the legs (ADR-0021), so this date is what the
+   * `session-outside-perjadin` window opens on and what every reader renders as the trip's start.
+   */
   departure: PlannedTravelLeg;
-  /** Return. Its zone is derived from the last School visited. */
+  /**
+   * Return. Its zone is derived from the last School visited. Its **date is the trip's `ends_on`**
+   * (ADR-0021) — the mirror of `departure.date` above — so `return.date < departure.date` is what
+   * the `return-before-departure` refusal guards, same-day allowed.
+   */
   return: PlannedTravelLeg;
 };
 
@@ -152,7 +158,12 @@ export type SessionTimeClash = {
  */
 export type PlanPerjadinResult =
   | { outcome: "planned"; perjadinId: string }
-  | { outcome: "ends-before-starts" }
+  /**
+   * The return date lands before the departure date, so the derived `[starts_on … ends_on]` range
+   * would be inverted (ADR-0021). Same-day is allowed. `perjadin_dates_check` holds `ends_on >=
+   * starts_on` at the database too; this repeats it so the form can point at the return date.
+   */
+  | { outcome: "return-before-departure" }
   /**
    * An extra Staff member repeated, or the same as the PIC. A Group holds each person once by
    * `(perjadin_id, person_id)`, so this is refused up front rather than left to a PK violation
@@ -232,9 +243,11 @@ export async function planPerjadin(
 ): Promise<PlanPerjadinResult> {
   requireStaff(caller);
 
-  // `perjadin_dates_check` holds this too. It is repeated here so the form can say which
-  // field is wrong, rather than showing the page a constraint violation produces.
-  if (input.endsOn < input.startsOn) return { outcome: "ends-before-starts" };
+  // The range is the departure→return span now (ADR-0021), not two typed fields, so the guard is on
+  // the leg dates: `return.date` before `departure.date` would derive an inverted range. Same-day is
+  // allowed. `perjadin_dates_check` holds `ends_on >= starts_on` too; this is repeated here so the
+  // form can point at the return date rather than showing the page a constraint violation produces.
+  if (input.return.date < input.departure.date) return { outcome: "return-before-departure" };
 
   if (input.sessions.length === 0) return { outcome: "no-schools" };
 
@@ -304,8 +317,9 @@ export async function planPerjadin(
   // The second of the three places a Session's date is written, and the invariant
   // [#28](https://github.com/mafiefa02/sugt/issues/28) stated: an arranged offline Session
   // lies inside its Perjadin. No CHECK can carry it, because the range is on this row and
-  // the date is on another table's.
-  const window = { startsOn: input.startsOn, endsOn: input.endsOn };
+  // the date is on another table's. The window is the derived range — the departure and return
+  // dates (ADR-0021) — not two typed fields.
+  const window = { startsOn: input.departure.date, endsOn: input.return.date };
   const offending = input.sessions.filter(
     (planned) => !heldOnWithinPerjadin(planned.heldOn, window),
   );
@@ -374,8 +388,10 @@ export async function planPerjadin(
       .values({
         subClusterId: input.subClusterId,
         destination,
-        startsOn: input.startsOn,
-        endsOn: input.endsOn,
+        // The range is stored-but-derived (ADR-0021): its source is the leg dates, not a typed
+        // field. `perjadin_dates_check` still holds `ends_on >= starts_on`, guarded above.
+        startsOn: input.departure.date,
+        endsOn: input.return.date,
         advanceIdr: input.advanceIdr,
         picPersonId: input.picPersonId,
         departureAt: `${input.departure.date} ${input.departure.time}`,

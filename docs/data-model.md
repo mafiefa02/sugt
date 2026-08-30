@@ -498,12 +498,13 @@ first row written and keeps it forever, and every screen then has to render "tim
 
 **An arranged offline Session's `held_on` lies inside its Perjadin's `starts_on`–`ends_on`.**
 Nothing holds that — not this schema, and until now not any document either. It is scoped to
-_arranged_ deliberately: a trip's dates are correctable and its arranged Sessions move with them,
-while delivered and cancelled ones stay where they are, so a delivered Session may legitimately
-sit outside the window its Perjadin now claims. A CHECK cannot carry it, because a CHECK sees
-only the row it is written on and the date range sits on `perjadin`; the choice is a constraint
-trigger or the application, and it belongs wherever the date is written — both at arrangement and
-when a trip's dates move. Online Sessions have no Perjadin and are untouched. Listed with the
+_arranged_ deliberately: a trip's range is correctable (it is the departure→return span now,
+[ADR-0021](./adr/0021-perjadin-date-range-is-departure-and-return.md)), and a resize that would
+strand an arranged Session is refused rather than allowed, while delivered and cancelled ones stay
+where they are and may legitimately sit outside the window their Perjadin now claims. A CHECK cannot
+carry it, because a CHECK sees only the row it is written on and the date range sits on `perjadin`;
+the choice is a constraint trigger or the application, and it belongs wherever the date is written —
+both at arrangement and when a trip's range is resized. Online Sessions have no Perjadin and are untouched. Listed with the
 rest in [what the database does not hold](#what-the-database-does-not-hold).
 
 A Session exists only once arranged
@@ -1625,22 +1626,26 @@ places:
 2. **Arranging an offline Session** — Rencanakan Perjadin calls it against every Session on
    the trip, before the transaction opens, and refuses the whole plan naming the Schools
    whose dates fall outside.
-3. **Moving the trip** — `movePerjadinDates` in `@sugt/db` offset-shifts the trip's
-   **arranged** Sessions by the days its `starts_on` moved, leaves delivered and cancelled ones
-   where they are, and refuses whole a shrink that would strand an arranged Session — one
-   transaction with the trip's own update. [#55](https://github.com/mafiefa02/sugt/issues/55)
-   carries it. The edit surface that drives it is the "Ubah tanggal" dialog on Detail Perjadin,
-   Staff-only; the cascade and its refusal are held by the query, with tests.
+3. **Resizing the trip** — the trip's range is its departure and return dates now
+   ([ADR-0021](./adr/0021-perjadin-date-range-is-departure-and-return.md)), so it is edited by
+   editing the legs, and `updatePerjadinLogistics` in `@sugt/db` recomputes `starts_on`/`ends_on`
+   from the new leg dates. It **clamps, never shifts**: if the new `[departure … return]` window
+   would leave an **arranged** Session outside it, the whole edit is refused (`would-strand`) and no
+   Session moves; delivered and cancelled ones may sit outside the window their trip now claims and
+   do not block it. One transaction with the trip's own update. The retired `movePerjadinDates` and
+   its offset-shift ([#55](https://github.com/mafiefa02/sugt/issues/55)) belonged to the standalone
+   typed range and went with it. The edit surface is Detail Perjadin's Staff-only "Ubah perjalanan"
+   dialog; the resize and its refusal are held by the query, with tests.
 
-   **It shifts `held_on` and must never touch `starts_at`.** The offset is a whole number of
-   days, and a trip sliding a week later does not change the hour a School is expecting
-   somebody. The two columns move independently by design.
+   **It never touches `starts_at`.** A leg-date correction changes which days a trip spans, not the
+   hour a School is expecting somebody — and it does not move any Session's `held_on` at all, since
+   it clamps rather than shifting.
 
-So an arranged offline Session can no longer be born outside its trip, nor moved outside
-it, nor left behind when the trip's own dates move — the cascade in path 3 shifts the
-arranged ones with it. Both halves of #28's invariant now hold, at the data layer and at the
-surface that drives it: Detail Perjadin's Staff-only "Ubah tanggal" dialog is what a person moves
-a trip through, and it reaches the cascade in path 3.
+So an arranged offline Session can no longer be born outside its trip, nor moved outside it, nor
+stranded when the trip's range is resized — path 3 refuses the resize rather than moving Sessions.
+Both halves of #28's invariant now hold, at the data layer and at the surface that drives it:
+Detail Perjadin's Staff-only "Ubah perjalanan" dialog is what a person resizes a trip through, and
+it reaches the guard in path 3.
 
 **That a Perjadin's Sessions are at Schools of its Sub-Cluster.** `perjadin.sub_cluster_id` is
 NOT NULL and `school.sub_cluster_id` is NOT NULL, but nothing joins them. The composite-key
