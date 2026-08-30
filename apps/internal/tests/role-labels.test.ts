@@ -1,4 +1,4 @@
-import { ROLES, ROLE_LABELS } from "@sugt/domain";
+import { PERJADIN_ROLE_LABELS, ROLES, ROLE_LABELS } from "@sugt/domain";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -20,5 +20,22 @@ describe("ROLE_LABELS", () => {
     // The stored value is what the keys are: renaming a label must never rename a role.
     expect(Object.keys(ROLE_LABELS).sort()).toEqual([...ROLES].sort());
     expect(ROLES).toContain("Staff");
+  });
+});
+
+/**
+ * **The Perjadin-surface role labels** (#141). The same stored role, seen from the trip's
+ * vantage point: on a Perjadin the DITSAMA people who accompany the Teaching Team read as
+ * **Pendamping**. Presentation only, and keyed on the stored `ROLES` values exactly like
+ * `ROLE_LABELS`, so `[member.role]` render sites resolve and nothing stored changes.
+ */
+describe("PERJADIN_ROLE_LABELS", () => {
+  it("labels Staff as Pendamping and leaves Teaching Team as-is", () => {
+    expect(PERJADIN_ROLE_LABELS.Staff).toBe("Pendamping");
+    expect(PERJADIN_ROLE_LABELS["Teaching Team"]).toBe("Teaching Team");
+  });
+
+  it("keys on the stored role values, like ROLE_LABELS", () => {
+    expect(Object.keys(PERJADIN_ROLE_LABELS).sort()).toEqual([...ROLES].sort());
   });
 });

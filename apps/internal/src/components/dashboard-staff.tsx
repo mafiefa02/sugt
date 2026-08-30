@@ -18,7 +18,7 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
       <header>
         <p className="text-sm text-muted-foreground">Selamat datang kembali,</p>
         <h1 className="font-heading text-xl font-medium">{dashboard.fullName}</h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">Staff · DITSAMA ITB</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">DITSAMA · DITSAMA ITB</p>
       </header>
 
       <section>
@@ -69,7 +69,7 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
           <p className="text-sm text-muted-foreground">
             Advance beredar (belum dipertanggungjawabkan)
           </p>
-          <span className="text-xs text-muted-foreground">Hanya Staff</span>
+          <span className="text-xs text-muted-foreground">Hanya DITSAMA</span>
         </div>
         <p className="mt-1 font-heading text-2xl font-semibold tabular-nums">
           Rp {formatIdr(dashboard.advanceOutstandingIdr)}

@@ -4,7 +4,7 @@ import { changePerjadinPicAction, setPerjadinStaffAction } from "-/app/(app)/per
 import { MultiSelectCombobox } from "-/components/multi-select-combobox";
 import { PersonSelect } from "-/components/person-select";
 import type { GroupMemberEntry } from "@sugt/db/queries";
-import { MAX_EXTRA_STAFF_PER_GROUP, ROLE_LABELS } from "@sugt/domain";
+import { MAX_EXTRA_STAFF_PER_GROUP, PERJADIN_ROLE_LABELS } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -62,8 +62,8 @@ function PerjadinGroup({
             className="text-muted-foreground"
           >
             <span className="text-foreground">{member.fullName}</span>
-            {/* The Group is Staff-only, so the PIC is named as such and the rest carry the DITSAMA label. */}
-            {member.personId === picPersonId ? " · PIC" : ` · ${ROLE_LABELS.Staff}`}
+            {/* The Group is Staff-only, so the PIC is named as such and the rest carry the Pendamping label — the on-Perjadin vantage of the DITSAMA role (#141). */}
+            {member.personId === picPersonId ? " · PIC" : ` · ${PERJADIN_ROLE_LABELS.Staff}`}
           </li>
         ))}
       </ul>
@@ -145,7 +145,8 @@ function EditGroup({
         <DialogHeader>
           <DialogTitle>Ubah Group</DialogTitle>
           <DialogDescription>
-            PIC dan Staf tambahan. Sesi, uang muka dan transaksi Perjadin ini tidak ikut berubah.
+            PIC dan Pendamping tambahan. Sesi, uang muka dan transaksi Perjadin ini tidak ikut
+            berubah.
           </DialogDescription>
         </DialogHeader>
 
@@ -172,15 +173,15 @@ function EditGroup({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor={staffFieldId}>Staf tambahan (opsional)</Label>
+            <Label htmlFor={staffFieldId}>Pendamping tambahan (opsional)</Label>
             <p className="-mt-0.5 text-xs text-muted-foreground">
               Selain PIC, hingga {MAX_EXTRA_STAFF_PER_GROUP} orang.
             </p>
             <MultiSelectCombobox
               id={staffFieldId}
-              aria-label="Staf tambahan"
-              placeholder="Cari Staf…"
-              emptyLabel="Tidak ada Staf."
+              aria-label="Pendamping tambahan"
+              placeholder="Cari Pendamping…"
+              emptyLabel="Tidak ada Pendamping."
               options={staffOptions}
               value={extraStaff.filter((personId) => personId !== pic)}
               onValueChange={(next) => {
@@ -216,8 +217,8 @@ const STALE = "Perjadin ini sudah tidak ada. Muat ulang halaman untuk melihat ke
 
 /** What each `setPerjadinStaff` refusal says. */
 const STAFF_REFUSALS = {
-  "too-many-staff": `Staf tambahan terlalu banyak: maksimal ${MAX_EXTRA_STAFF_PER_GROUP}.`,
-  "duplicate-staff": "Setiap Staf tambahan harus berbeda, dan bukan PIC.",
+  "too-many-staff": `Pendamping tambahan terlalu banyak: maksimal ${MAX_EXTRA_STAFF_PER_GROUP}.`,
+  "duplicate-staff": "Setiap Pendamping tambahan harus berbeda, dan bukan PIC.",
   "no-such-perjadin": STALE,
 } as const;
 

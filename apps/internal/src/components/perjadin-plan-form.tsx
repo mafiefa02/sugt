@@ -423,7 +423,7 @@ function PerjadinPlanForm({
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field
             id={extraStaffId}
-            label="Staf tambahan (opsional)"
+            label="Pendamping tambahan (opsional)"
           >
             <p className="-mt-0.5 mb-1 text-xs text-muted-foreground">
               Koordinator, bendahara, atau dokumentator — selain PIC, hingga{" "}
@@ -431,9 +431,9 @@ function PerjadinPlanForm({
             </p>
             <MultiSelectCombobox
               id={extraStaffId}
-              aria-label="Staf tambahan"
-              placeholder="Cari Staf…"
-              emptyLabel="Tidak ada Staf."
+              aria-label="Pendamping tambahan"
+              placeholder="Cari Pendamping…"
+              emptyLabel="Tidak ada Pendamping."
               options={extraStaffOptions}
               value={extraStaff}
               onValueChange={(next) => {
@@ -712,11 +712,11 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
           )}
           {result.outcome === "no-schools" && <p>Belum ada Sesi pada Perjadin ini.</p>}
           {result.outcome === "duplicate-staff" && (
-            <p>Setiap Staf tambahan harus berbeda, dan bukan PIC.</p>
+            <p>Setiap Pendamping tambahan harus berbeda, dan bukan PIC.</p>
           )}
           {result.outcome === "too-many-extra-staff" && (
             <p>
-              Staf tambahan terlalu banyak: maksimal {result.limit}, bukan {result.count}.
+              Pendamping tambahan terlalu banyak: maksimal {result.limit}, bukan {result.count}.
             </p>
           )}
           {result.outcome === "too-many-teachers" && (

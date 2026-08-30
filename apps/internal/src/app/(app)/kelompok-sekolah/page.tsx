@@ -23,7 +23,7 @@ export default async function Page() {
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           Kumpulan Sekolah dalam satu Cluster yang cukup dekat untuk dikunjungi dalam satu
           perjalanan. Perjadin direncanakan atas dasar ini. Siapa pun yang masuk bisa membacanya;
-          hanya Staff yang membuat, mengganti nama, menghapus, dan memindahkan Sekolah.
+          hanya DITSAMA yang membuat, mengganti nama, menghapus, dan memindahkan Sekolah.
         </p>
       </header>
 

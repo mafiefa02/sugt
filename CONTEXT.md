@@ -93,8 +93,12 @@ _Avoid_: user (a sign-in identity, which a Person may or may not yet have), memb
 
 **Staff**:
 A DITSAMA ITB employee working on the Programme, the Programme's leadership included.
-The internal UI labels this role **DITSAMA**; the domain term is still **Staff** (like the Indonesian website copy, a presentation concern — the stored value stays `Staff`).
+The internal UI labels this role by context: **DITSAMA** on surfaces away from a **Perjadin**, and **Pendamping** on a Perjadin's own surfaces (see **Pendamping**). The domain term is still **Staff** (a presentation concern — the stored value stays `Staff`).
 _Avoid_: leadership, admin, organiser (senior Staff are Staff; there is no separate role)
+
+**Pendamping**:
+The on-**Perjadin** label for the **Staff** role — the DITSAMA people who **accompany** the Teaching Team on the journey. One role, two context-dependent labels: **Staff** reads **DITSAMA** away from a Perjadin and **Pendamping** on one (its Group list, the acquittal receipts, the "confirmed with the Pendamping" **Preparation Item**). Presentation only — the stored value stays `Staff`, and the **PIC** tag is orthogonal (a PIC is a Pendamping too, but is marked by the more specific fact). See [#141](https://github.com/mafiefa02/sugt/issues/141).
+_Avoid_: companion, escort, chaperone; a second role (it is the Staff role seen from the trip)
 
 **Teaching Team**:
 The professors and instructors who deliver Sessions. On a **Perjadin** they are **trip-scoped names**, not People — entered on the trip, up to twenty, never invited and never signed in, carrying no Stream and no Group membership (see [ADR-0020](./docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)). An offline **Session** records the set of them who taught it in parallel. Online **Sessions** are the exception: they still name a **Person** per **Stream** through `session_teacher`, so the `Person` role `Teaching Team` lives on for them alone.
@@ -121,7 +125,7 @@ A Perjadin's private, hand-ticked list of pre-departure to-dos — an internal-m
 _Avoid_: preparation status, readiness, onboarding, workflow (it tracks nothing but hand-ticked boxes and blocks nothing)
 
 **Preparation Item**:
-One line of a **Preparation Checklist**. Seven are fixed for every Perjadin — SK Perjalanan, the two tickets, lodging, local transport, a single "confirmed with DITSAMA" box, and **"Pengajar sudah lengkap"**. Only the ticked items are stored. Every box is ticked by hand; every box stays ticked until a hand un-ticks it — **except "Pengajar sudah lengkap"**, the one box the tool clears by itself whenever the Teaching Team changes (a name added, removed or renamed), so that each change forces a fresh manual confirmation that the team is complete (see the amendment to [ADR-0018](./docs/adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md)).
+One line of a **Preparation Checklist**. Seven are fixed for every Perjadin — SK Perjalanan, the two tickets, lodging, local transport, a single "confirmed with the Pendamping" box, and **"Pengajar sudah lengkap"**. Only the ticked items are stored. Every box is ticked by hand; every box stays ticked until a hand un-ticks it — **except "Pengajar sudah lengkap"**, the one box the tool clears by itself whenever the Teaching Team changes (a name added, removed or renamed), so that each change forces a fresh manual confirmation that the team is complete (see the amendment to [ADR-0018](./docs/adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md)).
 _Avoid_: task, step, todo (it is neither assigned nor sequenced)
 
 ### Reporting
@@ -262,7 +266,7 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - The source spreadsheet groups **Schools** by island (Sumatera, Jawa, Kalimantan, Sulawesi/Maluku/Papua) and separately by numbered **Cluster**, and the two do not agree — Jawa splits across two **Clusters** and Kalimantan merges with Sulawesi into one — resolved: only the **Cluster** is a level the Programme is organised by. The island grouping is a way of reading a spreadsheet and has no term here.
 - **Stream** was a property of the **Teaching Team** — a professor was assigned to STEM or Research when a **Group** formed — and a **Session** taught both at once. Resolved: for **offline Sessions**, **Stream** is now a property of the **Session** itself, and one occasion is one Stream; the same people may teach a Research Session then a STEM one. Online Sessions are unchanged. See [ADR-0019](./docs/adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md).
 - **Teaching Team** was "a maintained roster of named People". Resolved: on a **Perjadin** they are **trip-scoped names**, never People and never invited, because the professors who teach offline will not sign in. The **Person** role `Teaching Team` survives only for online **Sessions**, so the term now names two things that must be read by context. See [ADR-0020](./docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md).
-- **Staff** vs **DITSAMA**: previously only the **role label** rendered as "DITSAMA" (the stored value staying `Staff`, #116). Resolved: **every** string displayed as "Staff"/"staff" now reads "DITSAMA", the "confirmed with the Staff" **Preparation Item** included; the **stored** value is still `Staff` and no data migrates.
+- **Staff** vs **DITSAMA** vs **Pendamping**: previously only the **role label** rendered as "DITSAMA" (the stored value staying `Staff`, #116). Resolved ([#141](https://github.com/mafiefa02/sugt/issues/141)): the role now reads **by context** — **DITSAMA** on surfaces away from a **Perjadin**, and **Pendamping** on a Perjadin's own surfaces (its **Group** list, the acquittal receipts, the "confirmed with the Pendamping" **Preparation Item**). One role, two context-dependent labels. No user-visible "Staff"/"Staf" remains in the internal app; the **stored** value is still `Staff` and no data migrates.
 
 ## Open questions
 

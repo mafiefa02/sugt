@@ -152,6 +152,20 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 /**
+ * How each role is labelled **on a Perjadin surface** — the same stored role seen from the trip's
+ * vantage point. There the DITSAMA people are the ones who **accompany** the Teaching Team on the
+ * journey, so they read as **Pendamping** rather than the organisation's name; the Teaching Team is
+ * unchanged. One role, two context-dependent labels ([#141](https://github.com/mafiefa02/sugt/issues/141)):
+ * `ROLE_LABELS` off a Perjadin, this map on one. Presentation only, keyed on the stored `Role` exactly
+ * like `ROLE_LABELS`, so `[member.role]` render sites resolve; the stored value stays `"Staff"`. The
+ * PIC tag is orthogonal to this — the PIC is a Pendamping too, but is marked by the more specific fact.
+ */
+export const PERJADIN_ROLE_LABELS: Record<Role, string> = {
+  Staff: "Pendamping",
+  "Teaching Team": "Teaching Team",
+};
+
+/**
  * The two kinds a Story may be. They share one editor and one upload path; they differ only
  * in where the public site lists them — a Final Project reaches the public this way without
  * becoming a tracked record (see `docs/adr/0009-the-tool-tracks-delivery-not-outcomes.md`).

@@ -17,9 +17,9 @@ export default function Forbidden() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-8 text-center">
       <div>
-        <h1 className="font-heading text-lg font-medium">Layar ini khusus Staff DITSAMA.</h1>
+        <h1 className="font-heading text-lg font-medium">Layar ini khusus DITSAMA.</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Data keuangan hanya terbuka untuk Staff. Hubungi tim DITSAMA jika Anda perlu akses.
+          Data keuangan hanya terbuka untuk DITSAMA. Hubungi tim DITSAMA jika Anda perlu akses.
         </p>
       </div>
       <LinkButton

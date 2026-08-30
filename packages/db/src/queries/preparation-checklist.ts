@@ -26,7 +26,8 @@ export type PreparationItem = {
  * The seven fixed items, in order, with their stable keys. **Written out here, character for
  * character**, the same way the CHECK lists are: these keys are stored in `item_key` and a composed
  * list would drift from the strings the rows already hold. `staff` is a **single** box — "confirmed
- * with the Staff", not one per Staff member. `pengajar_lengkap` is the seventh, replacing the old
+ * with the Pendamping" (the on-Perjadin label for the DITSAMA role, #141), not one per member; the
+ * stored key stays `staff`. `pengajar_lengkap` is the seventh, replacing the old
  * per-teacher boxes (the amendment to ADR-0018): it is ticked by hand like the rest, but is the one
  * box the tool clears by itself — the teacher-mutation queries delete its tick whenever the Teaching
  * Team changes, so each change forces a fresh manual confirmation that the team is complete.
@@ -37,7 +38,7 @@ export const PREPARATION_FIXED_ITEMS = [
   { itemKey: "tiket_kepulangan", label: "Tiket kepulangan" },
   { itemKey: "booking_penginapan", label: "Booking penginapan" },
   { itemKey: "transportasi_lokal", label: "Konfirmasi dengan pihak transportasi lokal" },
-  { itemKey: "staff", label: "Konfirmasi dengan para staff" },
+  { itemKey: "staff", label: "Konfirmasi dengan para Pendamping" },
   { itemKey: "pengajar_lengkap", label: "Pengajar sudah lengkap" },
 ] as const;
 

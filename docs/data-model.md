@@ -1219,7 +1219,9 @@ the table are **orphans**: no item derives them, so they are silently ignored an
 The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent — the write
 upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than duplicating a row.
 `checked_by` and `checked_at` record who and when for later use; nothing renders them yet. **`staff`
-is a single box** — "confirmed with the Staff", not one row per Staff member. `N` is therefore the
+is a single box** — "confirmed with the Pendamping" (the on-Perjadin label for the DITSAMA role,
+[#141](https://github.com/mafiefa02/sugt/issues/141)), not one row per member; the stored key stays
+`staff`. `N` is therefore the
 constant **7**, and the Perjadin list's `Persiapan: x/N` pill counts the ticks whose key is one of
 the seven fixed items.
 
