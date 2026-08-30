@@ -58,11 +58,15 @@ function SessionWrites({ session }: { session: SessionDetail }) {
       )}
 
       {/*
-        Offered after delivery and only then. Until a mis-named professor is removed they
-        owe three Class Records they cannot honestly file, and `delivered` being terminal
-        means there is no un-delivering the Session to fix it.
+        Offered after delivery and only then, and **online only**: an offline Session's teachers
+        are trip-scoped `session_teaching_team` names edited on the Perjadin, not the per-Stream
+        People `Perbaiki pengajar` writes (ADR-0020, #140). Until a mis-named online professor is
+        removed they owe three Class Records they cannot honestly file, and `delivered` being
+        terminal means there is no un-delivering the Session to fix it.
       */}
-      {session.status === "delivered" && <CorrectTeachers session={session} />}
+      {session.status === "delivered" && session.mode === "online" && (
+        <CorrectTeachers session={session} />
+      )}
 
       {session.status === "cancelled" && (
         <p className="text-sm text-muted-foreground">
@@ -74,13 +78,18 @@ function SessionWrites({ session }: { session: SessionDetail }) {
 }
 
 /**
- * **Tandai terlaksana** — the status and who taught, in one dialog and one call.
+ * **Tandai terlaksana** — what it asks turns on the mode (ADR-0019, #140).
  *
- * The pickers open on `suggestedTeachers`, which is the Group's Stream assignments on an
- * offline Session and nobody on an online one. It is a **suggestion**: Staff confirm or
- * change it, and what they submit is what is written.
+ * **Offline** is status only: the Session already carries its Stream and its "Diajar oleh" names
+ * (edited on the Perjadin), so there is nobody to name here — a plain confirmation.
+ *
+ * **Online** names a Teaching-Team Person per Stream, which is what its Class Records are owed
+ * against. The pickers open on `suggestedTeachers` (nobody, on an online Session with no Group)
+ * as a suggestion Staff confirm or change; what they submit is what is written to `session_teacher`.
  */
 function MarkDelivered({ session }: { session: SessionDetail }) {
+  if (session.mode === "offline") return <OfflineMarkDelivered session={session} />;
+
   return (
     <TeachersDialog
       session={session}
@@ -90,6 +99,68 @@ function MarkDelivered({ session }: { session: SessionDetail }) {
       confirm="Tandai terlaksana"
       save={(teachers) => markSessionDeliveredAction(session.id, teachers)}
     />
+  );
+}
+
+/**
+ * **Offline Tandai terlaksana** — status only (#140). No who-taught prompt: the teachers are
+ * trip-scoped names on the Perjadin, not People, and no `session_teacher` row is written. The
+ * confirmation exists only so a delivered Session is a deliberate act; the sole refusal it can meet
+ * is a Session someone else already moved, shown the same way the other dialogs show it.
+ */
+function OfflineMarkDelivered({ session }: { session: SessionDetail }) {
+  const [open, setOpen] = useState(false);
+  const [stale, setStale] = useState<string | null>(null);
+  const [saving, startSaving] = useTransition();
+
+  function submit() {
+    startSaving(async () => {
+      const result = await markSessionDeliveredAction(session.id, []);
+      if (result.outcome === "delivered") {
+        setOpen(false);
+        return;
+      }
+      // `stream-unnamed` cannot come back for an offline Session — it names nobody — so the only
+      // refusal here is a Session someone else already moved.
+      if (result.outcome === "not-arranged") setStale(STALE_MESSAGES[result.status]);
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <DialogTrigger render={<Button>Tandai terlaksana</Button>} />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Tandai Sesi terlaksana</DialogTitle>
+          <DialogDescription>
+            Tandai Sesi luring ini sebagai terlaksana. Pengajarnya dicatat lewat &ldquo;Diajar
+            oleh&rdquo; di halaman Perjadin, bukan di sini.
+          </DialogDescription>
+        </DialogHeader>
+
+        {stale !== null && <StaleAlert message={stale} />}
+
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setOpen(false);
+            }}
+          >
+            Batal
+          </Button>
+          <Button
+            disabled={saving}
+            onClick={submit}
+          >
+            {saving ? "Menyimpan…" : "Tandai terlaksana"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -162,6 +233,10 @@ function TeachersDialog({
         return;
       }
       if (result.outcome === "stream-unnamed") setMissing(result.missing);
+      // `offline-not-correctable` is unreachable here — this dialog is online-only (offline uses
+      // OfflineMarkDelivered, and Perbaiki pengajar renders for online Sessions only) — but the
+      // union carries it, so it is handled as a generic reload rather than left to crash.
+      else if (result.outcome === "offline-not-correctable") setStale(STALE_MESSAGES.arranged);
       else setStale(STALE_MESSAGES[result.status]);
     });
   }

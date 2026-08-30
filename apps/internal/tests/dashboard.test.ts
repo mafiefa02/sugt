@@ -56,33 +56,35 @@ describe("teachingTeamDashboard", () => {
     const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
     const sari = await professor("sari@itb.ac.id", "Sari Dewi");
     const { school } = await oneSchool();
-    const perjadin = await addPerjadin({
-      advanceIdr: 5_000_000,
-      picPersonId: pic.id,
-      teachers: [
-        { personId: bagus.id, stream: "STEM" },
-        { personId: sari.id, stream: "Research" },
-      ],
-    });
-    const delivered = await addOfflineSession({
+    // A Teaching Team member owes Class Records for the **online** Sessions they taught: since
+    // ADR-0020 offline teachers are trip-scoped `session_teaching_team` names, not People, and their
+    // offline Class Records are deferred (T8), so `session_teacher` — and this owed list — is online
+    // only. Delivering names both professors, so Bagus becomes a session_teacher and owes three.
+    const arranged = await arrangeOnlineSession(pic, {
       schoolId: school.id,
       heldOn: "2026-09-02",
-      perjadinId: perjadin.id,
+      startsAt: "09:00",
+      picPersonId: pic.id,
+      teachers: [{ stream: "STEM", personId: bagus.id }],
     });
-    // Delivering names both professors, so Bagus becomes a session_teacher and owes three.
-    await markSessionDelivered(pic, delivered.id, [
+    if (arranged.outcome !== "arranged") throw new Error("unreachable");
+    await markSessionDelivered(pic, arranged.sessionId, [
       { personId: bagus.id, stream: "STEM" },
       { personId: sari.id, stream: "Research" },
     ]);
     // Bagus files one of the three.
-    await addClassRecord({ sessionId: delivered.id, classKind: "GTK", filedByPersonId: bagus.id });
+    await addClassRecord({
+      sessionId: arranged.sessionId,
+      classKind: "GTK",
+      filedByPersonId: bagus.id,
+    });
 
     const dashboard = await teachingTeamDashboard(bagus);
 
     expect(dashboard.fullName).toBe("Bagus Prakoso");
     expect(dashboard.streams).toEqual(["STEM"]);
     expect(dashboard.owed).toHaveLength(CLASS_KINDS.length - 1);
-    expect(dashboard.owed.every((entry) => entry.sessionId === delivered.id)).toBe(true);
+    expect(dashboard.owed.every((entry) => entry.sessionId === arranged.sessionId)).toBe(true);
     expect(dashboard.owed.map((entry) => entry.classKind).sort()).toEqual(["MS", "Student"]);
   });
 
