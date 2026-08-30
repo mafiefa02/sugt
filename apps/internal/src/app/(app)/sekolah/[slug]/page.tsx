@@ -66,7 +66,6 @@ export default async function Page({ params }: PageProps<"/sekolah/[slug]">) {
           <ArrangeOnlineSessionForm
             school={arrange.school}
             staff={arrange.staff}
-            teachingTeam={arrange.teachingTeam}
           />
         </section>
       )}

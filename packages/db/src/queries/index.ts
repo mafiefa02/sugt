@@ -97,7 +97,6 @@ export {
   type ArrangeOnlineSessionInput,
   type ArrangeOnlineSessionResult,
   type ArrangePerson,
-  type OnlineSessionTeacher,
   type SchoolOption,
 } from "./arrange-online-session";
 export {

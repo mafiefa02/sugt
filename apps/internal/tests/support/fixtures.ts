@@ -135,6 +135,13 @@ export type SessionFixture = {
   heldOn: string;
   /** Local wall-clock start time, in the School's Time Zone. Defaults to a mid-morning hour. */
   startsAt?: string;
+  /**
+   * The Session's Stream — STEM or Research. An online Session is single-Stream now (ADR-0022) and
+   * `session_stream_not_null` refuses a null, so this defaults to STEM to keep tests that do not
+   * care about the Stream terse, and is overridable — a School may hold one STEM and one Research
+   * online Session on a date, so a test wanting two on one day varies it.
+   */
+  stream?: Stream;
   status?: SessionStatus;
   /** A Staff Person. An online Session carries its own PIC, since it has no Perjadin. */
   onlinePicPersonId: string;
@@ -142,7 +149,7 @@ export type SessionFixture = {
 
 /**
  * An **online** Session, which is the cheap one to build: `mode = 'online'` means no
- * Perjadin, so it needs nothing but a School and a Staff PIC. The two CHECKs are
+ * Perjadin, so it needs nothing but a School, a Stream and a Staff PIC. The Perjadin CHECKs are
  * exact mirrors — an offline Session has a Perjadin and an online one has none — so
  * an offline fixture would have to build a whole Perjadin first.
  *
@@ -155,6 +162,7 @@ export async function addSession(fixture: SessionFixture) {
     .values({
       schoolId: fixture.schoolId,
       mode: "online",
+      stream: fixture.stream ?? "STEM",
       heldOn: fixture.heldOn,
       startsAt: fixture.startsAt ?? "09:00",
       status,

@@ -1,3 +1,4 @@
+import { db, schema } from "@sugt/db";
 import {
   arrangeOnlineSession,
   isNotStaffError,
@@ -56,16 +57,18 @@ describe("teachingTeamDashboard", () => {
     const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
     const sari = await professor("sari@itb.ac.id", "Sari Dewi");
     const { school } = await oneSchool();
-    // A Teaching Team member owes Class Records for the **online** Sessions they taught: since
-    // ADR-0020 offline teachers are trip-scoped `session_teaching_team` names, not People, and their
-    // offline Class Records are deferred (T8), so `session_teacher` — and this owed list — is online
-    // only. Delivering names both professors, so Bagus becomes a session_teacher and owes three.
+    // A Teaching Team member owes Class Records for the **online** Sessions they taught. Offline
+    // teachers are trip-scoped names, not People (ADR-0020), and since ADR-0022 an arranged online
+    // Session names Pengajar as free-text names too — so `session_teacher`, and this owed list, is
+    // fed only by **delivering**: `markSessionDelivered` names both professors, so Bagus becomes a
+    // `session_teacher` and owes three (that path is unchanged here, retired in T3).
     const arranged = await arrangeOnlineSession(pic, {
       schoolId: school.id,
       heldOn: "2026-09-02",
       startsAt: "09:00",
       picPersonId: pic.id,
-      teachers: [{ stream: "STEM", personId: bagus.id }],
+      stream: "STEM",
+      teacherNames: [],
     });
     if (arranged.outcome !== "arranged") throw new Error("unreachable");
     await markSessionDelivered(pic, arranged.sessionId, [
@@ -117,12 +120,16 @@ describe("teachingTeamDashboard", () => {
   });
 
   /**
-   * The ADR-0006 scenario the ticket names, and the one the delivered-only filter exists for: an
-   * **online** Session names its professor at *arrangement*, so its `session_teacher` row exists
-   * before any teaching has happened. Nothing is owed until it is delivered — dropping the filter
-   * would report three Class Records owed for teaching that has not happened, which this catches.
+   * The delivered-only filter the dashboard applies to `session_teacher`: a `session_teacher` row
+   * on an *arranged* Session must owe nothing until it is delivered — dropping the filter would
+   * report three Class Records owed for teaching that has not happened, which this catches.
+   *
+   * The row is inserted **directly**: since ADR-0022 an arranged online Session names its Pengajar
+   * as free-text `session_teacher_name`, not a `session_teacher` Person, so arrangement no longer
+   * produces this state. The `session_teacher` table (and this read of it) survive until T3, so the
+   * defensive filter still has to hold; the fixture builds the state the read is defending against.
    */
-  it("owes nothing for an arranged online Session that already names the professor", async () => {
+  it("owes nothing for an arranged Session that carries a session_teacher row", async () => {
     const pic = await staff();
     const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
     const { school } = await oneSchool();
@@ -131,14 +138,18 @@ describe("teachingTeamDashboard", () => {
       heldOn: "2026-09-02",
       startsAt: "09:00",
       picPersonId: pic.id,
-      teachers: [{ stream: "STEM", personId: bagus.id }],
+      stream: "STEM",
+      teacherNames: [],
     });
     if (arranged.outcome !== "arranged") throw new Error("unreachable");
+    await db
+      .insert(schema.sessionTeacher)
+      .values({ sessionId: arranged.sessionId, stream: "STEM", personId: bagus.id });
 
     const dashboard = await teachingTeamDashboard(bagus);
 
     expect(dashboard.owed).toEqual([]);
-    // It is Bagus's upcoming Session, since it names him.
+    // It is Bagus's upcoming Session, since a session_teacher row names him.
     expect(dashboard.upcoming.map((entry) => entry.sessionId)).toEqual([arranged.sessionId]);
   });
 });
@@ -167,7 +178,8 @@ describe("staffDashboard", () => {
       heldOn: "2026-09-02",
       startsAt: "09:00",
       picPersonId: pic.id,
-      teachers: [],
+      stream: "STEM",
+      teacherNames: [],
     });
 
     const dashboard = await staffDashboard(pic);

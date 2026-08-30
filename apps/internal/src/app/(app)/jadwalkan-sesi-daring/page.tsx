@@ -36,7 +36,6 @@ export default async function Page() {
         <ArrangeOnlineSessionForm
           schools={form.schools}
           staff={form.staff}
-          teachingTeam={form.teachingTeam}
         />
       )}
     </div>

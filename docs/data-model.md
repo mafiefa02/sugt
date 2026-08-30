@@ -375,7 +375,7 @@ create table session (
   created_at        timestamptz not null default now(),
 
   check ((mode = 'offline') = (perjadin_id is not null)),
-  check ((mode = 'offline') = (stream is not null)),
+  check (stream is not null),
   check ((mode = 'online') = (online_pic_person_id is not null)),
   check ((online_pic_person_id is null) = (online_pic_role is null)),
   check ((status = 'cancelled') = (cancelled_reason is not null)),
@@ -384,7 +384,7 @@ create table session (
 );
 
 create unique index session_one_online_per_school_per_day
-  on session (school_id, held_on)
+  on session (school_id, held_on, stream)
   where perjadin_id is null and status <> 'cancelled';
 
 create unique index session_no_duplicate_offline_per_school_per_perjadin
@@ -392,20 +392,24 @@ create unique index session_no_duplicate_offline_per_school_per_perjadin
   where status <> 'cancelled';
 ```
 
-**`stream` carries the STEM/Research division of an offline Session, and is null for an online
-one** ([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md)).
+**`stream` carries the STEM/Research division of a Session, whichever its mode**
+([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
+[ADR-0022](./adr/0022-online-sessions-carry-a-stream-and-name-teachers-as-session-scoped-names.md)).
 The split used to be a property of who taught — the two `session_teacher` rows, one per Stream —
-but an offline Session now teaches _one_ Stream in parallel rooms, so the Stream moved onto the
-Session itself. The second CHECK is its equivalence, an exact mirror of the `mode`/`perjadin_id`
-one directly above: offline carries a Stream, online never does. Online Sessions still teach both
-Streams at once and name a teacher per Stream through `session_teacher`, which is why `stream`
-stays null for them.
+but a Session now teaches _one_ Stream, so the Stream moved onto the Session itself. It went there
+for the offline half first (ADR-0019); ADR-0022 made the online half single-Stream too. The second
+CHECK is therefore a plain `stream is not null` for **both** modes — it replaced the old
+`(mode = 'offline') = (stream is not null)` equivalence, which let online rows hold a null. Stream
+no longer tells you the mode; `mode`/`perjadin_id` still do. The column type stays nullable and the
+not-null rule is the CHECK, the same shape as the value-set CHECK beside it.
 
-**The online index is the one unchanged rule here.** Online Sessions are arranged from the
-coverage view in a batch — one date and one PIC applied across a multi-selection — so "the same
-School twice on the same day" is one mis-click away. It keys on `(school_id, held_on)` where
-`perjadin_id is null`, so it touches online Sessions only; offline ones are untouched because
-their `perjadin_id` is not null. Partial the usual way: cancelled rows accumulate and must not
+**The online index now keys on Stream too** (ADR-0022). Online Sessions are arranged one at a time,
+so "the same School twice on the same day" is a mis-click away — but an online Session is
+single-Stream now, so a School may legitimately hold a STEM _and_ a Research online Session on one
+date. Widening the index to `(school_id, held_on, stream)` draws that line: those two do not
+collide, and only a second Session of the _same_ Stream on that date does. It stays partial on
+`perjadin_id is null`, so it touches online Sessions only; offline ones are untouched because their
+`perjadin_id` is not null. Partial the usual way besides: cancelled rows accumulate and must not
 collide with their replacements.
 
 **Two offline-Session indexes were dropped, and this one replaces them
@@ -513,15 +517,18 @@ no target dates and nothing is ever overdue. Progress is `count(*) where status 
 against `TOTAL_SESSIONS_PER_SCHOOL`, a constant that already lives in `@sugt/domain`.
 
 **Marking a Session delivered turns on the mode** (#140). An **online** Session's "Tandai
-terlaksana" names a Teaching-Team Person per Stream and writes `session_teacher` in the same act,
-because its Class Records are owed against them. An **offline** Session's is **status only**: it
-already carries its Stream, its teachers are trip-scoped `session_teaching_team` names edited on the
-Perjadin, and it writes no `session_teacher` (ADR-0019, ADR-0020). Two consequences are
-**deferred** and not modelled here — see the offline open question in `CONTEXT.md` and T8:
-**offline Class Records** (their filer would be a name, not a Person who can sign in) and the
-**offline progress metric** (the fixed `delivered / TOTAL_SESSIONS_PER_SCHOOL` no longer holds for
-the offline half, whose Session count per School is now variable — ADR-0019). Online progress —
-six per School — is untouched.
+terlaksana" historically named a Teaching-Team Person per Stream and wrote `session_teacher` in the
+same act. That is superseded by ADR-0022: an online Session is single-Stream and names its teachers
+as session-scoped `session_teacher_name` at arrangement, so the Person-per-Stream step no longer
+fits — its removal from the delivery path lands with the online editing work (T2/T3), not here. An
+**offline** Session's mark-delivered is **status only**: it already carries its Stream, its teachers
+are trip-scoped `session_teaching_team` names edited on the Perjadin, and it writes no
+`session_teacher` (ADR-0019, ADR-0020). Consequences left **deferred** and not modelled here — see
+the open question in `CONTEXT.md` and T8: **Class Records** for a name-taught Session (their filer
+would be a name, not a Person who can sign in, on both sides now) and the **offline progress metric**
+(the fixed `delivered / TOTAL_SESSIONS_PER_SCHOOL` no longer holds for the offline half, whose
+Session count per School is now variable — ADR-0019). Online progress — six per School — is
+untouched.
 
 ### Who taught
 
@@ -541,14 +548,33 @@ The primary key gives at most one teacher per Stream per Session. The composite 
 into `person (id, role)` — using the pinned `person_role` column — makes it impossible to
 record a Staff member as having taught a Stream, without a trigger.
 
-**This table is now scoped to online Sessions in practice**
+**This Person-based table is being retired, and nothing arranged now writes it**
 ([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
-[ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)). It names
-**People**, and offline teaching is no longer delivered by People — a Perjadin's teachers are
-trip-scoped names (`perjadin_teacher` below), not `person` rows — so nothing offline writes here.
-The table is kept, not dropped, because online Class Records depend on it: an online Session names
-a Person per Stream, and that is who owes the Class Record. For an online Session it still records
-who was in the room, and is what tells you whose account is missing when a Session has only one.
+[ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md),
+[ADR-0022](./adr/0022-online-sessions-carry-a-stream-and-name-teachers-as-session-scoped-names.md)).
+Offline teaching went name-based first — a Perjadin's teachers are trip-scoped names
+(`perjadin_teacher` below), not `person` rows — and ADR-0022 did the same online: an online
+Session's teachers are now session-scoped names in `session_teacher_name` (below), not one-per-Stream
+Persons. The table is **kept, not dropped**, only so the transition can be staged; its drop and the
+retirement of the `Teaching Team` Person role are a later step (T3), by which time nothing reads it.
+
+An online Session records who taught it as session-scoped free-text names:
+
+```sql
+create table session_teacher_name (
+  id          uuid primary key default gen_random_uuid(),
+  session_id  uuid not null references session (id) on delete cascade,
+  name        text not null
+);
+```
+
+The online analogue of the offline `perjadin_teacher` + `session_teaching_team` pair, **collapsed
+to one table** because an online Session has no Perjadin to scope names to: an offline name belongs
+to the trip and is linked to the Sessions that used it, whereas an online name belongs to the one
+Session and nothing else. No Stream (the Session carries its own now) and no Person, which is the
+whole point of the name-based model. Cascade on delete: a name means nothing once its Session is
+gone. The count is an app cap (`MAX_TEACHING_TEAM_PER_ONLINE_SESSION`), not a DB rule — the same
+disposition as the offline caps.
 
 Offline Sessions record who taught through a name-based link instead:
 
