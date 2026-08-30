@@ -138,6 +138,10 @@ function EditLogistics({
     returnZone: (returnLeg?.zone ?? "") as TimeZone | "",
   });
   const [refusal, setRefusal] = useState<string | null>(null);
+  // A field-level message under the return date: the range is the leg dates now (ADR-0021), so the
+  // two refusals a leg edit can hit — an inverted range, or one that would strand a still-arranged
+  // Session — land here rather than in the stale-link Alert above.
+  const [dateRefusal, setDateRefusal] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const fields = useId();
 
@@ -153,6 +157,7 @@ function EditLogistics({
   function set(patch: Partial<typeof form>) {
     setForm((previous) => ({ ...previous, ...patch }));
     setRefusal(null);
+    setDateRefusal(null);
   }
 
   function submit() {
@@ -169,6 +174,19 @@ function EditLogistics({
       });
       if (result.outcome === "updated") {
         setOpen(false);
+        return;
+      }
+      // The range now moves with the legs (ADR-0021), so the write can refuse an inverted range or
+      // one that would strand a still-arranged Session. Both point at the return date.
+      if (result.outcome === "return-before-departure") {
+        setDateRefusal("Tanggal Kepulangan tidak boleh lebih awal dari Keberangkatan.");
+        return;
+      }
+      if (result.outcome === "would-strand") {
+        setDateRefusal(
+          `Rentang baru mengeluarkan ${result.strandedCount} Sesi yang masih terjadwal. ` +
+            "Perlebar rentangnya atau ubah tanggal Sesi tersebut lebih dulu.",
+        );
         return;
       }
       setRefusal("Perjadin ini sudah tidak ada. Muat ulang halaman untuk melihat keadaannya.");
@@ -194,8 +212,10 @@ function EditLogistics({
         <DialogHeader>
           <DialogTitle>Ubah perjalanan</DialogTitle>
           <DialogDescription>
-            Keberangkatan selalu dari Bandung (WIB). Zona waktu kepulangan mengikuti kota Sekolah
-            terakhir, dan bisa dikoreksi di sini.
+            Tanggal Keberangkatan dan Kepulangan menentukan rentang Perjadin. Mengubahnya menggeser
+            rentang, tetapi tidak memindahkan Sesi — perubahan ditolak jika ada Sesi terjadwal yang
+            jatuh di luar rentang baru. Keberangkatan selalu dari Bandung (WIB); zona waktu
+            kepulangan mengikuti kota Sekolah terakhir dan bisa dikoreksi di sini.
           </DialogDescription>
         </DialogHeader>
 
@@ -254,10 +274,12 @@ function EditLogistics({
                   id={`${fields}-ret-date`}
                   type="date"
                   value={form.returnDate}
+                  aria-invalid={dateRefusal !== null}
                   onChange={(event) => {
                     set({ returnDate: event.target.value });
                   }}
                 />
+                {dateRefusal !== null && <p className="text-sm text-destructive">{dateRefusal}</p>}
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor={`${fields}-ret-time`}>Jam</Label>

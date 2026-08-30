@@ -59,15 +59,13 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
           {shortenKabupaten(trip.destination)}
         </h1>
         {/*
-          The dates and, for Staff, the one write that corrects them. Moving the trip offset-shifts
-          its arranged Sessions; delivered and cancelled ones stay, and the times do not move.
+          The date range, read-only: it is the departure→return span now (ADR-0021), so it is
+          corrected by editing the legs in the Perjalanan section below, not here.
         */}
         <div className="mt-0.5">
           <PerjadinDates
-            perjadinId={trip.id}
             startsOn={trip.startsOn}
             endsOn={trip.endsOn}
-            canEdit={person.role === "Staff"}
           />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">

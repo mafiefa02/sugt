@@ -9,7 +9,6 @@ import {
   changePerjadinPic,
   editPerjadinSession,
   filePerjadinEvaluation,
-  movePerjadinDates,
   removePerjadinTeacher,
   renamePerjadinTeacher,
   setPerjadinPimpinan,
@@ -22,7 +21,6 @@ import {
   type ChangePerjadinPicResult,
   type EditPerjadinSessionResult,
   type FilePerjadinEvaluationResult,
-  type MovePerjadinDatesResult,
   type NewPerjadinEvaluation,
   type PerjadinLogisticsInput,
   type PerjadinSessionInput,
@@ -191,25 +189,12 @@ export async function filePerjadinEvaluationAction(
 }
 
 /**
- * **Correct a Perjadin's dates**, moving its arranged Sessions with them.
+ * **Correct a Perjadin's departure/return logistics** — and, with them, its date range.
  *
- * The cascade rewrites `held_on` on the trip's arranged Sessions, which `/sesi/[id]` and
- * `/sekolah/[slug]` render — but only `/perjadin/${perjadinId}` is revalidated, following the
- * convention above. Those pages re-read on their own next visit.
+ * The range is the leg dates now (ADR-0021), so this write resizes `starts_on`/`ends_on` too. It
+ * clamps rather than shifting: an edit that would strand an arranged Session comes back as
+ * `would-strand` and nothing moves.
  */
-export async function movePerjadinDatesAction(
-  perjadinId: string,
-  startsOn: string,
-  endsOn: string,
-): Promise<MovePerjadinDatesResult> {
-  const person = await requirePerson();
-
-  const result = await staffSurface(() => movePerjadinDates(person, perjadinId, startsOn, endsOn));
-  if (result.outcome === "moved") revalidatePath(`/perjadin/${perjadinId}`);
-  return result;
-}
-
-/** **Correct a Perjadin's departure/return logistics.** */
 export async function updatePerjadinLogisticsAction(
   perjadinId: string,
   input: PerjadinLogisticsInput,

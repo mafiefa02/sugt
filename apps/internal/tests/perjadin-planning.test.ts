@@ -85,7 +85,11 @@ async function twoSchools(kabupatenKota: [string, string] = ["Kota Bandung", "Ko
   return { cluster, subCluster, schools };
 }
 
-/** The travel logistics a valid plan carries. The zones are the server's — WIB out, derived back. */
+/**
+ * The travel logistics a valid plan carries. The zones are the server's — WIB out, derived back. The
+ * leg **dates** are also the trip's range now (ADR-0021): `starts_on = 2026-09-01`, `ends_on =
+ * 2026-09-03`, so every in-window Session below sits between these two dates.
+ */
 const DEPARTURE = { date: "2026-09-01", time: "07:30", mode: "Pesawat" } as const;
 const RETURN = { date: "2026-09-03", time: "18:00", mode: "Pesawat" } as const;
 
@@ -97,8 +101,6 @@ async function validPlan(kabupatenKota?: [string, string]) {
 
   const input: PlanPerjadinInput = {
     subClusterId: subCluster.id,
-    startsOn: "2026-09-01",
-    endsOn: "2026-09-03",
     advanceIdr: 5_000_000,
     picPersonId: pic.id,
     teacherNames: [],
@@ -254,8 +256,6 @@ describe("Rencanakan Perjadin", () => {
 
     const planned = await planPerjadin(pic, {
       subClusterId: subCluster.id,
-      startsOn: "2026-09-01",
-      endsOn: "2026-09-03",
       advanceIdr: 5_000_000,
       picPersonId: pic.id,
       teacherNames: ["Dr. Andi", "Dr. Bella"],
@@ -591,12 +591,17 @@ describe("Rencanakan Perjadin", () => {
     expect(result.outcome).toBe("planned");
   });
 
-  it("refuses a trip that ends before it starts, and writes nothing", async () => {
+  it("refuses a return date earlier than the departure date, and writes nothing", async () => {
     const { pic, input } = await validPlan();
 
-    const result = await planPerjadin(pic, { ...input, startsOn: "2026-09-05" });
+    // The range is the leg dates now (ADR-0021): a return before the departure would derive an
+    // inverted range. The departure stays 2026-09-01; the return is pulled back before it.
+    const result = await planPerjadin(pic, {
+      ...input,
+      return: { date: "2026-08-30", time: "18:00", mode: "Pesawat" },
+    });
 
-    expect(result).toEqual({ outcome: "ends-before-starts" });
+    expect(result).toEqual({ outcome: "return-before-departure" });
     expect(await perjadinRows()).toEqual([]);
   });
 
@@ -786,8 +791,6 @@ describe("the derived Perjadin destination", () => {
 
     const planned = await planPerjadin(pic, {
       subClusterId: subCluster.id,
-      startsOn: "2026-09-01",
-      endsOn: "2026-09-03",
       advanceIdr: 5_000_000,
       picPersonId: pic.id,
       teacherNames: [],
@@ -823,8 +826,10 @@ describe("the Perjadin list and detail", () => {
     await planPerjadin(pic, input);
     await planPerjadin(pic, {
       ...input,
-      startsOn: "2026-10-01",
-      endsOn: "2026-10-02",
+      // The range is the leg dates now (ADR-0021), so a later trip is a later departure/return, not
+      // a separately typed range. Its one Session sits inside the new window.
+      departure: { date: "2026-10-01", time: "07:30", mode: "Pesawat" },
+      return: { date: "2026-10-02", time: "18:00", mode: "Pesawat" },
       sessions: [
         {
           schoolId: input.sessions[0]!.schoolId,
@@ -1038,8 +1043,6 @@ describe("extra Staff and travel logistics", () => {
 
     const planned = await planPerjadin(pic, {
       subClusterId: subCluster.id,
-      startsOn: "2026-09-01",
-      endsOn: "2026-09-05",
       advanceIdr: 5_000_000,
       picPersonId: pic.id,
       teacherNames: [],

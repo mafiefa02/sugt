@@ -102,7 +102,6 @@ export {
 } from "./arrange-online-session";
 export {
   changePerjadinPic,
-  movePerjadinDates,
   perjadinDetail,
   setPerjadinPimpinan,
   setPerjadinStaff,
@@ -110,7 +109,6 @@ export {
   type ChangePerjadinPicResult,
   type EligibleSchool,
   type GroupMemberEntry,
-  type MovePerjadinDatesResult,
   type PerjadinDetail,
   type PerjadinLogisticsInput,
   type PerjadinSession,

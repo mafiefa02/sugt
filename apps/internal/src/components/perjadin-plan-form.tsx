@@ -76,9 +76,10 @@ function PerjadinPlanForm({
 }) {
   const router = useRouter();
   const [subClusterId, setSubClusterId] = useState("");
+  // The trip's range is no longer typed here (ADR-0021): it is the departure→return span, derived
+  // at the write from the logistics leg dates. So Mulai/Selesai are gone and this holds only the
+  // Advance and the PIC.
   const [trip, setTrip] = useState({
-    startsOn: "",
-    endsOn: "",
     advanceIdr: "",
     picPersonId: "",
   });
@@ -107,8 +108,6 @@ function PerjadinPlanForm({
   const [saving, startSaving] = useTransition();
 
   const subClusterFieldId = useId();
-  const startsId = useId();
-  const endsId = useId();
   const advanceId = useId();
   const picId = useId();
   const teacherDraftId = useId();
@@ -190,8 +189,6 @@ function PerjadinPlanForm({
   /** Every field the database needs before a trip can be written. Teaching Team, Staff, Pimpinan are optional. */
   const incomplete =
     subClusterId === "" ||
-    trip.startsOn === "" ||
-    trip.endsOn === "" ||
     trip.advanceIdr === "" ||
     trip.picPersonId === "" ||
     logistics.departureDate === "" ||
@@ -209,8 +206,6 @@ function PerjadinPlanForm({
     startSaving(async () => {
       const result = await planPerjadinAction({
         subClusterId,
-        startsOn: trip.startsOn,
-        endsOn: trip.endsOn,
         advanceIdr: Number(trip.advanceIdr),
         picPersonId: trip.picPersonId,
         extraStaffPersonIds: extraStaff,
@@ -301,34 +296,6 @@ function PerjadinPlanForm({
             placeholder="Pilih PIC"
             onSelect={(personId) => {
               setTrip((previous) => ({ ...previous, picPersonId: personId }));
-            }}
-          />
-        </Field>
-
-        <Field
-          id={startsId}
-          label="Mulai"
-        >
-          <Input
-            id={startsId}
-            type="date"
-            value={trip.startsOn}
-            onChange={(event) => {
-              setTrip((previous) => ({ ...previous, startsOn: event.target.value }));
-            }}
-          />
-        </Field>
-
-        <Field
-          id={endsId}
-          label="Selesai"
-        >
-          <Input
-            id={endsId}
-            type="date"
-            value={trip.endsOn}
-            onChange={(event) => {
-              setTrip((previous) => ({ ...previous, endsOn: event.target.value }));
             }}
           />
         </Field>
@@ -565,8 +532,10 @@ function PerjadinPlanForm({
                             id={`${idPrefix}-date-${school.id}-${index}`}
                             type="date"
                             className="w-44"
-                            min={trip.startsOn || undefined}
-                            max={trip.endsOn || undefined}
+                            // The range is the departure→return span now (ADR-0021), so a Session's
+                            // date is bounded by the leg dates rather than by typed Mulai/Selesai.
+                            min={logistics.departureDate || undefined}
+                            max={logistics.returnDate || undefined}
                             value={draft.date}
                             onChange={(event) => {
                               patchSession(school.id, index, { date: event.target.value });
@@ -707,8 +676,8 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
       <Alert variant="destructive">
         <AlertTitle>Perjadin belum dibuat.</AlertTitle>
         <AlertDescription>
-          {result.outcome === "ends-before-starts" && (
-            <p>Tanggal selesai tidak boleh mendahului tanggal mulai.</p>
+          {result.outcome === "return-before-departure" && (
+            <p>Tanggal Kepulangan tidak boleh lebih awal dari Keberangkatan.</p>
           )}
           {result.outcome === "no-schools" && <p>Belum ada Sesi pada Perjadin ini.</p>}
           {result.outcome === "duplicate-staff" && (

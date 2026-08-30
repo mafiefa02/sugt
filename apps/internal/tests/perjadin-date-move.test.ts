@@ -1,5 +1,9 @@
 import { db, schema } from "@sugt/db";
-import { isNotStaffError, movePerjadinDates } from "@sugt/db/queries";
+import {
+  planPerjadin,
+  updatePerjadinLogistics,
+  type PerjadinLogisticsInput,
+} from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -10,14 +14,17 @@ import {
   addPerson,
   addProvince,
   addSchool,
+  addSubCluster,
   resetDatabase,
 } from "./support/fixtures";
 
 /**
- * **Moving a Perjadin's dates** — the other half of #28's invariant, and the write side #55
- * owns. Correcting a trip's dates offset-shifts its **arranged** Sessions so each stays inside
- * the new window; delivered and cancelled ones do not move; and a shrink that would strand an
- * arranged Session is refused whole, leaving the trip and its Sessions untouched.
+ * **A Perjadin's range is its departure and return dates** (ADR-0021), and the write side of #28's
+ * invariant now lives on the logistics edit. The range is no longer typed: planning derives it from
+ * the leg dates, and `updatePerjadinLogistics` resizes it when a leg date moves — clamping, never
+ * shifting. An edit that would leave an **arranged** Session outside the new `[departure … return]`
+ * window is refused whole (`would-strand`) and moves nothing; delivered and cancelled Sessions may
+ * sit outside the window their trip now claims and do not block it.
  */
 
 /** The Staff Person who is PIC of the trip. */
@@ -25,42 +32,11 @@ async function staff(email = "rina@ditsama.itb.ac.id") {
   return addPerson({ fullName: "Rina Nurhayati", email, role: "Staff" });
 }
 
-/** One School to hang Sessions off. */
+/** One School to hang Sessions off — the free-standing kind, for the `addPerjadin` fixtures below. */
 async function oneSchool(slug = "sman-1-bandung") {
   await addProvince("JB", "Jawa Barat");
   const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
   return addSchool({ slug, name: "SMAN 1 Bandung", clusterId: cluster.id, provinceCode: "JB" });
-}
-
-/**
- * Three Schools under one Cluster, so these tests can put a Session at each and move the trip's
- * dates across all three. (Since ADR-0019 a School may hold several offline Sessions per trip, so
- * three Sessions no longer *need* three Schools — this fixture just keeps one Session per School,
- * which is what the current planning form produces.)
- */
-async function threeSchools() {
-  await addProvince("JB", "Jawa Barat");
-  const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
-  return Promise.all([
-    addSchool({
-      slug: "sman-1-bandung",
-      name: "SMAN 1 Bandung",
-      clusterId: cluster.id,
-      provinceCode: "JB",
-    }),
-    addSchool({
-      slug: "sman-2-bandung",
-      name: "SMAN 2 Bandung",
-      clusterId: cluster.id,
-      provinceCode: "JB",
-    }),
-    addSchool({
-      slug: "sman-3-bandung",
-      name: "SMAN 3 Bandung",
-      clusterId: cluster.id,
-      provinceCode: "JB",
-    }),
-  ]);
 }
 
 /** The `held_on` a Session actually carries, read back rather than trusted. */
@@ -72,16 +48,7 @@ async function heldOnOf(sessionId: string) {
   return row?.heldOn ?? null;
 }
 
-/** The `starts_at` a Session actually carries, read back rather than trusted. */
-async function startsAtOf(sessionId: string) {
-  const [row] = await db
-    .select({ startsAt: schema.session.startsAt })
-    .from(schema.session)
-    .where(eq(schema.session.id, sessionId));
-  return row?.startsAt ?? null;
-}
-
-/** The window a Perjadin actually carries, read back rather than trusted. */
+/** The range a Perjadin actually carries, read back rather than trusted. */
 async function windowOf(perjadinId: string) {
   const [row] = await db
     .select({ startsOn: schema.perjadin.startsOn, endsOn: schema.perjadin.endsOn })
@@ -90,96 +57,102 @@ async function windowOf(perjadinId: string) {
   return row ?? null;
 }
 
-describe("Moving a Perjadin's dates", () => {
+/**
+ * A whole `PerjadinLogisticsInput` around one pair of leg **dates** — the times, modes and return
+ * zone are fixed, because these tests are about the dates that become the range. Departure is always
+ * WIB and the write fixes it there regardless of what is passed.
+ */
+function logistics(departureDate: string, returnDate: string): PerjadinLogisticsInput {
+  return {
+    departureDate,
+    departureTime: "07:30",
+    departureMode: "Pesawat",
+    returnDate,
+    returnTime: "18:00",
+    returnMode: "Pesawat",
+    returnZone: "WIB",
+  };
+}
+
+describe("Planning derives the range from the leg dates", () => {
   beforeEach(resetDatabase);
 
-  it("offset-shifts arranged Sessions so each stays inside the moved window", async () => {
+  it("writes starts_on/ends_on equal to the departure and return dates", async () => {
+    const pic = await staff();
+    await addProvince("JB", "Jawa Barat");
+    const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
+    const subCluster = await addSubCluster({
+      slug: "alpha-bandung",
+      name: "Kelompok Sekolah Bandung",
+      clusterId: cluster.id,
+    });
+    const school = await addSchool({
+      slug: "sman-1",
+      name: "SMAN 1 Bandung",
+      clusterId: cluster.id,
+      subClusterId: subCluster.id,
+      provinceCode: "JB",
+    });
+
+    const planned = await planPerjadin(pic, {
+      subClusterId: subCluster.id,
+      advanceIdr: 5_000_000,
+      picPersonId: pic.id,
+      teacherNames: [],
+      pimpinan: [],
+      sessions: [
+        {
+          schoolId: school.id,
+          heldOn: "2026-09-02",
+          startsAt: "09:00",
+          stream: "STEM",
+          taughtByTeacherIndexes: [],
+        },
+      ],
+      departure: { date: "2026-09-01", time: "07:30", mode: "Pesawat" },
+      return: { date: "2026-09-04", time: "18:00", mode: "Pesawat" },
+    });
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    // The range is the leg dates, not a typed field — no input carried it.
+    expect(await windowOf(planned.perjadinId)).toEqual({
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-04",
+    });
+  });
+});
+
+describe("Editing a leg date resizes the range", () => {
+  beforeEach(resetDatabase);
+
+  it("recomputes starts_on/ends_on from the new leg dates", async () => {
     const pic = await staff();
     const school = await oneSchool();
-    const perjadin = await addPerjadin({
-      picPersonId: pic.id,
-      advanceIdr: 5_000_000,
-      startsOn: "2026-09-01",
-      endsOn: "2026-09-03",
-    });
-    const session = await addOfflineSession({
-      schoolId: school.id,
-      heldOn: "2026-09-02",
-      perjadinId: perjadin.id,
-    });
-
-    // The trip moves a week later, start and end together: a pure translation of +7 days.
-    const result = await movePerjadinDates(pic, perjadin.id, "2026-09-08", "2026-09-10");
-
-    expect(result).toEqual({ outcome: "moved", sessionsShifted: 1 });
-    expect(await heldOnOf(session.id)).toBe("2026-09-09");
-    expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-08", endsOn: "2026-09-10" });
-  });
-
-  it("moves held_on but never starts_at — the trip slides, the hour a School expects does not", async () => {
-    const pic = await staff();
-    const school = await oneSchool();
-    const perjadin = await addPerjadin({
-      picPersonId: pic.id,
-      advanceIdr: 5_000_000,
-      startsOn: "2026-09-01",
-      endsOn: "2026-09-03",
-    });
-    // A time distinct from the fixture default, so pinning it after the move discriminates: a
-    // rewrite from anywhere would show up as "09:00" and pass a lazier assertion.
-    const session = await addOfflineSession({
-      schoolId: school.id,
-      heldOn: "2026-09-02",
-      startsAt: "13:30",
-      perjadinId: perjadin.id,
-    });
-
-    const result = await movePerjadinDates(pic, perjadin.id, "2026-09-08", "2026-09-10");
-
-    expect(result).toEqual({ outcome: "moved", sessionsShifted: 1 });
-    // The date moves with the trip; the time does not. A PG `time` column renders HH:MM:SS.
-    expect(await heldOnOf(session.id)).toBe("2026-09-09");
-    expect(await startsAtOf(session.id)).toBe("13:30:00");
-  });
-
-  it("leaves delivered and cancelled Sessions where they are", async () => {
-    const pic = await staff();
-    const [s1, s2, s3] = await threeSchools();
     const perjadin = await addPerjadin({
       picPersonId: pic.id,
       advanceIdr: 5_000_000,
       startsOn: "2026-09-01",
       endsOn: "2026-09-05",
     });
-    const arranged = await addOfflineSession({
-      schoolId: s1!.id,
-      heldOn: "2026-09-02",
-      perjadinId: perjadin.id,
-    });
-    const delivered = await addOfflineSession({
-      schoolId: s2!.id,
+    // A Session that stays inside the widened window, so the edit is not about stranding.
+    await addOfflineSession({
+      schoolId: school.id,
       heldOn: "2026-09-03",
-      status: "delivered",
-      perjadinId: perjadin.id,
-    });
-    const cancelled = await addOfflineSession({
-      schoolId: s3!.id,
-      heldOn: "2026-09-04",
-      status: "cancelled",
       perjadinId: perjadin.id,
     });
 
-    const result = await movePerjadinDates(pic, perjadin.id, "2026-09-11", "2026-09-15");
+    const result = await updatePerjadinLogistics(
+      pic,
+      perjadin.id,
+      logistics("2026-09-01", "2026-09-08"),
+    );
 
-    // Only the arranged Session shifts (+10). The delivered and cancelled ones stay put — a
-    // delivered Session may legitimately sit outside the window its trip now claims.
-    expect(result).toEqual({ outcome: "moved", sessionsShifted: 1 });
-    expect(await heldOnOf(arranged.id)).toBe("2026-09-12");
-    expect(await heldOnOf(delivered.id)).toBe("2026-09-03");
-    expect(await heldOnOf(cancelled.id)).toBe("2026-09-04");
+    expect(result).toEqual({ outcome: "updated" });
+    // The range followed the return date; no separate field was touched.
+    expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-08" });
   });
 
-  it("refuses a shrink that would strand an arranged Session, changing nothing", async () => {
+  it("refuses a leg-date change that would strand an arranged Session, moving nothing", async () => {
     const pic = await staff();
     const school = await oneSchool();
     const perjadin = await addPerjadin({
@@ -194,9 +167,13 @@ describe("Moving a Perjadin's dates", () => {
       perjadinId: perjadin.id,
     });
 
-    // Start stays, end pulls in to the 5th: the Session does not shift (delta 0) and 09-09 now
-    // falls outside. The whole edit is refused rather than stranding it.
-    const result = await movePerjadinDates(pic, perjadin.id, "2026-09-01", "2026-09-05");
+    // The return date pulls in to the 5th: the arranged Session on the 9th would fall outside the new
+    // window. Clamp, not shift — the whole edit is refused and the Session is left where it is.
+    const result = await updatePerjadinLogistics(
+      pic,
+      perjadin.id,
+      logistics("2026-09-01", "2026-09-05"),
+    );
 
     expect(result).toEqual({
       outcome: "would-strand",
@@ -204,38 +181,106 @@ describe("Moving a Perjadin's dates", () => {
       startsOn: "2026-09-01",
       endsOn: "2026-09-05",
     });
-    // One transaction: neither the trip nor the Session changed.
+    // Nothing changed: not the range, and not the Session's date.
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-10" });
     expect(await heldOnOf(session.id)).toBe("2026-09-09");
   });
 
-  it("refuses a Teaching Team caller, because a trip's dates gate its Sessions", async () => {
+  it("lets a delivered or cancelled Session outside the new window pass — the invariant is arranged-only", async () => {
     const pic = await staff();
-    const teacher = await addPerson({
-      fullName: "Bagus Prakoso",
-      email: "bagus@itb.ac.id",
-      role: "Teaching Team",
-    });
+    await addProvince("JB", "Jawa Barat");
+    const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
+    const [delivered, cancelled] = await Promise.all([
+      addSchool({ slug: "sman-1", name: "SMAN 1", clusterId: cluster.id, provinceCode: "JB" }),
+      addSchool({ slug: "sman-2", name: "SMAN 2", clusterId: cluster.id, provinceCode: "JB" }),
+    ]);
     const perjadin = await addPerjadin({
       picPersonId: pic.id,
       advanceIdr: 5_000_000,
       startsOn: "2026-09-01",
-      endsOn: "2026-09-03",
+      endsOn: "2026-09-10",
+    });
+    // Both sit on the 9th — outside the window the edit shrinks to — but neither is arranged, so
+    // neither blocks the resize.
+    const deliveredSession = await addOfflineSession({
+      schoolId: delivered.id,
+      heldOn: "2026-09-09",
+      status: "delivered",
+      perjadinId: perjadin.id,
+    });
+    const cancelledSession = await addOfflineSession({
+      schoolId: cancelled.id,
+      heldOn: "2026-09-09",
+      status: "cancelled",
+      perjadinId: perjadin.id,
     });
 
-    await expect(
-      movePerjadinDates(teacher, perjadin.id, "2026-09-08", "2026-09-10"),
-    ).rejects.toSatisfy(isNotStaffError);
+    const result = await updatePerjadinLogistics(
+      pic,
+      perjadin.id,
+      logistics("2026-09-01", "2026-09-05"),
+    );
+
+    expect(result).toEqual({ outcome: "updated" });
+    expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-05" });
+    // The two out-of-window Sessions are left exactly where they were.
+    expect(await heldOnOf(deliveredSession.id)).toBe("2026-09-09");
+    expect(await heldOnOf(cancelledSession.id)).toBe("2026-09-09");
+  });
+
+  it("accepts a same-day trip — departure date equal to return date", async () => {
+    const pic = await staff();
+    const school = await oneSchool();
+    const perjadin = await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: 5_000_000,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-05",
+    });
+    await addOfflineSession({
+      schoolId: school.id,
+      heldOn: "2026-09-02",
+      perjadinId: perjadin.id,
+    });
+
+    const result = await updatePerjadinLogistics(
+      pic,
+      perjadin.id,
+      logistics("2026-09-02", "2026-09-02"),
+    );
+
+    expect(result).toEqual({ outcome: "updated" });
+    expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-02", endsOn: "2026-09-02" });
+  });
+
+  it("refuses a return date earlier than the departure date, before opening the transaction", async () => {
+    const pic = await staff();
+    await oneSchool();
+    const perjadin = await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: 5_000_000,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-05",
+    });
+
+    const result = await updatePerjadinLogistics(
+      pic,
+      perjadin.id,
+      logistics("2026-09-05", "2026-09-01"),
+    );
+
+    expect(result).toEqual({ outcome: "return-before-departure" });
+    // The range is untouched: the refusal comes before any write.
+    expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-05" });
   });
 
   it("reports no-such-perjadin for an id that names no trip", async () => {
     const pic = await staff();
 
-    const result = await movePerjadinDates(
+    const result = await updatePerjadinLogistics(
       pic,
       "00000000-0000-0000-0000-000000000000",
-      "2026-09-01",
-      "2026-09-03",
+      logistics("2026-09-01", "2026-09-03"),
     );
 
     expect(result).toEqual({ outcome: "no-such-perjadin" });

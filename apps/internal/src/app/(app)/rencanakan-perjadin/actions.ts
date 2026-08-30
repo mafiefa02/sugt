@@ -12,8 +12,9 @@ import { planPerjadin, type PlanPerjadinInput, type PlanPerjadinResult } from "@
  * either — `requireStaff` inside the query is what closes the path, since a layout does not
  * run before a Server Action.
  *
- * Every refusal comes back as a value. A Group missing a Stream, a trip that ends before it
- * starts, a Session dated outside the trip: each is something a person can type honestly,
+ * Every refusal comes back as a value. A return date before the departure date (the range is the
+ * departure→return span now, ADR-0021), a Session dated outside the trip: each is something a
+ * person can type honestly,
  * and by the rule settled on the query layer each earns a field-level message rather than
  * an error page.
  *
