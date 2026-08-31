@@ -55,7 +55,7 @@ export default async function Page() {
               <span className="text-xs text-muted-foreground">PIC {session.picFullName}</span>
               <SessionStatusBadge status={session.status} />
               <Link
-                href={`/sesi/${session.id}`}
+                href={`/sesi-daring/${session.id}`}
                 className="ml-auto text-xs text-muted-foreground hover:underline"
               >
                 Lihat sesi

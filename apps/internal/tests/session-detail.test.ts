@@ -205,10 +205,13 @@ describe("Detail Sesi", () => {
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
+    // `session_teacher` is seeded directly now — mark-delivered is status-only (#152), and this read
+    // still counts owed Class Records off `session_teacher` until T3 retires it.
+    await db.insert(schema.sessionTeacher).values([
+      { sessionId: session.id, stream: "STEM", personId: bagus.id },
+      { sessionId: session.id, stream: "Research", personId: sari.id },
     ]);
+    await markSessionDelivered(pic, session.id);
 
     const detail = await sessionDetail(pic, session.id);
 
@@ -335,17 +338,13 @@ describe("Detail Sesi", () => {
 
   it("stops owing a Session Record once the PIC files one", async () => {
     const pic = await staff();
-    const [bagus, sari] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
+    await markSessionDelivered(pic, session.id);
     await addSessionRecord({ sessionId: session.id, filedByPersonId: pic.id });
 
     const detail = await sessionDetail(pic, session.id);
@@ -354,108 +353,59 @@ describe("Detail Sesi", () => {
   });
 });
 
-describe("Tandai terlaksana", () => {
+describe("Tandai terlaksana — online", () => {
   beforeEach(resetDatabase);
 
   async function arrangedOnlineSession() {
     const pic = await staff();
-    const [bagus, sari] = await professors();
+    const [bagus] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    return { pic, bagus, sari, school, session };
+    return { pic, bagus, school, session };
   }
 
-  it("writes the status and who taught as one act", async () => {
-    const { pic, bagus, sari, session } = await arrangedOnlineSession();
-
-    const result = await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
-
-    expect(result.outcome).toBe("delivered");
-    expect(await statusOf(session.id)).toBe("delivered");
-    expect(await teachersOf(session.id)).toHaveLength(2);
-  });
-
   /**
-   * The rule `data-model.md` places at exactly this point. It is refused as a **value**
-   * rather than as a throw: a form submitted with one Stream empty is a user state, and
-   * the rule settled on the query layer is that a state reachable from correct UI gets a
-   * field-level message.
+   * Status only now, for both modes (#152). An online Session names its Pengajar as session-scoped
+   * `session_teacher_name` at arrangement and edits them per-item on `/sesi-daring/[id]`, so
+   * delivery no longer names a Person per Stream and writes no `session_teacher`.
    */
-  it("refuses to deliver with a Stream unnamed, and writes nothing", async () => {
-    const { pic, bagus, session } = await arrangedOnlineSession();
+  it("marks an online Session delivered with status only, writing no session_teacher", async () => {
+    const { pic, session } = await arrangedOnlineSession();
 
-    const result = await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-    ]);
+    const result = await markSessionDelivered(pic, session.id);
 
-    expect(result).toEqual({ outcome: "stream-unnamed", missing: ["Research"] });
-    expect(await statusOf(session.id)).toBe("arranged");
+    expect(result).toEqual({ outcome: "delivered" });
+    expect(await statusOf(session.id)).toBe("delivered");
     expect(await teachersOf(session.id)).toEqual([]);
   });
 
   /** `delivered` is terminal, and the second attempt is what proves it. */
   it("refuses to deliver a Session that is already delivered", async () => {
-    const { pic, bagus, sari, session } = await arrangedOnlineSession();
-    const teachers = [
-      { stream: "STEM" as const, personId: bagus.id },
-      { stream: "Research" as const, personId: sari.id },
-    ];
-    await markSessionDelivered(pic, session.id, teachers);
+    const { pic, session } = await arrangedOnlineSession();
+    await markSessionDelivered(pic, session.id);
 
-    const result = await markSessionDelivered(pic, session.id, teachers);
+    const result = await markSessionDelivered(pic, session.id);
 
     expect(result).toEqual({ outcome: "not-arranged", status: "delivered" });
   });
 
   it("refuses to deliver a cancelled Session", async () => {
-    const { pic, bagus, sari, session } = await arrangedOnlineSession();
+    const { pic, session } = await arrangedOnlineSession();
     await cancelSession(pic, session.id, "Sekolah meminta penjadwalan ulang");
 
-    const result = await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
+    const result = await markSessionDelivered(pic, session.id);
 
     expect(result).toEqual({ outcome: "not-arranged", status: "cancelled" });
   });
 
   it("refuses a Teaching Team caller", async () => {
-    const { bagus, sari, session } = await arrangedOnlineSession();
+    const { bagus, session } = await arrangedOnlineSession();
 
-    await expect(
-      markSessionDelivered(bagus, session.id, [
-        { stream: "STEM", personId: bagus.id },
-        { stream: "Research", personId: sari.id },
-      ]),
-    ).rejects.toSatisfy(isNotStaffError);
-  });
-
-  /**
-   * Naming both Streams is optional at arrangement and mandatory here, so a Session may
-   * arrive already carrying teacher rows. They are replaced rather than merged — the
-   * dialog shows the complete answer, so a row it does not carry is a row Staff removed.
-   */
-  it("replaces teacher rows rather than adding to them", async () => {
-    const { pic, bagus, sari, session } = await arrangedOnlineSession();
-    await db
-      .insert(schema.sessionTeacher)
-      .values([{ sessionId: session.id, stream: "STEM", personId: sari.id }]);
-
-    await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
-
-    const rows = await teachersOf(session.id);
-    expect(rows).toHaveLength(2);
-    expect(rows.find((row) => row.stream === "STEM")?.personId).toBe(bagus.id);
+    await expect(markSessionDelivered(bagus, session.id)).rejects.toSatisfy(isNotStaffError);
   });
 });
 
@@ -483,7 +433,7 @@ describe("Tandai terlaksana — offline", () => {
   it("marks an offline Session delivered with status only, writing no session_teacher", async () => {
     const { pic, session } = await arrangedOfflineSession();
 
-    const result = await markSessionDelivered(pic, session.id, []);
+    const result = await markSessionDelivered(pic, session.id);
 
     expect(result).toEqual({ outcome: "delivered" });
     expect(await statusOf(session.id)).toBe("delivered");
@@ -492,22 +442,9 @@ describe("Tandai terlaksana — offline", () => {
     expect(await teachersOf(session.id)).toEqual([]);
   });
 
-  it("ignores any teachers passed for an offline Session — it never writes session_teacher", async () => {
-    const { pic, bagus, sari, session } = await arrangedOfflineSession();
-
-    // A hand-edited payload naming People: an offline Session must still write no session_teacher.
-    const result = await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
-
-    expect(result).toEqual({ outcome: "delivered" });
-    expect(await teachersOf(session.id)).toEqual([]);
-  });
-
   it("refuses to correct teachers on an offline Session, writing no session_teacher", async () => {
     const { pic, bagus, sari, session } = await arrangedOfflineSession();
-    await markSessionDelivered(pic, session.id, []);
+    await markSessionDelivered(pic, session.id);
 
     const result = await correctSessionTeachers(pic, session.id, [
       { stream: "STEM", personId: bagus.id },
@@ -531,7 +468,10 @@ describe("correcting who taught", () => {
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    await markSessionDelivered(pic, session.id, [
+    // Mark-delivered is status-only now (#152); `session_teacher` is seeded through the retained
+    // (unsurfaced) `correctSessionTeachers` writer, which is the path these tests still exercise.
+    await markSessionDelivered(pic, session.id);
+    await correctSessionTeachers(pic, session.id, [
       { stream: "STEM", personId: bagus.id },
       { stream: "Research", personId: sari.id },
     ]);
@@ -657,17 +597,13 @@ describe("Batalkan Sesi", () => {
    */
   it("refuses to cancel a delivered Session", async () => {
     const pic = await staff();
-    const [bagus, sari] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
+    await markSessionDelivered(pic, session.id);
 
     const result = await cancelSession(pic, session.id, "Berubah pikiran");
 
@@ -795,17 +731,13 @@ describe("moving a date", () => {
 
   it("refuses to move a delivered Session", async () => {
     const pic = await staff();
-    const [bagus, sari] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    await markSessionDelivered(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
+    await markSessionDelivered(pic, session.id);
 
     expect(await moveSessionDate(pic, session.id, "2026-09-17", "09:00")).toEqual({
       outcome: "not-arranged",

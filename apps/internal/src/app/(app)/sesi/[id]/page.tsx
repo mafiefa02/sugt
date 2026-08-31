@@ -6,7 +6,7 @@ import { requirePerson } from "-/lib/person";
 import { sessionDetail } from "@sugt/db/queries";
 import { formatSessionStartTimeWithWib } from "@sugt/domain";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 /**
  * **Detail Sesi** — one Session: what has been filed against it, who still owes what, and
@@ -25,6 +25,10 @@ import { notFound } from "next/navigation";
  * Keyed on the Session's id rather than a slug — a Session has no natural name, and its
  * School and date are not unique between two Sessions on the same day. An id naming no
  * Session is an ordinary thing to arrive with, so it is a **404** and not an error.
+ *
+ * **This is the offline detail surface now (#152).** An online Session is edited on its own
+ * `/sesi-daring/[id]`, so an online id is redirected there rather than rendered here — the reads and
+ * writes below (Tandai terlaksana status-only, Batalkan Sesi, moving the date) are the offline half.
  */
 export default async function Page({ params }: PageProps<"/sesi/[id]">) {
   const person = await requirePerson();
@@ -32,6 +36,8 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
 
   const session = await sessionDetail(person, id);
   if (!session) notFound();
+  // An online Session's detail and editing live on `/sesi-daring/[id]`; only offline stays here.
+  if (session.mode === "online") redirect(`/sesi-daring/${id}`);
 
   return (
     <div className="flex min-h-full flex-col">

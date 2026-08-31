@@ -376,9 +376,7 @@ export type PastArranged = Exclude<SessionStatus, "arranged">;
 
 export type MarkDeliveredResult =
   | { outcome: "delivered" }
-  | { outcome: "not-arranged"; status: PastArranged }
-  /** A Stream nobody was named for, which Tandai terlaksana will not submit with. */
-  | { outcome: "stream-unnamed"; missing: Stream[] };
+  | { outcome: "not-arranged"; status: PastArranged };
 
 export type CorrectTeachersResult =
   | { outcome: "corrected" }
@@ -466,50 +464,38 @@ async function lockedSession(
 }
 
 /**
- * **Tandai terlaksana** — mark a Session delivered. What it writes turns on the mode.
+ * **Tandai terlaksana** — mark a Session delivered. **Status only, for both modes now**
+ * (ADR-0019, ADR-0020, ADR-0022, #140, #152).
  *
- * **Online** — one act writing `session.status` and `session_teacher`, deliberately not two
- * steps. "Who still owes what" is computed from who taught, so a Session marked delivered with
- * nobody recorded owes nothing and the chase list is silently empty — the worst failure
- * available to a tool whose only enforcement is naming who has not filed. So an online Session
- * names a Person per Stream and the both-Streams rule is enforced here.
+ * It writes nothing but `session.status = 'delivered'`, and it takes no teachers. Both modes name
+ * their Stream on the Session and their teachers as **session-scoped free-text names**: an offline
+ * Session's are trip-scoped `session_teaching_team` names edited on the Perjadin, and an online
+ * Session's are `session_teacher_name` names edited on `/sesi-daring/[id]` (ADR-0022). Neither is a
+ * `person`, so `session_teacher` cannot and must not hold them, and there is no who-taught prompt on
+ * either side.
  *
- * **Offline** — **status only** (ADR-0019, ADR-0020, #140). An offline Session already carries
- * its Stream (`session.stream`) and its teachers are trip-scoped names recorded through
- * `session_teaching_team`, edited on the Perjadin — not People, so `session_teacher` cannot and
- * must not hold them. There is no who-taught prompt and no teacher row is written; `teachers` is
- * ignored. Offline Class Records and the offline progress metric are deferred (T8, the `CONTEXT.md`
- * open question), so nothing here is owed off the back of it.
+ * The online half used to name a Teaching-Team Person per Stream and write `session_teacher` in the
+ * same act; ADR-0022 made online Sessions single-Stream with named teachers set at arrangement, so
+ * that step no longer fits and #152 retired it from this path — the online mirror of #140's offline
+ * change. The Person-based `session_teacher` table and its `correctSessionTeachers` writer live on
+ * unsurfaced until T3; nothing here touches them. Offline Class Records and the offline progress
+ * metric stay deferred (T8, the `CONTEXT.md` open question), so nothing is owed off the back of this.
  *
- * The transaction is here and not in the Server Action, by convention 5 beside this package: for
- * online the status and the teacher rows commit together or not at all. `for update` on the Session
- * is what makes the status check mean something — two Staff pressing the button at once both read
- * `arranged` otherwise, and the second overwrites the first.
+ * The transaction and the `for update` lock are still here, by convention 5: the status check means
+ * nothing without the lock — two Staff pressing the button at once both read `arranged` otherwise,
+ * and the second overwrites the first — even now that the write is a single statement.
  */
 export async function markSessionDelivered(
   caller: Person,
   sessionId: string,
-  teachers: TaughtBy[],
 ): Promise<MarkDeliveredResult> {
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
-    const { status, mode } = await lockedSession(tx, sessionId);
+    const { status } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
-    if (mode === "offline") {
-      // Status only — no who-taught, no `session_teacher`. The Stream is on the Session and the
-      // teachers are `session_teaching_team` names, not People.
-      await tx.update(session).set({ status: "delivered" }).where(eq(session.id, sessionId));
-      return { outcome: "delivered" };
-    }
-
-    const missing = streamsUnnamed(teachers);
-    if (missing.length > 0) return { outcome: "stream-unnamed", missing };
-
-    await replaceTeachers(tx, sessionId, teachers);
     await tx.update(session).set({ status: "delivered" }).where(eq(session.id, sessionId));
-
     return { outcome: "delivered" };
   });
 }
@@ -517,9 +503,17 @@ export async function markSessionDelivered(
 /**
  * Correct who taught, which stays possible **after** delivery and stays Staff-only.
  *
- * It has to: `delivered` is terminal, so there is no un-delivering a Session to fix a
- * name, and until a mis-named professor is removed they owe three Class Records they
- * cannot honestly file.
+ * **Unsurfaced since #152, pending its removal in T3.** This writes `session_teacher`, the
+ * Person-based table ADR-0022 replaced online with `session_teacher_name`. Online Pengajar are
+ * now edited anytime per-item on `/sesi-daring/[id]` (add/rename/remove against
+ * `session_teacher_name`), so the post-delivery correction this offered is obsolete — its Server
+ * Action and its "Perbaiki pengajar" dialog were removed with the online detail work. The function
+ * is left exported so `session_teacher` still has a writer while the table stands; both go together
+ * in T3. It may be uncalled from the app, which is expected.
+ *
+ * It has to stay possible after delivery while it exists: `delivered` is terminal, so there is no
+ * un-delivering a Session to fix a name, and until a mis-named professor is removed they owe three
+ * Class Records they cannot honestly file.
  *
  * **The both-Streams rule is re-checked once the Session is delivered, and not before.**
  * Naming is optional at arrangement — mandatory at arrangement would block a batch

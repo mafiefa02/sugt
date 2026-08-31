@@ -1,5 +1,6 @@
 import { db, schema } from "@sugt/db";
 import {
+  correctSessionTeachers,
   fileClassRecord,
   fileSessionRecord,
   isNotStaffError,
@@ -271,7 +272,10 @@ describe("fileClassRecord", () => {
       onlinePicPersonId: pic.id,
     });
     // Two professors named makes the expected set six Class Records, plus the PIC's Session Record.
-    await markSessionDelivered(pic, session.id, [
+    // Mark-delivered is status-only now (#152); `session_teacher` — which this owed list counts off
+    // until T3 — is seeded through the retained `correctSessionTeachers` writer.
+    await markSessionDelivered(pic, session.id);
+    await correctSessionTeachers(pic, session.id, [
       { stream: "STEM", personId: stem.id },
       { stream: "Research", personId: research.id },
     ]);

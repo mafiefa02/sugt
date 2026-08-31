@@ -1,6 +1,7 @@
 import { db, schema } from "@sugt/db";
 import {
   arrangeOnlineSession,
+  correctSessionTeachers,
   isNotStaffError,
   markSessionDelivered,
   staffDashboard,
@@ -57,11 +58,10 @@ describe("teachingTeamDashboard", () => {
     const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
     const sari = await professor("sari@itb.ac.id", "Sari Dewi");
     const { school } = await oneSchool();
-    // A Teaching Team member owes Class Records for the **online** Sessions they taught. Offline
-    // teachers are trip-scoped names, not People (ADR-0020), and since ADR-0022 an arranged online
-    // Session names Pengajar as free-text names too — so `session_teacher`, and this owed list, is
-    // fed only by **delivering**: `markSessionDelivered` names both professors, so Bagus becomes a
-    // `session_teacher` and owes three (that path is unchanged here, retired in T3).
+    // A Teaching Team member owes Class Records for the **online** Sessions they taught, counted off
+    // `session_teacher`. Mark-delivered is status-only now (#152), so `session_teacher` is seeded
+    // through the retained (unsurfaced) `correctSessionTeachers` writer — the table and this owed
+    // list are retired together in T3.
     const arranged = await arrangeOnlineSession(pic, {
       schoolId: school.id,
       heldOn: "2026-09-02",
@@ -71,7 +71,8 @@ describe("teachingTeamDashboard", () => {
       teacherNames: [],
     });
     if (arranged.outcome !== "arranged") throw new Error("unreachable");
-    await markSessionDelivered(pic, arranged.sessionId, [
+    await markSessionDelivered(pic, arranged.sessionId);
+    await correctSessionTeachers(pic, arranged.sessionId, [
       { personId: bagus.id, stream: "STEM" },
       { personId: sari.id, stream: "Research" },
     ]);
@@ -205,10 +206,8 @@ describe("staffDashboard", () => {
       heldOn: "2026-09-02",
       perjadinId: perjadin.id,
     });
-    await markSessionDelivered(pic, delivered.id, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: sari.id, stream: "Research" },
-    ]);
+    // Offline mark-delivered is status-only — its teachers are trip-scoped names, not People.
+    await markSessionDelivered(pic, delivered.id);
     await addTransaction({
       perjadinId: perjadin.id,
       amountIdr: 1_000_000,
@@ -254,10 +253,7 @@ describe("staffDashboard", () => {
       heldOn: "2026-09-02",
       perjadinId: perjadin.id,
     });
-    await markSessionDelivered(pic, delivered.id, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: sari.id, stream: "Research" },
-    ]);
+    await markSessionDelivered(pic, delivered.id);
     await addSessionRecord({ sessionId: delivered.id, filedByPersonId: pic.id });
 
     const dashboard = await staffDashboard(pic);

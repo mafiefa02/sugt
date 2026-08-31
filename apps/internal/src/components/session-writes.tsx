@@ -2,18 +2,10 @@
 
 import {
   cancelSessionAction,
-  correctSessionTeachersAction,
   markSessionDeliveredAction,
   moveSessionDateAction,
 } from "-/app/(app)/sesi/[id]/actions";
-import { PersonSelect } from "-/components/person-select";
-import type {
-  CorrectTeachersResult,
-  MarkDeliveredResult,
-  SessionDetail,
-  TaughtBy,
-} from "@sugt/db/queries";
-import { STREAMS, type Stream } from "@sugt/domain";
+import type { SessionDetail } from "@sugt/db/queries";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -31,41 +23,32 @@ import { Textarea } from "@sugt/ui/components/textarea";
 import { useId, useState, useTransition } from "react";
 
 /**
- * Everything Staff can do to a Session, and nothing else can.
+ * Everything Staff can do to an **offline** Session, and nothing else can. (An online Session is
+ * edited on `/sesi-daring/[id]`; `/sesi/[id]` redirects an online id there, so nothing here runs for
+ * one — #152.)
  *
  * **What is offered turns on the status, and that is the enforcement's shape rather than
  * its substance.** Tandai terlaksana, Batalkan Sesi and the date edit are offered only
- * while `arranged`; after delivery the only thing offered is correcting who taught,
- * because `delivered` is terminal; a cancelled Session offers nothing.
+ * while `arranged`; a delivered Session offers nothing to change (its teachers are trip-scoped names
+ * edited on the Perjadin, not here); a cancelled Session offers nothing.
  *
  * Every one of those rules is also held by the write function, which is why each dialog
  * below has a branch for a refusal it believes it cannot provoke. A screen that merely
  * declines to show a button protects nothing against a page opened before somebody else
  * acted on the same Session — and that page is what those branches are for.
  *
- * A client component because four dialogs hold form state, and none of that state is
- * worth a URL. The rosters arrive as props; nothing here fetches.
+ * A client component because three dialogs hold form state, and none of that state is
+ * worth a URL. Nothing here fetches.
  */
 function SessionWrites({ session }: { session: SessionDetail }) {
   return (
     <div className="flex flex-wrap gap-2.5 px-7 py-5">
       {session.status === "arranged" && (
         <>
-          <MarkDelivered session={session} />
+          <OfflineMarkDelivered session={session} />
           <MoveDate session={session} />
           <Cancel session={session} />
         </>
-      )}
-
-      {/*
-        Offered after delivery and only then, and **online only**: an offline Session's teachers
-        are trip-scoped `session_teaching_team` names edited on the Perjadin, not the per-Stream
-        People `Perbaiki pengajar` writes (ADR-0020, #140). Until a mis-named online professor is
-        removed they owe three Class Records they cannot honestly file, and `delivered` being
-        terminal means there is no un-delivering the Session to fix it.
-      */}
-      {session.status === "delivered" && session.mode === "online" && (
-        <CorrectTeachers session={session} />
       )}
 
       {session.status === "cancelled" && (
@@ -78,35 +61,11 @@ function SessionWrites({ session }: { session: SessionDetail }) {
 }
 
 /**
- * **Tandai terlaksana** — what it asks turns on the mode (ADR-0019, #140).
- *
- * **Offline** is status only: the Session already carries its Stream and its "Diajar oleh" names
- * (edited on the Perjadin), so there is nobody to name here — a plain confirmation.
- *
- * **Online** names a Teaching-Team Person per Stream, which is what its Class Records are owed
- * against. The pickers open on `suggestedTeachers` (nobody, on an online Session with no Group)
- * as a suggestion Staff confirm or change; what they submit is what is written to `session_teacher`.
- */
-function MarkDelivered({ session }: { session: SessionDetail }) {
-  if (session.mode === "offline") return <OfflineMarkDelivered session={session} />;
-
-  return (
-    <TeachersDialog
-      session={session}
-      trigger={<Button>Tandai terlaksana</Button>}
-      title="Tandai Sesi terlaksana"
-      description="Sebutkan pengajar tiap Stream. Daftar inilah yang menentukan siapa yang diharapkan mengisi Catatan Kelas."
-      confirm="Tandai terlaksana"
-      save={(teachers) => markSessionDeliveredAction(session.id, teachers)}
-    />
-  );
-}
-
-/**
- * **Offline Tandai terlaksana** — status only (#140). No who-taught prompt: the teachers are
- * trip-scoped names on the Perjadin, not People, and no `session_teacher` row is written. The
- * confirmation exists only so a delivered Session is a deliberate act; the sole refusal it can meet
- * is a Session someone else already moved, shown the same way the other dialogs show it.
+ * **Offline Tandai terlaksana** — status only (#140, #152). No who-taught prompt: the teachers are
+ * trip-scoped names on the Perjadin, not People, and no `session_teacher` row is written — the same
+ * shape both modes now share. The confirmation exists only so a delivered Session is a deliberate
+ * act; the sole refusal it can meet is a Session someone else already moved, shown the same way the
+ * other dialogs show it.
  */
 function OfflineMarkDelivered({ session }: { session: SessionDetail }) {
   const [open, setOpen] = useState(false);
@@ -115,13 +74,13 @@ function OfflineMarkDelivered({ session }: { session: SessionDetail }) {
 
   function submit() {
     startSaving(async () => {
-      const result = await markSessionDeliveredAction(session.id, []);
+      const result = await markSessionDeliveredAction(session.id);
       if (result.outcome === "delivered") {
         setOpen(false);
         return;
       }
-      // `stream-unnamed` cannot come back for an offline Session — it names nobody — so the only
-      // refusal here is a Session someone else already moved.
+      // The only refusal here is a Session someone else already moved — mark-delivered is
+      // status-only, so nothing about who taught can turn it back.
       if (result.outcome === "not-arranged") setStale(STALE_MESSAGES[result.status]);
     });
   }
@@ -157,134 +116,6 @@ function OfflineMarkDelivered({ session }: { session: SessionDetail }) {
             onClick={submit}
           >
             {saving ? "Menyimpan…" : "Tandai terlaksana"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/**
- * Correcting who taught, after delivery.
- *
- * The both-Streams rule still applies. Without it, removing a professor would be the way
- * out of the rule Tandai terlaksana had just enforced.
- */
-function CorrectTeachers({ session }: { session: SessionDetail }) {
-  return (
-    <TeachersDialog
-      session={session}
-      trigger={<Button variant="outline">Perbaiki pengajar</Button>}
-      title="Perbaiki pengajar"
-      description="Catatan Kelas yang sudah diisi tidak ikut terhapus — daftar ini hanya menentukan siapa yang diharapkan mengisi."
-      confirm="Simpan"
-      save={(teachers) => correctSessionTeachersAction(session.id, teachers)}
-    />
-  );
-}
-
-/**
- * The one dialog behind both of the writes that name who taught.
- *
- * They differ in four strings and which action they call, and in nothing else: the same
- * two pickers, the same both-Streams check before submit, the same three ways a save can
- * come back. **They are one component because the check is the part worth having once** —
- * two copies of "refuse to submit with a Stream unnamed" is two places for the rule to
- * drift, and the rule is the reason marking delivered and naming who taught are one act.
- *
- * `save` is a function rather than an action name so the two results can differ. Both
- * unions carry `stream-unnamed`; everything else is read through `outcome` and `status`,
- * which both share.
- */
-function TeachersDialog({
-  session,
-  trigger,
-  title,
-  description,
-  confirm,
-  save,
-}: {
-  session: SessionDetail;
-  trigger: React.ReactElement;
-  title: string;
-  description: string;
-  confirm: string;
-  save: (teachers: TaughtBy[]) => Promise<MarkDeliveredResult | CorrectTeachersResult>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [chosen, setChosen] = useState<Record<Stream, string>>(() => prefill(session));
-  const [missing, setMissing] = useState<Stream[]>([]);
-  const [stale, setStale] = useState<string | null>(null);
-  const [saving, startSaving] = useTransition();
-
-  function submit() {
-    // Checked here so the message lands on the field, and checked again in the write
-    // function so it is a rule rather than a convenience.
-    const unnamed = STREAMS.filter((stream) => chosen[stream] === "");
-    if (unnamed.length > 0) {
-      setMissing(unnamed);
-      return;
-    }
-
-    startSaving(async () => {
-      const result = await save(taughtBy(chosen));
-      if (result.outcome === "delivered" || result.outcome === "corrected") {
-        setOpen(false);
-        return;
-      }
-      if (result.outcome === "stream-unnamed") setMissing(result.missing);
-      // `offline-not-correctable` is unreachable here — this dialog is online-only (offline uses
-      // OfflineMarkDelivered, and Perbaiki pengajar renders for online Sessions only) — but the
-      // union carries it, so it is handled as a generic reload rather than left to crash.
-      else if (result.outcome === "offline-not-correctable") setStale(STALE_MESSAGES.arranged);
-      else setStale(STALE_MESSAGES[result.status]);
-    });
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={setOpen}
-    >
-      <DialogTrigger render={trigger} />
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-
-        {stale !== null && <StaleAlert message={stale} />}
-
-        <div className="grid gap-3.5">
-          {STREAMS.map((stream) => (
-            <TeacherField
-              key={stream}
-              stream={stream}
-              session={session}
-              value={chosen[stream]}
-              invalid={missing.includes(stream)}
-              onSelect={(personId) => {
-                setChosen((previous) => ({ ...previous, [stream]: personId }));
-                setMissing((previous) => previous.filter((entry) => entry !== stream));
-              }}
-            />
-          ))}
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setOpen(false);
-            }}
-          >
-            Batal
-          </Button>
-          <Button
-            disabled={saving}
-            onClick={submit}
-          >
-            {saving ? "Menyimpan…" : confirm}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -483,38 +314,6 @@ function MoveDate({ session }: { session: SessionDetail }) {
   );
 }
 
-/** One Stream's picker, with the roster the payload carries. */
-function TeacherField({
-  stream,
-  session,
-  value,
-  invalid,
-  onSelect,
-}: {
-  stream: Stream;
-  session: SessionDetail;
-  value: string;
-  invalid: boolean;
-  onSelect: (personId: string) => void;
-}) {
-  const id = useId();
-
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={id}>{stream}</Label>
-      <PersonSelect
-        id={id}
-        people={session.teachingTeam}
-        value={value}
-        invalid={invalid}
-        placeholder="Pilih pengajar"
-        onSelect={onSelect}
-      />
-      {invalid && <p className="text-sm text-destructive">Pengajar {stream} wajib disebut.</p>}
-    </div>
-  );
-}
-
 /**
  * What a refusal that the screen could not have predicted says.
  *
@@ -537,28 +336,5 @@ const STALE_MESSAGES = {
   cancelled: "Sesi ini sudah dibatalkan. Muat ulang halaman untuk melihat keadaannya.",
   arranged: "Sesi ini sudah berubah. Muat ulang halaman untuk melihat keadaannya.",
 } as const;
-
-/**
- * What the two pickers open on: whoever is already recorded, falling back to the Group's
- * Stream assignments. `""` is the unset value, and the one the both-Streams check reads.
- */
-function prefill(session: SessionDetail): Record<Stream, string> {
-  const named = session.teachers.length > 0 ? session.teachers : session.suggestedTeachers;
-
-  return Object.fromEntries(
-    STREAMS.map((stream) => [
-      stream,
-      named.find((teacher) => teacher.stream === stream)?.personId ?? "",
-    ]),
-  ) as Record<Stream, string>;
-}
-
-/** The pickers' state as the write function wants it: `""` is nobody and travels as nothing. */
-function taughtBy(chosen: Record<Stream, string>): TaughtBy[] {
-  return STREAMS.filter((stream) => chosen[stream] !== "").map((stream) => ({
-    stream,
-    personId: chosen[stream],
-  }));
-}
 
 export { SessionWrites };
