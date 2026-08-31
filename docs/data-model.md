@@ -516,14 +516,19 @@ A Session exists only once arranged
 no target dates and nothing is ever overdue. Progress is `count(*) where status = 'delivered'`
 against `TOTAL_SESSIONS_PER_SCHOOL`, a constant that already lives in `@sugt/domain`.
 
-**Marking a Session delivered turns on the mode** (#140). An **online** Session's "Tandai
-terlaksana" historically named a Teaching-Team Person per Stream and wrote `session_teacher` in the
-same act. That is superseded by ADR-0022: an online Session is single-Stream and names its teachers
-as session-scoped `session_teacher_name` at arrangement, so the Person-per-Stream step no longer
-fits — its removal from the delivery path lands with the online editing work (T2/T3), not here. An
-**offline** Session's mark-delivered is **status only**: it already carries its Stream, its teachers
-are trip-scoped `session_teaching_team` names edited on the Perjadin, and it writes no
-`session_teacher` (ADR-0019, ADR-0020). Consequences left **deferred** and not modelled here — see
+**Marking a Session delivered is status only now, for both modes** (#140, #152). It writes nothing
+but `session.status = 'delivered'` and names nobody. An **online** Session's "Tandai terlaksana"
+historically named a Teaching-Team Person per Stream and wrote `session_teacher` in the same act;
+ADR-0022 made online Sessions single-Stream with their teachers named as session-scoped
+`session_teacher_name`, and #152 retired the Person-per-Stream step from delivery — the online mirror
+of #140's offline change. Online Pengajar are now edited anytime, one name at a time, on
+`/sesi-daring/[id]` (add/rename/remove against `session_teacher_name`), which is also the correction
+path that replaced the old post-delivery "Perbaiki pengajar" flow. An **offline** Session's
+mark-delivered was already status only (#140): it carries its Stream, its teachers are trip-scoped
+`session_teaching_team` names edited on the Perjadin, and it writes no `session_teacher` (ADR-0019,
+ADR-0020). `session_teacher` is **no longer written by anything surfaced** — its one remaining writer,
+`correctSessionTeachers`, is unsurfaced pending its removal with the table in T3. Consequences left
+**deferred** and not modelled here — see
 the open question in `CONTEXT.md` and T8: **Class Records** for a name-taught Session (their filer
 would be a name, not a Person who can sign in, on both sides now) and the **offline progress metric**
 (the fixed `delivered / TOTAL_SESSIONS_PER_SCHOOL` no longer holds for the offline half, whose
@@ -555,7 +560,9 @@ record a Staff member as having taught a Stream, without a trigger.
 Offline teaching went name-based first — a Perjadin's teachers are trip-scoped names
 (`perjadin_teacher` below), not `person` rows — and ADR-0022 did the same online: an online
 Session's teachers are now session-scoped names in `session_teacher_name` (below), not one-per-Stream
-Persons. The table is **kept, not dropped**, only so the transition can be staged; its drop and the
+Persons. **No surfaced write creates a row here any more** (#152): delivery is status only, and its
+last writer — `correctSessionTeachers` — is unsurfaced, kept exported only so the table has a writer
+while it stands. The table is **kept, not dropped**, so the transition can be staged; its drop and the
 retirement of the `Teaching Team` Person role are a later step (T3), by which time nothing reads it.
 
 An online Session records who taught it as session-scoped free-text names:

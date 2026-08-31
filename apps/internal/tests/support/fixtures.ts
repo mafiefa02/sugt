@@ -583,10 +583,13 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
  * evaluation tables are named below because fixtures write them directly.
  *
  * `session_teacher` is the first table here that **no fixture writes and the tests
- * populate anyway** — `arrangeOnlineSession` writes it, and the arrange tests assert on
+ * populate anyway** — `correctSessionTeachers` writes it, and the session-detail tests assert on
  * it. `cascade` from `public."session"` already reaches it, so naming it changes nothing
  * today; it is named for the reason above, which is that a list pruned to the cascade
- * minimum stops covering a table the day its parent leaves. `perjadin_evaluation` has since
+ * minimum stops covering a table the day its parent leaves. `session_teacher_name` sits beside it
+ * for the same reason: no fixture writes one, but `arrangeOnlineSession` and the online-detail
+ * per-item writes do, and the online-detail tests assert on it, so it is named even though
+ * `cascade` from `public."session"` reaches it too. `perjadin_evaluation` has since
  * joined it: no fixture writes one, but the Perjadin Evaluation write-path tests file them
  * directly, and `cascade` from `public."perjadin"` reaches it, so naming it is for the same
  * reason and not for a fixture.
@@ -609,6 +612,7 @@ export async function resetDatabase() {
       public."school",
       public."session",
       public."session_teacher",
+      public."session_teacher_name",
       public."class_record",
       public."session_record",
       public."participant_feedback",

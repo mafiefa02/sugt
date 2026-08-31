@@ -143,6 +143,21 @@ export {
 export type { PreparationItem } from "./preparation-checklist";
 export { onlineSessionDirectory, type DirectoryOnlineSession } from "./online-session-directory";
 export {
+  addOnlineSessionTeacher,
+  onlineSessionDetail,
+  removeOnlineSessionTeacher,
+  renameOnlineSessionTeacher,
+  updateOnlineSession,
+  type AddOnlineSessionTeacherResult,
+  type OnlineSessionDetail,
+  type OnlineSessionInput,
+  type OnlineSessionLookup,
+  type OnlineSessionTeacher,
+  type RemoveOnlineSessionTeacherResult,
+  type RenameOnlineSessionTeacherResult,
+  type UpdateOnlineSessionResult,
+} from "./online-session-detail";
+export {
   addPerson,
   revokePerson,
   roster,

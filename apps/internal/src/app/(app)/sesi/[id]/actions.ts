@@ -5,14 +5,12 @@ import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import {
   cancelSession,
-  correctSessionTeachers,
   fileClassRecord,
   fileSessionRecord,
   issueFeedbackToken,
   markSessionDelivered,
   moveSessionDate,
   type CancelSessionResult,
-  type CorrectTeachersResult,
   type FileClassRecordResult,
   type FileSessionRecordResult,
   type IssueFeedbackTokenResult,
@@ -20,7 +18,6 @@ import {
   type MoveSessionDateResult,
   type NewClassRecord,
   type NewSessionRecord,
-  type TaughtBy,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
 import QRCode from "qrcode";
@@ -30,9 +27,8 @@ import QRCode from "qrcode";
  * resolve the Person, hand it to `@sugt/db`, return what came back.
  *
  * None of them opens a transaction. The boundary is convention 5's and it lives in the
- * query function — Tandai terlaksana writes `session.status` and `session_teacher`
- * together, and an Action that opened the boundary would have put it somewhere a second
- * caller cannot reuse.
+ * query function — even now that Tandai terlaksana is a single status write, its `for update`
+ * lock is inside `markSessionDelivered`, where a second caller can reuse it.
  *
  * None of them re-checks Staff. `requireStaff` inside each query function is what
  * actually closes this path: a Next.js layout does not run before a Server Action, so a
@@ -40,11 +36,10 @@ import QRCode from "qrcode";
  * reason it is on the page — a Teaching Team caller reaching one of these is a bug or an
  * attack rather than a user state, and it should read as a **403** rather than as a crash.
  *
- * **A refusal is a value and is returned, not thrown.** `not-arranged`, `stream-unnamed`,
- * `reason-required`, `collided` and `outside-perjadin` are all states a correct screen can
- * reach — a second Staff member cancelled the Session while this page was open, a form was
- * submitted with one Stream empty — and by the rule settled on the query layer each gets a
- * field-level message rather than an error page.
+ * **A refusal is a value and is returned, not thrown.** `not-arranged`, `reason-required`,
+ * `collided` and `outside-perjadin` are all states a correct screen can reach — a second Staff
+ * member cancelled the Session while this page was open — and by the rule settled on the query
+ * layer each gets a field-level message rather than an error page.
  *
  * **`revalidatePath` is here where Jadwalkan Sesi daring needed none, and the two are not
  * in conflict.** That module's note is about the server: every page in this app reads the
@@ -58,27 +53,12 @@ import QRCode from "qrcode";
  * correct, and busting a cache to re-render the same thing is a round trip for nothing.
  */
 
-/** **Tandai terlaksana** — the status and who taught, as one act. */
-export async function markSessionDeliveredAction(
-  sessionId: string,
-  teachers: TaughtBy[],
-): Promise<MarkDeliveredResult> {
+/** **Tandai terlaksana** — status only now, for both modes (#152). No who-taught prompt. */
+export async function markSessionDeliveredAction(sessionId: string): Promise<MarkDeliveredResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => markSessionDelivered(person, sessionId, teachers));
+  const result = await staffSurface(() => markSessionDelivered(person, sessionId));
   if (result.outcome === "delivered") revalidatePath(`/sesi/${sessionId}`);
-  return result;
-}
-
-/** Correcting a mis-named professor, which stays possible after delivery. */
-export async function correctSessionTeachersAction(
-  sessionId: string,
-  teachers: TaughtBy[],
-): Promise<CorrectTeachersResult> {
-  const person = await requirePerson();
-
-  const result = await staffSurface(() => correctSessionTeachers(person, sessionId, teachers));
-  if (result.outcome === "corrected") revalidatePath(`/sesi/${sessionId}`);
   return result;
 }
 
