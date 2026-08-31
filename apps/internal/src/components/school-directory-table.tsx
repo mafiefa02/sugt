@@ -4,6 +4,7 @@ import type { DirectorySchool } from "@sugt/db/queries";
 import { TOTAL_SESSIONS_PER_SCHOOL } from "@sugt/domain";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
+import { Progress } from "@sugt/ui/components/progress";
 import {
   Table,
   TableBody,
@@ -121,8 +122,26 @@ function SchoolDirectoryTable({ schools }: { schools: DirectorySchool[] }) {
                 </TableCell>
                 <TableCell className="text-muted-foreground">{school.clusterName}</TableCell>
                 <TableCell className="text-muted-foreground">{school.kabupatenKota}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {school.deliveredSessions} / {TOTAL_SESSIONS_PER_SCHOOL}
+                <TableCell className="text-right">
+                  {/*
+                    The count and its meter, inline — number then bar, right-aligned. A plain
+                    restatement of the count: one length, one colour, no threshold and no ramp. It
+                    carries the same `<Progress>` the retired `/coverage` page used, because the
+                    directory now tells the whole "where are we" story and Coverage showed the same
+                    count over the same Schools (#154). A Rating's severity ramp belongs to the
+                    Rating controls (`docs/product.md`), deliberately not to a delivery count.
+                  */}
+                  <div className="flex items-center justify-end gap-3">
+                    <span className="tabular-nums">
+                      {school.deliveredSessions} / {TOTAL_SESSIONS_PER_SCHOOL}
+                    </span>
+                    <Progress
+                      className="w-21 shrink-0"
+                      value={school.deliveredSessions}
+                      max={TOTAL_SESSIONS_PER_SCHOOL}
+                      aria-label={`${school.name}: ${school.deliveredSessions} dari ${TOTAL_SESSIONS_PER_SCHOOL} Sesi terlaksana`}
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

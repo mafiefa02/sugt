@@ -82,7 +82,6 @@ export {
   type PicReport,
   type StaffDashboard,
 } from "./dashboard";
-export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage";
 export {
   arrangeOnlineSession,
   arrangeOnlineSessionAt,
