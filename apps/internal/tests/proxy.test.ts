@@ -39,10 +39,13 @@ describe("the optimistic check", () => {
   });
 
   it("lets through the cookie the auth handler actually issues", async () => {
+    // The role is incidental here — the round trip asserts the proxy recognises the cookie our
+    // handler issues, not anything about the Person's role. T3 (#153) retired the Teaching Team
+    // Role, so any signed-in Person is Staff now.
     await addPerson({
-      fullName: "Prof. Ratna",
+      fullName: "Ratna",
       email: "ratna@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
     const { sessionCookie } = await signInWithGoogle({
       googleId: "google-ratna",

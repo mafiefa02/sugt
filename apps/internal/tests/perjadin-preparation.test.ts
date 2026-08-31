@@ -8,10 +8,26 @@ import {
   renamePerjadinTeacher,
   togglePreparationItem,
 } from "@sugt/db/queries";
+import type { Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { addPerjadin, addPerson, resetDatabase } from "./support/fixtures";
+
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the Staff-only choke point still has to
+ * reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. The cast through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
+}
 
 /**
  * **The Preparation Checklist** ([#114](https://github.com/mafiefa02/sugt/issues/114)).
@@ -216,13 +232,11 @@ describe("toggling a box", () => {
     expect(row?.checkedBy).toBe(other.id);
   });
 
-  it("refuses a Teaching Team caller", async () => {
+  it("refuses a non-Staff caller", async () => {
     const { perjadinId } = await trip();
-    const bagus = await addPerson({
-      fullName: "Bagus Prakoso",
-      email: "bagus@itb.ac.id",
-      role: "Teaching Team",
-    });
+    // T3 (#153) retired the Teaching Team Role, so no non-Staff Person can be invited; the
+    // Staff-only gate is still proven with a hand-built non-Staff caller.
+    const bagus = nonStaff();
 
     await expect(
       togglePreparationItem(bagus, { perjadinId, itemKey: "staff", checked: true }),

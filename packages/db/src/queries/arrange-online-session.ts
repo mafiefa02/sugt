@@ -97,8 +97,8 @@ export type ArrangeOnlineSessionResult =
  * taken, whatever the hour.
  *
  * Teachers are session-scoped free-text names now (ADR-0022), not `session_teacher` Person rows:
- * this writes `session_teacher_name` and touches `session_teacher` not at all — that table's
- * teardown is T3. The cap is refused before the transaction, mirroring `planPerjadin`.
+ * this writes `session_teacher_name` only — the Person-based `session_teacher` table is now dropped
+ * (T3, #153). The cap is refused before the transaction, mirroring `planPerjadin`.
  */
 export async function arrangeOnlineSession(
   caller: Person,

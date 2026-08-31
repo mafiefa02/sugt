@@ -1,5 +1,6 @@
 import { db, schema } from "@sugt/db";
 import { addPerson, isNotStaffError, revokePerson, roster } from "@sugt/db/queries";
+import type { Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -17,14 +18,31 @@ import { signInAsPerson } from "./support/sign-in";
 /**
  * **Orang** — the roster and the invite list. The rules under test are the ones ADR-0013 draws:
  * revoking is one write, a duplicate active email is refused by the partial index, and `used` —
- * the write-once lock — is computed from all **seven** composite foreign keys, the Story author
- * included. The gate is the invite list alone (ADR-0003, amended by #115): any email may be
- * listed for either role, so `addPerson` no longer refuses a Staff member on a non-DITSAMA address.
+ * the write-once lock — is computed from all **six** composite foreign keys, the Story author
+ * included. T3 (#153) dropped `session_teacher`, so its composite reference is gone and a Person
+ * can no longer be `used` via one; six references remain. The gate is the invite list alone
+ * (ADR-0003, amended by #115): any email may be listed, and with only the one Role left `addPerson`
+ * no longer refuses a Staff member on a non-DITSAMA address.
  */
 
 /** A Staff Person to hand the writes as their caller. */
 async function staffCaller() {
   return seedPerson({ fullName: "Rina Nurhayati", email: "rina@ditsama.itb.ac.id", role: "Staff" });
+}
+
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but `addPerson` and `revokePerson` still have
+ * to reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. The cast through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Prof",
+    email: "prof@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
 }
 
 async function oneSchool() {
@@ -40,12 +58,12 @@ describe("addPerson", () => {
   beforeEach(resetDatabase);
 
   it("the partial person_email_key refuses a second active row for one email", async () => {
-    await seedPerson({ fullName: "Budi", email: "budi@gmail.com", role: "Teaching Team" });
+    await seedPerson({ fullName: "Budi", email: "budi@gmail.com", role: "Staff" });
 
     const refusal = await refusedBy(
       db
         .insert(schema.person)
-        .values({ fullName: "Budi Dua", email: "budi@gmail.com", role: "Teaching Team" }),
+        .values({ fullName: "Budi Dua", email: "budi@gmail.com", role: "Staff" }),
     );
 
     expect(refusal).toBe("person_email_key");
@@ -53,30 +71,18 @@ describe("addPerson", () => {
 
   it("refuses a duplicate active email as a value", async () => {
     const staff = await staffCaller();
-    await addPerson(staff, { fullName: "Budi", email: "budi@gmail.com", role: "Teaching Team" });
+    await addPerson(staff, { fullName: "Budi", email: "budi@gmail.com", role: "Staff" });
 
     const again = await addPerson(staff, {
       fullName: "Budi Dua",
       email: "budi@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
 
     expect(again).toEqual({ outcome: "email-taken" });
   });
 
-  it("adds a Teaching Team member with any email", async () => {
-    const staff = await staffCaller();
-
-    const result = await addPerson(staff, {
-      fullName: "Budi",
-      email: "budi@gmail.com",
-      role: "Teaching Team",
-    });
-
-    expect(result.outcome).toBe("added");
-  });
-
-  it("adds a Staff member on a non-DITSAMA address — the domain rule is gone", async () => {
+  it("adds a member on a non-DITSAMA address — the domain rule is gone", async () => {
     const staff = await staffCaller();
 
     const result = await addPerson(staff, {
@@ -109,7 +115,7 @@ describe("addPerson", () => {
     const staff = await staffCaller();
 
     expect(
-      await addPerson(staff, { fullName: "   ", email: "x@gmail.com", role: "Teaching Team" }),
+      await addPerson(staff, { fullName: "   ", email: "x@gmail.com", role: "Staff" }),
     ).toEqual({ outcome: "incomplete" });
   });
 
@@ -118,7 +124,7 @@ describe("addPerson", () => {
     const first = await addPerson(staff, {
       fullName: "Budi",
       email: "budi@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
     if (first.outcome !== "added") throw new Error("unreachable");
     await revokePerson(staff, first.personId);
@@ -126,23 +132,17 @@ describe("addPerson", () => {
     const again = await addPerson(staff, {
       fullName: "Budi Baru",
       email: "budi@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
 
     expect(again.outcome).toBe("added");
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await seedPerson({
-      fullName: "Prof",
-      email: "prof@gmail.com",
-      role: "Teaching Team",
-    });
-
-    const refusal = await addPerson(teacher, {
+  it("throws NotStaffError for a non-Staff caller", async () => {
+    const refusal = await addPerson(nonStaff(), {
       fullName: "Budi",
       email: "budi@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     }).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);
@@ -157,7 +157,7 @@ describe("revokePerson", () => {
     const person = await seedPerson({
       fullName: "Budi",
       email: "budi@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
 
     expect(await revokePerson(staff, person.id)).toEqual({ outcome: "revoked" });
@@ -170,26 +170,21 @@ describe("revokePerson", () => {
     const person = await seedPerson({
       fullName: "Budi",
       email: "budi@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
       active: false,
     });
 
     expect(await revokePerson(staff, person.id)).toEqual({ outcome: "no-such-person" });
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await seedPerson({
-      fullName: "Prof",
-      email: "prof@gmail.com",
-      role: "Teaching Team",
-    });
+  it("throws NotStaffError for a non-Staff caller", async () => {
     const target = await seedPerson({
       fullName: "Budi",
       email: "budi@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
 
-    const refusal = await revokePerson(teacher, target.id).catch((error: unknown) => error);
+    const refusal = await revokePerson(nonStaff(), target.id).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);
   });
@@ -200,12 +195,12 @@ describe("roster", () => {
 
   it("shows the three states — invited, signed in, and revoked", async () => {
     const staff = await staffCaller();
-    await seedPerson({ fullName: "Invited", email: "invited@gmail.com", role: "Teaching Team" });
-    await signInAsPerson("Teaching Team", "signed@gmail.com", "Signed In");
+    await seedPerson({ fullName: "Invited", email: "invited@gmail.com", role: "Staff" });
+    await signInAsPerson("Staff", "signed@gmail.com", "Signed In");
     const revoked = await seedPerson({
       fullName: "Revoked",
       email: "revoked@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
     await revokePerson(staff, revoked.id);
 
@@ -217,25 +212,23 @@ describe("roster", () => {
 
   it("flags a used Person and leaves an unused one unlocked", async () => {
     const staff = await staffCaller();
-    const teacher = await seedPerson({
-      fullName: "Prof",
-      email: "prof@gmail.com",
-      role: "Teaching Team",
+    const leader = await seedPerson({
+      fullName: "Ketua",
+      email: "ketua@gmail.com",
+      role: "Staff",
     });
-    await seedPerson({ fullName: "Unused", email: "unused@gmail.com", role: "Teaching Team" });
-    // The trip makes the PIC and the teacher Group members — used by the composite key.
-    await addPerjadin({
-      advanceIdr: 5_000_000,
-      picPersonId: staff.id,
-      teachers: [{ personId: teacher.id, stream: "STEM" }],
-    });
+    await seedPerson({ fullName: "Unused", email: "unused@gmail.com", role: "Staff" });
+    // Being a trip's PIC makes the Person a Group member — used by the group_member composite key.
+    // The Teaching Team member this once used is gone: the Group is the PIC alone now, all Staff
+    // and none carrying a Stream (T3, #153), so a trip's PIC is the fixture that locks a role.
+    await addPerjadin({ advanceIdr: 5_000_000, picPersonId: leader.id });
 
     const list = await roster(staff);
-    expect(byEmail(list, "prof@gmail.com")?.used).toBe(true);
+    expect(byEmail(list, "ketua@gmail.com")?.used).toBe(true);
     expect(byEmail(list, "unused@gmail.com")?.used).toBe(false);
   });
 
-  it("flags a Story author as used — the seventh composite reference", async () => {
+  it("flags a Story author as used — the sixth composite reference", async () => {
     const staff = await staffCaller();
     const author = await seedPerson({
       fullName: "Penulis",

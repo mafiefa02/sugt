@@ -7,6 +7,7 @@ import {
   renameSubCluster,
   subClusterBoard,
 } from "@sugt/db/queries";
+import type { Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -22,6 +23,21 @@ import {
 } from "./support/fixtures";
 
 /**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the Staff-only choke point still has to
+ * reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. The cast through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
+}
+
+/**
  * **Kelompok Sekolah** — the Sub-Cluster editing screen, and the two refusals ADR-0016 says are
  * the point of it: a Sub-Cluster that still holds Schools cannot be deleted (the database's own
  * `NO ACTION`, caught and named), and a School cannot be moved out from under an **arranged**
@@ -31,10 +47,6 @@ import {
 
 async function staffCaller() {
   return seedPerson({ fullName: "Rina Nurhayati", email: "rina@ditsama.itb.ac.id", role: "Staff" });
-}
-
-async function teacherCaller() {
-  return seedPerson({ fullName: "Prof", email: "prof@gmail.com", role: "Teaching Team" });
 }
 
 /** A Cluster with a Province behind it, ready for Sub-Clusters and Schools. */
@@ -100,8 +112,8 @@ describe("createSubCluster", () => {
     ).toEqual({ outcome: "no-such-cluster" });
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await teacherCaller();
+  it("throws NotStaffError for a non-Staff caller", async () => {
+    const teacher = nonStaff();
     const cluster = await oneCluster();
 
     const refusal = await createSubCluster(teacher, {
@@ -153,8 +165,8 @@ describe("renameSubCluster", () => {
     });
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await teacherCaller();
+  it("throws NotStaffError for a non-Staff caller", async () => {
+    const teacher = nonStaff();
     const cluster = await oneCluster();
     const sub = await addSubCluster({
       slug: "bandung-raya",
@@ -227,8 +239,8 @@ describe("deleteSubCluster", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await teacherCaller();
+  it("throws NotStaffError for a non-Staff caller", async () => {
+    const teacher = nonStaff();
     const cluster = await oneCluster();
     const sub = await addSubCluster({ slug: "kosong", name: "Kosong", clusterId: cluster.id });
 
@@ -359,8 +371,8 @@ describe("moveSchool", () => {
     });
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await teacherCaller();
+  it("throws NotStaffError for a non-Staff caller", async () => {
+    const teacher = nonStaff();
     const { to, school } = await twoSubClusters();
 
     const refusal = await moveSchool(teacher, school.id, to.id).catch((error: unknown) => error);

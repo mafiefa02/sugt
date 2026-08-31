@@ -123,19 +123,19 @@ export const perjadin = pgTable(
  * keeps its id and its Sessions, Advance and transactions are untouched.
  *
  * `role` is denormalised from `person`, but it cannot drift: the composite foreign
- * key means a row can only exist if the pair is true there. Carrying it is what makes
- * the CHECK below expressible — **exactly the Teaching Team members carry a Stream
- * assignment**, and Staff never do.
+ * key means a row can only exist if the pair is true there.
  *
  * `receiptsSettledAt` is the PIC's checklist. It has to be an explicit mark rather
  * than something derived, because a member with no transactions is ambiguous between
  * *spent nothing* and *has not handed anything over yet*.
  *
- * **Under the new model this table is Staff-only** (ADR-0020): the Group is the PIC plus up to ten
- * other DITSAMA Staff, and the Teaching Team have left it entirely for `perjadin_teacher`. The CHECK
- * is unchanged on purpose — all-Staff rows satisfy `group_member_stream_iff_teaching` since Staff
- * carry no Stream — so nothing here narrows; `stream` is simply always null now, and T2/T3 stop
- * inserting Teaching Team rows. See `docs/data-model.md`'s Group section.
+ * **This table is Staff-only, and now so is the whole Person roster** (ADR-0020, and T3/#153): the
+ * Group is the PIC plus up to ten other DITSAMA Staff, and the teaching team left it entirely for
+ * `perjadin_teacher` (trip-scoped names). With every Person now Staff, `group_member_role_check`
+ * pins `'Staff'`, and `stream` can never be carried by a Group member — so the old
+ * `group_member_stream_iff_teaching` equivalence (which pinned Stream to Teaching-Team rows)
+ * collapses to `group_member_stream_null`: a Group member holds no Stream at all. See
+ * `docs/data-model.md`'s Group section.
  */
 export const groupMember = pgTable(
   "group_member",
@@ -145,21 +145,22 @@ export const groupMember = pgTable(
       .references(() => perjadin.id, { onDelete: "cascade" }),
     personId: uuid("person_id").notNull(),
     // `group_member_role_check` and `group_member_stream_check` name exactly the values
-    // `ROLES` and `STREAMS` hold. `stream` stays nullable, so it reads as `Stream | null`
-    // — the CHECK pins which strings are allowed, and `group_member_stream_iff_teaching`
-    // below pins when the column may be null at all.
+    // `ROLES` and `STREAMS` hold — `role` is now the single value `'Staff'` (T3, #153).
+    // `stream` stays nullable, so it reads as `Stream | null`; the CHECK pins which strings
+    // are allowed, and `group_member_stream_null` below pins that it is always null now.
     role: text("role").$type<Role>().notNull(),
     stream: text("stream").$type<Stream>(),
     receiptsSettledAt: timestamp("receipts_settled_at", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ columns: [t.perjadinId, t.personId] }),
-    check("group_member_role_check", sql`${t.role} in ('Staff', 'Teaching Team')`),
+    check("group_member_role_check", sql`${t.role} = 'Staff'`),
     check("group_member_stream_check", sql`${t.stream} in ('STEM', 'Research')`),
-    check(
-      "group_member_stream_iff_teaching",
-      sql`(${t.role} = 'Teaching Team') = (${t.stream} is not null)`,
-    ),
+    // A Group is Staff and only Staff now (ADR-0020, T3/#153), so no member carries a Stream:
+    // the teaching team who used to carry a Stream assignment are trip-scoped names, not Group
+    // members. This replaces `group_member_stream_iff_teaching`, whose Teaching-Team side is now
+    // unreachable.
+    check("group_member_stream_null", sql`${t.stream} is null`),
     foreignKey({
       name: "group_member_person_role_fk",
       columns: [t.personId, t.role],

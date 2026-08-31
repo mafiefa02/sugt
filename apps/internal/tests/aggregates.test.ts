@@ -13,14 +13,7 @@ import {
 } from "@sugt/db/queries";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  addCluster,
-  addPerson,
-  addProvince,
-  addSchool,
-  addSession,
-  resetDatabase,
-} from "./support/fixtures";
+import { addCluster, addProvince, addSchool, addSession, resetDatabase } from "./support/fixtures";
 import { signInAsPerson } from "./support/sign-in";
 
 /**
@@ -330,11 +323,11 @@ describe("the Stories payloads", () => {
     expect(await publishedStory(service, "tidak-ada")).toBeNull();
   });
 
-  it("refuses no one by role — the ServiceCaller reads what a Teaching Team member cannot", async () => {
+  it("refuses no one by role — the ServiceCaller reads on its own arm", async () => {
     // Authoring is Staff-only, but reading the published payload is the ServiceCaller's alone. The
-    // arm is the check; there is no role here to narrow further. This just documents that these four
-    // take the arm and run no `requireStaff`.
-    await addPerson({ fullName: "Bagus", email: "bagus@itb.ac.id", role: "Teaching Team" });
+    // arm is the check; there is no Person or role here to narrow further — and T3 (#153) retired
+    // the one non-Staff Role anyway, so every signed-in caller is Staff. This documents that these
+    // four take the arm and run no `requireStaff`.
     await expect(scope(service)).resolves.toBeTruthy();
   });
 });

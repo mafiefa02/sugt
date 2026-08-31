@@ -32,10 +32,6 @@ async function staff(email = "rina@ditsama.itb.ac.id") {
   return addPerson({ fullName: "Rina Nurhayati", email, role: "Staff" });
 }
 
-async function professor(email = "bagus@itb.ac.id") {
-  return addPerson({ fullName: "Bagus Prakoso", email, role: "Teaching Team" });
-}
-
 async function oneSchool() {
   await addProvince("JB", "Jawa Barat");
   const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
@@ -105,15 +101,12 @@ describe("issueFeedbackToken", () => {
     expect(result.outcome).toBe("issued");
   });
 
-  it("lets anyone signed in issue it, not only Staff", async () => {
-    const pic = await staff();
-    const teacher = await professor();
-    const session = await aSession(pic.id, "delivered");
-
-    const result = await issueFeedbackToken(teacher, session.id);
-
-    expect(result.outcome).toBe("issued");
-  });
+  // The former "lets anyone signed in issue it, not only Staff" test is gone: `issueFeedbackToken`
+  // still skips `requireStaff` (it is deliberately open to any signed-in caller), but it writes
+  // `caller.id` as `issued_by_person_id`, a foreign key into `person`. T3 (#153) retired the one
+  // non-Staff Role, so there is no non-Staff Person to issue a token as — a cast caller would fail
+  // the foreign key rather than exercise the guard, so the non-Staff dimension is no longer
+  // expressible. The open path stays covered by the Staff issuers above.
 
   it("refuses a cancelled Session, and writes no token", async () => {
     const pic = await staff();

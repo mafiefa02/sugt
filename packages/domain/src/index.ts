@@ -132,10 +132,14 @@ export function formatIdr(n: number): string {
 }
 
 /**
- * The two roles in the internal tool. The Programme's leadership are senior
- * Staff, not a third role — see `docs/adr/0004-delivery-data-is-open-internally-money-is-not.md`.
+ * The one role in the internal tool. **`Teaching Team` was retired in T3** ([#153](https://github.com/mafiefa02/sugt/issues/153)):
+ * once online Sessions named their teachers as free-text `session_teacher_name` (ADR-0022) the
+ * Person role had no remaining purpose, so every signed-in Person is now Staff. The Programme's
+ * leadership are senior Staff, not a separate role — see
+ * `docs/adr/0004-delivery-data-is-open-internally-money-is-not.md`. The teaching **team** concept
+ * lives on, but as trip-scoped / session-scoped free-text **names**, not People (ADR-0020, ADR-0022).
  */
-export const ROLES = ["Staff", "Teaching Team"] as const;
+export const ROLES = ["Staff"] as const;
 export type Role = (typeof ROLES)[number];
 
 /**
@@ -145,24 +149,25 @@ export type Role = (typeof ROLES)[number];
  * what the internal screens show; renaming the stored value would be a history-touching migration
  * across the `*_role` columns, deliberately avoided ([#116](https://github.com/mafiefa02/sugt/issues/116)).
  * Route any rendered role string through this map; never through the raw value.
+ *
+ * One key now `Role` has narrowed to `"Staff"` alone (#153); the map still satisfies
+ * `Record<Role, string>`.
  */
 export const ROLE_LABELS: Record<Role, string> = {
   Staff: "DITSAMA",
-  "Teaching Team": "Teaching Team",
 };
 
 /**
  * How each role is labelled **on a Perjadin surface** — the same stored role seen from the trip's
- * vantage point. There the DITSAMA people are the ones who **accompany** the Teaching Team on the
- * journey, so they read as **Pendamping** rather than the organisation's name; the Teaching Team is
- * unchanged. One role, two context-dependent labels ([#141](https://github.com/mafiefa02/sugt/issues/141)):
+ * vantage point. There the DITSAMA people are the ones who **accompany** the (name-based) teaching
+ * team on the journey, so they read as **Pendamping** rather than the organisation's name. One
+ * stored role, two context-dependent labels ([#141](https://github.com/mafiefa02/sugt/issues/141)):
  * `ROLE_LABELS` off a Perjadin, this map on one. Presentation only, keyed on the stored `Role` exactly
  * like `ROLE_LABELS`, so `[member.role]` render sites resolve; the stored value stays `"Staff"`. The
  * PIC tag is orthogonal to this — the PIC is a Pendamping too, but is marked by the more specific fact.
  */
 export const PERJADIN_ROLE_LABELS: Record<Role, string> = {
   Staff: "Pendamping",
-  "Teaching Team": "Teaching Team",
 };
 
 /**
@@ -235,14 +240,6 @@ export type ParticipantFeedbackAspect = (typeof PARTICIPANT_FEEDBACK_ASPECTS)[nu
  */
 export const PERJADIN_ASPECTS = ["lodging", "transport", "meals", "punctuality"] as const;
 export type PerjadinAspect = (typeof PERJADIN_ASPECTS)[number];
-
-/**
- * How many Class Records a Session expects: two professors, one per Stream, each filing for
- * all three Classes. Nothing is blocked when they are missing — this is the denominator for
- * the list of who to chase, the same way `TOTAL_SESSIONS_PER_SCHOOL` is the denominator for
- * progress with no planned rows existing.
- */
-export const CLASS_RECORDS_PER_SESSION = STREAMS.length * CLASS_KINDS.length;
 
 /**
  * The bounds of a Rating: the score one person gives one Aspect. Ratings are the only

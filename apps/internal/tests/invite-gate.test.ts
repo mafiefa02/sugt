@@ -43,11 +43,14 @@ describe("the invite gate", () => {
     expect(result.authorizationURL.searchParams.get("prompt")).toBe("select_account consent");
   });
 
-  it("lets an invited Teaching Team member in with any Google address", async () => {
+  it("lets an invited member in with any Google address", async () => {
+    // The gate is the invite list alone (ADR-0003, amended by #115); role is irrelevant to
+    // admission, and since T3 (#153) there is only the one Role anyway. A personal Gmail is
+    // admitted so long as a row lists it.
     const person = await addPerson({
       fullName: "Prof. Ratna",
       email: "ratna@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
 
     const result = await signInWithGoogle({
@@ -99,7 +102,7 @@ describe("the invite gate", () => {
     /**
      * The gate is the invite list alone (ADR-0003, amended by #115): the domain rule is
      * gone, so a `Staff` row listed under a personal Gmail is admitted exactly as a
-     * Teaching Team row would be. This is the behaviour the ticket adds — the same
+     * DITSAMA address would be. This is the behaviour the ticket adds — the same
      * fixture that used to be refused as a "roster row that is itself wrong" now signs
      * in.
      */
@@ -127,7 +130,7 @@ describe("the invite gate", () => {
     await addPerson({
       fullName: "Sudah Keluar",
       email: "sudah.keluar@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
       active: false,
     });
 
@@ -153,9 +156,9 @@ describe("the invite gate", () => {
      * **The two rows are arranged so that only one of them can succeed.** The revoked
      * row carries `active = false`, and the lookup's `and active` skips it — so sign-in
      * succeeds only by landing on the active row, and `person_id` names which one it was.
-     * The two rows also differ in `role` (revoked `Staff`, active `Teaching Team`), which
-     * is incidental to the invite gate now the domain rule is gone but keeps the fixture
-     * a faithful revoke-and-re-add.
+     * A revoke-and-re-add is how any correction is made — a typo'd name, a re-invite — and
+     * with only the one Role left (T3, #153) the two rows differ solely in `active`, which
+     * is the whole of what the lookup keys on.
      */
     await addPerson({
       fullName: "Salah Peran",
@@ -166,7 +169,7 @@ describe("the invite gate", () => {
     const corrected = await addPerson({
       fullName: "Salah Peran",
       email: "Salah.Peran@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
       active: true,
     });
 
@@ -188,7 +191,7 @@ describe("the invite gate", () => {
     const person = await addPerson({
       fullName: "Masih Punya Akun",
       email: "masih@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
 
     const first = await signInWithGoogle({
@@ -219,7 +222,7 @@ describe("the invite gate", () => {
     await addPerson({
       fullName: "Dicabut",
       email: "dicabut@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
       active: false,
     });
 

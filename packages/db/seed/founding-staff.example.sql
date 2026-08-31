@@ -27,10 +27,11 @@
 -- ## Two rules the rows below have to obey
 --
 -- 1. **Each row's email is simply the Google account that person signs in with.** Any
---    address, either role — the sign-in gate is the active `person` row alone. The old
+--    address — the sign-in gate is the active `person` row alone. The old
 --    `@ditsama.itb.ac.id` requirement on Staff was dropped in ADR-0003's amendment
 --    ("the gate is single-tier", #115), so a founding-Staff row may hold any Google
---    address.
+--    address. Every row is `role = 'Staff'` now: the `Teaching Team` role was retired in
+--    T3 (#153), so `person_role_check` admits only `'Staff'`.
 -- 2. **`role` is write-once.** Six composite foreign keys point at `person (id, role)`
 --    and none declares `on update`, so Postgres refuses to change it the moment the
 --    Person has been used anywhere. A wrong role is corrected by revoking that row and

@@ -1,17 +1,13 @@
-import { db, schema } from "@sugt/db";
 import {
   arrangeOnlineSession,
-  correctSessionTeachers,
   isNotStaffError,
   markSessionDelivered,
   staffDashboard,
-  teachingTeamDashboard,
 } from "@sugt/db/queries";
-import { CLASS_KINDS } from "@sugt/domain";
+import type { Role } from "@sugt/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  addClassRecord,
   addCluster,
   addOfflineSession,
   addPerjadin,
@@ -24,17 +20,33 @@ import {
 } from "./support/fixtures";
 
 /**
- * **Beranda** — the two role dashboards (#40). They assemble from delivery, the owed lists and,
- * on the Staff side, money. The rules under test are the ones the ticket names: "who owes what"
- * is scoped to delivered Sessions, the Teaching Team payload carries no money, and the Staff
- * payload is refused a Teaching Team caller by the choke point.
+ * **Beranda** — the Staff dashboard (#40). It assembles from delivery, the owed list and money.
+ * The rules under test are the ones the ticket names: "who owes what" is scoped to delivered
+ * Sessions, and the payload — the Advance strip is money (ADR-0004) — is refused a non-Staff
+ * caller by the choke point.
+ *
+ * The Teaching Team dashboard is gone: T3 (#153) retired `session_teacher` and the Teaching Team
+ * Role, so there is no professor to owe Class Records off the back of who taught, and
+ * `teachingTeamDashboard` was removed with them.
  */
 
 async function staff(email = "rina@ditsama.itb.ac.id", fullName = "Rina Nurhayati") {
   return addPerson({ fullName, email, role: "Staff" });
 }
-async function professor(email: string, fullName: string) {
-  return addPerson({ fullName, email, role: "Teaching Team" });
+
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person exists in the database any more — but the choke point still has to reject a
+ * non-Staff caller, and `requireStaff` throws on the role alone. The cast through `unknown` is the
+ * only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Bagus Prakoso",
+    email: "bagus@itb.ac.id",
+    role: "Teaching Team" as unknown as Role,
+  };
 }
 
 /** A Cluster with a School in it, and a Province behind them. */
@@ -50,118 +62,11 @@ async function oneSchool() {
   return { cluster, school };
 }
 
-describe("teachingTeamDashboard", () => {
-  beforeEach(resetDatabase);
-
-  it("owes a Class Record per unfiled Class kind on delivered Sessions the professor taught", async () => {
-    const pic = await staff();
-    const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
-    const sari = await professor("sari@itb.ac.id", "Sari Dewi");
-    const { school } = await oneSchool();
-    // A Teaching Team member owes Class Records for the **online** Sessions they taught, counted off
-    // `session_teacher`. Mark-delivered is status-only now (#152), so `session_teacher` is seeded
-    // through the retained (unsurfaced) `correctSessionTeachers` writer — the table and this owed
-    // list are retired together in T3.
-    const arranged = await arrangeOnlineSession(pic, {
-      schoolId: school.id,
-      heldOn: "2026-09-02",
-      startsAt: "09:00",
-      picPersonId: pic.id,
-      stream: "STEM",
-      teacherNames: [],
-    });
-    if (arranged.outcome !== "arranged") throw new Error("unreachable");
-    await markSessionDelivered(pic, arranged.sessionId);
-    await correctSessionTeachers(pic, arranged.sessionId, [
-      { personId: bagus.id, stream: "STEM" },
-      { personId: sari.id, stream: "Research" },
-    ]);
-    // Bagus files one of the three.
-    await addClassRecord({
-      sessionId: arranged.sessionId,
-      classKind: "GTK",
-      filedByPersonId: bagus.id,
-    });
-
-    const dashboard = await teachingTeamDashboard(bagus);
-
-    expect(dashboard.fullName).toBe("Bagus Prakoso");
-    expect(dashboard.streams).toEqual(["STEM"]);
-    expect(dashboard.owed).toHaveLength(CLASS_KINDS.length - 1);
-    expect(dashboard.owed.every((entry) => entry.sessionId === arranged.sessionId)).toBe(true);
-    expect(dashboard.owed.map((entry) => entry.classKind).sort()).toEqual(["MS", "Student"]);
-  });
-
-  it("owes nothing for an arranged Session, and lists it as upcoming instead", async () => {
-    const pic = await staff();
-    const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
-    const sari = await professor("sari@itb.ac.id", "Sari Dewi");
-    const { school } = await oneSchool();
-    const perjadin = await addPerjadin({
-      advanceIdr: 5_000_000,
-      picPersonId: pic.id,
-      teachers: [
-        { personId: bagus.id, stream: "STEM" },
-        { personId: sari.id, stream: "Research" },
-      ],
-    });
-    const arranged = await addOfflineSession({
-      schoolId: school.id,
-      heldOn: "2026-09-02",
-      perjadinId: perjadin.id,
-    });
-
-    const dashboard = await teachingTeamDashboard(bagus);
-
-    // Arranged, so nothing is owed — the delivered-only rule.
-    expect(dashboard.owed).toEqual([]);
-    // But it is on a trip Bagus is on, so it is upcoming.
-    expect(dashboard.upcoming.map((entry) => entry.sessionId)).toEqual([arranged.id]);
-    expect(dashboard.activeTripCount).toBe(1);
-  });
-
-  /**
-   * The delivered-only filter the dashboard applies to `session_teacher`: a `session_teacher` row
-   * on an *arranged* Session must owe nothing until it is delivered — dropping the filter would
-   * report three Class Records owed for teaching that has not happened, which this catches.
-   *
-   * The row is inserted **directly**: since ADR-0022 an arranged online Session names its Pengajar
-   * as free-text `session_teacher_name`, not a `session_teacher` Person, so arrangement no longer
-   * produces this state. The `session_teacher` table (and this read of it) survive until T3, so the
-   * defensive filter still has to hold; the fixture builds the state the read is defending against.
-   */
-  it("owes nothing for an arranged Session that carries a session_teacher row", async () => {
-    const pic = await staff();
-    const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
-    const { school } = await oneSchool();
-    const arranged = await arrangeOnlineSession(pic, {
-      schoolId: school.id,
-      heldOn: "2026-09-02",
-      startsAt: "09:00",
-      picPersonId: pic.id,
-      stream: "STEM",
-      teacherNames: [],
-    });
-    if (arranged.outcome !== "arranged") throw new Error("unreachable");
-    await db
-      .insert(schema.sessionTeacher)
-      .values({ sessionId: arranged.sessionId, stream: "STEM", personId: bagus.id });
-
-    const dashboard = await teachingTeamDashboard(bagus);
-
-    expect(dashboard.owed).toEqual([]);
-    // It is Bagus's upcoming Session, since a session_teacher row names him.
-    expect(dashboard.upcoming.map((entry) => entry.sessionId)).toEqual([arranged.sessionId]);
-  });
-});
-
 describe("staffDashboard", () => {
   beforeEach(resetDatabase);
 
-  it("refuses a Teaching Team caller — the choke point, not a case to handle", async () => {
-    const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
-
-    const refusal = await staffDashboard(bagus).catch((error: unknown) => error);
+  it("refuses a non-Staff caller — the choke point, not a case to handle", async () => {
+    const refusal = await staffDashboard(nonStaff()).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);
   });
@@ -190,16 +95,10 @@ describe("staffDashboard", () => {
 
   it("assembles the delivery picture, the outstanding Advance and the PIC's owed Records", async () => {
     const pic = await staff();
-    const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
-    const sari = await professor("sari@itb.ac.id", "Sari Dewi");
     const { cluster, school } = await oneSchool();
     const perjadin = await addPerjadin({
       advanceIdr: 5_000_000,
       picPersonId: pic.id,
-      teachers: [
-        { personId: bagus.id, stream: "STEM" },
-        { personId: sari.id, stream: "Research" },
-      ],
     });
     const delivered = await addOfflineSession({
       schoolId: school.id,
@@ -224,10 +123,11 @@ describe("staffDashboard", () => {
     expect(dashboard.advanceOutstandingIdr).toBe(5_000_000);
     // The PIC owes a Session Record on the delivered Session they led.
     expect(dashboard.owed.map((entry) => entry.sessionId)).toEqual([delivered.id]);
-    // The trip is theirs, with the acquittal figures.
+    // The trip is theirs, with the acquittal figures. The Group is the PIC alone now — Teaching
+    // Team left `group_member` with the Role (T3, #153) — so the Group counts one.
     const report = dashboard.picReports.find((entry) => entry.perjadinId === perjadin.id);
     expect(report).toMatchObject({
-      groupCount: 3,
+      groupCount: 1,
       receiptsSettled: 0,
       transactionCount: 1,
       remainderIdr: 4_000_000,
@@ -237,16 +137,10 @@ describe("staffDashboard", () => {
 
   it("stops owing a Session Record once the PIC files it", async () => {
     const pic = await staff();
-    const bagus = await professor("bagus@itb.ac.id", "Bagus Prakoso");
-    const sari = await professor("sari@itb.ac.id", "Sari Dewi");
     const { school } = await oneSchool();
     const perjadin = await addPerjadin({
       advanceIdr: 5_000_000,
       picPersonId: pic.id,
-      teachers: [
-        { personId: bagus.id, stream: "STEM" },
-        { personId: sari.id, stream: "Research" },
-      ],
     });
     const delivered = await addOfflineSession({
       schoolId: school.id,

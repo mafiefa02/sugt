@@ -21,11 +21,10 @@
  *    Staff-only by the surface list. One guard, two reasons — see `./staff-only.ts`.
  * 5. **A write function owns its own transaction.** Several writes are
  *    multi-statement: Rencanakan Perjadin writes `perjadin`, `group_member` and N
- *    `session` rows; Tandai terlaksana writes `session.status` and `session_teacher`;
- *    a Group is replaced wholesale. The boundary belongs in the function here, never
- *    in the Server Action calling it — a Server Action that opens one has put the
- *    boundary somewhere a second caller cannot reuse. **`arrangeOnlineSession` in
- *    `./arrange-online-session.ts`** exercises it: a Session and its `session_teacher`
+ *    `session` rows; a Group is replaced wholesale. The boundary belongs in the function
+ *    here, never in the Server Action calling it — a Server Action that opens one has put
+ *    the boundary somewhere a second caller cannot reuse. **`arrangeOnlineSession` in
+ *    `./arrange-online-session.ts`** exercises it: a Session and its `session_teacher_name`
  *    rows commit together, and a collision returns a value without writing either. (It
  *    replaced a batch write, `#70`, once online Sessions were arranged one at a time —
  *    a one-row batch was dead weight every reader had to understand.)
@@ -78,14 +77,10 @@ export {
 export { concerns, type Concern, type ConcernAspect, type ConcernSource } from "./concerns";
 export {
   staffDashboard,
-  teachingTeamDashboard,
   type ClusterReach,
-  type OwedClassRecord,
   type OwedSessionRecord,
   type PicReport,
   type StaffDashboard,
-  type TeachingTeamDashboard,
-  type UpcomingSession,
 } from "./dashboard";
 export { coverage, type CoverageCluster, type CoverageSchool } from "./coverage";
 export {
@@ -221,28 +216,20 @@ export {
 export { schoolDirectory, type DirectorySchool } from "./school-directory";
 export {
   cancelSession,
-  correctSessionTeachers,
   markSessionDelivered,
   moveSessionDate,
   sessionDetail,
   type CancelSessionResult,
-  type CorrectTeachersResult,
   type MarkDeliveredResult,
   type MoveSessionDateResult,
   type OwedRecord,
   type PastArranged,
   type SessionDetail,
-  type SessionDetailTeacher,
   type SessionPerjadin,
-  type TaughtBy,
 } from "./session-detail";
 export {
-  fileClassRecord,
   fileSessionRecord,
-  type ClassRecordRatings,
-  type FileClassRecordResult,
   type FileSessionRecordResult,
-  type NewClassRecord,
   type NewSessionRecord,
   type NotDelivered,
   type SessionRecordRatings,

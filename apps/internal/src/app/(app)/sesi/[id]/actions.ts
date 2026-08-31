@@ -5,18 +5,15 @@ import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import {
   cancelSession,
-  fileClassRecord,
   fileSessionRecord,
   issueFeedbackToken,
   markSessionDelivered,
   moveSessionDate,
   type CancelSessionResult,
-  type FileClassRecordResult,
   type FileSessionRecordResult,
   type IssueFeedbackTokenResult,
   type MarkDeliveredResult,
   type MoveSessionDateResult,
-  type NewClassRecord,
   type NewSessionRecord,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
@@ -88,31 +85,14 @@ export async function moveSessionDateAction(
 }
 
 /**
- * **File a Class Record** — a Teaching Team member's account of one Class they taught.
- *
- * No `staffSurface` here, and that is the difference from the four above: a Class Record is
- * Teaching Team's, not Staff's, and `fileClassRecord` returns `not-teaching-team` as a value
- * rather than throwing. There is no Teaching-Team choke point that throws, so there is
- * nothing for a surface to translate — the caller is still resolved, and the query still
- * holds the rule with its composite foreign key.
- *
- * `revalidatePath` clears the client router cache so the owed list on the page the filer is
- * looking at drops the Record they just filed. Called only on the outcome that wrote one.
- */
-export async function fileClassRecordAction(input: NewClassRecord): Promise<FileClassRecordResult> {
-  const person = await requirePerson();
-
-  const result = await fileClassRecord(person, input);
-  if (result.outcome === "filed") revalidatePath(`/sesi/${input.sessionId}`);
-  return result;
-}
-
-/**
  * **File a Session Record** — the PIC's account of the visit as a whole.
  *
  * Staff-only, so it goes through `staffSurface`: `fileSessionRecord` throws `NotStaffError`
- * on a Teaching Team caller, which reads as a 403 rather than a crash. Every other refusal
- * comes back as a value for the form to place on a field.
+ * on a non-Staff caller, which reads as a 403 rather than a crash. Every other refusal comes
+ * back as a value for the form to place on a field.
+ *
+ * The Class Record action that used to sit beside this was retired in T3 (#153): the `Teaching
+ * Team` Person role who filed one is gone, and Class Records are deferred for both modes.
  */
 export async function fileSessionRecordAction(
   input: NewSessionRecord,

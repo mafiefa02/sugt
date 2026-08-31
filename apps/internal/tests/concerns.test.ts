@@ -4,7 +4,6 @@ import { CONCERN_AT_OR_BELOW } from "@sugt/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  addClassRecord,
   addCluster,
   addPerjadin,
   addPerjadinEvaluation,
@@ -18,18 +17,20 @@ import {
 } from "./support/fixtures";
 
 /**
- * **The concerns list** — every Aspect anyone Rated at or below the threshold, across all four
- * forms, newest first. The tests prove the four sources unpivot to one row per low Aspect, that
- * a single low Rating is never averaged away, that the threshold is inclusive, and that only the
- * internal sources carry prose.
+ * **The concerns list** — every Aspect anyone Rated at or below the threshold, newest first. The
+ * tests prove the sources unpivot to one row per low Aspect, that a single low Rating is never
+ * averaged away, that the threshold is inclusive, and that only the internal sources carry prose.
+ *
+ * The query still `union`s all four forms, but T3 (#153) retired `session_teacher` and the
+ * Teaching Team Role: no Person can be Teaching Team, so the `class_record` composite foreign key
+ * — pinned to `filed_by_role = 'Teaching Team'` — can never be satisfied and no Class Record can
+ * be filed. Its branch of the union stays (the table is a dead surface) but now yields nothing, so
+ * the rows below come from the three forms that can still be filed: the PIC's Session Record,
+ * Participant Feedback, and the Perjadin Evaluation.
  */
 
 async function staff(email = "rina@ditsama.itb.ac.id") {
   return addPerson({ fullName: "Rina Nurhayati", email, role: "Staff" });
-}
-
-async function professor(email = "bagus@itb.ac.id") {
-  return addPerson({ fullName: "Bagus Prakoso", email, role: "Teaching Team" });
 }
 
 async function oneSchool(slug = "sman-8", name = "SMAN 8 Jakarta") {
@@ -58,36 +59,12 @@ describe("concerns", () => {
 
   it("is empty when nothing was Rated low", async () => {
     const pic = await staff();
-    const teacher = await professor();
     const session = await aDeliveredSession(pic.id);
-    await addClassRecord({
-      sessionId: session.id,
-      classKind: "Student",
-      filedByPersonId: teacher.id,
-    });
+    // A Session Record with every Aspect comfortably above the threshold — a filed form that
+    // contributes no concern.
+    await addSessionRecord({ sessionId: session.id, filedByPersonId: pic.id });
 
     expect(await concerns(pic)).toEqual([]);
-  });
-
-  it("surfaces a low Class Record Aspect, with its cohort, prose and Session link", async () => {
-    const pic = await staff();
-    const teacher = await professor();
-    const session = await aDeliveredSession(pic.id);
-    await addClassRecord({
-      sessionId: session.id,
-      classKind: "Student",
-      filedByPersonId: teacher.id,
-      ratings: { comprehension: 4 },
-    });
-
-    const row = find(await concerns(pic), "class-record", "comprehension");
-    expect(row).toBeDefined();
-    expect(row?.rating).toBe(4);
-    expect(row?.subject).toBe("SMAN 8 Jakarta · Student");
-    expect(row?.who).toBe("Bagus Prakoso");
-    expect(row?.said).not.toBeNull();
-    expect(row?.sessionId).toBe(session.id);
-    expect(row?.perjadinId).toBeNull();
   });
 
   it("surfaces a low Session Record Aspect from the PIC", async () => {
@@ -102,8 +79,10 @@ describe("concerns", () => {
     const row = find(await concerns(pic), "session-record", "turnout");
     expect(row?.rating).toBe(5);
     expect(row?.subject).toBe("SMAN 8 Jakarta");
+    expect(row?.who).toBe("Rina Nurhayati");
     expect(row?.said).not.toBeNull();
     expect(row?.sessionId).toBe(session.id);
+    expect(row?.perjadinId).toBeNull();
   });
 
   it("surfaces a low Participant Feedback Aspect, and it carries no prose", async () => {
@@ -158,13 +137,10 @@ describe("concerns", () => {
 
   it("surfaces a low Perjadin Evaluation Aspect, linked to the trip", async () => {
     const pic = await staff();
-    const teacher = await professor();
-    const trip = await addPerjadin({
-      advanceIdr: 5_000_000,
-      picPersonId: pic.id,
-      teachers: [{ personId: teacher.id, stream: "STEM" }],
-    });
-    await addPerjadinEvaluation({ perjadinId: trip.id, filedByPersonId: teacher.id, lodging: 4 });
+    // The Group is the PIC alone now (T3, #153) — no Teaching Team members — so the PIC is the
+    // Group member who files the Evaluation.
+    const trip = await addPerjadin({ advanceIdr: 5_000_000, picPersonId: pic.id });
+    await addPerjadinEvaluation({ perjadinId: trip.id, filedByPersonId: pic.id, lodging: 4 });
 
     const row = find(await concerns(pic), "perjadin-evaluation", "lodging");
     expect(row?.rating).toBe(4);
@@ -176,73 +152,76 @@ describe("concerns", () => {
 
   it("keeps each low Aspect as its own row and never averages", async () => {
     const pic = await staff();
-    const teacher = await professor();
     const session = await aDeliveredSession(pic.id);
-    await addClassRecord({
+    await addSessionRecord({
       sessionId: session.id,
-      classKind: "GTK",
-      filedByPersonId: teacher.id,
-      ratings: { comprehension: 4, participation: 6 },
+      filedByPersonId: pic.id,
+      ratings: { turnout: 4, coordination: 6 },
     });
 
     const list = await concerns(pic);
-    expect(find(list, "class-record", "comprehension")?.rating).toBe(4);
-    expect(find(list, "class-record", "participation")?.rating).toBe(6);
-    // The seven-Aspect record has exactly two low ones; nothing else appears from it.
-    expect(list.filter((concern) => concern.source === "class-record")).toHaveLength(2);
+    expect(find(list, "session-record", "turnout")?.rating).toBe(4);
+    expect(find(list, "session-record", "coordination")?.rating).toBe(6);
+    // The five-Aspect record has exactly two low ones; nothing else appears from it.
+    expect(list.filter((concern) => concern.source === "session-record")).toHaveLength(2);
   });
 
   it("includes an Aspect exactly at the threshold and excludes one above it", async () => {
     const pic = await staff();
-    const teacher = await professor();
     const session = await aDeliveredSession(pic.id);
-    await addClassRecord({
+    await addSessionRecord({
       sessionId: session.id,
-      classKind: "MS",
-      filedByPersonId: teacher.id,
-      ratings: { comprehension: CONCERN_AT_OR_BELOW, participation: CONCERN_AT_OR_BELOW + 1 },
+      filedByPersonId: pic.id,
+      ratings: { turnout: CONCERN_AT_OR_BELOW, coordination: CONCERN_AT_OR_BELOW + 1 },
     });
 
     const list = await concerns(pic);
-    // Pin the branch to exactly one row, so "participation absent" means the threshold excluded
-    // it — not that the whole Class Record source silently returned nothing.
-    expect(list.filter((concern) => concern.source === "class-record")).toHaveLength(1);
-    expect(find(list, "class-record", "comprehension")?.rating).toBe(CONCERN_AT_OR_BELOW);
-    expect(find(list, "class-record", "participation")).toBeUndefined();
+    // Pin the branch to exactly one row, so "coordination absent" means the threshold excluded
+    // it — not that the whole Session Record source silently returned nothing.
+    expect(list.filter((concern) => concern.source === "session-record")).toHaveLength(1);
+    expect(find(list, "session-record", "turnout")?.rating).toBe(CONCERN_AT_OR_BELOW);
+    expect(find(list, "session-record", "coordination")).toBeUndefined();
   });
 
   it("orders newest first", async () => {
     const pic = await staff();
-    const [older, newer] = [await professor("a@itb.ac.id"), await professor("b@itb.ac.id")];
-    const session = await aDeliveredSession(pic.id);
+    const school = await oneSchool();
+    // Two delivered Sessions at one School on different days — the per-day index allows it, and a
+    // Session Record is unique per Session per filer, so the two Records sit on different Sessions.
+    const older = await addSession({
+      schoolId: school.id,
+      heldOn: "2026-09-10",
+      status: "delivered",
+      onlinePicPersonId: pic.id,
+    });
+    const newer = await addSession({
+      schoolId: school.id,
+      heldOn: "2026-09-17",
+      status: "delivered",
+      onlinePicPersonId: pic.id,
+    });
     // Inserted directly to control the timestamp the list orders on.
-    await db.insert(schema.classRecord).values({
-      sessionId: session.id,
-      classKind: "GTK",
-      filedByPersonId: older.id,
-      filedByRole: "Teaching Team",
-      comprehension: 4,
-      participation: 9,
-      readiness: 9,
-      materials: 9,
-      delivery: 9,
+    await db.insert(schema.sessionRecord).values({
+      sessionId: older.id,
+      filedByPersonId: pic.id,
+      filedByRole: "Staff",
       facilities: 9,
+      turnout: 4,
+      schoolSupport: 9,
       timing: 9,
+      coordination: 9,
       problems: "lebih dulu",
       createdAt: new Date("2026-01-01T00:00:00Z"),
     });
-    await db.insert(schema.classRecord).values({
-      sessionId: session.id,
-      classKind: "MS",
-      filedByPersonId: newer.id,
-      filedByRole: "Teaching Team",
-      comprehension: 3,
-      participation: 9,
-      readiness: 9,
-      materials: 9,
-      delivery: 9,
+    await db.insert(schema.sessionRecord).values({
+      sessionId: newer.id,
+      filedByPersonId: pic.id,
+      filedByRole: "Staff",
       facilities: 9,
+      turnout: 3,
+      schoolSupport: 9,
       timing: 9,
+      coordination: 9,
       problems: "lebih baru",
       createdAt: new Date("2026-06-01T00:00:00Z"),
     });

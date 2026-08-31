@@ -1,9 +1,26 @@
 import { staffSurface } from "-/lib/staff-surface";
 import { isNotStaffError, perjadinAcquittal } from "@sugt/db/queries";
+import type { Role } from "@sugt/domain";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addPerjadin, addTransaction, resetDatabase } from "./support/fixtures";
 import { signInAsPerson } from "./support/sign-in";
+
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the choke point must still reject a
+ * non-Staff caller, which is the whole of what this file proves. `requireStaff` throws on the role
+ * alone, before the money query touches a row, so a cast object is a faithful stand-in; the cast
+ * through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
+}
 
 /**
  * **The Staff-only choke point**, driven at the seam
@@ -35,9 +52,9 @@ describe("money is Staff-only", () => {
     return { pic, perjadin };
   }
 
-  it("refuses a Teaching Team Person with a distinguishable typed error", async () => {
+  it("refuses a non-Staff Person with a distinguishable typed error", async () => {
     const { perjadin } = await aPerjadinWithSpending();
-    const teacher = await signInAsPerson("Teaching Team", "budi@gmail.com", "Budi Santoso");
+    const teacher = nonStaff();
 
     const refusal = await perjadinAcquittal(teacher, perjadin.id).catch((error: unknown) => error);
 
@@ -51,7 +68,7 @@ describe("money is Staff-only", () => {
      * them. So the refusal is a throw, and this asserts it is not quietly a `null`.
      */
     const { perjadin } = await aPerjadinWithSpending();
-    const teacher = await signInAsPerson("Teaching Team", "ratna@gmail.com", "Ratna Dewi");
+    const teacher = nonStaff();
 
     await expect(perjadinAcquittal(teacher, perjadin.id)).rejects.toThrow();
   });
@@ -80,7 +97,7 @@ describe("money is Staff-only", () => {
 
   it("reaches the browser as a 403, not as a crash page", async () => {
     /**
-     * The product half of the refusal: what a Teaching Team member who somehow
+     * The product half of the refusal: what a non-Staff member who somehow
      * reached a money surface actually gets back.
      *
      * `forbidden()` throws an error carrying `NEXT_HTTP_ERROR_FALLBACK;403` as its
@@ -96,7 +113,7 @@ describe("money is Staff-only", () => {
      */
     vi.stubEnv("__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS", "1");
     const { perjadin } = await aPerjadinWithSpending();
-    const teacher = await signInAsPerson("Teaching Team", "budi@gmail.com", "Budi Santoso");
+    const teacher = nonStaff();
 
     const thrown = await staffSurface(() => perjadinAcquittal(teacher, perjadin.id)).catch(
       (error: unknown) => error,

@@ -11,10 +11,26 @@ import {
   withdrawStory,
   type NewStoryPhoto,
 } from "@sugt/db/queries";
+import type { Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { addCluster, addPerson, addProvince, addSchool, resetDatabase } from "./support/fixtures";
+
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the Staff-only choke point still has to
+ * reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. The cast through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
+}
 
 /**
  * **Cerita** — creating, editing and publishing Stories. The invariants under test are the one
@@ -195,7 +211,7 @@ describe("Cerita", () => {
     });
   });
 
-  it("refuses a Teaching Team caller everywhere — publishing is Staff-only", async () => {
+  it("refuses a non-Staff caller everywhere — publishing is Staff-only", async () => {
     const pic = await staff();
     const school = await oneSchool();
     const s = await createStory(pic, {
@@ -205,11 +221,9 @@ describe("Cerita", () => {
       kind: "field",
       stream: null,
     });
-    const teacher = await addPerson({
-      fullName: "Bagus Prakoso",
-      email: "bagus@itb.ac.id",
-      role: "Teaching Team",
-    });
+    // T3 (#153) retired the Teaching Team Role, so no non-Staff Person can be invited; the
+    // Staff-only gate is still proven with a hand-built non-Staff caller.
+    const teacher = nonStaff();
 
     await expect(ceritaIndex(teacher)).rejects.toSatisfy(isNotStaffError);
     await expect(publishStory(teacher, s.id)).rejects.toSatisfy(isNotStaffError);
