@@ -6,7 +6,6 @@ import {
   Boxes,
   CalendarPlus,
   LayoutDashboard,
-  LayoutGrid,
   ListVideo,
   Newspaper,
   Plane,
@@ -40,7 +39,6 @@ import { usePathname } from "next/navigation";
  */
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, staffOnly: false },
-  { href: "/coverage", label: "Coverage", icon: LayoutGrid, staffOnly: false },
   { href: "/sekolah", label: "Direktori Sekolah", icon: School, staffOnly: false },
   { href: "/kelompok-sekolah", label: "Kelompok Sekolah", icon: Boxes, staffOnly: false },
   { href: "/concerns", label: "Concerns", icon: TriangleAlert, staffOnly: false },
