@@ -1,18 +1,21 @@
-import { ClassRecordDialog, SessionRecordDialog } from "-/components/record-forms";
+import { SessionRecordDialog } from "-/components/record-forms";
 import type { SessionDetail } from "@sugt/db/queries";
-import { CLASS_KINDS } from "@sugt/domain";
 
 /**
- * What has been filed against this Session, and who still owes what.
+ * Who still owes what against this Session — now the **PIC's Session Record**, and nothing else.
  *
- * A server component that renders read-only figures and lists, plus one interactive leaf:
- * beside an owed Record the signed-in person owes, the form to file it. `personId` is that
- * person's id — the forms appear for their own Records and nobody else's, so a professor
- * fills their Class Records and the PIC the Session Record.
+ * **The online Class-Record "who owes what" machinery is gone** (T3, #153). It counted Records
+ * filed against Records expected off the two `session_teacher` professors, but online teachers are
+ * free-text names now (ADR-0022) who cannot sign in and file, `session_teacher` is dropped, and
+ * Class Records are deferred for both modes — so there is no expected set to report and no
+ * teachers list to render here. What survives is the Session Record the Staff PIC owes.
+ *
+ * A server component that renders a read-only list, plus one interactive leaf: beside the owed
+ * Session Record, if the signed-in person is the one who owes it, the form to file it. `personId`
+ * is that person's id — the form appears for their own Record and nobody else's.
  *
  * **The form is offered to the person the tool chases, which is narrower than who may file.**
- * `owed` names the PIC for the Session Record and each named teacher for their Class Records
- * — the chase list, empty until the Session is delivered (ADR-0009). The write is broader:
+ * `owed` names the PIC, empty until the Session is delivered (ADR-0009). The write is broader:
  * `fileSessionRecord` admits any Staff member, not only the PIC, because `docs/data-model.md`
  * says any Staff who was there may file one while the PIC's is the one chased. A non-PIC Staff
  * member's Session Record is therefore permitted by the write and has no screen here yet —
@@ -21,55 +24,13 @@ import { CLASS_KINDS } from "@sugt/domain";
 function SessionRecords({ session, personId }: { session: SessionDetail; personId: string }) {
   return (
     <div className="border-b border-border px-7 py-5">
-      <h2 className="font-heading text-sm font-medium">Catatan</h2>
-
-      {/*
-        **Two numbers, side by side, and nothing reconciles them.** `class_record` has no
-        foreign key to `session_teacher`, so a Record filed by somebody this Session never
-        named is a legal row and filed may legitimately exceed expected. A single
-        "4 of 6" would have to pick one of them to be wrong.
-      */}
-      <dl className="mt-2.5 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-        <div>
-          <dt className="text-muted-foreground">Catatan Kelas terkumpul</dt>
-          <dd className="tabular-nums">{session.classRecordsFiled}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Diharapkan</dt>
-          <dd className="tabular-nums">{session.classRecordsExpected}</dd>
-        </div>
-      </dl>
-
-      {/*
-        Expected is the teachers this Session names crossed with the three Classes, so a
-        Session naming nobody expects nothing. Saying so is better than a bare zero,
-        which reads as a system that has lost the professors.
-      */}
-      {session.teachers.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">
-          Belum ada pengajar yang dicatat, jadi belum ada Catatan Kelas yang diharapkan.
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-1 text-sm">
-          {session.teachers.map((teacher) => (
-            <li
-              key={teacher.stream}
-              className="text-muted-foreground"
-            >
-              <span className="text-foreground">{teacher.fullName}</span> · {teacher.stream}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h2 className="mt-6 font-heading text-sm font-medium">Yang belum mengisi</h2>
+      <h2 className="font-heading text-sm font-medium">Yang belum mengisi</h2>
 
       {/*
         Empty while the Session is arranged, and that is the criterion rather than an
-        oversight: an arranged online Session already names its professors, so a list
-        that did not wait for `delivered` would chase people for teaching that has not
-        happened. Nothing is required and nothing is blocked (ADR-0009) — naming who has
-        not filed is the whole of the enforcement.
+        oversight: a list that did not wait for `delivered` would chase the PIC for a visit
+        that has not happened. Nothing is required and nothing is blocked (ADR-0009) — naming
+        who has not filed is the whole of the enforcement.
       */}
       {session.owed.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">
@@ -81,36 +42,20 @@ function SessionRecords({ session, personId }: { session: SessionDetail; personI
         <ul className="mt-2 space-y-1.5 text-sm">
           {session.owed.map((owed) => (
             <li
-              key={
-                owed.kind === "session-record"
-                  ? `session-record:${owed.personId}`
-                  : `class-record:${owed.personId}:${owed.classKind}`
-              }
+              key={`session-record:${owed.personId}`}
               className="flex items-center justify-between gap-3 text-muted-foreground"
             >
               <span>
-                <span className="text-foreground">{owed.fullName}</span>
-                {owed.kind === "session-record"
-                  ? " · Catatan Sesi"
-                  : ` · Catatan Kelas ${CLASS_LABELS[owed.classKind]}`}
+                <span className="text-foreground">{owed.fullName}</span> · Catatan Sesi
               </span>
 
               {/*
-                The form is offered only for the signed-in person's own Records. Everyone
-                sees the list — naming who has not filed is the whole of the enforcement
-                (ADR-0009) — but only the person who owes a Record can file it, and the
-                write refuses anyone else regardless.
+                The form is offered only for the signed-in person's own Record. Everyone sees the
+                list — naming who has not filed is the whole of the enforcement (ADR-0009) — but
+                only the person who owes the Record can file it, and the write refuses anyone else
+                regardless.
               */}
-              {owed.personId === personId &&
-                (owed.kind === "session-record" ? (
-                  <SessionRecordDialog sessionId={session.id} />
-                ) : (
-                  <ClassRecordDialog
-                    sessionId={session.id}
-                    classKind={owed.classKind}
-                    classLabel={CLASS_LABELS[owed.classKind]}
-                  />
-                ))}
+              {owed.personId === personId && <SessionRecordDialog sessionId={session.id} />}
             </li>
           ))}
         </ul>
@@ -118,26 +63,5 @@ function SessionRecords({ session, personId }: { session: SessionDetail; personI
     </div>
   );
 }
-
-/**
- * The three Classes by name. A Class is a cohort of people at one School, so these are
- * audiences and never Streams — every Class is taught in both.
- *
- * The copy is Indonesian and the domain terms are English — `CONTEXT.md` § *Language* —
- * which is why this is a translation at the edge rather than names in `@sugt/domain`. The
- * line is not clean and is not meant to be: *Catatan Kelas* and *Catatan Sesi* are
- * translated because they are what somebody is asked to fill in, while `Rating`, `Stream`,
- * `Perjadin` and `PIC` stay as they are because they are what the Programme calls them.
- *
- * **`Student` reads as `Siswa` and the other two do not translate at all.** GTK and MS are
- * already Indonesian initialisms; spelling them out would be inventing a name nobody uses.
- * `docs/research/handoff-vs-docs.md` flags *Siswa* as drift from the handoff — it is kept
- * here because *Student* beside two Indonesian initialisms reads as an oversight.
- */
-const CLASS_LABELS: Record<(typeof CLASS_KINDS)[number], string> = {
-  GTK: "GTK",
-  MS: "MS",
-  Student: "Siswa",
-};
 
 export { SessionRecords };

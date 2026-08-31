@@ -1,18 +1,16 @@
 import { db, schema } from "@sugt/db";
 import {
   cancelSession,
-  correctSessionTeachers,
   isNotStaffError,
   markSessionDelivered,
   moveSessionDate,
   sessionDetail,
 } from "@sugt/db/queries";
-import { CLASS_KINDS } from "@sugt/domain";
+import type { Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  addClassRecord,
   addCluster,
   addOfflineSession,
   addPerjadin,
@@ -34,6 +32,10 @@ import {
  * date re-checks the per-day index, and an arranged offline Session stays inside its
  * Perjadin's window. A test through the form would pass against a function that checks
  * none of them, so long as the form did not offer the button.
+ *
+ * T3 (#153) retired `session_teacher` and the Teaching Team Role. Detail Sesi no longer names
+ * teachers, suggests a Group's Stream assignments or counts Class Records owed; the one Record
+ * still owed is the PIC's Session Record, so that is all `owed` carries now.
  */
 
 /** The Staff Person who is PIC of everything below. */
@@ -41,12 +43,20 @@ async function staff(email = "rina@ditsama.itb.ac.id") {
   return addPerson({ fullName: "Rina Nurhayati", email, role: "Staff" });
 }
 
-/** Two Teaching Team members, one per Stream. */
-async function professors() {
-  return Promise.all([
-    addPerson({ fullName: "Bagus Prakoso", email: "bagus@itb.ac.id", role: "Teaching Team" }),
-    addPerson({ fullName: "Sari Dewi", email: "sari@itb.ac.id", role: "Teaching Team" }),
-  ]);
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the Staff-only writes below must still
+ * reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. Casting through `unknown` is the only way to name a role the type no longer admits; the id
+ * is never read, because the guard fires first.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
 }
 
 /** One School to hang Sessions off. */
@@ -68,14 +78,6 @@ async function statusOf(sessionId: string) {
     .from(schema.session)
     .where(eq(schema.session.id, sessionId));
   return row?.status ?? null;
-}
-
-/** The `session_teacher` rows a Session actually holds. */
-async function teachersOf(sessionId: string) {
-  return db
-    .select({ stream: schema.sessionTeacher.stream, personId: schema.sessionTeacher.personId })
-    .from(schema.sessionTeacher)
-    .where(eq(schema.sessionTeacher.sessionId, sessionId));
 }
 
 describe("Detail Sesi", () => {
@@ -151,9 +153,11 @@ describe("Detail Sesi", () => {
     expect(detail?.timeZone).toBe("WIT");
   });
 
-  it("is open to a Teaching Team caller, because a Session carries no money", async () => {
+  it("is open to a non-Staff caller, because a Session carries no money", async () => {
+    // `sessionDetail` reads delivery data, not money, so it takes any signed-in caller (ADR-0004)
+    // — it never calls `requireStaff`. A hand-built non-Staff caller proves the surface is open;
+    // no such Person exists in the database since T3 (#153), so the caller is cast, not invited.
     const pic = await staff();
-    const [bagus] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
@@ -161,7 +165,7 @@ describe("Detail Sesi", () => {
       onlinePicPersonId: pic.id,
     });
 
-    await expect(sessionDetail(bagus, session.id)).resolves.not.toBeNull();
+    await expect(sessionDetail(nonStaff(), session.id)).resolves.not.toBeNull();
   });
 
   it("is null for an id naming no Session, which is what a stale link is", async () => {
@@ -172,168 +176,44 @@ describe("Detail Sesi", () => {
   });
 
   /**
-   * The criterion the wayfinder calls the worst failure available: an *arranged* online
-   * Session already names its professors, so a chase list that did not filter on
-   * `delivered` would report six Class Records owed for teaching that has not happened.
+   * `owed` is delivered-only. An arranged Session has not happened, so nothing is owed off it —
+   * the overdue-shaped state ADR-0006 exists to prevent. Since T3 (#153) the only thing ever owed
+   * is the PIC's Session Record, so `owed` on an arranged Session is simply empty.
    */
-  it("owes nothing while a Session is arranged, even though it already names teachers", async () => {
+  it("owes nothing while a Session is arranged", async () => {
     const pic = await staff();
-    const [bagus, sari] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    await db.insert(schema.sessionTeacher).values([
-      { sessionId: session.id, stream: "STEM", personId: bagus.id },
-      { sessionId: session.id, stream: "Research", personId: sari.id },
-    ]);
 
     const detail = await sessionDetail(pic, session.id);
 
-    expect(detail?.teachers).toHaveLength(2);
     expect(detail?.owed).toEqual([]);
   });
 
-  it("owes one row per named teacher per Class kind, plus the PIC's Session Record", async () => {
+  /**
+   * The one Record still owed off a delivered Session: the PIC's Session Record. Class Records
+   * went with `session_teacher` (T3, #153), so there is no per-teacher, per-Class-kind debt any
+   * more — `owed` is exactly the PIC's Session Record until they file it.
+   */
+  it("owes the PIC's Session Record once a Session is delivered", async () => {
     const pic = await staff();
-    const [bagus, sari] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    // `session_teacher` is seeded directly now — mark-delivered is status-only (#152), and this read
-    // still counts owed Class Records off `session_teacher` until T3 retires it.
-    await db.insert(schema.sessionTeacher).values([
-      { sessionId: session.id, stream: "STEM", personId: bagus.id },
-      { sessionId: session.id, stream: "Research", personId: sari.id },
-    ]);
     await markSessionDelivered(pic, session.id);
 
     const detail = await sessionDetail(pic, session.id);
 
-    // Two professors across three Class kinds, and one Session Record from the PIC.
-    expect(detail?.owed).toHaveLength(2 * CLASS_KINDS.length + 1);
-    expect(detail?.owed.filter((row) => row.kind === "session-record")).toHaveLength(1);
-  });
-
-  /**
-   * Expected is computed from the teachers a Session **names**, never from
-   * `CLASS_RECORDS_PER_SESSION`. The constant assumes both Streams are named, which is
-   * true after Tandai terlaksana and not before — so a Session naming one professor
-   * would otherwise show three units of debt attached to nobody.
-   */
-  it("counts expected Class Records from the teachers actually named", async () => {
-    const pic = await staff();
-    const [bagus] = await professors();
-    const school = await oneSchool();
-    const session = await addSession({
-      schoolId: school.id,
-      heldOn: "2026-09-10",
-      onlinePicPersonId: pic.id,
-    });
-    await db
-      .insert(schema.sessionTeacher)
-      .values([{ sessionId: session.id, stream: "STEM", personId: bagus.id }]);
-
-    const detail = await sessionDetail(pic, session.id);
-
-    expect(detail?.classRecordsExpected).toBe(CLASS_KINDS.length);
-  });
-
-  /**
-   * `class_record` has **no foreign key to `session_teacher`** — it references
-   * `session (id)` and `person (id, role)` only — so a Record filed by somebody the
-   * Session never named is a legal row. The screen shows both numbers and reconciles
-   * neither, because the database permits the divergence deliberately.
-   */
-  it("shows filed above expected when somebody the Session never named files a Record", async () => {
-    const pic = await staff();
-    const [bagus, sari] = await professors();
-    const school = await oneSchool();
-    const session = await addSession({
-      schoolId: school.id,
-      heldOn: "2026-09-10",
-      onlinePicPersonId: pic.id,
-    });
-    await db
-      .insert(schema.sessionTeacher)
-      .values([{ sessionId: session.id, stream: "STEM", personId: bagus.id }]);
-    for (const classKind of CLASS_KINDS) {
-      await addClassRecord({ sessionId: session.id, classKind, filedByPersonId: bagus.id });
-      await addClassRecord({ sessionId: session.id, classKind, filedByPersonId: sari.id });
-    }
-
-    const detail = await sessionDetail(pic, session.id);
-
-    expect(detail?.classRecordsExpected).toBe(CLASS_KINDS.length);
-    expect(detail?.classRecordsFiled).toBe(2 * CLASS_KINDS.length);
-  });
-
-  /**
-   * The pre-fill the criterion names. It is read from `group_member` on every open rather
-   * than copied into `session_teacher` at arrangement — a Group is replaced wholesale, so
-   * a copy taken then would be stranded by a substitution with nothing to catch it.
-   */
-  it("suggests the Group's Stream assignments for an offline Session", async () => {
-    const pic = await staff();
-    const [bagus, sari] = await professors();
-    const school = await oneSchool();
-    const perjadin = await addPerjadin({
-      picPersonId: pic.id,
-      advanceIdr: 5_000_000,
-      startsOn: "2026-09-01",
-      endsOn: "2026-09-03",
-      teachers: [
-        { personId: bagus.id, stream: "STEM" },
-        { personId: sari.id, stream: "Research" },
-      ],
-    });
-    const session = await addOfflineSession({
-      schoolId: school.id,
-      heldOn: "2026-09-02",
-      perjadinId: perjadin.id,
-    });
-
-    const detail = await sessionDetail(pic, session.id);
-
-    expect(detail?.suggestedTeachers).toEqual([
-      { stream: "Research", personId: sari.id, fullName: "Sari Dewi" },
-      { stream: "STEM", personId: bagus.id, fullName: "Bagus Prakoso" },
+    expect(detail?.owed).toEqual([
+      { kind: "session-record", personId: pic.id, fullName: "Rina Nurhayati" },
     ]);
-  });
-
-  /** An online Session has no Perjadin and therefore no Group to read a suggestion from. */
-  it("suggests nobody for an online Session", async () => {
-    const pic = await staff();
-    const school = await oneSchool();
-    const session = await addSession({
-      schoolId: school.id,
-      heldOn: "2026-09-10",
-      onlinePicPersonId: pic.id,
-    });
-
-    expect((await sessionDetail(pic, session.id))?.suggestedTeachers).toEqual([]);
-  });
-
-  /** The pickers offer active Teaching Team members, and Staff are not among them. */
-  it("offers the Teaching Team roster and nobody else", async () => {
-    const pic = await staff();
-    const [bagus] = await professors();
-    const school = await oneSchool();
-    const session = await addSession({
-      schoolId: school.id,
-      heldOn: "2026-09-10",
-      onlinePicPersonId: pic.id,
-    });
-
-    const detail = await sessionDetail(pic, session.id);
-
-    expect(detail?.teachingTeam.map((entry) => entry.id)).toContain(bagus.id);
-    expect(detail?.teachingTeam.map((entry) => entry.id)).not.toContain(pic.id);
   });
 
   it("stops owing a Session Record once the PIC files one", async () => {
@@ -349,7 +229,7 @@ describe("Detail Sesi", () => {
 
     const detail = await sessionDetail(pic, session.id);
 
-    expect(detail?.owed.filter((row) => row.kind === "session-record")).toEqual([]);
+    expect(detail?.owed).toEqual([]);
   });
 });
 
@@ -358,29 +238,28 @@ describe("Tandai terlaksana — online", () => {
 
   async function arrangedOnlineSession() {
     const pic = await staff();
-    const [bagus] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
       heldOn: "2026-09-10",
       onlinePicPersonId: pic.id,
     });
-    return { pic, bagus, school, session };
+    return { pic, school, session };
   }
 
   /**
-   * Status only now, for both modes (#152). An online Session names its Pengajar as session-scoped
-   * `session_teacher_name` at arrangement and edits them per-item on `/sesi-daring/[id]`, so
-   * delivery no longer names a Person per Stream and writes no `session_teacher`.
+   * Status only now, for both modes (#152, T3 #153). An online Session names its Pengajar as
+   * session-scoped `session_teacher_name` at arrangement and edits them per-item on
+   * `/sesi-daring/[id]`, so delivery only flips the status and names no Person per Stream —
+   * `session_teacher` is gone entirely.
    */
-  it("marks an online Session delivered with status only, writing no session_teacher", async () => {
+  it("marks an online Session delivered with status only", async () => {
     const { pic, session } = await arrangedOnlineSession();
 
     const result = await markSessionDelivered(pic, session.id);
 
     expect(result).toEqual({ outcome: "delivered" });
     expect(await statusOf(session.id)).toBe("delivered");
-    expect(await teachersOf(session.id)).toEqual([]);
   });
 
   /** `delivered` is terminal, and the second attempt is what proves it. */
@@ -402,10 +281,10 @@ describe("Tandai terlaksana — online", () => {
     expect(result).toEqual({ outcome: "not-arranged", status: "cancelled" });
   });
 
-  it("refuses a Teaching Team caller", async () => {
-    const { bagus, session } = await arrangedOnlineSession();
+  it("refuses a non-Staff caller", async () => {
+    const { session } = await arrangedOnlineSession();
 
-    await expect(markSessionDelivered(bagus, session.id)).rejects.toSatisfy(isNotStaffError);
+    await expect(markSessionDelivered(nonStaff(), session.id)).rejects.toSatisfy(isNotStaffError);
   });
 });
 
@@ -414,7 +293,6 @@ describe("Tandai terlaksana — offline", () => {
 
   async function arrangedOfflineSession() {
     const pic = await staff();
-    const [bagus, sari] = await professors();
     const school = await oneSchool();
     const perjadin = await addPerjadin({
       picPersonId: pic.id,
@@ -427,148 +305,16 @@ describe("Tandai terlaksana — offline", () => {
       heldOn: "2026-09-02",
       perjadinId: perjadin.id,
     });
-    return { pic, bagus, sari, session };
+    return { pic, session };
   }
 
-  it("marks an offline Session delivered with status only, writing no session_teacher", async () => {
+  it("marks an offline Session delivered with status only", async () => {
     const { pic, session } = await arrangedOfflineSession();
 
     const result = await markSessionDelivered(pic, session.id);
 
     expect(result).toEqual({ outcome: "delivered" });
     expect(await statusOf(session.id)).toBe("delivered");
-    // The Stream is on the Session and the teachers are session_teaching_team names — nobody is
-    // named here, so no Person-based teacher row is written.
-    expect(await teachersOf(session.id)).toEqual([]);
-  });
-
-  it("refuses to correct teachers on an offline Session, writing no session_teacher", async () => {
-    const { pic, bagus, sari, session } = await arrangedOfflineSession();
-    await markSessionDelivered(pic, session.id);
-
-    const result = await correctSessionTeachers(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
-
-    expect(result).toEqual({ outcome: "offline-not-correctable" });
-    expect(await teachersOf(session.id)).toEqual([]);
-  });
-});
-
-describe("correcting who taught", () => {
-  beforeEach(resetDatabase);
-
-  async function deliveredSession() {
-    const pic = await staff();
-    const [bagus, sari] = await professors();
-    const school = await oneSchool();
-    const session = await addSession({
-      schoolId: school.id,
-      heldOn: "2026-09-10",
-      onlinePicPersonId: pic.id,
-    });
-    // Mark-delivered is status-only now (#152); `session_teacher` is seeded through the retained
-    // (unsurfaced) `correctSessionTeachers` writer, which is the path these tests still exercise.
-    await markSessionDelivered(pic, session.id);
-    await correctSessionTeachers(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
-    return { pic, bagus, sari, session };
-  }
-
-  /**
-   * The only route to fixing a mis-named professor. Until they are removed they owe
-   * three Class Records they cannot honestly file, and `delivered` being terminal means
-   * un-delivering is not an option.
-   */
-  it("lets Staff correct a professor after delivery", async () => {
-    const { pic, bagus, session } = await deliveredSession();
-    const rian = await addPerson({
-      fullName: "Rian Saputra",
-      email: "rian@itb.ac.id",
-      role: "Teaching Team",
-    });
-
-    const result = await correctSessionTeachers(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: rian.id },
-    ]);
-
-    expect(result.outcome).toBe("corrected");
-    const rows = await teachersOf(session.id);
-    expect(rows.find((row) => row.stream === "Research")?.personId).toBe(rian.id);
-  });
-
-  /**
-   * The both-Streams rule survives the correction. Without this, removing a professor
-   * from a delivered Session is the way out of a rule that Tandai terlaksana enforced.
-   */
-  it("refuses to leave a delivered Session with a Stream unnamed", async () => {
-    const { pic, bagus, session } = await deliveredSession();
-
-    const result = await correctSessionTeachers(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-    ]);
-
-    expect(result).toEqual({ outcome: "stream-unnamed", missing: ["Research"] });
-    expect(await teachersOf(session.id)).toHaveLength(2);
-  });
-
-  /** Naming is optional before delivery, so a correction on an arranged Session may empty it. */
-  it("allows a Stream to be left unnamed while the Session is still arranged", async () => {
-    const pic = await staff();
-    const [bagus] = await professors();
-    const school = await oneSchool();
-    const session = await addSession({
-      schoolId: school.id,
-      heldOn: "2026-09-10",
-      onlinePicPersonId: pic.id,
-    });
-
-    const result = await correctSessionTeachers(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-    ]);
-
-    expect(result.outcome).toBe("corrected");
-    expect(await teachersOf(session.id)).toHaveLength(1);
-  });
-
-  /**
-   * Nobody taught a Session that was called off, so there is nothing to correct. The rows
-   * this would write are meaningless and invisible — `owed` is delivered-only, so they
-   * would sit in `session_teacher` with no screen ever reporting them.
-   */
-  it("refuses to correct a cancelled Session", async () => {
-    const pic = await staff();
-    const [bagus, sari] = await professors();
-    const school = await oneSchool();
-    const session = await addSession({
-      schoolId: school.id,
-      heldOn: "2026-09-10",
-      onlinePicPersonId: pic.id,
-    });
-    await cancelSession(pic, session.id, "Sekolah meminta penjadwalan ulang");
-
-    const result = await correctSessionTeachers(pic, session.id, [
-      { stream: "STEM", personId: bagus.id },
-      { stream: "Research", personId: sari.id },
-    ]);
-
-    expect(result).toEqual({ outcome: "not-correctable", status: "cancelled" });
-    expect(await teachersOf(session.id)).toEqual([]);
-  });
-
-  it("refuses a Teaching Team caller", async () => {
-    const { bagus, sari, session } = await deliveredSession();
-
-    await expect(
-      correctSessionTeachers(bagus, session.id, [
-        { stream: "STEM", personId: bagus.id },
-        { stream: "Research", personId: sari.id },
-      ]),
-    ).rejects.toSatisfy(isNotStaffError);
   });
 });
 
@@ -630,9 +376,8 @@ describe("Batalkan Sesi", () => {
     expect(await statusOf(session.id)).toBe("arranged");
   });
 
-  it("refuses a Teaching Team caller", async () => {
+  it("refuses a non-Staff caller", async () => {
     const pic = await staff();
-    const [bagus] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
@@ -640,7 +385,9 @@ describe("Batalkan Sesi", () => {
       onlinePicPersonId: pic.id,
     });
 
-    await expect(cancelSession(bagus, session.id, "Tidak jadi")).rejects.toSatisfy(isNotStaffError);
+    await expect(cancelSession(nonStaff(), session.id, "Tidak jadi")).rejects.toSatisfy(
+      isNotStaffError,
+    );
   });
 });
 
@@ -823,9 +570,8 @@ describe("moving a date", () => {
     );
   });
 
-  it("refuses a Teaching Team caller", async () => {
+  it("refuses a non-Staff caller", async () => {
     const pic = await staff();
-    const [bagus] = await professors();
     const school = await oneSchool();
     const session = await addSession({
       schoolId: school.id,
@@ -833,7 +579,7 @@ describe("moving a date", () => {
       onlinePicPersonId: pic.id,
     });
 
-    await expect(moveSessionDate(bagus, session.id, "2026-09-17", "09:00")).rejects.toSatisfy(
+    await expect(moveSessionDate(nonStaff(), session.id, "2026-09-17", "09:00")).rejects.toSatisfy(
       isNotStaffError,
     );
   });

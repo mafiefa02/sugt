@@ -5,7 +5,7 @@ import {
   arrangeOnlineSessionForm,
   isNotStaffError,
 } from "@sugt/db/queries";
-import { MAX_TEACHING_TEAM_PER_ONLINE_SESSION } from "@sugt/domain";
+import { MAX_TEACHING_TEAM_PER_ONLINE_SESSION, type Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -18,6 +18,21 @@ import {
   refusedBy,
   resetDatabase,
 } from "./support/fixtures";
+
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the Staff-only choke point still has to
+ * reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. The cast through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
+}
 
 /**
  * **Jadwalkan Sesi daring** — arranging one online Session at a time (#70, ADR-0022). The write is
@@ -86,7 +101,7 @@ describe("arrangeOnlineSession", () => {
     expect(row?.startsAt).toMatch(/^09:30/);
   });
 
-  it("writes session_teacher_name rows and no session_teacher row", async () => {
+  it("writes session_teacher_name rows for the named Pengajar", async () => {
     const staff = await staffCaller();
     const school = await oneSchool();
 
@@ -100,14 +115,13 @@ describe("arrangeOnlineSession", () => {
     });
     if (result.outcome !== "arranged") throw new Error("unreachable");
 
+    // Pengajar are session-scoped free-text names now: T3 (#153) dropped `session_teacher`
+    // outright, so there is no Person-based table left even to assert empty.
     const names = await db
       .select({ name: schema.sessionTeacherName.name })
       .from(schema.sessionTeacherName)
       .where(eq(schema.sessionTeacherName.sessionId, result.sessionId));
     expect(names.map((row) => row.name).sort()).toEqual(["Dr. Sari", "Prof. Bagus"]);
-
-    // The Person-based table is left in place (T3 retires it) but nothing writes it now.
-    expect(await db.select().from(schema.sessionTeacher)).toEqual([]);
   });
 
   it("writes no session_teacher_name rows when no Pengajar is named", async () => {
@@ -124,7 +138,6 @@ describe("arrangeOnlineSession", () => {
     });
 
     expect(await db.select().from(schema.sessionTeacherName)).toEqual([]);
-    expect(await db.select().from(schema.sessionTeacher)).toEqual([]);
   });
 
   it("allows a second online Session on one day when the Stream differs", async () => {
@@ -273,12 +286,8 @@ describe("arrangeOnlineSession", () => {
     expect(refusal).toBe("session_stream_not_null");
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await addPerson({
-      fullName: "Prof",
-      email: "prof@gmail.com",
-      role: "Teaching Team",
-    });
+  it("throws NotStaffError for a non-Staff caller", async () => {
+    const teacher = nonStaff();
     const school = await oneSchool();
 
     const refusal = await arrangeOnlineSession(teacher, {
@@ -311,12 +320,8 @@ describe("arrangeOnlineSessionForm", () => {
     expect(form).not.toHaveProperty("teachingTeam");
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await addPerson({
-      fullName: "Prof",
-      email: "prof@gmail.com",
-      role: "Teaching Team",
-    });
+  it("throws NotStaffError for a non-Staff caller", async () => {
+    const teacher = nonStaff();
 
     const refusal = await arrangeOnlineSessionForm(teacher).catch((error: unknown) => error);
 
@@ -343,12 +348,8 @@ describe("arrangeOnlineSessionAt", () => {
     expect(await arrangeOnlineSessionAt(staff, "tidak-ada")).toBeNull();
   });
 
-  it("throws NotStaffError for a Teaching Team caller", async () => {
-    const teacher = await addPerson({
-      fullName: "Prof",
-      email: "prof@gmail.com",
-      role: "Teaching Team",
-    });
+  it("throws NotStaffError for a non-Staff caller", async () => {
+    const teacher = nonStaff();
     await oneSchool();
 
     const refusal = await arrangeOnlineSessionAt(teacher, "sman-8").catch(

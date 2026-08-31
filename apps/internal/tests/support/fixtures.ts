@@ -239,50 +239,11 @@ const needsProse = (ratings: number[]) => Math.min(...ratings) <= 7;
 
 const WENT_WRONG = "Proyektor mati sepanjang sesi";
 
-export type ClassRecordFixture = {
-  sessionId: string;
-  classKind: ClassKind;
-  /** Teaching Team. A composite foreign key into `person (id, role)` refuses anyone else. */
-  filedByPersonId: string;
-  ratings?: Partial<
-    Record<
-      | "comprehension"
-      | "participation"
-      | "readiness"
-      | "materials"
-      | "delivery"
-      | "facilities"
-      | "timing",
-      number
-    >
-  >;
-};
-
-/** What a Teaching Team member says about one Class they taught. Seven Aspects. */
-export async function addClassRecord(fixture: ClassRecordFixture) {
-  const ratings = {
-    comprehension: FINE,
-    participation: FINE,
-    readiness: FINE,
-    materials: FINE,
-    delivery: FINE,
-    facilities: FINE,
-    timing: FINE,
-    ...fixture.ratings,
-  };
-  const [record] = await db
-    .insert(schema.classRecord)
-    .values({
-      sessionId: fixture.sessionId,
-      classKind: fixture.classKind,
-      filedByPersonId: fixture.filedByPersonId,
-      filedByRole: "Teaching Team",
-      ...ratings,
-      problems: needsProse(Object.values(ratings)) ? WENT_WRONG : null,
-    })
-    .returning();
-  return record!;
-}
+// No `addClassRecord` here any more. `class_record.filed_by_role` is pinned to `'Teaching Team'`
+// by its composite foreign key into `person (id, role)`, and T3 (#153) retired that Role — no
+// Person can be Teaching Team, so no Class Record can ever be filed. Class Records are deferred
+// for both modes; the table survives only as the dead surface the `concerns` union still reads
+// (and now finds empty). The other record fixtures below stay: their filers are Staff.
 
 export type SessionRecordFixture = {
   sessionId: string;
@@ -428,8 +389,6 @@ export type PerjadinFixture = {
   subClusterId?: string;
   /** Staff. They are the PIC and, by the deferred foreign key, a member of their own Group. */
   picPersonId: string;
-  /** Teaching Team, each carrying the Stream they cover. Staff never carry one. */
-  teachers?: { personId: string; stream: Stream }[];
   /**
    * The Pimpinan recorded on the trip — record-only names, each a member of the fixed `PIMPINAN`
    * three (`perjadin_pimpinan_name_check` refuses anything else). Empty or absent by default.
@@ -481,18 +440,18 @@ export async function addPerjadin(fixture: PerjadinFixture) {
       })
       .returning();
 
-    await tx.insert(schema.groupMember).values([
-      { perjadinId: perjadin!.id, personId: fixture.picPersonId, role: "Staff", stream: null },
-      ...(fixture.teachers ?? []).map((teacher) => ({
-        perjadinId: perjadin!.id,
-        personId: teacher.personId,
-        // `as const`, where the row above needs nothing: a `.map` callback has no
-        // contextual type, so its object literal widens `role` to `string` — which the
-        // column's `Role` refuses. The row above is checked against `values()` directly.
-        role: "Teaching Team" as const,
-        stream: teacher.stream,
-      })),
-    ]);
+    // The Group is the PIC alone. T3 (#153) retired the Teaching Team Role and replaced
+    // `group_member_stream_iff_teaching` with `group_member_stream_null` — every member is Staff
+    // and no member carries a Stream — so there is no teacher row to add here. The online
+    // Session's Pengajar are session-scoped free-text names on `session_teacher_name` (ADR-0022),
+    // and an offline trip's teachers are trip-scoped names on `perjadin_teacher`; neither is a
+    // Group member.
+    await tx.insert(schema.groupMember).values({
+      perjadinId: perjadin!.id,
+      personId: fixture.picPersonId,
+      role: "Staff",
+      stream: null,
+    });
 
     if (fixture.pimpinan && fixture.pimpinan.length > 0) {
       await tx
@@ -582,17 +541,14 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
  * references and no fixture writes needs no entry; one a fixture writes does. The other three
  * evaluation tables are named below because fixtures write them directly.
  *
- * `session_teacher` is the first table here that **no fixture writes and the tests
- * populate anyway** — `correctSessionTeachers` writes it, and the session-detail tests assert on
- * it. `cascade` from `public."session"` already reaches it, so naming it changes nothing
- * today; it is named for the reason above, which is that a list pruned to the cascade
- * minimum stops covering a table the day its parent leaves. `session_teacher_name` sits beside it
- * for the same reason: no fixture writes one, but `arrangeOnlineSession` and the online-detail
- * per-item writes do, and the online-detail tests assert on it, so it is named even though
- * `cascade` from `public."session"` reaches it too. `perjadin_evaluation` has since
- * joined it: no fixture writes one, but the Perjadin Evaluation write-path tests file them
- * directly, and `cascade` from `public."perjadin"` reaches it, so naming it is for the same
- * reason and not for a fixture.
+ * `session_teacher_name` is a table here that **no fixture writes and the tests populate
+ * anyway** — `arrangeOnlineSession` and the online-detail per-item writes do, and the
+ * online-detail tests assert on it, so it is named even though `cascade` from
+ * `public."session"` reaches it too. (Its predecessor `session_teacher` was dropped whole in
+ * T3 (#153) — the online-session Teaching Team it carried is gone — so it leaves this list with
+ * the table.) `perjadin_evaluation` sits beside it for the same reason: no fixture writes one,
+ * but the Perjadin Evaluation write-path tests file them directly, and `cascade` from
+ * `public."perjadin"` reaches it, so naming it is for the same reason and not for a fixture.
  *
  * `public."session"` and `better_auth."session"` are both here and both qualified.
  * That collision is the whole reason Better Auth was given a Postgres schema of its
@@ -611,7 +567,6 @@ export async function resetDatabase() {
       public."sub_cluster",
       public."school",
       public."session",
-      public."session_teacher",
       public."session_teacher_name",
       public."class_record",
       public."session_record",

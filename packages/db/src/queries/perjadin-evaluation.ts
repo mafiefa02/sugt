@@ -11,9 +11,9 @@ import type { Person } from "./caller";
  * a member of the Group that travelled, four Aspects about the journey and none about a School.
  *
  * **Not Staff-only.** A Perjadin Evaluation carries no money, so by ADR-0004 it follows the
- * open-delivery rule — the Teaching Team members are the ones who slept in the hotel. So this
- * opens with no `requireStaff`; the gate is membership, returned as a value the way
- * `fileClassRecord` returns `not-teaching-team`.
+ * open-delivery rule — the Group who travelled are the ones who slept in the hotel. So this
+ * opens with no `requireStaff`; the gate is membership of the Group, returned as a value rather
+ * than thrown.
  *
  * **"Only the Group that travelled may file" is held here and only here.** `filed_by_person_id`
  * references `person`, not `group_member`, because a Group is replaced wholesale and a composite

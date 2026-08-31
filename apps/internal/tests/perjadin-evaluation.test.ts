@@ -16,6 +16,10 @@ import { addPerjadin, addPerson, refusedBy, resetDatabase } from "./support/fixt
  * nullable, so a day trip with no hotel drops out of the minimum rather than forcing prose or
  * reaching the concerns list. Postgres `least()` ignoring NULLs is what makes that work, and it
  * is asserted here rather than left a comment.
+ *
+ * Since T3 (#153) the Group is Staff-only and carries no Stream — the Teaching Team members who
+ * once travelled are gone with the Role — so a "member who is not the PIC" is a second Staff
+ * Person, added to `group_member` directly (the trip fixture builds a PIC-only Group).
  */
 
 /** The Staff PIC, who is a Group member by construction and may file an Evaluation. */
@@ -23,18 +27,25 @@ async function staff(email = "rina@ditsama.itb.ac.id") {
   return addPerson({ fullName: "Rina Nurhayati", email, role: "Staff" });
 }
 
-/** A Teaching Team member — the one who slept in the hotel. */
-async function professor(email = "bagus@itb.ac.id") {
-  return addPerson({ fullName: "Bagus Prakoso", email, role: "Teaching Team" });
+/** A second Staff Person — a Group member who is not the PIC, or an outsider until added to one. */
+async function member(email = "dewi@ditsama.itb.ac.id") {
+  return addPerson({ fullName: "Dewi Lestari", email, role: "Staff" });
 }
 
-/** A trip with the PIC and one professor on the Group. */
-async function aTrip(picPersonId: string, teacherPersonId: string) {
-  return addPerjadin({
-    advanceIdr: 5_000_000,
-    picPersonId,
-    teachers: [{ personId: teacherPersonId, stream: "STEM" }],
+/**
+ * A trip with the PIC and one further Staff member on the Group. The `group_member` row is
+ * inserted directly: `addPerjadin` builds a PIC-only Group, and these tests need a non-PIC member
+ * to file. The Group is Staff-only and no member carries a Stream (T3, #153).
+ */
+async function aTrip(picPersonId: string, memberPersonId: string) {
+  const trip = await addPerjadin({ advanceIdr: 5_000_000, picPersonId });
+  await db.insert(schema.groupMember).values({
+    perjadinId: trip.id,
+    personId: memberPersonId,
+    role: "Staff",
+    stream: null,
   });
+  return trip;
 }
 
 /** Every Rating comfortably above the threshold — an overnight trip that went well. */
@@ -52,12 +63,12 @@ async function evaluationCount(perjadinId: string) {
 describe("filePerjadinEvaluation", () => {
   beforeEach(resetDatabase);
 
-  it("files an Evaluation by a Teaching Team Group member", async () => {
+  it("files an Evaluation by a Group member who is not the PIC", async () => {
     const pic = await staff();
-    const teacher = await professor();
-    const trip = await aTrip(pic.id, teacher.id);
+    const traveller = await member();
+    const trip = await aTrip(pic.id, traveller.id);
 
-    const result = await filePerjadinEvaluation(teacher, {
+    const result = await filePerjadinEvaluation(traveller, {
       perjadinId: trip.id,
       ratings: FINE,
       problems: null,
@@ -70,8 +81,8 @@ describe("filePerjadinEvaluation", () => {
 
   it("files an Evaluation by the PIC, who is also a Group member", async () => {
     const pic = await staff();
-    const teacher = await professor();
-    const trip = await aTrip(pic.id, teacher.id);
+    const traveller = await member();
+    const trip = await aTrip(pic.id, traveller.id);
 
     const result = await filePerjadinEvaluation(pic, {
       perjadinId: trip.id,
@@ -85,10 +96,10 @@ describe("filePerjadinEvaluation", () => {
 
   it("files a day trip with no lodging Rating", async () => {
     const pic = await staff();
-    const teacher = await professor();
-    const trip = await aTrip(pic.id, teacher.id);
+    const traveller = await member();
+    const trip = await aTrip(pic.id, traveller.id);
 
-    const result = await filePerjadinEvaluation(teacher, {
+    const result = await filePerjadinEvaluation(traveller, {
       perjadinId: trip.id,
       ratings: { ...FINE, lodging: null },
       problems: null,
@@ -100,9 +111,9 @@ describe("filePerjadinEvaluation", () => {
 
   it("refuses a caller who was not on the Group, and writes nothing", async () => {
     const pic = await staff();
-    const teacher = await professor();
-    const outsider = await professor("dodi@itb.ac.id");
-    const trip = await aTrip(pic.id, teacher.id);
+    const traveller = await member();
+    const outsider = await member("dodi@ditsama.itb.ac.id");
+    const trip = await aTrip(pic.id, traveller.id);
 
     const result = await filePerjadinEvaluation(outsider, {
       perjadinId: trip.id,
@@ -117,10 +128,10 @@ describe("filePerjadinEvaluation", () => {
 
   it("refuses a Rating of 7 or below with no prose, and writes nothing", async () => {
     const pic = await staff();
-    const teacher = await professor();
-    const trip = await aTrip(pic.id, teacher.id);
+    const traveller = await member();
+    const trip = await aTrip(pic.id, traveller.id);
 
-    const result = await filePerjadinEvaluation(teacher, {
+    const result = await filePerjadinEvaluation(traveller, {
       perjadinId: trip.id,
       ratings: { ...FINE, transport: 4 },
       problems: null,
@@ -133,10 +144,10 @@ describe("filePerjadinEvaluation", () => {
 
   it("files a low Rating once it carries prose", async () => {
     const pic = await staff();
-    const teacher = await professor();
-    const trip = await aTrip(pic.id, teacher.id);
+    const traveller = await member();
+    const trip = await aTrip(pic.id, traveller.id);
 
-    const result = await filePerjadinEvaluation(teacher, {
+    const result = await filePerjadinEvaluation(traveller, {
       perjadinId: trip.id,
       ratings: { ...FINE, transport: 4 },
       problems: "Mobil sewaan telat dua jam",
@@ -148,8 +159,8 @@ describe("filePerjadinEvaluation", () => {
 
   it("refuses a second Evaluation from the same member for the same trip", async () => {
     const pic = await staff();
-    const teacher = await professor();
-    const trip = await aTrip(pic.id, teacher.id);
+    const traveller = await member();
+    const trip = await aTrip(pic.id, traveller.id);
     const evaluation = {
       perjadinId: trip.id,
       ratings: FINE,
@@ -157,8 +168,8 @@ describe("filePerjadinEvaluation", () => {
       suggestions: null,
     };
 
-    await filePerjadinEvaluation(teacher, evaluation);
-    const again = await filePerjadinEvaluation(teacher, evaluation);
+    await filePerjadinEvaluation(traveller, evaluation);
+    const again = await filePerjadinEvaluation(traveller, evaluation);
 
     expect(again).toEqual({ outcome: "already-filed" });
     expect(await evaluationCount(trip.id)).toBe(1);
@@ -175,19 +186,19 @@ describe("the nullable lodging invariant", () => {
 
   async function aFiler() {
     const pic = await staff();
-    const teacher = await professor();
-    const trip = await aTrip(pic.id, teacher.id);
-    return { teacher, trip };
+    const traveller = await member();
+    const trip = await aTrip(pic.id, traveller.id);
+    return { traveller, trip };
   }
 
   it("accepts a null lodging with every other Rating high and no prose", async () => {
-    const { teacher, trip } = await aFiler();
+    const { traveller, trip } = await aFiler();
 
     const [row] = await db
       .insert(schema.perjadinEvaluation)
       .values({
         perjadinId: trip.id,
-        filedByPersonId: teacher.id,
+        filedByPersonId: traveller.id,
         lodging: null,
         transport: 9,
         meals: 9,
@@ -200,12 +211,12 @@ describe("the nullable lodging invariant", () => {
   });
 
   it("still refuses a low non-null Rating with no prose when lodging is null", async () => {
-    const { teacher, trip } = await aFiler();
+    const { traveller, trip } = await aFiler();
 
     const refusal = await refusedBy(
       db.insert(schema.perjadinEvaluation).values({
         perjadinId: trip.id,
-        filedByPersonId: teacher.id,
+        filedByPersonId: traveller.id,
         lodging: null,
         transport: 4,
         meals: 9,
@@ -218,11 +229,11 @@ describe("the nullable lodging invariant", () => {
   });
 
   it("keeps a null-lodging row off the concerns list — least() over its Ratings is not low", async () => {
-    const { teacher, trip } = await aFiler();
+    const { traveller, trip } = await aFiler();
 
     await db.insert(schema.perjadinEvaluation).values({
       perjadinId: trip.id,
-      filedByPersonId: teacher.id,
+      filedByPersonId: traveller.id,
       lodging: null,
       transport: 9,
       meals: 9,

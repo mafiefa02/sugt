@@ -283,7 +283,8 @@ export type AddOnlineSessionTeacherResult =
  *
  * **Not gated on status**, unlike the field edit above: online Pengajar are edited anytime
  * (ADR-0022, #152), and this add/rename/remove trio is the correction path that replaced the retired
- * post-delivery `correctSessionTeachers` flow — so a name may be fixed on a delivered Session too.
+ * post-delivery who-taught correction flow (the `session_teacher`-writing `correctSessionTeachers`,
+ * dropped with the table in T3/#153) — so a name may be fixed on a delivered Session too.
  * The cap is a count across sibling rows, so it is checked here under the Session's lock rather than
  * by a CHECK that cannot see the set.
  */

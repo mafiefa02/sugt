@@ -45,20 +45,12 @@ describe("resolving who is asking", () => {
     });
   });
 
-  it("resolves a Teaching Team member with their own role", async () => {
-    const { cookie } = await signIn("Teaching Team", "ratna@gmail.com");
-
-    const resolved = await resolvePerson(new Headers({ cookie }));
-
-    expect(resolved?.role).toBe("Teaching Team");
-  });
-
   it("resolves no cookie to null", async () => {
     await expect(resolvePerson(new Headers())).resolves.toBeNull();
   });
 
   it("resolves a cookie for a deleted session to null", async () => {
-    const { cookie } = await signIn("Teaching Team", "hilang@gmail.com");
+    const { cookie } = await signIn("Staff", "hilang@gmail.com");
 
     await db.delete(schema.authSession).where(sql`true`);
 
@@ -72,7 +64,7 @@ describe("resolving who is asking", () => {
      * configuration flag, and it holds with cookie caching either way, because the
      * `active` join is our own read against our own table.
      */
-    const { person, cookie } = await signIn("Teaching Team", "dicabut@gmail.com");
+    const { person, cookie } = await signIn("Staff", "dicabut@gmail.com");
     await expect(resolvePerson(new Headers({ cookie }))).resolves.not.toBeNull();
 
     await revokePerson(person.id);

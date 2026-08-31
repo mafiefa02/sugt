@@ -9,11 +9,14 @@ import { describe, expect, it } from "vitest";
  * UI shows `Staff` as **DITSAMA** — and, just as importantly, that this is *presentation only*:
  * the map's keys are the stored `ROLES` values, unchanged, so every `role === "Staff"` compare,
  * CHECK constraint and composite FK still speaks the same string it always did.
+ *
+ * T3 (#153) retired the `Teaching Team` Role: `ROLES` is now exactly `["Staff"]`, so both maps
+ * carry a single key. The old `["Teaching Team"]` label assertions are gone with the Role.
  */
 describe("ROLE_LABELS", () => {
-  it("labels Staff as DITSAMA and leaves Teaching Team as-is", () => {
+  it("labels Staff as DITSAMA, the only Role", () => {
     expect(ROLE_LABELS.Staff).toBe("DITSAMA");
-    expect(ROLE_LABELS["Teaching Team"]).toBe("Teaching Team");
+    expect(ROLES).toEqual(["Staff"]);
   });
 
   it("keys on the stored role values, so the domain term stays Staff", () => {
@@ -25,14 +28,14 @@ describe("ROLE_LABELS", () => {
 
 /**
  * **The Perjadin-surface role labels** (#141). The same stored role, seen from the trip's
- * vantage point: on a Perjadin the DITSAMA people who accompany the Teaching Team read as
+ * vantage point: on a Perjadin the DITSAMA people who accompany the visit read as
  * **Pendamping**. Presentation only, and keyed on the stored `ROLES` values exactly like
  * `ROLE_LABELS`, so `[member.role]` render sites resolve and nothing stored changes.
  */
 describe("PERJADIN_ROLE_LABELS", () => {
-  it("labels Staff as Pendamping and leaves Teaching Team as-is", () => {
+  it("labels Staff as Pendamping, the only Role", () => {
     expect(PERJADIN_ROLE_LABELS.Staff).toBe("Pendamping");
-    expect(PERJADIN_ROLE_LABELS["Teaching Team"]).toBe("Teaching Team");
+    expect(ROLES).toEqual(["Staff"]);
   });
 
   it("keys on the stored role values, like ROLE_LABELS", () => {

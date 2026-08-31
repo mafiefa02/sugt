@@ -10,6 +10,7 @@ import {
   type PlanPerjadinInput,
 } from "@sugt/db/queries";
 import { PIMPINAN } from "@sugt/domain";
+import type { Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -40,15 +41,19 @@ async function staff(fullName = "Rina Nurhayati", email = "rina@ditsama.itb.ac.i
 }
 
 /**
- * Two Teaching Team People, kept for the callers the plan tests need — a non-Staff caller to be
- * refused, and a professor to name as an illegal PIC. `planPerjadin` no longer takes them as Group
- * members: its Teaching Team are trip-scoped names on `perjadin_teacher`.
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the Staff-only choke point still has to
+ * reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. The cast through `unknown` is the only way to name a role the type no longer admits. The
+ * open surfaces (directory, detail) also take it, to prove they are open to a non-Staff caller.
  */
-async function professors() {
-  return Promise.all([
-    addPerson({ fullName: "Bagus Prakoso", email: "bagus@itb.ac.id", role: "Teaching Team" }),
-    addPerson({ fullName: "Sari Dewi", email: "sari@itb.ac.id", role: "Teaching Team" }),
-  ]);
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
 }
 
 /**
@@ -96,7 +101,6 @@ const RETURN = { date: "2026-09-03", time: "18:00", mode: "Pesawat" } as const;
 /** Everything a valid trip needs, so each test below can spoil exactly one thing. */
 async function validPlan(kabupatenKota?: [string, string]) {
   const pic = await staff();
-  const [bagus, sari] = await professors();
   const { cluster, subCluster, schools } = await twoSchools(kabupatenKota);
 
   const input: PlanPerjadinInput = {
@@ -125,7 +129,7 @@ async function validPlan(kabupatenKota?: [string, string]) {
     return: RETURN,
   };
 
-  return { pic, bagus, sari, cluster, subCluster, schools, input };
+  return { pic, cluster, subCluster, schools, input };
 }
 
 /** Every Perjadin row, so "nothing was written" can be asserted rather than assumed. */
@@ -215,18 +219,6 @@ describe("Rencanakan Perjadin", () => {
     expect(sessions.every((row) => row.mode === "offline")).toBe(true);
     expect(sessions.every((row) => row.status === "arranged")).toBe(true);
     expect(sessions.every((row) => row.stream !== null)).toBe(true);
-  });
-
-  /**
-   * No `session_teacher` rows: offline teaching is name-based now, recorded through
-   * `session_teaching_team`, not `session_teacher` (which is online Sessions' alone).
-   */
-  it("writes no session_teacher rows", async () => {
-    const { pic, input } = await validPlan();
-
-    await planPerjadin(pic, input);
-
-    expect(await db.select().from(schema.sessionTeacher)).toEqual([]);
   });
 
   /**
@@ -614,23 +606,12 @@ describe("Rencanakan Perjadin", () => {
     expect(await perjadinRows()).toEqual([]);
   });
 
-  /**
-   * `perjadin_pic_is_staff`, asserted by name. The composite foreign key into `person (id, role)`
-   * is what makes "the PIC is a Staff member" unbreakable, so it is worth proving it is the rule
-   * that fires and not one of the others the row satisfies.
-   */
-  it("is refused by perjadin_pic_is_staff when a professor is named PIC", async () => {
-    const { bagus, input } = await validPlan();
-    const staffCaller = await staff("Dewi Lestari", "dewi@ditsama.itb.ac.id");
-
-    const refusal = await planPerjadin(staffCaller, {
-      ...input,
-      picPersonId: bagus.id,
-    }).then(() => null, constraintOf);
-
-    expect(refusal).toBe("perjadin_pic_is_staff");
-    expect(await perjadinRows()).toEqual([]);
-  });
+  // The old "refused by perjadin_pic_is_staff when a professor is named PIC" case is gone: T3
+  // (#153) retired the Teaching Team Role and the database now refuses `person.role <> 'Staff'`,
+  // so a non-Staff Person can no longer be built to name as PIC. The composite foreign key into
+  // `person (id, role)` still stands as the guarantee (see `perjadin-planning.ts`); its precondition
+  // — a Person who is not Staff — simply can no longer be constructed. The COMMIT-time membership
+  // half of the PIC rule stays below.
 
   /**
    * The other half of the PIC rule, and the reason the whole write is one transaction. Driven at
@@ -668,10 +649,10 @@ describe("Rencanakan Perjadin", () => {
     expect(await perjadinRows()).toEqual([]);
   });
 
-  it("refuses a Teaching Team caller", async () => {
-    const { bagus, input } = await validPlan();
+  it("refuses a non-Staff caller", async () => {
+    const { input } = await validPlan();
 
-    await expect(planPerjadin(bagus, input)).rejects.toSatisfy(isNotStaffError);
+    await expect(planPerjadin(nonStaff(), input)).rejects.toSatisfy(isNotStaffError);
   });
 });
 
@@ -822,7 +803,7 @@ describe("the Perjadin list and detail", () => {
   beforeEach(resetDatabase);
 
   it("lists Perjadins for anyone signed in, newest trip first", async () => {
-    const { pic, bagus, input } = await validPlan();
+    const { pic, input } = await validPlan();
     await planPerjadin(pic, input);
     await planPerjadin(pic, {
       ...input,
@@ -841,7 +822,7 @@ describe("the Perjadin list and detail", () => {
       ],
     });
 
-    const trips = await perjadinDirectory(bagus);
+    const trips = await perjadinDirectory(nonStaff());
 
     expect(trips.map((trip) => trip.destination)).toEqual([
       "Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi",
@@ -856,11 +837,11 @@ describe("the Perjadin list and detail", () => {
    * `perjadinAcquittal`'s, behind the Staff-only choke point. The Group is the PIC alone now.
    */
   it("returns the Group, the Schools and no money", async () => {
-    const { pic, bagus, input } = await validPlan();
+    const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
-    const detail = await perjadinDetail(bagus, planned.perjadinId);
+    const detail = await perjadinDetail(nonStaff(), planned.perjadinId);
 
     expect(detail?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi");
     expect(detail?.picFullName).toBe("Rina Nurhayati");
@@ -918,12 +899,14 @@ describe("the Perjadin list and detail", () => {
     expect(await perjadinDetail(pic, "00000000-0000-0000-0000-000000000000")).toBeNull();
   });
 
-  it("refuses a Teaching Team caller the money, which is the whole of the variant", async () => {
-    const { pic, bagus, input } = await validPlan();
+  it("refuses a non-Staff caller the money, which is the whole of the variant", async () => {
+    const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
-    await expect(perjadinAcquittal(bagus, planned.perjadinId)).rejects.toSatisfy(isNotStaffError);
+    await expect(perjadinAcquittal(nonStaff(), planned.perjadinId)).rejects.toSatisfy(
+      isNotStaffError,
+    );
     await expect(perjadinAcquittal(pic, planned.perjadinId)).resolves.not.toBeNull();
   });
 });
@@ -1097,13 +1080,13 @@ describe("extra Staff and travel logistics", () => {
     expect(log?.returnMode).toBe("Travel");
   });
 
-  it("refuses a Teaching Team caller on the logistics edit", async () => {
-    const { pic, bagus, input } = await validPlan();
+  it("refuses a non-Staff caller on the logistics edit", async () => {
+    const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
     await expect(
-      updatePerjadinLogistics(bagus, planned.perjadinId, {
+      updatePerjadinLogistics(nonStaff(), planned.perjadinId, {
         departureDate: "2026-09-01",
         departureTime: "06:00",
         departureMode: "Kereta",

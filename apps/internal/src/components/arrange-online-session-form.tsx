@@ -28,7 +28,7 @@ import { useId, useState, useTransition } from "react";
  * its Pengajar as **session-scoped free-text names** — typed in one at a time and shown as
  * removable chips, the same pattern the plan form uses for a Perjadin's trip-scoped Teaching Team
  * (ADR-0020). It no longer picks Teaching-Team People per Stream, so `teachingTeam` is gone from
- * this component; the `session_teacher` write it fed is retired in T3.
+ * this component; the `session_teacher` write it fed was retired in T3 (#153) along with the table.
  *
  * A client component because every field is editable and none of that state is worth a URL. The
  * pickers and Schools arrive from the server as props; nothing here fetches. The Server Action

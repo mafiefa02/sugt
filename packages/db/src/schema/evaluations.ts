@@ -57,6 +57,14 @@ const ratingBounds = (table: string, cols: Record<string, AnyPgColumn>) =>
  *
  * The composite foreign key makes **only a Teaching Team member can file one** a fact
  * rather than a convention.
+ *
+ * **This table is now dead, and deliberately kept ([#153](https://github.com/mafiefa02/sugt/issues/153)).**
+ * T3 retired the `Teaching Team` Person role (professors are trip-/session-scoped names who never
+ * sign in — ADR-0020, ADR-0022), so `person_role_check` admits only `'Staff'` and the
+ * `class_record_filed_by_teaching_team` foreign key below is **unsatisfiable**: no row can be
+ * inserted. The table and its constraints stay frozen rather than dropped or relaxed — how teaching
+ * delivered by non-signed-in teachers is evaluated is the deferred open question (`CONTEXT.md`), and
+ * relaxing this to a new filer would be that redesign, not this teardown. See `docs/data-model.md`.
  */
 export const classRecord = pgTable(
   "class_record",

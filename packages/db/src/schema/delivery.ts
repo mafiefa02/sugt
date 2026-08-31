@@ -39,7 +39,7 @@ import { perjadin, perjadinTeacher } from "./travel";
 export const ONLINE_SESSION_STILL_STANDS = sql`perjadin_id is null and status <> 'cancelled'`;
 
 /**
- * Delivery: Sessions, and who taught which Stream at them.
+ * Delivery: Sessions, and the free-text names of who taught them.
  *
  * A Session exists only once **arranged** — never before — so there are no planned
  * rows, no target dates and nothing is ever overdue. Progress is delivered Sessions
@@ -164,39 +164,13 @@ export const session = pgTable(
 );
 
 /**
- * Who taught which Stream — **online Sessions only, in practice** (ADR-0019, ADR-0020).
- * The primary key gives at most one teacher per Stream per Session; the composite foreign
- * key makes it impossible to record a Staff member as having taught one.
- *
- * This is also the denominator for who owes a Class Record: these two People crossed
- * with the three Class kinds is the six an online Session expects.
- *
- * Offline Sessions no longer write here: their teachers are trip-scoped names, not People,
- * recorded through `session_teaching_team` below. The table is kept — online Class Records
- * depend on it — but nothing offline inserts a row; see `docs/data-model.md`'s Delivery
- * section for that scoping.
+ * **`session_teacher` was dropped in T3** ([#153](https://github.com/mafiefa02/sugt/issues/153)).
+ * It recorded who taught which Stream as one-per-Stream `person` rows, but offline teaching went
+ * name-based first (ADR-0019, ADR-0020) and ADR-0022 did the same online, so by T3 nothing wrote
+ * or read it and the `Teaching Team` Person role it depended on had no purpose. Both modes now name
+ * their teachers as free-text: offline through `session_teaching_team` (below), online through
+ * `session_teacher_name` (below). See `docs/data-model.md`'s Delivery section.
  */
-export const sessionTeacher = pgTable(
-  "session_teacher",
-  {
-    sessionId: uuid("session_id")
-      .notNull()
-      .references(() => session.id, { onDelete: "cascade" }),
-    stream: text("stream").$type<Stream>().notNull(),
-    personId: uuid("person_id").notNull(),
-    personRole: text("person_role").$type<"Teaching Team">().notNull().default("Teaching Team"),
-  },
-  (t) => [
-    primaryKey({ columns: [t.sessionId, t.stream] }),
-    check("session_teacher_stream_check", sql`${t.stream} in ('STEM', 'Research')`),
-    check("session_teacher_role_check", sql`${t.personRole} = 'Teaching Team'`),
-    foreignKey({
-      name: "session_teacher_is_teaching_team",
-      columns: [t.personId, t.personRole],
-      foreignColumns: [person.id, person.role],
-    }),
-  ],
-);
 
 /**
  * An online Session's teachers, as **session-scoped free-text names** (ADR-0022). The online
@@ -209,9 +183,8 @@ export const sessionTeacher = pgTable(
  * online name belongs to the one Session and nothing else, so the two-table split has nothing to
  * express here. Cascade on delete: a name is meaningless once its Session is gone.
  *
- * This is the write path's replacement for `session_teacher` on the online side. The old
- * Person-based table is left in place for now — its teardown, and the retirement of the
- * `Teaching Team` Person role, are T3 — but nothing this ticket writes touches it.
+ * This replaced `session_teacher` on the online side (ADR-0022), and that Person-based table is
+ * now dropped (T3, #153) along with the `Teaching Team` Person role it depended on.
  */
 export const sessionTeacherName = pgTable("session_teacher_name", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -231,7 +204,7 @@ export const sessionTeacherName = pgTable("session_teacher_name", {
  * rooms, so this is a plain many-to-many with no Stream and no Person.
  *
  * Both sides cascade on delete — a link is meaningless once either the Session or the
- * teacher name is gone. It is the offline counterpart to `session_teacher`; nothing here
+ * teacher name is gone. It is the offline analogue of `session_teacher_name`; nothing here
  * touches a `person` row, which is the whole point of the name-based model.
  */
 export const sessionTeachingTeam = pgTable(

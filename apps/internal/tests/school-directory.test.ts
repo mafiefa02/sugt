@@ -1,8 +1,24 @@
 import { schoolDirectory } from "@sugt/db/queries";
+import type { Role } from "@sugt/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { addCluster, addProvince, addSchool, addSession, resetDatabase } from "./support/fixtures";
 import { signInAsPerson } from "./support/sign-in";
+
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the Staff-only choke point still has to
+ * reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. The cast through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
+}
 
 /**
  * **Direktori Sekolah** — every School, filterable, and the route into Detail Sekolah.
@@ -126,18 +142,16 @@ describe("the Direktori Sekolah payload", () => {
     });
   });
 
-  it("is open to a Teaching Team member, who reads the same payload", async () => {
+  it("is open to a non-Staff caller, who reads the same payload", async () => {
     /**
      * ADR-0004: delivery data is open to everyone signed in. Nothing here carries
      * money, so the only thing narrowing it is the `Person` arm of the `Caller` union
-     * — not a role check.
+     * — not a role check. `schoolDirectory` takes an ignored `_caller`, so a hand-built
+     * non-Staff caller stands in for the retired Teaching Team member.
      */
     const staff = await signInAsStaff();
     await seedThreeSchools(staff.id);
 
-    const teacher = await signInAsPerson("Teaching Team", "budi@gmail.com", "Budi Santoso");
-
-    expect(teacher.role).toBe("Teaching Team");
-    await expect(schoolDirectory(teacher)).resolves.toEqual(await schoolDirectory(staff));
+    await expect(schoolDirectory(nonStaff())).resolves.toEqual(await schoolDirectory(staff));
   });
 });

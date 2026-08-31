@@ -8,6 +8,7 @@ import {
   recordTransaction,
 } from "@sugt/db/queries";
 import { PIMPINAN, REPORT_DEADLINE_DAYS_AFTER_RETURN, TRANSACTION_CATEGORIES } from "@sugt/domain";
+import type { Role } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -26,7 +27,7 @@ import {
  * The invariants under test are the ones no column holds: the reconciliation is derived
  * rather than typed, the evidence rule is checked when the Report is filed rather than when
  * a transaction is entered, the receipts checklist is an explicit mark rather than a count
- * of transactions, and every entry point refuses a Teaching Team `Person`.
+ * of transactions, and every entry point refuses a non-Staff caller.
  *
  * `staff-only.test.ts` covers the choke point itself at the sign-in seam. This file drives
  * the same guard on the four surfaces #30 added, and asserts on rows.
@@ -36,8 +37,19 @@ async function pic(email = "rina@ditsama.itb.ac.id") {
   return addPerson({ fullName: "Rina Nurhayati", email, role: "Staff" });
 }
 
-async function professor(email = "budi@gmail.com") {
-  return addPerson({ fullName: "Budi Santoso", email, role: "Teaching Team" });
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but the Staff-only choke point still has to
+ * reject a non-Staff caller, and `requireStaff` throws on the role alone, before it touches the
+ * row. The cast through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
 }
 
 // Calendar-day arithmetic on the `YYYY-MM-DD` strings the `date` columns hold, at UTC midnight
@@ -60,16 +72,14 @@ function jakartaToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
 }
 
-/** A trip with an Advance, its PIC, and one professor on the Group. */
+/**
+ * A trip with an Advance and its PIC. T3 (#153) made the Group Staff-only and Stream-less, so the
+ * Group is now the PIC alone — no Teaching Team member rides on it any more.
+ */
 async function aTrip(advanceIdr = 5_000_000) {
   const staff = await pic();
-  const teacher = await professor();
-  const trip = await addPerjadin({
-    advanceIdr,
-    picPersonId: staff.id,
-    teachers: [{ personId: teacher.id, stream: "STEM" }],
-  });
-  return { staff, teacher, trip };
+  const trip = await addPerjadin({ advanceIdr, picPersonId: staff.id });
+  return { staff, trip };
 }
 
 describe("the acquittal payload", () => {
@@ -174,14 +184,22 @@ describe("the acquittal payload", () => {
   });
 
   it("names who incurred a line item, and leaves it null where nobody did", async () => {
-    const { staff, teacher, trip } = await aTrip();
+    // `incurred_by_person_id` is a foreign key into `person` — nothing more — so whoever ran up
+    // the cost need only be a Person, not a Group member. T3 (#153) retired the Teaching Team, so
+    // the traveller here is Staff; the column's claim is the same either way.
+    const { staff, trip } = await aTrip();
+    const traveller = await addPerson({
+      fullName: "Budi Santoso",
+      email: "budi@gmail.com",
+      role: "Staff",
+    });
     await addTransaction({
       perjadinId: trip.id,
       amountIdr: 600_000,
       description: "Uang harian",
       spentOn: "2026-09-01",
       category: "Uang Harian",
-      incurredByPersonId: teacher.id,
+      incurredByPersonId: traveller.id,
       createdByPersonId: staff.id,
     });
     await addTransaction({
@@ -194,21 +212,21 @@ describe("the acquittal payload", () => {
     const acquittal = await perjadinAcquittal(staff, trip.id);
 
     expect(acquittal?.transactions[0]?.incurredBy).toEqual({
-      personId: teacher.id,
+      personId: traveller.id,
       fullName: "Budi Santoso",
     });
     expect(acquittal?.transactions[1]?.incurredBy).toBeNull();
   });
 
   it("lists every Group member on the receipts checklist, settled or not", async () => {
-    const { staff, teacher, trip } = await aTrip();
+    // The Group is the PIC alone now (T3 (#153) made `group_member` Staff-only and Stream-less),
+    // so the checklist is the one member.
+    const { staff, trip } = await aTrip();
 
     const acquittal = await perjadinAcquittal(staff, trip.id);
 
-    expect(acquittal?.receipts).toHaveLength(2);
-    expect(acquittal?.receipts.map((member) => member.personId).sort()).toEqual(
-      [staff.id, teacher.id].sort(),
-    );
+    expect(acquittal?.receipts).toHaveLength(1);
+    expect(acquittal?.receipts.map((member) => member.personId)).toEqual([staff.id]);
     expect(acquittal?.receipts.every((member) => member.settledAt === null)).toBe(true);
   });
 
@@ -319,10 +337,10 @@ describe("the category", () => {
 describe("recording a line item", () => {
   beforeEach(resetDatabase);
 
-  it("refuses a Teaching Team Person with a distinguishable typed error", async () => {
-    const { teacher, trip } = await aTrip();
+  it("refuses a non-Staff caller with a distinguishable typed error", async () => {
+    const { trip } = await aTrip();
 
-    const refusal = await recordTransaction(teacher, {
+    const refusal = await recordTransaction(nonStaff(), {
       perjadinId: trip.id,
       spentOn: "2026-09-02",
       description: "Taksi",
@@ -339,13 +357,14 @@ describe("recording a line item", () => {
      * The tempting rule — only a Group member can have incurred a cost on this trip — is false
      * against the category list it would police. `Honorarium Narasumber` pays a speaker, who is
      * a Person the Programme knows and is on no Group. The foreign key into `person` is the
-     * whole of what this column claims.
+     * whole of what this column claims — so the speaker is just a Person, Staff now that T3 (#153)
+     * retired the Teaching Team Role, and on no Group regardless.
      */
     const { staff, trip } = await aTrip();
     const speaker = await addPerson({
       fullName: "Sari Wulandari",
       email: "sari@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
 
     const result = await recordTransaction(staff, {
@@ -395,15 +414,15 @@ describe("recording a line item", () => {
 describe("attaching evidence", () => {
   beforeEach(resetDatabase);
 
-  it("refuses a Teaching Team Person", async () => {
-    const { staff, teacher, trip } = await aTrip();
+  it("refuses a non-Staff caller", async () => {
+    const { staff, trip } = await aTrip();
     const line = await addTransaction({
       perjadinId: trip.id,
       amountIdr: 50_000,
       createdByPersonId: staff.id,
     });
 
-    const refusal = await attachTransactionEvidence(teacher, trip.id, line.id, [
+    const refusal = await attachTransactionEvidence(nonStaff(), trip.id, line.id, [
       { storagePath: "a", contentType: "image/jpeg", byteSize: 10 },
     ]).catch((error: unknown) => error);
 
@@ -484,39 +503,40 @@ describe("the receipts checklist", () => {
     /**
      * The member below has no transactions at all. Deriving the checklist would read that as
      * settled, when it is ambiguous between *spent nothing* and *has not handed anything
-     * over yet* — which is the whole reason the column exists.
+     * over yet* — which is the whole reason the column exists. The Group is the PIC alone now
+     * (T3 (#153)), so the PIC is the member with nothing against them.
      */
-    const { staff, teacher, trip } = await aTrip();
+    const { staff, trip } = await aTrip();
 
     const before = await perjadinAcquittal(staff, trip.id);
-    expect(before?.receipts.find((m) => m.personId === teacher.id)?.settledAt).toBeNull();
+    expect(before?.receipts.find((m) => m.personId === staff.id)?.settledAt).toBeNull();
 
-    const marked = await markReceiptsSettled(staff, trip.id, teacher.id, true);
+    const marked = await markReceiptsSettled(staff, trip.id, staff.id, true);
     expect(marked.outcome).toBe("marked");
 
     const after = await perjadinAcquittal(staff, trip.id);
-    expect(after?.receipts.find((m) => m.personId === teacher.id)?.settledAt).toBeInstanceOf(Date);
+    expect(after?.receipts.find((m) => m.personId === staff.id)?.settledAt).toBeInstanceOf(Date);
   });
 
   it("unticks by clearing the mark rather than storing a second event", async () => {
-    const { staff, teacher, trip } = await aTrip();
+    const { staff, trip } = await aTrip();
 
-    await markReceiptsSettled(staff, trip.id, teacher.id, true);
-    await expect(markReceiptsSettled(staff, trip.id, teacher.id, false)).resolves.toEqual({
+    await markReceiptsSettled(staff, trip.id, staff.id, true);
+    await expect(markReceiptsSettled(staff, trip.id, staff.id, false)).resolves.toEqual({
       outcome: "marked",
       settledAt: null,
     });
   });
 
-  it("refuses a Teaching Team Person, and reports somebody off the Group as a value", async () => {
-    const { staff, teacher, trip } = await aTrip();
+  it("refuses a non-Staff caller, and reports somebody off the Group as a value", async () => {
+    const { staff, trip } = await aTrip();
     const outsider = await addPerson({
       fullName: "Sari Wulandari",
       email: "sari@gmail.com",
-      role: "Teaching Team",
+      role: "Staff",
     });
 
-    const refusal = await markReceiptsSettled(teacher, trip.id, teacher.id, true).catch(
+    const refusal = await markReceiptsSettled(nonStaff(), trip.id, staff.id, true).catch(
       (error: unknown) => error,
     );
     expect(isNotStaffError(refusal)).toBe(true);
@@ -593,10 +613,10 @@ describe("filing the Report", () => {
     });
   });
 
-  it("refuses a Teaching Team Person, and a stale link as a value", async () => {
-    const { staff, teacher, trip } = await aTrip();
+  it("refuses a non-Staff caller, and a stale link as a value", async () => {
+    const { staff, trip } = await aTrip();
 
-    const refusal = await filePerjadinReport(teacher, trip.id).catch((error: unknown) => error);
+    const refusal = await filePerjadinReport(nonStaff(), trip.id).catch((error: unknown) => error);
     expect(isNotStaffError(refusal)).toBe(true);
 
     await expect(

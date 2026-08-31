@@ -82,11 +82,12 @@ neither.
 
 A column CHECKed against a **whole** set is read back as that set's type rather than as
 `string`. A column CHECKed against a **single member** of one — `perjadin.pic_role`,
-`session.online_pic_role`, `session_teacher.person_role` and the two `filed_by_role`
-columns — now carries that member as a literal type too:
-[#52](https://github.com/mafiefa02/sugt/issues/52) settled it, so each reads back as
-`"Staff"` or `"Teaching Team"` via `$type<"Staff">()` rather than `string`. Neither is DDL,
-and the header of `packages/db/src/schema/index.ts` carries the reasoning.
+`session.online_pic_role` and the two `filed_by_role` columns — now carries that member as a
+literal type too: [#52](https://github.com/mafiefa02/sugt/issues/52) settled it, so each reads
+back as `"Staff"` — or `"Teaching Team"` on the now-dead `class_record.filed_by_role` — via
+`$type<"Staff">()` rather than `string`. (`session_teacher.person_role` was one of these until T3
+dropped the table, [#153](https://github.com/mafiefa02/sugt/issues/153).) Neither is DDL, and the
+header of `packages/db/src/schema/index.ts` carries the reasoning.
 
 The four Aspect lists are the exception — `CLASS_RECORD_ASPECTS`, `SESSION_RECORD_ASPECTS`,
 `PARTICIPANT_FEEDBACK_ASPECTS` and `PERJADIN_ASPECTS` name **columns** rather than stored
@@ -149,7 +150,7 @@ create table person (
   id          uuid primary key default gen_random_uuid(),
   full_name   text not null,
   email       text not null,
-  role        text not null check (role in ('Staff', 'Teaching Team')),
+  role        text not null check (role = 'Staff'),   -- 'Teaching Team' retired in T3, #153
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
 
@@ -182,19 +183,24 @@ This document previously routed revocation through Better Auth's admin plugin an
 `banned` as `person.active`'s effect; both are gone. See the amendment to
 [ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
 
+**Every Person is Staff** ([#153](https://github.com/mafiefa02/sugt/issues/153)). The `Teaching
+Team` role was retired in T3, so `role` is CHECKed against the single value `'Staff'`: once online
+Sessions named their teachers as `session_teacher_name` (ADR-0022), the role that modelled
+professors as People had no purpose, and `session_teacher` — its last user — was dropped.
+
 **`role` is write-once, and the database already enforces it.** Six composite foreign
-keys point at `person (id, role)` — from `group_member`, `session_teacher`,
-`class_record`, `session_record`, `perjadin.pic_person_id` and
-`session.online_pic_person_id` — and none declares
-`on update`, so all default to `NO ACTION`. The moment a Person has been on a trip,
-taught a Stream or filed a record, Postgres refuses to change their role. This is not a
-policy anyone added; it falls out of the composite keys, and it is written here because
-an unwritten enforced constraint reads as a bug the first time it fires.
+keys point at `person (id, role)` — from `group_member`, `class_record`, `session_record`,
+`story.written_by_person_id`, `perjadin.pic_person_id` and `session.online_pic_person_id` — and
+none declares `on update`, so all default to `NO ACTION`. The moment a Person has been on a trip,
+filed a record or authored a Story, Postgres refuses to change their role. (`session_teacher` was a
+seventh until T3 dropped it.) `class_record`'s FK still pins `'Teaching Team'`, but that table is
+dead — no Person can hold that role now, so nothing satisfies it. This is not a policy anyone
+added; it falls out of the composite keys, and it is written here because an unwritten enforced
+constraint reads as a bug the first time it fires.
 
 `unique (id, role)` looks pointless next to a primary key on `id`. It is the target of
-composite foreign keys elsewhere in this schema, and it is what lets "the PIC is Staff" and
-"only Teaching Team members teach" be declarative constraints instead of triggers. Do not
-drop it.
+composite foreign keys elsewhere in this schema, and it is what lets "the PIC is Staff" and "only
+Staff file a Session Record" be declarative constraints instead of triggers. Do not drop it.
 
 `person` **is** the invite list from
 [ADR-0003](./adr/0003-google-sign-in-with-an-invite-list.md). There is no separate invite
@@ -516,7 +522,7 @@ A Session exists only once arranged
 no target dates and nothing is ever overdue. Progress is `count(*) where status = 'delivered'`
 against `TOTAL_SESSIONS_PER_SCHOOL`, a constant that already lives in `@sugt/domain`.
 
-**Marking a Session delivered is status only now, for both modes** (#140, #152). It writes nothing
+**Marking a Session delivered is status only, for both modes** (#140, #152, #153). It writes nothing
 but `session.status = 'delivered'` and names nobody. An **online** Session's "Tandai terlaksana"
 historically named a Teaching-Team Person per Stream and wrote `session_teacher` in the same act;
 ADR-0022 made online Sessions single-Stream with their teachers named as session-scoped
@@ -525,45 +531,25 @@ of #140's offline change. Online Pengajar are now edited anytime, one name at a 
 `/sesi-daring/[id]` (add/rename/remove against `session_teacher_name`), which is also the correction
 path that replaced the old post-delivery "Perbaiki pengajar" flow. An **offline** Session's
 mark-delivered was already status only (#140): it carries its Stream, its teachers are trip-scoped
-`session_teaching_team` names edited on the Perjadin, and it writes no `session_teacher` (ADR-0019,
-ADR-0020). `session_teacher` is **no longer written by anything surfaced** — its one remaining writer,
-`correctSessionTeachers`, is unsurfaced pending its removal with the table in T3. Consequences left
-**deferred** and not modelled here — see
-the open question in `CONTEXT.md` and T8: **Class Records** for a name-taught Session (their filer
-would be a name, not a Person who can sign in, on both sides now) and the **offline progress metric**
-(the fixed `delivered / TOTAL_SESSIONS_PER_SCHOOL` no longer holds for the offline half, whose
-Session count per School is now variable — ADR-0019). Online progress — six per School — is
-untouched.
+`session_teaching_team` names edited on the Perjadin, and it writes no per-Stream Person (ADR-0019,
+ADR-0020). Consequences left **deferred** and not modelled here — see the open question in
+`CONTEXT.md`: **Class Records** for a name-taught Session (their filer would be a name, not a Person
+who can sign in, on both sides now) and the **offline progress metric** (the fixed
+`delivered / TOTAL_SESSIONS_PER_SCHOOL` no longer holds for the offline half, whose Session count per
+School is now variable — ADR-0019). Online progress — six per School — is untouched.
 
 ### Who taught
 
-```sql
-create table session_teacher (
-  session_id   uuid not null references session (id) on delete cascade,
-  stream       text not null check (stream in ('STEM', 'Research')),
-  person_id    uuid not null,
-  person_role  text not null default 'Teaching Team' check (person_role = 'Teaching Team'),
-
-  primary key (session_id, stream),
-  foreign key (person_id, person_role) references person (id, role)
-);
-```
-
-The primary key gives at most one teacher per Stream per Session. The composite foreign key
-into `person (id, role)` — using the pinned `person_role` column — makes it impossible to
-record a Staff member as having taught a Stream, without a trigger.
-
-**This Person-based table is being retired, and nothing arranged now writes it**
+**`session_teacher` was dropped in T3** ([#153](https://github.com/mafiefa02/sugt/issues/153)). It
+held one `person` row per Stream per Session — its composite foreign key into `person (id, role)`,
+with `person_role` pinned to `'Teaching Team'`, making it impossible to record a Staff member as
+having taught a Stream. But offline teaching went name-based first
 ([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
-[ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md),
-[ADR-0022](./adr/0022-online-sessions-carry-a-stream-and-name-teachers-as-session-scoped-names.md)).
-Offline teaching went name-based first — a Perjadin's teachers are trip-scoped names
-(`perjadin_teacher` below), not `person` rows — and ADR-0022 did the same online: an online
-Session's teachers are now session-scoped names in `session_teacher_name` (below), not one-per-Stream
-Persons. **No surfaced write creates a row here any more** (#152): delivery is status only, and its
-last writer — `correctSessionTeachers` — is unsurfaced, kept exported only so the table has a writer
-while it stands. The table is **kept, not dropped**, so the transition can be staged; its drop and the
-retirement of the `Teaching Team` Person role are a later step (T3), by which time nothing reads it.
+[ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)) and ADR-0022 did
+the same online, so by T3 nothing wrote or read the table and the `Teaching Team` Person role it
+depended on had no purpose — so the table and the role were both dropped. Both modes now record who
+taught as **free-text names**: online through `session_teacher_name`, offline through
+`session_teaching_team` (below).
 
 An online Session records who taught it as session-scoped free-text names:
 
@@ -597,7 +583,7 @@ create table session_teaching_team (
 "Diajar oleh" — the _set_ of a Perjadin's trip-scoped teacher names who staffed one offline
 Session's parallel rooms. A plain many-to-many with no Stream (the Session already carries it) and
 no Person. Both sides cascade: a link means nothing once either the Session or the teacher name is
-gone. It is the offline counterpart to `session_teacher`, and touches no `person` row, which is the
+gone. It is the offline analogue of `session_teacher_name`, and touches no `person` row, which is the
 whole point of the name-based model ([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)).
 
 **Offline Class Records fall out of scope** as a consequence: their filers would be the teachers,
@@ -629,13 +615,22 @@ self-assessment; nobody but the Group slept in the hotel.
 
 What a Teaching Team member says about **one Class** they taught at one Session.
 
-**Six per Session is the full set.** Two professors — one per Stream — each teach all three
-Classes, so each files three. That is the same six-part shape the design started with, arrived
-at from the other direction: the unit is now (Class, filer) rather than (Class, Stream).
+> **Deferred and dead for both modes** ([#153](https://github.com/mafiefa02/sugt/issues/153)). A
+> Class Record is filed by a `Teaching Team` **Person** — the composite foreign key below pins
+> `filed_by_role = 'Teaching Team'` — but that role was retired in T3: teachers are free-text names
+> now, on both sides (ADR-0020, ADR-0022), who cannot sign in and file. So **no Person can satisfy
+> the FK and no row can be inserted**. The table is **kept** as a now-dead surface — the DDL below is
+> unchanged and still applied — while how name-taught teaching is evaluated is a later decision (the
+> `CONTEXT.md` open question). Everything below describes the shape it had when it was written; read
+> it as the record of a deferred design, not of a live one.
 
-**Stream needs no column.** It is derivable from the filer's Stream assignment on the Group.
-Two Records for the same Class from different professors is not duplication — it is STEM and
-Research disagreeing about the same cohort, which is real information.
+**Six per Session was the full set.** Two professors — one per Stream — each taught all three
+Classes, so each filed three. The unit was (Class, filer) rather than (Class, Stream). This no
+longer describes anything, because there are no signed-in professors to file (see the note above).
+
+**Stream needs no column.** It was derivable from the filer's Stream assignment on the Group.
+Two Records for the same Class from different professors was not duplication — it was STEM and
+Research disagreeing about the same cohort.
 
 ```sql
 create table class_record (
@@ -678,9 +673,10 @@ create index class_record_concerns_idx
               materials, delivery, facilities, timing) <= 7;
 ```
 
-The composite foreign key into `person (id, role)`, with `filed_by_role` pinned, makes **only a
+The composite foreign key into `person (id, role)`, with `filed_by_role` pinned, made **only a
 Teaching Team member can file a Class Record** a fact rather than a convention — the same trick
-that holds "the PIC is Staff" and "only Teaching Team taught a Stream".
+that holds "the PIC is Staff". Since T3 that FK is unsatisfiable: no Person holds the `Teaching
+Team` role any more, so the rule it enforces has become "nobody can file one".
 
 The first three Aspects are the ones only the person at the front can judge: whether the cohort
 followed it, took part, and arrived prepared. The last four are about what was brought and the
@@ -823,23 +819,16 @@ by somebody who was not there. **Participant Feedback is indicative, not a censu
 Nothing is required in the sense of being blocked, and nothing has a deadline. What the tool does
 is name who has not filed, so they can be chased in the group chat.
 
-It can do that for internal records only, and it needs no new columns:
+**The only record it still chases is the PIC's Session Record**, on a delivered Session where no
+`session_record` of theirs exists yet — a Staff Person who can sign in and file. It needs no new
+columns.
 
-```text
--- The six Class Records a Session expects, and who owes the missing ones
-select st.person_id, ck.class_kind
-  from session_teacher st
-  cross join unnest(array['GTK','MS','Student']) as ck(class_kind)
- where st.session_id = $1
-   and not exists (select 1 from class_record cr
-                    where cr.session_id = st.session_id
-                      and cr.class_kind = ck.class_kind
-                      and cr.filed_by_person_id = st.person_id);
-```
-
-`session_teacher` already names the two professors, and the three Class kinds are a constant, so
-the expected set is their cross product — six rows — and what is outstanding is whatever is not
-yet in `class_record`.
+**The online Class-Record expectation is gone** ([#153](https://github.com/mafiefa02/sugt/issues/153)).
+This section used to compute "the six Class Records a Session expects" as `session_teacher` × the
+three Class kinds, minus whatever was already in `class_record`. But `session_teacher` is dropped and
+the two professors it named are free-text names now who cannot sign in and file — so nothing owes a
+Class Record, on either side, and there is nothing to expect. Class Records are deferred for both
+modes (the `CONTEXT.md` open question); the `class_record` table stands unused.
 
 **Participants cannot be listed.** There is no attendee list, so there is no denominator: "4 of ?
 responded". A count with no denominator reads as a system of record and is not one, which is
@@ -1142,29 +1131,28 @@ lives.
 create table group_member (
   perjadin_id          uuid not null references perjadin (id) on delete cascade,
   person_id            uuid not null,
-  role                 text not null check (role in ('Staff', 'Teaching Team')),
+  role                 text not null check (role = 'Staff'),   -- 'Teaching Team' retired, #153
   stream               text check (stream in ('STEM', 'Research')),
   receipts_settled_at  timestamptz,
 
   primary key (perjadin_id, person_id),
   foreign key (person_id, role) references person (id, role),
 
-  check ((role = 'Teaching Team') = (stream is not null))
+  check (stream is null)   -- group_member_stream_null: a Group is Staff-only, so no Stream
 );
 ```
 
 `role` is denormalised from `person` — but it cannot drift, because the composite foreign key
-into `person (id, role)` means a row can only exist if the pair is true there. Carrying it is
-what makes the next constraint expressible.
+into `person (id, role)` means a row can only exist if the pair is true there.
 
-That constraint says **exactly the Teaching Team members carry a Stream assignment** — Staff never
-do. **Under the new model it is unchanged but now vacuous on one side**
-([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)): the Group is
-Staff-only, so every row is a Staff row with `stream = null`, and the CHECK is kept precisely
-because all-Staff rows satisfy it — nothing had to narrow. `group_member.stream` is therefore
-**always null now**; the column and its two CHECKs stay so the table needs no migration, and so the
-old Teaching-Team-with-a-Stream shape remains expressible if it ever returns. The professors
-themselves have moved to `perjadin_teacher`, which carries no Stream at all.
+**The Group is Staff and only Staff** ([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md),
+and T3/[#153](https://github.com/mafiefa02/sugt/issues/153)): the teaching team who used to carry a
+Stream assignment are trip-scoped names now, not Group members, and every Person is Staff. So
+`role` CHECKs `'Staff'`, and `group_member.stream` is **always null** — enforced by
+`group_member_stream_null` (`stream is null`), which replaced the old
+`(role = 'Teaching Team') = (stream is not null)` equivalence once its Teaching-Team side became
+unreachable. The `stream` column stays (with its value-set CHECK) so the table needs no column
+migration. The professors themselves live in `perjadin_teacher`, which carries no Stream at all.
 
 **A Group is replaced wholesale, never edited.** There is no "remove one member" operation.
 Substituting a professor submits an entire replacement Group, and one transaction deletes
@@ -1638,10 +1626,11 @@ the same spirit as the Group rules: **ten** offline Sessions per School per Perj
 extra Staff beyond the PIC on a Group (`MAX_EXTRA_STAFF_PER_GROUP`). All three constants are in
 `@sugt/domain`; the writes that enforce them are T2/T3.
 
-**"Both Streams were taught."** For an online Session, `session_teacher` guarantees at most one
-teacher per Stream, not that both rows exist. Required at the point an online Session is marked
-delivered. An offline Session now teaches one Stream (the `stream` column), so the two-Streams
-expectation is an online-only rule.
+**"Both Streams were taught."** **Gone** ([#153](https://github.com/mafiefa02/sugt/issues/153), and
+ADR-0022). It was an online-only rule, checked at delivery against the two `session_teacher` rows —
+but an online Session is single-Stream now (ADR-0022) and carries one `stream` like an offline one,
+and `session_teacher` is dropped, so there is no both-Streams expectation left to hold on either
+side. Marking delivered is status-only for both modes.
 
 **That an arranged offline Session falls inside its Perjadin.** `session.held_on` and
 `perjadin.starts_on`/`ends_on` are unrelated columns as far as the database is concerned. The
@@ -1758,24 +1747,13 @@ onto `group_member`. Not worth a duplicated range today.
 Session Record or Participant Feedback being filed against an `arranged` or `cancelled` Session.
 Left to the application, which only offers the form on a delivered one.
 
-**That the professor who filed a Class Record actually taught that Session.** The composite
-foreign key holds that they are Teaching Team, not that they were in that room —
-`session_teacher` says who taught, and comparing against it is a query. Worth knowing because
-"who still owes what" is computed from exactly that comparison.
-
-**That `session_teacher` and `class_record` are kept in step.** There is no foreign key between
-them: `class_record` references `session (id)` and `person (id, role)` and nothing else. So a
-Record filed by a professor the Session never named is a legal row, and removing a named
-professor does not delete the Records they already filed. The divergence is permitted rather
-than tolerated — `session_teacher` stays editable by Staff after delivery, because until a
-mis-named professor is removed they owe three Class Records they cannot honestly file, and there
-is no other route to correcting it. The Session screen therefore reports filed against expected
-and does not reconcile them; showing both numbers is the honest rendering of two sets that can
-legitimately differ.
-
-**That all six Class Records exist.** Nothing is required and nothing is blocked; the missing
-ones are a list to chase, computed from `session_teacher` × the three Class kinds. See
-[who still owes what](#who-still-owes-what).
+**That any Class Record exists, or that a filer taught the Session.** These were rules about
+`session_teacher` — who taught, whether the six expected Records had arrived, whether a filer was in
+that room — and `session_teacher` is dropped ([#153](https://github.com/mafiefa02/sugt/issues/153)).
+Class Records are deferred for both modes: teachers are free-text names now, on both sides, who
+cannot sign in and file, so no Record can be filed and none is expected. The `class_record` table
+stands unused; how name-taught teaching is evaluated is a later decision (the `CONTEXT.md` open
+question). See [who still owes what](#who-still-owes-what).
 
 **That only the Group filed a Perjadin Evaluation.** `filed_by_person_id` references `person`,
 not `group_member`, so the database will accept an evaluation from someone who was not on the

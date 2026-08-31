@@ -1,17 +1,9 @@
-import {
-  CLASS_KINDS,
-  STREAMS,
-  type ClassKind,
-  type SessionMode,
-  type SessionStatus,
-  type Stream,
-  type TimeZone,
-} from "@sugt/domain";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { type SessionMode, type SessionStatus, type TimeZone } from "@sugt/domain";
+import { eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../client";
-import { session, sessionTeacher } from "../schema/delivery";
+import { session } from "../schema/delivery";
 import { person } from "../schema/people";
 import { province, school } from "../schema/reference";
 import { perjadin } from "../schema/travel";
@@ -27,31 +19,26 @@ import { requireStaff } from "./staff-only";
  * list rather than by ADR-0004 — the same one guard for the second of its two reasons,
  * as `./staff-only.ts` sets out.
  *
- * Settled on [#17](https://github.com/mafiefa02/sugt/issues/17): marking delivered and
- * recording who taught are **one act**, cancelling is offered only while `arranged`, a
- * slipped date is an edit rather than a cancellation, and `delivered` is terminal while
- * who taught is not.
+ * Settled on [#17](https://github.com/mafiefa02/sugt/issues/17): marking delivered is offered
+ * only while `arranged`, cancelling likewise, a slipped date is an edit rather than a
+ * cancellation, and `delivered` is terminal.
+ *
+ * **The online Class-Record "who owes what" machinery is gone** (T3, #153). It counted Records
+ * expected against the two `session_teacher` professors, but online teachers are free-text names
+ * now (ADR-0022) who cannot sign in and file, and `session_teacher` is dropped — so, exactly as
+ * offline after ADR-0019/0020, nobody files a Class Record and Class Records are deferred for both
+ * modes (the `CONTEXT.md` open question). What survives here is the **Session Record** the Staff
+ * PIC owes.
  */
-
-/** One Teaching Team member and the Stream they taught. At most one per Stream, by primary key. */
-export type SessionDetailTeacher = {
-  stream: Stream;
-  personId: string;
-  fullName: string;
-};
 
 /**
- * One record nobody has filed yet.
- *
- * Two kinds rather than one, because the two are owed by different people for different
- * reasons: a professor owes a Class Record per Class they taught, and the PIC owes one
- * Session Record about the visit. `person` is who to chase — the whole point of the list,
- * since nothing is required and nothing is blocked (ADR-0009), and naming who has not
- * filed is the only enforcement this tool has.
+ * One record nobody has filed yet — now the **Session Record** the PIC owes, and nothing else.
+ * The online Class-Record variant was retired with `session_teacher` (T3, #153); Class Records
+ * are deferred for both modes. `person` is who to chase — the whole point of the list, since
+ * nothing is required and nothing is blocked (ADR-0009), and naming who has not filed is the only
+ * enforcement this tool has.
  */
-export type OwedRecord =
-  | { kind: "class-record"; personId: string; fullName: string; classKind: ClassKind }
-  | { kind: "session-record"; personId: string; fullName: string };
+export type OwedRecord = { kind: "session-record"; personId: string; fullName: string };
 
 /** The Perjadin an offline Session happens on, and the window its date must sit inside. */
 export type SessionPerjadin = {
@@ -88,41 +75,12 @@ export type SessionDetail = {
   picFullName: string;
   /** Null for an online Session, which by CHECK has no Perjadin. */
   perjadin: SessionPerjadin | null;
-  teachers: SessionDetailTeacher[];
   /**
-   * Who Tandai terlaksana offers **before** anybody confirms: the Group's Stream
-   * assignments on an offline Session, and nobody at all on an online one, which has no
-   * Group to read.
-   *
-   * Read here rather than copied into `session_teacher` at arrangement. A Group is
-   * replaced wholesale — one transaction deletes every member row and inserts a new set —
-   * so rows copied out of it then would be stranded by a substitution with no constraint
-   * to catch it.
-   */
-  suggestedTeachers: SessionDetailTeacher[];
-  /** Every active Teaching Team member, for the two per-Stream pickers in the dialog. */
-  teachingTeam: { id: string; fullName: string }[];
-  /**
-   * **Filed and expected are two numbers and are not reconciled.** `class_record` has no
-   * foreign key to `session_teacher` — it references `session (id)` and `person (id, role)`
-   * only — so a Record filed by somebody this Session never named is a legal row, and
-   * removing a named professor does not delete what they already filed. The database
-   * permits the divergence deliberately; the screen shows both rather than pretending
-   * they cannot differ.
-   */
-  classRecordsFiled: number;
-  /**
-   * Computed from the teachers this Session **names**, never from
-   * `CLASS_RECORDS_PER_SESSION`. That constant is six and assumes both Streams are named
-   * — true after Tandai terlaksana and not before, so reading it here would show three
-   * units of debt attached to nobody.
-   */
-  classRecordsExpected: number;
-  /**
-   * **Empty until the Session is delivered.** An arranged online Session already names
-   * its professors, so a list that did not filter on `delivered` would report Records
-   * owed for teaching that has not happened — the overdue-shaped state ADR-0006 exists
-   * to prevent.
+   * **Empty until the Session is delivered, and empty when the PIC has already filed.** The
+   * one thing owed is the PIC's Session Record; Class Records are deferred for both modes
+   * (T3, #153), so nothing is owed off the back of who taught. Filtering on `delivered` keeps
+   * the list from reporting a Record owed for a visit that has not happened — the
+   * overdue-shaped state ADR-0006 exists to prevent.
    */
   owed: OwedRecord[];
 };
@@ -156,201 +114,89 @@ export function heldOnWithinPerjadin(
   return heldOn >= window.startsOn && heldOn <= window.endsOn;
 }
 
-/** Which Streams a set of teacher rows leaves unnamed. Empty when both are covered. */
-function streamsUnnamed(teachers: { stream: Stream }[]): Stream[] {
-  return STREAMS.filter((stream) => !teachers.some((teacher) => teacher.stream === stream));
-}
-
 /**
  * One Session and everything the screen renders, or `null` when the id names none.
  *
  * `null` is a reachable state rather than an error: a link pasted into a message outlives
  * the row it points at, and the screen turns it into a 404.
  *
- * The Session's own statement returns one row per named teacher — at most two — so the
- * Session columns repeat and are read off the first. The LATERALs sit after the
- * `session_teacher` join because a LATERAL may only reference what precedes it, and the
- * per-teacher one references `session_teacher.person_id`.
+ * One statement, one row: since `session_teacher` was dropped (T3, #153) there is no teacher
+ * join to fan the Session columns out across, and the only fact still derived is whether the
+ * PIC has filed their Session Record.
  */
 export async function sessionDetail(_caller: Person, id: string): Promise<SessionDetail | null> {
   const pic = alias(person, "pic");
-  const teacher = alias(person, "teacher");
 
-  // Two statements rather than one, and the same reading of convention 3 that Jadwalkan
-  // Sesi daring settled: the roster is an unrelated aggregate, and the single-statement
-  // form would be a `union all` stapling it on behind a placeholder column. The screen
-  // still makes one call and assembles nothing. `Promise.all` keeps the two concurrent.
-  const [rows, teachingTeam] = await Promise.all([
-    db
-      .select({
-        schoolName: school.name,
-        schoolSlug: school.slug,
-        mode: session.mode,
-        heldOn: session.heldOn,
-        startsAt: session.startsAt,
-        timeZone: province.timeZone,
-        status: session.status,
-        cancelledReason: session.cancelledReason,
+  const [row] = await db
+    .select({
+      schoolName: school.name,
+      schoolSlug: school.slug,
+      mode: session.mode,
+      heldOn: session.heldOn,
+      startsAt: session.startsAt,
+      timeZone: province.timeZone,
+      status: session.status,
+      cancelledReason: session.cancelledReason,
 
-        picPersonId: pic.id,
-        picFullName: pic.fullName,
+      picPersonId: pic.id,
+      picFullName: pic.fullName,
 
-        perjadinId: perjadin.id,
-        perjadinStartsOn: perjadin.startsOn,
-        perjadinEndsOn: perjadin.endsOn,
+      perjadinId: perjadin.id,
+      perjadinStartsOn: perjadin.startsOn,
+      perjadinEndsOn: perjadin.endsOn,
 
-        teacherStream: sessionTeacher.stream,
-        teacherPersonId: teacher.id,
-        teacherFullName: teacher.fullName,
-        /** Which Classes this teacher has filed a Record for. Empty array when none. */
-        teacherFiledKinds: sql<ClassKind[]>`filed.kinds`,
+      // Whether the PIC's Session Record exists — the one thing still owed on a delivered
+      // Session now Class Records are deferred (T3, #153).
+      sessionRecordFiled: sql<boolean>`exists (
+        select 1 from session_record sr
+        where sr.session_id = ${session.id}
+          and sr.filed_by_person_id = coalesce(${session.onlinePicPersonId}, ${perjadin.picPersonId})
+      )`,
+    })
+    .from(session)
+    .innerJoin(school, eq(school.id, session.schoolId))
+    // The School's Province carries the Time Zone `startsAt` is read in. NOT NULL both ways,
+    // so an inner join.
+    .innerJoin(province, eq(province.code, school.provinceCode))
+    // Outer: six of every ten Sessions have no Perjadin.
+    .leftJoin(perjadin, eq(perjadin.id, session.perjadinId))
+    // The `coalesce` the criterion names, resolved in the join rather than in TypeScript.
+    // Every Session has exactly one of the two, by the pair of mirror CHECKs, so this is
+    // an inner join on a value that is never null.
+    .innerJoin(
+      pic,
+      eq(pic.id, sql`coalesce(${session.onlinePicPersonId}, ${perjadin.picPersonId})`),
+    )
+    .where(eq(session.id, id));
 
-        classRecordsFiled: sql<number>`totals.class_records_filed`.mapWith(Number),
-        sessionRecordFiled: sql<boolean>`totals.session_record_filed`,
-        /** The Group's Stream assignments, which is what Tandai terlaksana pre-fills from. */
-        groupTeachers: sql<SessionDetailTeacher[]>`grouped.members`,
-      })
-      .from(session)
-      .innerJoin(school, eq(school.id, session.schoolId))
-      // The School's Province carries the Time Zone `startsAt` is read in. NOT NULL both ways,
-      // so an inner join.
-      .innerJoin(province, eq(province.code, school.provinceCode))
-      // Outer: six of every ten Sessions have no Perjadin.
-      .leftJoin(perjadin, eq(perjadin.id, session.perjadinId))
-      // The `coalesce` the criterion names, resolved in the join rather than in TypeScript.
-      // Every Session has exactly one of the two, by the pair of mirror CHECKs, so this is
-      // an inner join on a value that is never null.
-      .innerJoin(
-        pic,
-        eq(pic.id, sql`coalesce(${session.onlinePicPersonId}, ${perjadin.picPersonId})`),
-      )
-      // Outer, and unfiltered: naming a professor is optional at arrangement, so an
-      // arranged Session with no teacher rows is ordinary rather than incomplete.
-      .leftJoin(sessionTeacher, eq(sessionTeacher.sessionId, session.id))
-      .leftJoin(teacher, eq(teacher.id, sessionTeacher.personId))
-      .leftJoinLateral(
-        sql`(
-        select coalesce(array_agg(cr.class_kind), '{}') as kinds
-        from class_record cr
-        where cr.session_id = ${session.id}
-          and cr.filed_by_person_id = ${sessionTeacher.personId}
-      ) as filed`,
-        sql`true`,
-      )
-      .leftJoinLateral(
-        sql`(
-        select
-          (select count(*) from class_record cr where cr.session_id = ${session.id})
-            as class_records_filed,
-          exists (
-            select 1 from session_record sr
-            where sr.session_id = ${session.id}
-              and sr.filed_by_person_id = coalesce(${session.onlinePicPersonId}, ${perjadin.picPersonId})
-          ) as session_record_filed
-      ) as totals`,
-        sql`true`,
-      )
-      // The Group's Stream assignments, for an offline Session only — `perjadin_id` is null
-      // on every online one, so this comes back empty for them without a special case.
-      //
-      // **Read here rather than copied at arrangement.** Rencanakan Perjadin writes no
-      // `session_teacher` rows: a Group is replaced wholesale, so rows copied out of it then
-      // would be stranded by a substitution, silently, with no constraint to catch it.
-      .leftJoinLateral(
-        sql`(
-        select coalesce(
-          json_agg(json_build_object(
-            'stream', gm.stream, 'personId', gm.person_id, 'fullName', p.full_name
-          ) order by gm.stream),
-          '[]'
-        ) as members
-        from group_member gm
-        join person p on p.id = gm.person_id
-        where gm.perjadin_id = ${session.perjadinId} and gm.stream is not null
-      ) as grouped`,
-        sql`true`,
-      )
-      .where(eq(session.id, id))
-      .orderBy(sessionTeacher.stream),
-    // Revoked People are not offered, for the reason Jadwalkan Sesi daring gives: naming
-    // one commits them to teaching that has not happened, and a picker is about what
-    // happens next. Historical references to them stay intact.
-    db
-      .select({ id: person.id, fullName: person.fullName })
-      .from(person)
-      .where(and(eq(person.active, true), eq(person.role, "Teaching Team")))
-      .orderBy(asc(person.fullName)),
-  ]);
+  if (!row) return null;
 
-  const [first] = rows;
-  if (!first) return null;
-
-  const teachers: SessionDetailTeacher[] = [];
-  const owedClassRecords: OwedRecord[] = [];
-  for (const row of rows) {
-    // The outer join is all-or-nothing: a Session naming nobody comes back as one row
-    // with every teacher column null.
-    if (row.teacherStream === null || row.teacherPersonId === null || row.teacherFullName === null)
-      continue;
-
-    teachers.push({
-      stream: row.teacherStream,
-      personId: row.teacherPersonId,
-      fullName: row.teacherFullName,
-    });
-
-    for (const classKind of CLASS_KINDS) {
-      if (row.teacherFiledKinds.includes(classKind)) continue;
-      owedClassRecords.push({
-        kind: "class-record",
-        personId: row.teacherPersonId,
-        fullName: row.teacherFullName,
-        classKind,
-      });
-    }
-  }
-
+  // The only thing owed is the PIC's Session Record, and only once the visit has happened.
   const owed: OwedRecord[] =
-    first.status === "delivered"
-      ? [
-          ...owedClassRecords,
-          ...(first.sessionRecordFiled
-            ? []
-            : [
-                {
-                  kind: "session-record" as const,
-                  personId: first.picPersonId,
-                  fullName: first.picFullName,
-                },
-              ]),
-        ]
+    row.status === "delivered" && !row.sessionRecordFiled
+      ? [{ kind: "session-record", personId: row.picPersonId, fullName: row.picFullName }]
       : [];
 
   return {
     id,
-    schoolName: first.schoolName,
-    schoolSlug: first.schoolSlug,
-    mode: first.mode,
-    heldOn: first.heldOn,
-    startsAt: first.startsAt,
-    timeZone: first.timeZone,
-    status: first.status,
-    cancelledReason: first.cancelledReason,
-    picPersonId: first.picPersonId,
-    picFullName: first.picFullName,
+    schoolName: row.schoolName,
+    schoolSlug: row.schoolSlug,
+    mode: row.mode,
+    heldOn: row.heldOn,
+    startsAt: row.startsAt,
+    timeZone: row.timeZone,
+    status: row.status,
+    cancelledReason: row.cancelledReason,
+    picPersonId: row.picPersonId,
+    picFullName: row.picFullName,
     perjadin:
-      first.perjadinId === null || first.perjadinStartsOn === null || first.perjadinEndsOn === null
+      row.perjadinId === null || row.perjadinStartsOn === null || row.perjadinEndsOn === null
         ? null
         : {
-            id: first.perjadinId,
-            startsOn: first.perjadinStartsOn,
-            endsOn: first.perjadinEndsOn,
+            id: row.perjadinId,
+            startsOn: row.perjadinStartsOn,
+            endsOn: row.perjadinEndsOn,
           },
-    teachers,
-    suggestedTeachers: first.groupTeachers,
-    teachingTeam,
-    classRecordsFiled: first.classRecordsFiled,
-    classRecordsExpected: teachers.length * CLASS_KINDS.length,
     owed,
   };
 }
@@ -378,19 +224,6 @@ export type MarkDeliveredResult =
   | { outcome: "delivered" }
   | { outcome: "not-arranged"; status: PastArranged };
 
-export type CorrectTeachersResult =
-  | { outcome: "corrected" }
-  | { outcome: "stream-unnamed"; missing: Stream[] }
-  /** The Session was cancelled, so there is no teaching to correct the record of. */
-  | { outcome: "not-correctable"; status: "cancelled" }
-  /**
-   * An offline Session, whose teachers are trip-scoped `session_teaching_team` names edited on the
-   * Perjadin, not `session_teacher` People (ADR-0020, #140). The detail-page surface never offers
-   * this for offline; the guard is a backstop against a hand-edited request, so no `session_teacher`
-   * row is ever written for an offline Session.
-   */
-  | { outcome: "offline-not-correctable" };
-
 export type CancelSessionResult =
   | { outcome: "cancelled" }
   | { outcome: "reason-required" }
@@ -403,33 +236,6 @@ export type MoveSessionDateResult =
   | { outcome: "collided"; constraint: "session_one_online_per_school_per_day" }
   /** An arranged offline Session may not leave the trip it happens on. */
   | { outcome: "outside-perjadin"; startsOn: string; endsOn: string };
-
-/** Who taught one Stream. The form names at most one per Stream, as the primary key does. */
-export type TaughtBy = { stream: Stream; personId: string };
-
-/**
- * Replace a Session's teacher rows with the set given.
- *
- * **Replaced rather than merged**, because the dialog shows the complete answer: a Stream
- * it comes back without is a Stream Staff removed, and merging would make removal
- * impossible.
- */
-async function replaceTeachers(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  sessionId: string,
-  teachers: TaughtBy[],
-) {
-  await tx.delete(sessionTeacher).where(eq(sessionTeacher.sessionId, sessionId));
-  if (teachers.length === 0) return;
-
-  await tx.insert(sessionTeacher).values(
-    teachers.map((taught) => ({
-      sessionId,
-      stream: taught.stream,
-      personId: taught.personId,
-    })),
-  );
-}
 
 /**
  * The Session's status, locked for the rest of the transaction.
@@ -447,9 +253,9 @@ async function replaceTeachers(
 async function lockedSession(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   sessionId: string,
-): Promise<{ status: SessionStatus; mode: SessionMode }> {
+): Promise<{ status: SessionStatus }> {
   const [row] = await tx
-    .select({ status: session.status, mode: session.mode })
+    .select({ status: session.status })
     .from(session)
     .where(eq(session.id, sessionId))
     .for("update");
@@ -464,22 +270,16 @@ async function lockedSession(
 }
 
 /**
- * **Tandai terlaksana** — mark a Session delivered. **Status only, for both modes now**
- * (ADR-0019, ADR-0020, ADR-0022, #140, #152).
+ * **Tandai terlaksana** — mark a Session delivered. **Status only, for both modes**
+ * (ADR-0019, ADR-0020, ADR-0022, #140, #152, #153).
  *
- * It writes nothing but `session.status = 'delivered'`, and it takes no teachers. Both modes name
- * their Stream on the Session and their teachers as **session-scoped free-text names**: an offline
- * Session's are trip-scoped `session_teaching_team` names edited on the Perjadin, and an online
- * Session's are `session_teacher_name` names edited on `/sesi-daring/[id]` (ADR-0022). Neither is a
- * `person`, so `session_teacher` cannot and must not hold them, and there is no who-taught prompt on
- * either side.
- *
- * The online half used to name a Teaching-Team Person per Stream and write `session_teacher` in the
- * same act; ADR-0022 made online Sessions single-Stream with named teachers set at arrangement, so
- * that step no longer fits and #152 retired it from this path — the online mirror of #140's offline
- * change. The Person-based `session_teacher` table and its `correctSessionTeachers` writer live on
- * unsurfaced until T3; nothing here touches them. Offline Class Records and the offline progress
- * metric stay deferred (T8, the `CONTEXT.md` open question), so nothing is owed off the back of this.
+ * It writes nothing but `session.status = 'delivered'`, and it names nobody. Both modes name
+ * their Stream on the Session and their teachers as **free-text names**: an offline Session's are
+ * trip-scoped `session_teaching_team` names edited on the Perjadin, and an online Session's are
+ * `session_teacher_name` names edited on `/sesi-daring/[id]` (ADR-0022). Neither is a `person`, and
+ * `session_teacher` — the Person-based table that once held the online half — is gone (T3, #153), so
+ * there is no who-taught prompt on either side. Class Records and the offline progress metric stay
+ * deferred (the `CONTEXT.md` open question), so nothing is owed off the back of this.
  *
  * The transaction and the `for update` lock are still here, by convention 5: the status check means
  * nothing without the lock — two Staff pressing the button at once both read `arranged` otherwise,
@@ -497,55 +297,6 @@ export async function markSessionDelivered(
 
     await tx.update(session).set({ status: "delivered" }).where(eq(session.id, sessionId));
     return { outcome: "delivered" };
-  });
-}
-
-/**
- * Correct who taught, which stays possible **after** delivery and stays Staff-only.
- *
- * **Unsurfaced since #152, pending its removal in T3.** This writes `session_teacher`, the
- * Person-based table ADR-0022 replaced online with `session_teacher_name`. Online Pengajar are
- * now edited anytime per-item on `/sesi-daring/[id]` (add/rename/remove against
- * `session_teacher_name`), so the post-delivery correction this offered is obsolete — its Server
- * Action and its "Perbaiki pengajar" dialog were removed with the online detail work. The function
- * is left exported so `session_teacher` still has a writer while the table stands; both go together
- * in T3. It may be uncalled from the app, which is expected.
- *
- * It has to stay possible after delivery while it exists: `delivered` is terminal, so there is no
- * un-delivering a Session to fix a name, and until a mis-named professor is removed they owe three
- * Class Records they cannot honestly file.
- *
- * **The both-Streams rule is re-checked once the Session is delivered, and not before.**
- * Naming is optional at arrangement — mandatory at arrangement would block a batch
- * whenever one professor is not yet fixed, which is the ordinary case — but a delivered
- * Session that could be emptied here would make removing a professor the way out of the
- * rule Tandai terlaksana had just enforced.
- */
-export async function correctSessionTeachers(
-  caller: Person,
-  sessionId: string,
-  teachers: TaughtBy[],
-): Promise<CorrectTeachersResult> {
-  requireStaff(caller);
-
-  return db.transaction(async (tx) => {
-    const { status, mode } = await lockedSession(tx, sessionId);
-    // Offline teaching is `session_teaching_team` names, corrected on the Perjadin — never
-    // `session_teacher`. Refuse before any write so an offline Session gets no teacher row.
-    if (mode === "offline") return { outcome: "offline-not-correctable" };
-    // Nobody taught a Session that was called off, so there is nothing to correct the
-    // record of. The rows this would otherwise write are invisible as well as meaningless
-    // — `owed` reports nothing until a Session is delivered — which is what would make
-    // them survive.
-    if (status === "cancelled") return { outcome: "not-correctable", status };
-
-    if (status === "delivered") {
-      const missing = streamsUnnamed(teachers);
-      if (missing.length > 0) return { outcome: "stream-unnamed", missing };
-    }
-
-    await replaceTeachers(tx, sessionId, teachers);
-    return { outcome: "corrected" };
   });
 }
 

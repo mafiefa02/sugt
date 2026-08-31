@@ -55,44 +55,25 @@ export async function selectedSchools(schoolIds: string[]): Promise<SelectedScho
 }
 
 /**
- * Everybody a planning form may name, split by role.
+ * Everybody a planning form may name.
  *
- * **Split in TypeScript rather than by two queries**: `role` is one column of one table and
- * one statement brings back both lists, so asking the database twice would buy nothing.
+ * **Only `{ staff }` now** (T3, #153): the `Teaching Team` Person role is retired, so every active
+ * Person is Staff. The teaching team a planning form once picked from People is trip-scoped /
+ * session-scoped free-text names now (ADR-0020, ADR-0022), typed on the form rather than chosen
+ * from a roster. The shape stays an object rather than a bare array so a second half can return
+ * here without every call site changing, and because the PIC/extra-Staff combobox reads `.staff`.
  *
  * **Revoked People are not here.** `person.active = false` is the whole revocation
  * mechanism ([ADR-0013](../../../../docs/adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md)),
- * and naming a revoked Person commits them to teaching or to a trip that has not happened.
- * Historical references to them stay intact; a picker is about what happens next.
+ * and naming a revoked Person commits them to a trip that has not happened. Historical references
+ * to them stay intact; a picker is about what happens next.
  */
-export async function activeRosters(): Promise<{
-  staff: RosterPerson[];
-  teachingTeam: RosterPerson[];
-}> {
-  const people = await db
-    .select({ id: person.id, fullName: person.fullName, role: person.role })
+export async function activeRosters(): Promise<{ staff: RosterPerson[] }> {
+  const staff = await db
+    .select({ id: person.id, fullName: person.fullName })
     .from(person)
     .where(eq(person.active, true))
     .orderBy(asc(person.fullName));
 
-  return {
-    staff: people.filter((entry) => entry.role === "Staff").map(withoutRole),
-    teachingTeam: people.filter((entry) => entry.role === "Teaching Team").map(withoutRole),
-  };
-}
-
-/**
- * `role` does not travel. Nothing on either form renders it, and the list a picker was
- * handed is what says which role it is asking for.
- */
-function withoutRole(entry: RosterPerson & { role: unknown }): RosterPerson {
-  return { id: entry.id, fullName: entry.fullName };
-}
-
-/**
- * Every active Teaching Team member, for the surfaces that need only that half — Tandai
- * terlaksana's two pickers and the Group substitution dialog.
- */
-export async function activeTeachingTeam(): Promise<RosterPerson[]> {
-  return (await activeRosters()).teachingTeam;
+  return { staff };
 }

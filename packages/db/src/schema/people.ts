@@ -26,15 +26,20 @@ import {
  * historical reference to that person.
  *
  * `unique (id, role)` looks pointless beside a primary key on `id`. It is not — it
- * is the target of seven composite foreign keys elsewhere in this schema, and it is
- * what lets "the PIC is Staff", "only Teaching Team taught a Stream", "only
- * Teaching Team file Class Records", "only Staff file Session Records" and "only
- * Staff author a Story" be declarative constraints instead of triggers. **Do not
- * drop it.** (The seventh, `story_written_by_staff`, arrived after this comment first
- * said "six".)
+ * is the target of the composite foreign keys elsewhere in this schema, and it is
+ * what lets "the PIC is Staff", "only Staff file Session Records" and "only Staff
+ * author a Story" be declarative constraints instead of triggers. **Do not drop it.**
  *
- * None of the seven declares `on update`, so all default to `NO ACTION` — which makes
- * `role` **write-once** once a Person has been used anywhere. A wrong role is
+ * **Every Person is now Staff** (T3, #153): `session_teacher` is dropped and the
+ * `Teaching Team` role retired, so `person_role_check` pins `'Staff'` alone. The
+ * composite FKs that remain are the PIC-is-Staff family — `group_member`,
+ * `perjadin.pic`, `session.online_pic`, `session_record` and `story` — each pinning
+ * `role = 'Staff'`. `class_record`'s composite FK still pins `'Teaching Team'` in the
+ * DDL, but that table is now dead (its FK is unsatisfiable, Class Records deferred both
+ * modes), so nothing satisfies it.
+ *
+ * None of these composite keys declares `on update`, so all default to `NO ACTION` —
+ * which makes `role` **write-once** once a Person has been used anywhere. A wrong role is
  * corrected by revoking the row and creating a new Person, which is why
  * `person_email_key` is partial (`where active`) — see
  * `docs/adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md`.
@@ -45,14 +50,15 @@ export const person = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     fullName: text("full_name").notNull(),
     email: text("email").notNull(),
-    // `person_role_check` names exactly the values `ROLES` holds. `$type` off it replaces
-    // a hand-copied `ROLE_VALUES` array that nothing ever read.
+    // `person_role_check` names exactly the values `ROLES` holds — now the single value
+    // `'Staff'` (T3, #153: the `Teaching Team` role is retired). `$type` off it replaces a
+    // hand-copied `ROLE_VALUES` array that nothing ever read.
     role: text("role").$type<Role>().notNull(),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check("person_role_check", sql`${t.role} in ('Staff', 'Teaching Team')`),
+    check("person_role_check", sql`${t.role} = 'Staff'`),
     /**
      * Case-insensitive, and **partial**: at most one *active* Person per email
      * address, any number of revoked ones.

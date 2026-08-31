@@ -2,7 +2,7 @@
 
 import { addPersonAction, revokePersonAction } from "-/app/(app)/orang/actions";
 import type { RosterEntry } from "@sugt/db/queries";
-import { ROLES, ROLE_LABELS, type Role } from "@sugt/domain";
+import { ROLE_LABELS } from "@sugt/domain";
 import { Badge } from "@sugt/ui/components/badge";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
@@ -173,13 +173,16 @@ function RevokeButton({ personId }: { personId: string }) {
 
 /**
  * The single-row add form above the table. The gate is the invite list alone (ADR-0003, amended
- * by #115) — any Google address may be listed for either role — so the only failures the form
- * surfaces are an incomplete row and a duplicate active email the database's partial index refuses.
+ * by #115) — any Google address may be listed — so the only failures the form surfaces are an
+ * incomplete row and a duplicate active email the database's partial index refuses.
+ *
+ * **Every invite is Staff now** (T3, #153). The form used to offer a role picker (Staff vs Teaching
+ * Team), but the `Teaching Team` Person role is retired — professors are free-text names who never
+ * sign in — so there is one role and no picker; `addPerson` writes `role: "Staff"`.
  */
 function AddPersonForm() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>("Teaching Team");
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
 
@@ -189,11 +192,10 @@ function AddPersonForm() {
     if (!canSubmit) return;
 
     startSaving(async () => {
-      const result = await addPersonAction({ fullName, email, role });
+      const result = await addPersonAction({ fullName, email, role: "Staff" });
       if (result.outcome === "added") {
         setFullName("");
         setEmail("");
-        setRole("Teaching Team");
         setError(null);
         return;
       }
@@ -225,22 +227,8 @@ function AddPersonForm() {
           aria-label="Email"
           className="h-8 w-full max-w-64"
         />
-        <div className="flex gap-1.5">
-          {ROLES.map((option) => (
-            <Button
-              key={option}
-              type="button"
-              size="sm"
-              variant={role === option ? "default" : "outline"}
-              onClick={() => {
-                setRole(option);
-                setError(null);
-              }}
-            >
-              {ROLE_LABELS[option]}
-            </Button>
-          ))}
-        </div>
+        {/* One role now — every Person added here is {ROLE_LABELS.Staff}, so the picker is gone. */}
+        <span className="text-sm text-muted-foreground">{ROLE_LABELS.Staff}</span>
         <Button
           size="sm"
           disabled={saving || !canSubmit}

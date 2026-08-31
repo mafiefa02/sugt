@@ -1,14 +1,12 @@
 import { schoolDetail } from "@sugt/db/queries";
-import { CONCERN_AT_OR_BELOW } from "@sugt/domain";
+import { CONCERN_AT_OR_BELOW, type Role } from "@sugt/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
-  addClassRecord,
   addCluster,
   addOfflineSession,
   addParticipantFeedback,
   addPerjadin,
-  addPerson,
   addProvince,
   addSchool,
   addSession,
@@ -18,15 +16,36 @@ import {
 import { signInAsPerson } from "./support/sign-in";
 
 /**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but `schoolDetail` is open to any signed-in
+ * caller (it reads delivery data, not money, ADR-0004; its `_caller` is ignored), and this proves
+ * the surface is not Staff-gated. The cast through `unknown` names a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Budi Santoso",
+    email: "budi@gmail.com",
+    role: "Teaching Team" as unknown as Role,
+  };
+}
+
+/**
  * **Detail Sekolah** — one School's Sessions, how many are delivered against the ten
  * it expects, and which of them carry a concern.
  *
  * The concern assertions are the reason this file is long. A Session's Ratings come
  * from three tables with three different rubrics, and the Aspect names are read out of
  * `@sugt/domain` and used as **column names** — so a name that has drifted from its
- * column fails at runtime and nowhere else. Every source therefore gets a test, and
+ * column fails at runtime and nowhere else. Every *fillable* source therefore gets a test, and
  * `school_support` gets its own, because it is the one Aspect whose column name and
  * Drizzle property differ.
+ *
+ * The third table, `class_record`, is a dead surface since T3 (#153): no Person can be Teaching
+ * Team, so its `filed_by_role = 'Teaching Team'` composite foreign key can never be satisfied and
+ * no Class Record can be filed. The query still reads it — it just finds nothing — so the tests
+ * below flag Sessions off Participant Feedback and the PIC's Session Record, the two forms that
+ * can still land.
  */
 describe("the Detail Sekolah payload", () => {
   beforeEach(resetDatabase);
@@ -191,27 +210,6 @@ describe("the Detail Sekolah payload", () => {
     expect(flagged?.concern).toEqual({ aspect: "instructor", rating: 3 });
   });
 
-  it("flags a Session on a Class Record", async () => {
-    const person = await signInAsStaff();
-    const { online } = await seedOneSchool(person.id);
-    const professor = await addPerson({
-      fullName: "Budi Santoso",
-      email: "budi@gmail.com",
-      role: "Teaching Team",
-    });
-    await addClassRecord({
-      sessionId: online.id,
-      classKind: "GTK",
-      filedByPersonId: professor.id,
-      ratings: { comprehension: 4 },
-    });
-
-    const detail = await schoolDetail(person, "sman-1-bandung");
-    const flagged = detail?.sessions.find((session) => session.id === online.id);
-
-    expect(flagged?.concern).toEqual({ aspect: "comprehension", rating: 4 });
-  });
-
   it("flags a Session on a Session Record, including the Aspect whose column is two words", async () => {
     /**
      * `school_support` is the one Aspect whose `@sugt/domain` name and Drizzle property
@@ -261,31 +259,25 @@ describe("the Detail Sekolah payload", () => {
     expect(justAbove).toMatchObject({ ratingsFiled: 3, concern: null });
   });
 
-  it("takes the lowest Rating on a Session, whichever of the three sources it came from", async () => {
+  it("takes the lowest Rating on a Session, whichever source it came from", async () => {
     /**
      * One low Rating is the signal and is never averaged away, so what a reader is
-     * shown is the worst one anybody filed — here the professor's 4 rather than the
-     * room's 6.
+     * shown is the worst one anybody filed — here the PIC's Session Record 4 rather than the
+     * room's 6. Class Records once made a third source, but no Person can file one now (T3, #153),
+     * so the worst-of-all is proven across the two forms that can still land.
      */
     const person = await signInAsStaff();
     const { online } = await seedOneSchool(person.id);
-    const professor = await addPerson({
-      fullName: "Budi Santoso",
-      email: "budi@gmail.com",
-      role: "Teaching Team",
-    });
     await addParticipantFeedback({
       sessionId: online.id,
       classKind: "Student",
       ratings: { materials: 6 },
     });
-    await addClassRecord({
+    await addSessionRecord({
       sessionId: online.id,
-      classKind: "GTK",
-      filedByPersonId: professor.id,
+      filedByPersonId: person.id,
       ratings: { facilities: 4 },
     });
-    await addSessionRecord({ sessionId: online.id, filedByPersonId: person.id });
 
     const detail = await schoolDetail(person, "sman-1-bandung");
     const flagged = detail?.sessions.find((session) => session.id === online.id);
@@ -311,7 +303,7 @@ describe("the Detail Sekolah payload", () => {
     expect(silent).toMatchObject({ ratingsFiled: 0, concern: null });
   });
 
-  it("is open to a Teaching Team member, who reads the same payload", async () => {
+  it("is open to a non-Staff caller, who reads the same payload", async () => {
     const staff = await signInAsStaff();
     const { online } = await seedOneSchool(staff.id);
     await addParticipantFeedback({
@@ -320,10 +312,9 @@ describe("the Detail Sekolah payload", () => {
       ratings: { relevance: 5 },
     });
 
-    const teacher = await signInAsPerson("Teaching Team", "budi@gmail.com", "Budi Santoso");
-
-    expect(teacher.role).toBe("Teaching Team");
-    await expect(schoolDetail(teacher, "sman-1-bandung")).resolves.toEqual(
+    // `schoolDetail` ignores its caller's role — a hand-built non-Staff caller reads exactly what
+    // Staff does. No such Person exists in the database since T3 (#153), so the caller is cast.
+    await expect(schoolDetail(nonStaff(), "sman-1-bandung")).resolves.toEqual(
       await schoolDetail(staff, "sman-1-bandung"),
     );
   });

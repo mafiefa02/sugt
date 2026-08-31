@@ -9,6 +9,7 @@ import {
   updateOnlineSession,
 } from "@sugt/db/queries";
 import { MAX_TEACHING_TEAM_PER_ONLINE_SESSION } from "@sugt/domain";
+import type { Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -34,6 +35,22 @@ import {
 /** A Staff Person, PIC of the online Sessions below. */
 async function staff(email = "rina@ditsama.itb.ac.id", fullName = "Rina Nurhayati") {
   return addPerson({ fullName, email, role: "Staff" });
+}
+
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more. `onlineSessionDetail` is open and ignores its
+ * caller, so this proves the read admits a non-Staff caller; the writes are Staff-only and
+ * `requireStaff` throws on the role alone, before it touches the row, so this proves they refuse
+ * one. The cast through `unknown` is the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Bagus Prakoso",
+    email: "bagus@itb.ac.id",
+    role: "Teaching Team" as unknown as Role,
+  };
 }
 
 /** Two Schools in one Province, so an edit can move a Session between them. */
@@ -122,13 +139,8 @@ describe("Detail Sesi daring — read", () => {
     expect(lookup.session.staff.map((entry) => entry.id)).toContain(pic.id);
   });
 
-  it("is open to a Teaching Team caller, because a Session carries no money", async () => {
+  it("is open to a non-Staff caller, because a Session carries no money", async () => {
     const pic = await staff();
-    const bagus = await addPerson({
-      fullName: "Bagus Prakoso",
-      email: "bagus@itb.ac.id",
-      role: "Teaching Team",
-    });
     const { first } = await twoSchools();
     const session = await addSession({
       schoolId: first.id,
@@ -136,7 +148,7 @@ describe("Detail Sesi daring — read", () => {
       onlinePicPersonId: pic.id,
     });
 
-    expect((await onlineSessionDetail(bagus, session.id)).outcome).toBe("online");
+    expect((await onlineSessionDetail(nonStaff(), session.id)).outcome).toBe("online");
   });
 
   /** An offline id belongs on `/sesi/[id]`, so the read reports `offline` for the page to redirect. */
@@ -316,13 +328,8 @@ describe("Detail Sesi daring — editing the fields", () => {
     expect((await sessionRow(session.id))?.schoolId).toBe(first.id);
   });
 
-  it("refuses a Teaching Team caller", async () => {
+  it("refuses a non-Staff caller", async () => {
     const pic = await staff();
-    const bagus = await addPerson({
-      fullName: "Bagus Prakoso",
-      email: "bagus@itb.ac.id",
-      role: "Teaching Team",
-    });
     const { first } = await twoSchools();
     const session = await addSession({
       schoolId: first.id,
@@ -331,7 +338,7 @@ describe("Detail Sesi daring — editing the fields", () => {
     });
 
     await expect(
-      updateOnlineSession(bagus, session.id, {
+      updateOnlineSession(nonStaff(), session.id, {
         schoolId: first.id,
         picPersonId: pic.id,
         heldOn: "2026-09-10",
@@ -421,15 +428,10 @@ describe("Detail Sesi daring — Pengajar per item", () => {
     expect(await removeOnlineSessionTeacher(pic, ghost)).toEqual({ outcome: "no-such-teacher" });
   });
 
-  it("refuses a Teaching Team caller", async () => {
+  it("refuses a non-Staff caller", async () => {
     const { session } = await arrangedSession();
-    const bagus = await addPerson({
-      fullName: "Bagus Prakoso",
-      email: "bagus@itb.ac.id",
-      role: "Teaching Team",
-    });
 
-    await expect(addOnlineSessionTeacher(bagus, session.id, "Nama")).rejects.toSatisfy(
+    await expect(addOnlineSessionTeacher(nonStaff(), session.id, "Nama")).rejects.toSatisfy(
       isNotStaffError,
     );
   });

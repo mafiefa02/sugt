@@ -3,7 +3,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { user } from "../schema/auth";
-import { session, sessionTeacher } from "../schema/delivery";
+import { session } from "../schema/delivery";
 import { classRecord, sessionRecord } from "../schema/evaluations";
 import { person } from "../schema/people";
 import { story } from "../schema/stories";
@@ -24,7 +24,7 @@ import { requireStaff } from "./staff-only";
  *   shows side by side. The three states are `revoked` (`active = false`), `signed in`, and
  *   invited-but-never-signed-in — the last is real because the invite gates signup.
  *
- * - **`used`** — whether the Person is referenced by any of the **seven** composite foreign keys
+ * - **`used`** — whether the Person is referenced by any of the **six** composite foreign keys
  *   into `person (id, role)`. None declares `on update`, so Postgres refuses to change a used
  *   Person's `role`: it is write-once, and the screen shows a lock rather than an edit the
  *   database would reject. Correcting a role is revoke-and-re-add, which `addPerson` and
@@ -41,7 +41,7 @@ export type RosterEntry = {
   active: boolean;
   /** A `better_auth.user` row exists for this email — they have signed in at least once. */
   signedIn: boolean;
-  /** Referenced by one of the seven composite foreign keys, so their `role` is now write-once. */
+  /** Referenced by one of the six composite foreign keys, so their `role` is now write-once. */
   used: boolean;
 };
 
@@ -60,9 +60,10 @@ const OUTER_PERSON_EMAIL = sql.raw(`"person"."email"`);
 /**
  * Whether a Person is used anywhere their `(id, role)` is a composite foreign key's target.
  *
- * **Seven references, not six.** The `story` author (`story_written_by_staff`) arrived after the
- * schema comments that still say "six"; leaving it out would show an unlocked role on a Story
- * author the database will refuse to change. The single-column references to `person(id)` —
+ * **Six references now** (T3, #153): `session_teacher` is dropped, so its composite FK is gone.
+ * `class_record`'s FK stays in the check — the table stands as a dead surface — but nothing
+ * satisfies it, because a Class Record filer would be a `Teaching Team` Person and that role is
+ * retired; every active Person is Staff. The single-column references to `person(id)` —
  * `transaction.created_by`, `session_feedback_token.issued_by`, `perjadin_evaluation.filed_by`
  * and the rest — do **not** lock the role, because they do not pin `role`, so they are absent here.
  */
@@ -70,7 +71,6 @@ const usedByComposite = sql<boolean>`(
   exists (select 1 from ${groupMember} gm where gm.person_id = ${OUTER_PERSON_ID})
   or exists (select 1 from ${perjadin} pj where pj.pic_person_id = ${OUTER_PERSON_ID})
   or exists (select 1 from ${session} s where s.online_pic_person_id = ${OUTER_PERSON_ID})
-  or exists (select 1 from ${sessionTeacher} st where st.person_id = ${OUTER_PERSON_ID})
   or exists (select 1 from ${classRecord} cr where cr.filed_by_person_id = ${OUTER_PERSON_ID})
   or exists (select 1 from ${sessionRecord} sr where sr.filed_by_person_id = ${OUTER_PERSON_ID})
   or exists (select 1 from ${story} sy where sy.written_by_person_id = ${OUTER_PERSON_ID})

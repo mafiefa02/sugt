@@ -15,6 +15,7 @@ import {
   setPerjadinStaff,
 } from "@sugt/db/queries";
 import { PIMPINAN } from "@sugt/domain";
+import type { Role } from "@sugt/domain";
 import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -41,8 +42,19 @@ async function staff(fullName = "Rina Nurhayati", email = "rina@ditsama.itb.ac.i
   return addPerson({ fullName, email, role: "Staff" });
 }
 
-async function professor(fullName = "Bagus Prakoso", email = "bagus@itb.ac.id") {
-  return addPerson({ fullName, email, role: "Teaching Team" });
+/**
+ * A non-Staff caller, hand-built rather than invited. T3 (#153) retired the Teaching Team Role, so
+ * no such Person can exist in the database any more — but every write below is Staff-only, and
+ * `requireStaff` throws on the role alone, before it touches the row. The cast through `unknown` is
+ * the only way to name a role the type no longer admits.
+ */
+function nonStaff() {
+  return {
+    id: "00000000-0000-0000-0000-000000000009",
+    fullName: "Bagus Prakoso",
+    email: "bagus@itb.ac.id",
+    role: "Teaching Team" as unknown as Role,
+  };
 }
 
 /**
@@ -269,9 +281,9 @@ describe("editing a Perjadin's Teaching Team", () => {
     expect(await ticks(perjadinId)).toEqual(["staff"]);
   });
 
-  it("refuses a Teaching Team caller on every teacher write", async () => {
+  it("refuses a non-Staff caller on every teacher write", async () => {
     const { perjadinId } = await trip();
-    const prof = await professor();
+    const prof = nonStaff();
 
     await expect(addPerjadinTeacher(prof, perjadinId, "Dr. Andi")).rejects.toSatisfy(
       isNotStaffError,
@@ -600,9 +612,9 @@ describe("editing a Perjadin's Sessions", () => {
     expect(row?.status).toBe("cancelled");
   });
 
-  it("refuses a Teaching Team caller on session writes", async () => {
+  it("refuses a non-Staff caller on session writes", async () => {
     const { perjadinId, schools } = await trip();
-    const prof = await professor();
+    const prof = nonStaff();
 
     await expect(
       addPerjadinSession(prof, perjadinId, {
@@ -728,9 +740,9 @@ describe("editing a Perjadin's Staff and PIC", () => {
     });
   });
 
-  it("refuses a Teaching Team caller on staff and PIC writes", async () => {
+  it("refuses a non-Staff caller on staff and PIC writes", async () => {
     const { pic, perjadinId } = await trip();
-    const prof = await professor();
+    const prof = nonStaff();
 
     await expect(setPerjadinStaff(prof, perjadinId, [])).rejects.toSatisfy(isNotStaffError);
     await expect(changePerjadinPic(prof, perjadinId, pic.id)).rejects.toSatisfy(isNotStaffError);
@@ -777,9 +789,9 @@ describe("editing a Perjadin's Pimpinan", () => {
     expect(await pimpinanOf(perjadinId)).toEqual([]);
   });
 
-  it("refuses a Teaching Team caller", async () => {
+  it("refuses a non-Staff caller", async () => {
     const { perjadinId } = await trip();
-    const prof = await professor();
+    const prof = nonStaff();
 
     await expect(setPerjadinPimpinan(prof, perjadinId, [])).rejects.toSatisfy(isNotStaffError);
   });
