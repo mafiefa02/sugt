@@ -99,6 +99,13 @@
       "when": 1787283654966,
       "tag": "0013_perjadin_model_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788106669610,
+      "tag": "0014_online_session_single_stream",
+      "breakpoints": true
     }
   ]
 }

@@ -60,11 +60,13 @@ export const session = pgTable(
     // guarantee rather than this module's hope. `$type<>()` comes before `.default()` so
     // that the default is checked against the set too.
     mode: text("mode").$type<SessionMode>().notNull(),
-    // An offline Session carries one Stream — STEM or Research — and an online one none:
-    // the STEM/Research split is now a property of the Session, not of who teaches
-    // (ADR-0019). Nullable so online rows can hold null; `session_stream_check` pins the
-    // two allowed values and `session_offline_iff_stream` pins when it may be null at all,
-    // exactly mirroring the `mode`/`perjadin_id` equivalence below.
+    // Every Session carries one Stream — STEM or Research — whatever its mode: the
+    // STEM/Research split is a property of the Session, not of who teaches (ADR-0019), and
+    // as of ADR-0022 an online Session is single-Stream too, exactly like an offline one.
+    // Still `text().$type<>()` rather than NOT NULL in the column type because the value set
+    // and the not-null rule are both CHECKs — `session_stream_check` pins the two allowed
+    // values and `session_stream_not_null` pins that it is present at all. The old
+    // mode-linkage (`session_offline_iff_stream`) is gone: Stream no longer tells you the mode.
     stream: text("stream").$type<Stream>(),
     heldOn: date("held_on").notNull(),
     // A wall-clock start time local to the School, in the School's Time Zone. NOT NULL
@@ -87,9 +89,12 @@ export const session = pgTable(
     check("session_mode_check", sql`${t.mode} in ('offline', 'online')`),
     check("session_status_check", sql`${t.status} in ('arranged', 'delivered', 'cancelled')`),
     check("session_stream_check", sql`${t.stream} in ('STEM', 'Research')`),
-    // An offline Session carries a Stream; an online one never does — the mirror of the
-    // `mode`/`perjadin_id` equivalence, and set in the same commit as the column (ADR-0019).
-    check("session_offline_iff_stream", sql`(${t.mode} = 'offline') = (${t.stream} is not null)`),
+    // Stream is now required for BOTH modes (ADR-0022): an online Session is single-Stream,
+    // like an offline one has been since ADR-0019. This replaces the old
+    // `session_offline_iff_stream` equivalence — `(mode = 'offline') = (stream is not null)` —
+    // which let online rows hold a null. The mode-linkage is dropped outright: `mode`/`perjadin_id`
+    // still tell you the mode, `stream` no longer does.
+    check("session_stream_not_null", sql`${t.stream} is not null`),
     // The sharpest rule in the delivery half, and an equivalence in both directions:
     // an offline Session has a Perjadin and an online Session has none.
     check(
@@ -125,11 +130,16 @@ export const session = pgTable(
     // daring arranges them from Coverage in a batch, one date across a multi-selection,
     // which moves that from theoretical to one mis-click away.
     //
+    // Keyed on Stream too since ADR-0022: an online Session is single-Stream, so a School may
+    // now hold a STEM and a Research online Session on the same date — those two do not collide,
+    // and only a second Session of the *same* Stream on that date does. Widening the index is
+    // what draws that line; without `stream` the STEM and Research pair would collide.
+    //
     // Partial in both the ways the first index is, and for the same two reasons:
     // cancelled rows accumulate and must not collide with the Session that replaced
     // them, and offline Sessions are untouched because their `perjadin_id` is not null.
     uniqueIndex("session_one_online_per_school_per_day")
-      .on(t.schoolId, t.heldOn)
+      .on(t.schoolId, t.heldOn, t.stream)
       .where(ONLINE_SESSION_STILL_STANDS),
     // Many offline Sessions per School per trip are now the point, not a collision (ADR-0019):
     // a School's participants are too many for one room, so a period splits into parallel rooms
@@ -145,7 +155,8 @@ export const session = pgTable(
     // must ignore same-School rows), so it moves to the application (see T2) and to
     // `data-model.md`'s "what the database does not hold". Partial in the same way as the
     // online index: cancelled rows accumulate and must not collide with their replacements,
-    // and online Sessions are untouched because their `perjadin_id` and `stream` are null.
+    // and online Sessions are untouched because their `perjadin_id` is null — which alone keeps
+    // them distinct here, so ADR-0022 giving them a Stream does not draw them into this index.
     uniqueIndex("session_no_duplicate_offline_per_school_per_perjadin")
       .on(t.perjadinId, t.schoolId, t.heldOn, t.startsAt, t.stream)
       .where(sql`status <> 'cancelled'`),
@@ -186,6 +197,32 @@ export const sessionTeacher = pgTable(
     }),
   ],
 );
+
+/**
+ * An online Session's teachers, as **session-scoped free-text names** (ADR-0022). The online
+ * mirror of ADR-0020's trip-scoped Teaching Team: a name typed at arrangement, never a `person`
+ * row, carrying no Stream (the Session already carries its own) and no sign-in.
+ *
+ * This is the online analogue of the offline `perjadin_teacher` + `session_teaching_team` pair,
+ * **collapsed to one table** because an online Session has no Perjadin to scope its names to —
+ * offline names belong to the trip and are linked to the Sessions that used them, whereas an
+ * online name belongs to the one Session and nothing else, so the two-table split has nothing to
+ * express here. Cascade on delete: a name is meaningless once its Session is gone.
+ *
+ * This is the write path's replacement for `session_teacher` on the online side. The old
+ * Person-based table is left in place for now — its teardown, and the retirement of the
+ * `Teaching Team` Person role, are T3 — but nothing this ticket writes touches it.
+ */
+export const sessionTeacherName = pgTable("session_teacher_name", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // The drizzle-default FK name `session_teacher_name_session_id_session_id_fk` is 42 characters,
+  // well under Postgres's 63-char identifier limit, so the inline `.references` is safe here where
+  // `session_teaching_team` had to name its FKs by hand.
+  sessionId: uuid("session_id")
+    .notNull()
+    .references(() => session.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+});
 
 /**
  * "Diajar oleh" — which of a Perjadin's trip-scoped teacher names taught one offline

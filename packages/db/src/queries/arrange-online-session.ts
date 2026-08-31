@@ -1,8 +1,8 @@
-import type { Stream } from "@sugt/domain";
+import { MAX_TEACHING_TEAM_PER_ONLINE_SESSION, type Stream } from "@sugt/domain";
 import { asc, eq } from "drizzle-orm";
 
 import { db } from "../client";
-import { ONLINE_SESSION_STILL_STANDS, session, sessionTeacher } from "../schema/delivery";
+import { ONLINE_SESSION_STILL_STANDS, session, sessionTeacherName } from "../schema/delivery";
 import { school } from "../schema/reference";
 import type { Person } from "./caller";
 import { activeRosters, type RosterPerson, type SelectedSchool } from "./rosters";
@@ -24,16 +24,9 @@ import { requireStaff } from "./staff-only";
  * member and an arranged Session.
  */
 
-/** Who taught one Stream at one Session. At most one per Stream, by primary key. */
-export type OnlineSessionTeacher = {
-  stream: Stream;
-  /** Teaching Team. A composite foreign key into `person (id, role)` refuses anyone else. */
-  personId: string;
-};
-
 /**
  * What arranging one online Session takes: a School, its own date and start time, a Staff PIC,
- * and optionally a Teaching Team member per Stream.
+ * its Stream, and optionally its session-scoped Pengajar names.
  *
  * **`mode`, `perjadinId`, `status` and `cancelledReason` are absent by design** — there is no
  * field to set wrong. The write binds `mode = 'online'` with no Perjadin and a Staff PIC, so
@@ -53,12 +46,19 @@ export type ArrangeOnlineSessionInput = {
    */
   picPersonId: string;
   /**
-   * **Optional here, and mandatory at Tandai terlaksana.** Naming both Streams at arrangement
-   * would block a Session whenever one professor is not yet fixed, which is ordinary; the dialog
-   * that marks a Session delivered is where "both Streams were taught" is enforced (#17). An
-   * empty list is therefore ordinary rather than a missing value.
+   * The Session's Stream — STEM or Research. Required now (ADR-0022): an online Session is
+   * single-Stream, exactly like an offline one, so `session_stream_not_null` refuses a null and
+   * `session_one_online_per_school_per_day` keys on it — a School may hold one STEM and one
+   * Research online Session on the same date, but not two of the same Stream.
    */
-  teachers: OnlineSessionTeacher[];
+  stream: Stream;
+  /**
+   * The Pengajar who teach this Session, as **session-scoped free-text names** (ADR-0022) — the
+   * online mirror of a Perjadin's trip-scoped teacher names. Optional and zero-to-cap
+   * (`MAX_TEACHING_TEAM_PER_ONLINE_SESSION`): the professors are not yet always fixed at
+   * arrangement, so an empty list is ordinary rather than a missing value.
+   */
+  teacherNames: string[];
 };
 
 /**
@@ -70,23 +70,35 @@ export type ArrangeOnlineSessionInput = {
  */
 export type ArrangeOnlineSessionResult =
   | { outcome: "arranged"; sessionId: string }
-  /** This School already has an online Session on this date that was not cancelled. */
-  | { outcome: "collided"; heldOn: string };
+  /** This School already has an online Session of this Stream on this date that was not cancelled. */
+  | { outcome: "collided"; heldOn: string }
+  /**
+   * More than `MAX_TEACHING_TEAM_PER_ONLINE_SESSION` Pengajar names — a safety ceiling the
+   * database does not hold, so it is refused up front as a value, mirroring `planPerjadin`'s cap
+   * refusals. The form's chip input caps at the same number, so this is only reachable through a
+   * hand-edited payload.
+   */
+  | { outcome: "too-many-teachers"; count: number; limit: number };
 
 /**
- * Arrange one online Session, and its optional `session_teacher` rows, in one transaction.
+ * Arrange one online Session, and its optional session-scoped `session_teacher_name` rows, in one
+ * transaction.
  *
  * **The transaction is here rather than in the Server Action** (convention 5): a Session and its
- * teacher rows are one act, and a Server Action that opened the boundary would put it somewhere
- * a second caller cannot reuse.
+ * teacher-name rows are one act, and a Server Action that opened the boundary would put it
+ * somewhere a second caller cannot reuse.
  *
  * `on conflict do nothing` names `session_one_online_per_school_per_day` as its arbiter and
  * repeats its predicate verbatim from `ONLINE_SESSION_STILL_STANDS` — Postgres refuses to infer
  * an index whose predicate does not match, which is a runtime failure. With no target it would
  * also swallow a violation of the primary key, which is not a user state. **The index keys on
- * `(school_id, held_on)` and not
- * `starts_at`**: two online Sessions at one School on one day is a mistake whatever the hour, so
- * a returned collision means the day is taken, not the slot.
+ * `(school_id, held_on, stream)` and not `starts_at`** (ADR-0022): a School may hold one STEM and
+ * one Research online Session on a date, so a returned collision means the day *and Stream* are
+ * taken, whatever the hour.
+ *
+ * Teachers are session-scoped free-text names now (ADR-0022), not `session_teacher` Person rows:
+ * this writes `session_teacher_name` and touches `session_teacher` not at all — that table's
+ * teardown is T3. The cap is refused before the transaction, mirroring `planPerjadin`.
  */
 export async function arrangeOnlineSession(
   caller: Person,
@@ -94,33 +106,41 @@ export async function arrangeOnlineSession(
 ): Promise<ArrangeOnlineSessionResult> {
   requireStaff(caller);
 
+  // The app-enforced cap the database does not hold: a count across sibling rows, the same shape
+  // as `planPerjadin`'s teacher cap, so it is checked here where the whole list is in hand rather
+  // than left to a constraint that cannot see the set.
+  if (input.teacherNames.length > MAX_TEACHING_TEAM_PER_ONLINE_SESSION) {
+    return {
+      outcome: "too-many-teachers",
+      count: input.teacherNames.length,
+      limit: MAX_TEACHING_TEAM_PER_ONLINE_SESSION,
+    };
+  }
+
   return db.transaction(async (tx) => {
     const [created] = await tx
       .insert(session)
       .values({
         schoolId: input.schoolId,
         mode: "online",
+        stream: input.stream,
         heldOn: input.heldOn,
         startsAt: input.startsAt,
         onlinePicPersonId: input.picPersonId,
         onlinePicRole: "Staff",
       })
       .onConflictDoNothing({
-        target: [session.schoolId, session.heldOn],
+        target: [session.schoolId, session.heldOn, session.stream],
         where: ONLINE_SESSION_STILL_STANDS,
       })
       .returning({ id: session.id });
 
     if (!created) return { outcome: "collided", heldOn: input.heldOn };
 
-    if (input.teachers.length > 0) {
-      await tx.insert(sessionTeacher).values(
-        input.teachers.map((teacher) => ({
-          sessionId: created.id,
-          stream: teacher.stream,
-          personId: teacher.personId,
-        })),
-      );
+    if (input.teacherNames.length > 0) {
+      await tx
+        .insert(sessionTeacherName)
+        .values(input.teacherNames.map((name) => ({ sessionId: created.id, name })));
     }
 
     return { outcome: "arranged", sessionId: created.id };
@@ -137,17 +157,18 @@ const SCHOOL_OPTION_COLUMNS = {
   kabupatenKota: school.kabupatenKota,
 };
 
-/** Somebody a picker on this screen can name — the PIC, or a Teaching Team member per Stream. */
+/** Somebody a picker on this screen can name — the PIC. */
 export type ArrangePerson = RosterPerson;
 
-/** What the standalone screen renders before anything is written: every School, and the pickers. */
+/** What the standalone screen renders before anything is written: every School, and the PIC picker. */
 export type ArrangeOnlineSessionForm = {
   /** Every School, in name order, for the picker the standalone screen leads with. */
   schools: SchoolOption[];
-  /** Staff, for the PIC. */
+  /**
+   * Staff, for the PIC. There is no Teaching Team roster here any more (ADR-0022): a Session's
+   * Pengajar are session-scoped free-text names typed on the form, not People chosen from a list.
+   */
   staff: ArrangePerson[];
-  /** Teaching Team, for the two per-Stream pickers. */
-  teachingTeam: ArrangePerson[];
 };
 
 /** Every School, in name order, for the standalone screen's School picker. */
@@ -156,23 +177,23 @@ async function pickableSchools(): Promise<SchoolOption[]> {
 }
 
 /**
- * The standalone screen's payload: the Schools to pick from, and the two rosters. Staff-only, so
+ * The standalone screen's payload: the Schools to pick from, and the Staff roster. Staff-only, so
  * a Teaching Team member reaching the URL directly is refused server-side rather than shown a
- * form. `Promise.all` keeps the two reads concurrent.
+ * form. `Promise.all` keeps the two reads concurrent. Only the `staff` half of `activeRosters` is
+ * kept — the Pengajar are session-scoped names now, not a roster (ADR-0022).
  */
 export async function arrangeOnlineSessionForm(caller: Person): Promise<ArrangeOnlineSessionForm> {
   requireStaff(caller);
 
-  const [schools, rosters] = await Promise.all([pickableSchools(), activeRosters()]);
+  const [schools, { staff }] = await Promise.all([pickableSchools(), activeRosters()]);
 
-  return { schools, ...rosters };
+  return { schools, staff };
 }
 
-/** What the Detail Sekolah entry point renders: the one School it is on, and the pickers. */
+/** What the Detail Sekolah entry point renders: the one School it is on, and the PIC picker. */
 export type ArrangeOnlineSessionAt = {
   school: SchoolOption;
   staff: ArrangePerson[];
-  teachingTeam: ArrangePerson[];
 };
 
 /**
@@ -191,6 +212,6 @@ export async function arrangeOnlineSessionAt(
   const [row] = await db.select(SCHOOL_OPTION_COLUMNS).from(school).where(eq(school.slug, slug));
   if (!row) return null;
 
-  const rosters = await activeRosters();
-  return { school: row, ...rosters };
+  const { staff } = await activeRosters();
+  return { school: row, staff };
 }

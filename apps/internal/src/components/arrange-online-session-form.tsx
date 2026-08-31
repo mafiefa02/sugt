@@ -2,8 +2,8 @@
 
 import { arrangeOnlineSessionAction } from "-/app/(app)/jadwalkan-sesi-daring/actions";
 import { PersonSelect } from "-/components/person-select";
-import type { ArrangePerson, OnlineSessionTeacher, SchoolOption } from "@sugt/db/queries";
-import { STREAMS, type Stream } from "@sugt/domain";
+import type { ArrangePerson, SchoolOption } from "@sugt/db/queries";
+import { MAX_TEACHING_TEAM_PER_ONLINE_SESSION, STREAMS, type Stream } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
@@ -15,28 +15,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@sugt/ui/components/select";
+import { XIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
 
 /**
- * Arrange **one** online Session (#70). Two entry points share this component: the standalone
- * screen leads with a School picker (`schools`), and Detail Sekolah pins the School it is on
- * (`school`). Exactly one of the two is passed.
+ * Arrange **one** online Session (#70, ADR-0022). Two entry points share this component: the
+ * standalone screen leads with a School picker (`schools`), and Detail Sekolah pins the School it
+ * is on (`school`). Exactly one of the two is passed.
+ *
+ * An online Session is single-Stream now, so the form leads with a required **Aliran** and names
+ * its Pengajar as **session-scoped free-text names** — typed in one at a time and shown as
+ * removable chips, the same pattern the plan form uses for a Perjadin's trip-scoped Teaching Team
+ * (ADR-0020). It no longer picks Teaching-Team People per Stream, so `teachingTeam` is gone from
+ * this component; the `session_teacher` write it fed is retired in T3.
  *
  * A client component because every field is editable and none of that state is worth a URL. The
  * pickers and Schools arrive from the server as props; nothing here fetches. The Server Action
  * is called with a typed value rather than through a `<form action>`, because the payload is
- * nested — a list of teachers — and `FormData` would mean flattening it out and parsing it back
- * with the type checker helping at neither end.
+ * nested — a list of teacher names — and `FormData` would mean flattening it out and parsing it
+ * back with the type checker helping at neither end.
  */
 function ArrangeOnlineSessionForm({
   school,
   schools,
   staff,
-  teachingTeam,
 }: {
   staff: ArrangePerson[];
-  teachingTeam: ArrangePerson[];
 } & (
   | /** Detail Sekolah pins the School. */ { school: SchoolOption; schools?: never }
   | /** The standalone screen offers a picker. */ { school?: never; schools: SchoolOption[] }
@@ -46,7 +51,13 @@ function ArrangeOnlineSessionForm({
   const [heldOn, setHeldOn] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [picPersonId, setPicPersonId] = useState("");
-  const [teachers, setTeachers] = useState<Record<Stream, string>>({ STEM: "", Research: "" });
+  // The Session's Stream — STEM or Research (ADR-0022). Required now, `""` until chosen; the submit
+  // guard proves it is set before the cast.
+  const [stream, setStream] = useState<Stream | "">("");
+  // The Pengajar as session-scoped names (ADR-0022): a list of plain strings, added one at a time
+  // from `teacherDraft` and shown as removable chips. Optional, capped at ten.
+  const [teacherNames, setTeacherNames] = useState<string[]>([]);
+  const [teacherDraft, setTeacherDraft] = useState("");
   const [collidedOn, setCollidedOn] = useState<string | null>(null);
   const [arranged, setArranged] = useState(false);
   const [saving, startSaving] = useTransition();
@@ -55,34 +66,47 @@ function ArrangeOnlineSessionForm({
   const dateId = useId();
   const timeId = useId();
   const picId = useId();
-  const idPrefix = useId();
+  const streamId = useId();
+  const teacherDraftId = useId();
 
-  // `held_on` and `starts_at` are NOT NULL and every online Session must name a PIC, by CHECK —
-  // so the screen refuses a submit that could only be rejected. Teachers are optional at
-  // arrangement (mandatory at Tandai terlaksana), so they are not required here.
-  const incomplete = schoolId === "" || heldOn === "" || startsAt === "" || picPersonId === "";
+  // `held_on` and `starts_at` are NOT NULL, every online Session must name a PIC and now carries a
+  // Stream, all by CHECK — so the screen refuses a submit that could only be rejected. Pengajar are
+  // optional at arrangement (mandatory at Tandai terlaksana), so they are not required here.
+  const incomplete =
+    schoolId === "" || heldOn === "" || startsAt === "" || picPersonId === "" || stream === "";
 
   function reset() {
     setHeldOn("");
     setStartsAt("");
     setPicPersonId("");
-    setTeachers({ STEM: "", Research: "" });
+    setStream("");
+    setTeacherNames([]);
+    setTeacherDraft("");
     setArranged(false);
     setCollidedOn(null);
   }
 
-  function submit() {
-    const named: OnlineSessionTeacher[] = STREAMS.filter((stream) => teachers[stream] !== "").map(
-      (stream) => ({ stream, personId: teachers[stream] }),
-    );
+  function addTeacher() {
+    const name = teacherDraft.trim();
+    if (name === "" || teacherNames.length >= MAX_TEACHING_TEAM_PER_ONLINE_SESSION) return;
+    setTeacherNames((previous) => [...previous, name]);
+    setTeacherDraft("");
+  }
 
+  function removeTeacher(index: number) {
+    setTeacherNames((previous) => previous.filter((_, i) => i !== index));
+  }
+
+  function submit() {
     startSaving(async () => {
       const result = await arrangeOnlineSessionAction({
         schoolId,
         heldOn,
         startsAt,
         picPersonId,
-        teachers: named,
+        // The guard above proves a Stream is chosen, so the cast holds.
+        stream: stream as Stream,
+        teacherNames: teacherNames.map((name) => name.trim()).filter((name) => name !== ""),
       });
 
       if (result.outcome === "arranged") {
@@ -92,7 +116,9 @@ function ArrangeOnlineSessionForm({
         router.refresh();
         return;
       }
-      setCollidedOn(result.heldOn);
+      // `too-many-teachers` is unreachable from here — the chip input caps at the same number the
+      // query does — so a collision is the only refusal the form can surface, beside the date.
+      if (result.outcome === "collided") setCollidedOn(result.heldOn);
     });
   }
 
@@ -119,8 +145,8 @@ function ArrangeOnlineSessionForm({
         <Alert variant="destructive">
           <AlertTitle>Sesi belum dijadwalkan.</AlertTitle>
           <AlertDescription>
-            Sekolah ini sudah punya Sesi daring pada {collidedOn}. Ubah tanggalnya, lalu simpan
-            lagi.
+            Sekolah ini sudah punya Sesi daring Aliran ini pada {collidedOn}. Ubah tanggal atau
+            Aliran-nya, lalu simpan lagi.
           </AlertDescription>
         </Alert>
       )}
@@ -181,6 +207,37 @@ function ArrangeOnlineSessionForm({
         </Field>
 
         <Field
+          id={streamId}
+          label="Aliran"
+        >
+          <Select
+            items={Object.fromEntries(STREAMS.map((entry) => [entry, entry]))}
+            value={stream === "" ? null : stream}
+            onValueChange={(value) => {
+              setStream((value as Stream | null) ?? "");
+              setCollidedOn(null);
+            }}
+          >
+            <SelectTrigger
+              id={streamId}
+              aria-label="Aliran"
+            >
+              <SelectValue placeholder="Pilih Aliran" />
+            </SelectTrigger>
+            <SelectContent>
+              {STREAMS.map((entry) => (
+                <SelectItem
+                  key={entry}
+                  value={entry}
+                >
+                  {entry}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field
           id={dateId}
           label="Tanggal"
         >
@@ -211,25 +268,69 @@ function ArrangeOnlineSessionForm({
             }}
           />
         </Field>
+      </div>
 
-        {STREAMS.map((stream) => (
-          <Field
-            key={stream}
-            id={`${idPrefix}-${stream}`}
-            label={`Pengajar ${stream}`}
+      <div>
+        <Label htmlFor={teacherDraftId}>Pengajar (opsional)</Label>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Nama Pengajar untuk Sesi ini. Tambahkan satu per satu; hingga{" "}
+          {MAX_TEACHING_TEAM_PER_ONLINE_SESSION} nama.
+        </p>
+
+        <div className="mt-3 flex max-w-md gap-2">
+          <Input
+            id={teacherDraftId}
+            aria-label="Nama pengajar"
+            placeholder="Nama pengajar"
+            value={teacherDraft}
+            disabled={teacherNames.length >= MAX_TEACHING_TEAM_PER_ONLINE_SESSION}
+            onChange={(event) => {
+              setTeacherDraft(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addTeacher();
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={
+              teacherDraft.trim() === "" ||
+              teacherNames.length >= MAX_TEACHING_TEAM_PER_ONLINE_SESSION
+            }
+            onClick={addTeacher}
           >
-            {/* Optional at arrangement — "Belum ditentukan" leaves the Stream unnamed. */}
-            <PersonSelect
-              id={`${idPrefix}-${stream}`}
-              people={teachingTeam}
-              value={teachers[stream]}
-              unassignedLabel="Belum ditentukan"
-              onSelect={(personId) => {
-                setTeachers((previous) => ({ ...previous, [stream]: personId }));
-              }}
-            />
-          </Field>
-        ))}
+            Tambah pengajar
+          </Button>
+        </div>
+
+        {teacherNames.length > 0 && (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {teacherNames.map((name, index) => (
+              <li
+                // The list is reordered only by removal, so the index is a stable enough key for a
+                // chip that carries no editable state of its own.
+                key={`teacher-${index}`}
+                className="flex items-center gap-1 rounded-2xl bg-input px-2.5 py-1 text-xs font-medium dark:bg-input/60"
+              >
+                {name}
+                <button
+                  type="button"
+                  aria-label={`Hapus ${name}`}
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    removeTeacher(index);
+                  }}
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="flex justify-end">

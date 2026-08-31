@@ -356,8 +356,12 @@ export type Pimpinan = (typeof PIMPINAN)[number];
  * - `MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN` — a safety ceiling; six or seven is the real
  *   maximum, ten is practically unreachable.
  * - `MAX_TEACHING_TEAM_PER_PERJADIN` — trip-scoped teacher names entered on the trip.
+ * - `MAX_TEACHING_TEAM_PER_ONLINE_SESSION` — session-scoped online Pengajar names, the online
+ *   analogue of the trip-scoped cap above (ADR-0022). A single online Session is taught by a small
+ *   handful; ten is a safety ceiling, not a target.
  * - `MAX_EXTRA_STAFF_PER_GROUP` — DITSAMA Staff on a Group besides the PIC; the PIC plus up to ten.
  */
 export const MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN = 10;
 export const MAX_TEACHING_TEAM_PER_PERJADIN = 20;
+export const MAX_TEACHING_TEAM_PER_ONLINE_SESSION = 10;
 export const MAX_EXTRA_STAFF_PER_GROUP = 10;
