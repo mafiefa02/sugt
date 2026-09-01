@@ -1,5 +1,5 @@
 import { PerjadinDates } from "-/components/perjadin-dates";
-import { PerjadinEvaluationDialog } from "-/components/perjadin-evaluation-form";
+import { PerjadinFeedbackTokenDialog } from "-/components/perjadin-feedback-token";
 import { PerjadinGroup } from "-/components/perjadin-group";
 import { PerjadinLogistics } from "-/components/perjadin-logistics";
 import { PerjadinPimpinan } from "-/components/perjadin-pimpinan";
@@ -40,11 +40,6 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
   // a courtesy so a professor's page makes no pointless call — `requireStaff` inside is
   // what actually closes the path.
   const acquittal = person.role === "Staff" ? await perjadinAcquittal(person, id) : null;
-
-  // The Evaluation is offered to whoever was on the Group — the people who slept in the hotel,
-  // Teaching Team and the PIC alike. Checked here for the display; `filePerjadinEvaluation`
-  // re-checks membership authoritatively, since a Server Action is a public endpoint.
-  const isGroupMember = trip.group.some((member) => member.personId === person.id);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -156,22 +151,22 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
       />
 
       {/*
-        Offered to Group members only, and to every one of them — the Evaluation is about the
-        journey, so the PIC who arranged it may file one too. Nothing tracks here whether this
-        viewer already filed; a second attempt is refused by the write as `already-filed`.
+        The Evaluation is now filed through a shared link, not a signed-in dialog (ADR-0024): the
+        people best placed to judge the trip include the name-based Pengajar and the record-only
+        Pimpinan, neither of whom can sign in. Any signed-in Person issues the QR/link here and hands
+        it out; the filer self-declares a Role and Name on `/ep/{token}`. So the old Group-member
+        gate is gone — this block shows for everyone who can see the page.
       */}
-      {isGroupMember && (
-        <div className="border-b border-border px-7 py-5">
-          <h2 className="font-heading text-sm font-medium">Evaluasi Perjadin</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Nilai perjalanannya — penginapan, transportasi, konsumsi dan ketepatan waktu. Tiap
-            anggota Group mengisi satu.
-          </p>
-          <div className="mt-3">
-            <PerjadinEvaluationDialog perjadinId={trip.id} />
-          </div>
+      <div className="border-b border-border px-7 py-5">
+        <h2 className="font-heading text-sm font-medium">Evaluasi Perjadin</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Bagikan tautan agar Pengajar, Pendamping dan Pimpinan dapat menilai perjalanannya —
+          penginapan, transportasi, konsumsi dan ketepatan waktu — tanpa perlu masuk.
+        </p>
+        <div className="mt-3">
+          <PerjadinFeedbackTokenDialog perjadinId={trip.id} />
         </div>
-      )}
+      </div>
 
       <PerjadinSessions
         perjadinId={trip.id}

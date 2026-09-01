@@ -1,4 +1,4 @@
-import type { ClassKind } from "@sugt/domain";
+import type { ClassKind, PerjadinEvaluationRole } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -273,12 +273,15 @@ export const participantFeedback = pgTable(
  * on purpose — two evaluation forms that behaved differently would be two things to
  * learn. There is no `covered`: nothing was taught on a journey.
  *
- * **`filedByPersonId` references `person`, not `group_member`.** "Only the Group may
- * file" is exactly what a composite foreign key would enforce, and it cannot be used:
- * a Group is replaced wholesale, so under the default action the delete fails once
- * anyone has filed, and under `cascade` it destroys every evaluation on the trip
- * including those from members who never left. Both were tested. Membership is checked
- * where the evaluation is written.
+ * **Filed without signing in, through a short-lived token link (ADR-0024).** The filer
+ * is not a `person` any more — the old `filed_by_person_id` foreign key and the
+ * `perjadin_evaluation_one_per_filer` unique are both gone. The people best placed to
+ * say how a trip went include the name-based Pengajar and the record-only Pimpinan,
+ * neither of whom has a login, so identity is now **self-declared and untrusted**,
+ * exactly as `participant_feedback.name` is: `filed_by_role` is one of three values a
+ * CHECK admits, and `filed_by_name` is typed by the filer and referenced by nothing.
+ * A duplicate is allowed — there is no dedup, the accepted cost ADR-0012 already pays
+ * for the token pattern.
  */
 export const perjadinEvaluation = pgTable(
   "perjadin_evaluation",
@@ -287,9 +290,12 @@ export const perjadinEvaluation = pgTable(
     perjadinId: uuid("perjadin_id")
       .notNull()
       .references(() => perjadin.id, { onDelete: "cascade" }),
-    filedByPersonId: uuid("filed_by_person_id")
-      .notNull()
-      .references(() => person.id),
+    // The self-declared filer. `filed_by_role` CHECKs `PERJADIN_EVALUATION_ROLES` character for
+    // character below (the same list the form's selector and the query are driven off), and
+    // `filed_by_name` is the name they type — neither is a foreign key, because a Pengajar or a
+    // Pimpinan has no `person` row to point at. This is the ADR-0012 identity model applied here.
+    filedByRole: text("filed_by_role").$type<PerjadinEvaluationRole>().notNull(),
+    filedByName: text("filed_by_name").notNull(),
 
     // **The one nullable Rating in the system.** Not every Perjadin involves a night away —
     // a School close enough for a day trip has no hotel to rate — so `lodging` is not the
@@ -319,7 +325,13 @@ export const perjadinEvaluation = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    unique("perjadin_evaluation_one_per_filer").on(t.perjadinId, t.filedByPersonId),
+    // Written out character for character, like every other value-list CHECK in this schema
+    // (`transaction_category_check`, `perjadin_pimpinan_name_check`), so the constraint reads the
+    // stored values rather than composing them from the domain array — the values `PERJADIN_EVALUATION_ROLES` holds.
+    check(
+      "perjadin_evaluation_filed_by_role_check",
+      sql`${t.filedByRole} in ('Pengajar', 'Pendamping', 'Pimpinan')`,
+    ),
     ...ratingBounds("perjadin_evaluation", {
       lodging: t.lodging,
       transport: t.transport,
@@ -345,4 +357,34 @@ export const perjadinEvaluation = pgTable(
       .on(sql`least(lodging, transport, meals, punctuality)`)
       .where(sql`least(lodging, transport, meals, punctuality) <= ${sql.raw(String(CONCERN))}`),
   ],
+);
+
+/**
+ * One token per Perjadin, shared — the link (a QR or copyable URL) handed out from the trip's page
+ * so its Evaluation can be filed without signing in (ADR-0024). A direct mirror of
+ * `sessionFeedbackToken`, keyed on `perjadin_id` so **issuing a new one replaces the old** and
+ * every link already shared resolves to nothing.
+ *
+ * `expiresAt` defaults 14 days out — the `PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS` window — and is
+ * stored rather than derived, as the Session token's is: the link is shared after the trip and the
+ * filers (Pengajar, Pendamping, Pimpinan) file when they get to it, so it outlives the trip's dates
+ * by design. There is no cancelled-trip bar the Session token needs: a Perjadin is a real trip once
+ * it exists and is never cancelled, so a token always has a live trip behind it.
+ */
+export const perjadinFeedbackToken = pgTable(
+  "perjadin_feedback_token",
+  {
+    perjadinId: uuid("perjadin_id")
+      .primaryKey()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now() + interval '14 days'`),
+    issuedByPersonId: uuid("issued_by_person_id")
+      .notNull()
+      .references(() => person.id),
+  },
+  (t) => [check("perjadin_feedback_token_expiry_check", sql`${t.expiresAt} > ${t.issuedAt}`)],
 );

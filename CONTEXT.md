@@ -113,7 +113,7 @@ The **Staff** who travel on one Perjadin — the **PIC** plus up to ten other DI
 _Avoid_: team, squad, class
 
 **Pimpinan**:
-A leader of DITSAMA ITB — one of a fixed set of three named people — who, rarely, joins a Perjadin's **Kelompok Perjalanan** for the offline Sessions to monitor and evaluate. Recorded on the Perjadin (optional, editable, chosen from the fixed set) and named on the **Laporan Perjadin**, but **record-only**: a Pimpinan is not a working **Group** member, files no **Perjadin Evaluation** and adds nothing to the **Preparation Checklist**.
+A leader of DITSAMA ITB — one of a fixed set of three named people — who, rarely, joins a Perjadin's **Kelompok Perjalanan** for the offline Sessions to monitor and evaluate. Recorded on the Perjadin (optional, editable, chosen from the fixed set) and named on the **Laporan Perjadin**, but **record-only** in the tool: a Pimpinan is not a working **Group** member and adds nothing to the **Preparation Checklist**. A Pimpinan **may now file a Perjadin Evaluation** — it is filed through an unauthenticated token link with a self-declared Role, and `Pimpinan` is one of the three (ADR-0024), reversing the earlier "files no Perjadin Evaluation".
 _Avoid_: leadership (that is the Staff role generally), chairman, director
 
 **PIC**:
@@ -159,7 +159,7 @@ The score one person gives one Aspect, from 1 to 10. Ratings are the only thing 
 _Avoid_: grade, mark, health, RAG, status
 
 **Perjadin Evaluation**:
-How the trip went, as against how the teaching went: a Rating for each of **Lodging**, **Transport**, **Meals** and **Punctuality**, each carrying an optional comment, required only when that Aspect's own Rating is low (#163, ADR-0023). Only the Group that travelled may file one, and each of them files at most one. Open to anyone signed in — it carries no money.
+How the trip went, as against how the teaching went: a Rating for each of **Lodging**, **Transport**, **Meals** and **Punctuality**, each carrying an optional comment, required only when that Aspect's own Rating is low (#163, ADR-0023). Filed **without signing in**, through a short-lived token link shared from the trip's page, by a filer who self-declares a Role (**Pengajar**, **Pendamping** or **Pimpinan**) and a Name — the same untrusted-identity pattern as **Participant Feedback** (ADR-0012, ADR-0024). No dedup: anyone with the link may file, as many times as they like. Any signed-in Person may issue the link — it carries no money.
 _Avoid_: travel evaluation ("travel" is reserved against **Perjadin**), trip report, Perjadin Report (that is the acquittal, and is Staff-only)
 
 **Participant**:
@@ -224,7 +224,7 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - A **Rating** of 7 or below cannot be filed on a **Class Record** or a **Session Record** without saying what went wrong. A **Participant** owes nothing and is held to no such rule
 - Nothing is required and nothing is blocked. The tool names who has not filed so they can be chased; **Participants** cannot be named, because nobody knows who was in the room
 - **Participant Feedback** is never part of a **Session Record**, and neither is derived from the other
-- Every member of a **Group** may file one **Perjadin Evaluation** on their **Perjadin**, and nobody else may
+- A **Perjadin Evaluation** is filed through an unauthenticated token link shared from the **Perjadin**, by a filer who self-declares a Role (**Pengajar**, **Pendamping** or **Pimpinan**) and a Name — no sign-in, no Group-membership gate, and no limit on how many are filed (ADR-0024)
 - One **Perjadin** may cover several **Schools**, so it sits behind many **Session Records**
 - A **Story** is written by **Staff** about exactly one **School**, and is the only Programme narrative a public page ever carries — nothing filed after a **Session** or a trip is ever a source for one
 - A **Story** may name a **Stream**, since a piece is usually about one; its **Cluster** is the **School**'s and is never stated separately

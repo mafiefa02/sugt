@@ -253,6 +253,21 @@ export const PERJADIN_ASPECTS = ["lodging", "transport", "meals", "punctuality"]
 export type PerjadinAspect = (typeof PERJADIN_ASPECTS)[number];
 
 /**
+ * Who a Perjadin Evaluation filer says they are — a **self-declared** role, typed alongside a name
+ * on the unauthenticated `/ep/{token}` form (ADR-0024). It is not validated against the Group or
+ * the `PIMPINAN` enum: the identity is untrusted by design, exactly as `participant_feedback.name`
+ * is (ADR-0012). The three cover everyone the evaluation wants to hear from — the name-based
+ * **Pengajar** (Teaching Team), the signed-in DITSAMA **Pendamping** who travel, and the
+ * record-only **Pimpinan** — none of whom the old signed-in-Group gate could all admit.
+ *
+ * These are **values a column may hold**, so `perjadin_evaluation.filed_by_role` CHECKs this list
+ * character for character (see `packages/db/src/schema/evaluations.ts`), and the form's Role
+ * selector is driven off it — one list behind the schema, the query and the form.
+ */
+export const PERJADIN_EVALUATION_ROLES = ["Pengajar", "Pendamping", "Pimpinan"] as const;
+export type PerjadinEvaluationRole = (typeof PERJADIN_EVALUATION_ROLES)[number];
+
+/**
  * The bounds of a Rating: the score one person gives one Aspect. Ratings are the only
  * thing in the system anything counts.
  */
@@ -280,6 +295,16 @@ export const CONCERN_AT_OR_BELOW = 7;
  * the same moment without storing a Session end time.
  */
 export const FEEDBACK_TOKEN_LIFETIME_HOURS = 24;
+
+/**
+ * How long a Perjadin's Evaluation link stays open — **14 days**, far longer than the Session
+ * feedback token's 24 hours. A Participant Feedback QR is held up in the room and scanned on the
+ * spot, so a day is generous; a Perjadin link is shared by hand to the Pengajar, Pendamping and
+ * Pimpinan after a trip that may have run over a week, and they file when they get to it. Counted
+ * from issue, like `FEEDBACK_TOKEN_LIFETIME_HOURS`, and expressed in hours so both tokens set
+ * their `expires_at` the same way (`now() + make_interval(hours => …)`).
+ */
+export const PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS = 24 * 14;
 
 /**
  * A Perjadin Report is due this many days after the Group gets back, so the deadline is

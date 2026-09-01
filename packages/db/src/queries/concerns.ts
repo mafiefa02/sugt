@@ -178,13 +178,15 @@ export async function concerns(_caller: Person): Promise<Concern[]> {
 
         union all
 
+        -- who is filed_by_name, the self-declared name, not a person join: a Perjadin Evaluation
+        -- is filed through an unauthenticated token link now and has no filer row to join
+        -- (ADR-0024). The Participant branch above reads its who the same way, off f.name.
         select 'perjadin-evaluation' as source, pj.destination as subject,
-               r.aspect as aspect, r.rating as rating, p.full_name as who,
+               r.aspect as aspect, r.rating as rating, e.filed_by_name as who,
                r.said as said, e.created_at as at,
                null::uuid as session_id, e.perjadin_id as perjadin_id
           from ${perjadinEvaluation} as e
           join ${perjadin} as pj on pj.id = e.perjadin_id
-          join ${person} as p on p.id = e.filed_by_person_id
           cross join lateral (values ${unpivotWithComment("e", PERJADIN_ASPECTS)}) as r(aspect, rating, said)
          where ${least("e", PERJADIN_ASPECTS)} <= ${THRESHOLD} and r.rating <= ${THRESHOLD}
       ) as concerns`,
