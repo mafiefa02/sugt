@@ -76,6 +76,15 @@ export {
 } from "./cerita";
 export { concerns, type Concern, type ConcernAspect, type ConcernSource } from "./concerns";
 export {
+  NO_FEEDBACK_FILTERS,
+  participantFeedbackAverages,
+  participantFeedbackPage,
+  type FeedbackCursor,
+  type FeedbackFilters,
+  type FeedbackFilterValue,
+  type ParticipantFeedbackRow,
+} from "./feedback";
+export {
   staffDashboard,
   type ClusterReach,
   type OwedSessionRecord,

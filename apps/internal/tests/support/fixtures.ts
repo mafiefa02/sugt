@@ -284,6 +284,12 @@ export type ParticipantFeedbackFixture = {
   /** Optional comment per Aspect, as the form is — a Participant owes no prose. Null by default. */
   comments?: Partial<Record<ParticipantFeedbackAspect, string>>;
   ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>>;
+  /**
+   * When it was submitted. Defaults to the schema's `now()`. The Feedback list orders on this
+   * and pages by it, so a test that asserts on the order supplies distinct values; existing
+   * callers pass none and keep the default.
+   */
+  submittedAt?: Date;
 };
 
 /**
@@ -305,6 +311,7 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
       instructor: FINE,
       relevance: FINE,
       ...fixture.ratings,
+      ...(fixture.submittedAt ? { submittedAt: fixture.submittedAt } : {}),
     })
     .returning();
   return feedback!;
