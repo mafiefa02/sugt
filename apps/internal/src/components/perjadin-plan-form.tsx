@@ -16,6 +16,7 @@ import {
   MAX_TEACHING_TEAM_PER_PERJADIN,
   PIMPINAN,
   STREAMS,
+  timeZoneSuffix,
   TRANSPORT_MODES,
   type Stream,
   type TransportMode,
@@ -545,7 +546,7 @@ function PerjadinPlanForm({
 
                         <Field
                           id={`${idPrefix}-time-${school.id}-${index}`}
-                          label="Jam Mulai"
+                          label={`Jam Mulai${timeZoneSuffix(school.timeZone)}`}
                         >
                           <Input
                             id={`${idPrefix}-time-${school.id}-${index}`}

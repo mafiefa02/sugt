@@ -822,6 +822,9 @@ describe("perjadinDetail's new payload", () => {
     expect(detail?.eligibleSchools.map((s) => s.id).sort()).toEqual(
       schools.map((s) => s.id).sort(),
     );
+    // Each eligible School carries its Province's Time Zone, so the add-Session dialog can label
+    // its time input on selection (#165). The trip's Schools are all in JB (WIB).
+    expect(detail?.eligibleSchools.every((s) => s.timeZone === "WIB")).toBe(true);
     // The Group is Staff-only, so no People roster of Teaching Team is carried any more.
     expect(detail).not.toHaveProperty("teachingTeam");
     const session = detail?.sessions[0];

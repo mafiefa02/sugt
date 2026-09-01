@@ -5,6 +5,7 @@ import {
   perjadinAcquittal,
   perjadinDetail,
   perjadinDirectory,
+  perjadinPlan,
   planPerjadin,
   updatePerjadinLogistics,
   type PlanPerjadinInput,
@@ -1096,5 +1097,22 @@ describe("extra Staff and travel logistics", () => {
         returnZone: "WIT",
       }),
     ).rejects.toSatisfy(isNotStaffError);
+  });
+});
+
+describe("perjadinPlan", () => {
+  beforeEach(resetDatabase);
+
+  it("carries each Sub-Cluster School's Province Time Zone onto the plan form (#165)", async () => {
+    const caller = await staff();
+    await twoSchools();
+
+    const plan = await perjadinPlan(caller);
+    const schools = plan.subClusters.flatMap((subCluster) => subCluster.schools);
+
+    // The plan form labels a per-School Session's Jam Mulai with the School's zone. Both Schools
+    // are in JB (WIB); the field is present on every one, joined from `province`.
+    expect(schools.length).toBeGreaterThan(0);
+    expect(schools.every((school) => school.timeZone === "WIB")).toBe(true);
   });
 });

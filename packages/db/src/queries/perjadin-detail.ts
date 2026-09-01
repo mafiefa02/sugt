@@ -82,6 +82,11 @@ export type EligibleSchool = {
   id: string;
   name: string;
   kabupatenKota: string;
+  /**
+   * The School's Time Zone, from its Province — carried so the add-Session dialog labels its time
+   * input with the zone the moment a School is picked (#165). A School always sits in one Province.
+   */
+  timeZone: TimeZone;
 };
 
 /** Everything the Perjadin detail screen renders, and no money. */
@@ -215,9 +220,15 @@ export async function perjadinDetail(
       .orderBy(asc(person.fullName)),
     // The Schools of the trip's Sub-Cluster — the set a new Session may be added at (ADR-0016).
     db
-      .select({ id: school.id, name: school.name, kabupatenKota: school.kabupatenKota })
+      .select({
+        id: school.id,
+        name: school.name,
+        kabupatenKota: school.kabupatenKota,
+        timeZone: province.timeZone,
+      })
       .from(school)
       .innerJoin(perjadin, eq(perjadin.subClusterId, school.subClusterId))
+      .innerJoin(province, eq(province.code, school.provinceCode))
       .where(eq(perjadin.id, perjadinId))
       .orderBy(asc(school.name)),
     // "Diajar oleh" for every Session on the trip: the teacher rows those Sessions link to. Scoped
