@@ -10,15 +10,10 @@ import { SessionStatusBadge } from "-/components/session-labels";
 import type {
   AddPerjadinSessionResult,
   EditPerjadinSessionResult,
+  EligibleSchool,
   PerjadinSession,
 } from "@sugt/db/queries";
-import {
-  formatSessionStartTimeWithWib,
-  STREAMS,
-  type Stream,
-  type TimeZone,
-  timeZoneSuffix,
-} from "@sugt/domain";
+import { formatSessionStartTimeWithWib, STREAMS, type Stream, timeZoneSuffix } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -42,7 +37,6 @@ import {
 import Link from "next/link";
 import { useId, useState, useTransition } from "react";
 
-type EligibleSchool = { id: string; name: string; kabupatenKota: string; timeZone: TimeZone };
 type TripTeacher = { id: string; name: string };
 
 /**
