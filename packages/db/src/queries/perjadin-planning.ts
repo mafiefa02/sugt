@@ -582,10 +582,12 @@ async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
       schoolId: school.id,
       schoolName: school.name,
       kabupatenKota: school.kabupatenKota,
+      timeZone: province.timeZone,
     })
     .from(subCluster)
     .innerJoin(cluster, eq(cluster.id, subCluster.clusterId))
     .innerJoin(school, eq(school.subClusterId, subCluster.id))
+    .innerJoin(province, eq(province.code, school.provinceCode))
     .orderBy(asc(cluster.name), asc(subCluster.name), asc(school.name));
 
   const map = new Map<string, PlannableSubCluster>();
@@ -604,6 +606,7 @@ async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
       id: row.schoolId,
       name: row.schoolName,
       kabupatenKota: row.kabupatenKota,
+      timeZone: row.timeZone,
     });
   }
   return [...map.values()];

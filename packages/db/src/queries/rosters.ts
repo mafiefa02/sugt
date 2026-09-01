@@ -1,8 +1,9 @@
+import type { TimeZone } from "@sugt/domain";
 import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
 import { person } from "../schema/people";
-import { school } from "../schema/reference";
+import { province, school } from "../schema/reference";
 
 /**
  * The two lists every planning form picks from, and the Schools a Coverage selection names.
@@ -29,6 +30,13 @@ export type SelectedSchool = {
   name: string;
   /** Shown so a reader can confirm this is the right School, not a namesake. */
   kabupatenKota: string;
+  /**
+   * The School's Time Zone, from its Province (`province.time_zone`). Carried so a create/plan
+   * form can label its wall-clock time input with the zone the moment the School is picked
+   * ([#165](https://github.com/mafiefa02/sugt/issues/165)); a School always sits in one Province,
+   * so it is never absent.
+   */
+  timeZone: TimeZone;
 };
 
 /**
@@ -48,8 +56,14 @@ export async function selectedSchools(schoolIds: string[]): Promise<SelectedScho
   if (schoolIds.length === 0) return [];
 
   return db
-    .select({ id: school.id, name: school.name, kabupatenKota: school.kabupatenKota })
+    .select({
+      id: school.id,
+      name: school.name,
+      kabupatenKota: school.kabupatenKota,
+      timeZone: province.timeZone,
+    })
     .from(school)
+    .innerJoin(province, eq(province.code, school.provinceCode))
     .where(inArray(school.id, schoolIds))
     .orderBy(asc(school.name));
 }
