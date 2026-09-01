@@ -279,7 +279,10 @@ function SessionDialog({
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-time`}>Jam Mulai</Label>
+              {/* Zone shown in edit mode (the Session's School is known); omitted in add mode, where no School is picked yet — Ticket A2. */}
+              <Label htmlFor={`${idPrefix}-time`}>
+                Jam Mulai{session ? ` (${session.timeZone})` : ""}
+              </Label>
               <Input
                 id={`${idPrefix}-time`}
                 type="time"

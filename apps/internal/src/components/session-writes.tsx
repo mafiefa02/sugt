@@ -278,7 +278,7 @@ function MoveDate({ session }: { session: SessionDetail }) {
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor={timeId}>Jam Mulai</Label>
+            <Label htmlFor={timeId}>Jam Mulai ({session.timeZone})</Label>
             {/* Wall-clock time local to the School, in the School's Time Zone. */}
             <Input
               id={timeId}

@@ -236,7 +236,7 @@ function EditDialog({ session }: { session: OnlineSessionDetail }) {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-time`}>Jam Mulai</Label>
+              <Label htmlFor={`${idPrefix}-time`}>Jam Mulai ({session.timeZone})</Label>
               {/* Local wall-clock time, in the School's Time Zone. */}
               <Input
                 id={`${idPrefix}-time`}
