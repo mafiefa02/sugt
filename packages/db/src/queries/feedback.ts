@@ -129,11 +129,14 @@ export async function participantFeedbackPage(
 ): Promise<{ rows: ParticipantFeedbackRow[]; nextCursor: FeedbackCursor | null }> {
   const { filters, cursor } = args;
 
-  const conditions: (SQL | undefined)[] = [
-    bound(filters.reviewType, rowAverageExpr) ?? undefined,
-    bound(filters.instructor, participantFeedback.instructor) ?? undefined,
-    bound(filters.materials, participantFeedback.materials) ?? undefined,
-    bound(filters.relevance, participantFeedback.relevance) ?? undefined,
+  // Each `all` filter yields `null` and is filtered out below; the active ones are conjoined. The
+  // cursor predicate (when there is one) joins them, and `or()` can be `undefined`, so the list
+  // holds both — a single `!= null` at the `where` drops either.
+  const conditions: (SQL | null | undefined)[] = [
+    bound(filters.reviewType, rowAverageExpr),
+    bound(filters.instructor, participantFeedback.instructor),
+    bound(filters.materials, participantFeedback.materials),
+    bound(filters.relevance, participantFeedback.relevance),
   ];
 
   if (cursor !== null) {
@@ -178,7 +181,7 @@ export async function participantFeedbackPage(
     .from(participantFeedback)
     .innerJoin(session, eq(session.id, participantFeedback.sessionId))
     .innerJoin(school, eq(school.id, session.schoolId))
-    .where(and(...conditions.filter((c): c is SQL => c !== undefined)))
+    .where(and(...conditions.filter((c): c is SQL => c != null)))
     .orderBy(desc(participantFeedback.submittedAt), desc(participantFeedback.id))
     .limit(BATCH + 1);
 
