@@ -1,4 +1,4 @@
-import { CONCERN_AT_OR_BELOW } from "@sugt/domain";
+import { CONCERN_AT_OR_BELOW, PERJADIN_ASPECTS, type PerjadinAspect } from "@sugt/domain";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../client";
@@ -20,11 +20,12 @@ import type { Person } from "./caller";
  * foreign key into it would either block the edit or cascade every evaluation away — both tested,
  * both wrong (`docs/data-model.md`). So membership is checked at the write instead.
  *
- * The elaboration rule is the same one `session-records.ts` enforces twice: a Rating at or below
- * `CONCERN_AT_OR_BELOW` needs prose, checked here beside the write and by
- * `perjadin_evaluation_low_rating_needs_prose` behind it. **`lodging` is the one nullable Rating**,
- * and it drops out of the minimum rather than counting as a low one — Postgres `least()` ignores
- * NULLs, and this mirrors that by taking the minimum over the Ratings that were given.
+ * The elaboration rule is the same one `session-records.ts` enforces, but **retargeted per-Aspect**
+ * (#163, ADR-0023): a Rating at or below `CONCERN_AT_OR_BELOW` on Aspect X needs X's OWN Komentar,
+ * checked here beside the write and by `perjadin_evaluation_low_rating_needs_prose` behind it. A
+ * comment on a different Aspect no longer excuses a low one — the shared `problems` box that once
+ * did is gone. **`lodging` is the one nullable Rating**: a skipped hotel needs no comment, exactly
+ * as Postgres `least()` drops a NULL out of the minimum.
  */
 
 /** Trim to the prose the CHECK counts, or `null` when only whitespace is left. */
@@ -40,15 +41,6 @@ function constraintOf(error: unknown): string | null {
 }
 
 /**
- * Whether the lowest Rating that was **given** reaches the concerns threshold, which is when
- * prose becomes mandatory. A skipped `lodging` is not in the array, exactly as Postgres
- * `least()` leaves a NULL out of the minimum.
- */
-function needsProse(ratings: number[]): boolean {
-  return Math.min(...ratings) <= CONCERN_AT_OR_BELOW;
-}
-
-/**
  * The four Ratings on a Perjadin Evaluation. `lodging` is `null` when the Group did not stay
  * anywhere — a day trip has no hotel — and 1–10 otherwise. The other three are always given.
  */
@@ -59,12 +51,19 @@ export type PerjadinEvaluationRatings = {
   punctuality: number;
 };
 
-/** What the Perjadin Evaluation form collects. `null` on any prose field the filer left blank. */
+/**
+ * One optional comment per Aspect, keyed off `PERJADIN_ASPECTS` so the form, this type and the
+ * concerns query stay driven by the one list (as #102 keyed Participant Feedback off its own list).
+ * Each is nullable in the row, but the per-Aspect elaboration rule below *forces* the comment for
+ * any Aspect Rated low — so it belongs to the Rating it explains.
+ */
+export type PerjadinEvaluationComments = Record<PerjadinAspect, string | null>;
+
+/** What the Perjadin Evaluation form collects. `null` on any Komentar the filer left blank. */
 export type NewPerjadinEvaluation = {
   perjadinId: string;
   ratings: PerjadinEvaluationRatings;
-  problems: string | null;
-  suggestions: string | null;
+  comments: PerjadinEvaluationComments;
 };
 
 export type FilePerjadinEvaluationResult =
@@ -75,7 +74,10 @@ export type FilePerjadinEvaluationResult =
    * is a value rather than a throw because a stale link is a state a correct screen can reach.
    */
   | { outcome: "not-a-group-member" }
-  /** A Rating of 7 or below with no prose. `perjadin_evaluation_low_rating_needs_prose` refuses it too. */
+  /**
+   * A Rating of 7 or below on an Aspect whose OWN Komentar is blank.
+   * `perjadin_evaluation_low_rating_needs_prose` refuses it too, per-Aspect (#163).
+   */
   | { outcome: "prose-required" }
   /** This member already filed one for this Perjadin, by `perjadin_evaluation_one_per_filer`. */
   | { outcome: "already-filed" };
@@ -91,14 +93,29 @@ export async function filePerjadinEvaluation(
   caller: Person,
   input: NewPerjadinEvaluation,
 ): Promise<FilePerjadinEvaluationResult> {
-  const problems = prose(input.problems);
-  const rated = [
-    input.ratings.lodging,
-    input.ratings.transport,
-    input.ratings.meals,
-    input.ratings.punctuality,
-  ].filter((value): value is number => value !== null);
-  if (needsProse(rated) && problems === null) return { outcome: "prose-required" };
+  // Trim each Komentar blank → null once, and reuse it for both the gate and the insert so the
+  // rule the client sees and the row that lands agree on what counts as "said".
+  const comments: PerjadinEvaluationComments = {
+    lodging: prose(input.comments.lodging),
+    transport: prose(input.comments.transport),
+    meals: prose(input.comments.meals),
+    punctuality: prose(input.comments.punctuality),
+  };
+  const ratings: Record<PerjadinAspect, number | null> = {
+    lodging: input.ratings.lodging,
+    transport: input.ratings.transport,
+    meals: input.ratings.meals,
+    punctuality: input.ratings.punctuality,
+  };
+
+  // Per-Aspect, not trip-wide: a low Aspect owes ITS OWN Komentar, and prose on a different
+  // Aspect does not satisfy it (#163). A null `lodging` is not low — it drops out of the check
+  // exactly as Postgres `least()` leaves a NULL out of the minimum — so it never demands one.
+  const lowAspectLacksProse = PERJADIN_ASPECTS.some((aspect) => {
+    const rating = ratings[aspect];
+    return rating !== null && rating <= CONCERN_AT_OR_BELOW && comments[aspect] === null;
+  });
+  if (lowAspectLacksProse) return { outcome: "prose-required" };
 
   try {
     return await db.transaction(async (tx) => {
@@ -119,8 +136,10 @@ export async function filePerjadinEvaluation(
           transport: input.ratings.transport,
           meals: input.ratings.meals,
           punctuality: input.ratings.punctuality,
-          problems,
-          suggestions: prose(input.suggestions),
+          lodgingComment: comments.lodging,
+          transportComment: comments.transport,
+          mealsComment: comments.meals,
+          punctualityComment: comments.punctuality,
         })
         .returning({ id: perjadinEvaluation.id });
 

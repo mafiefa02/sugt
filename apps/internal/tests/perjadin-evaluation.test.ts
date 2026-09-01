@@ -1,5 +1,9 @@
 import { db, schema } from "@sugt/db";
-import { filePerjadinEvaluation, type PerjadinEvaluationRatings } from "@sugt/db/queries";
+import {
+  filePerjadinEvaluation,
+  type PerjadinEvaluationComments,
+  type PerjadinEvaluationRatings,
+} from "@sugt/db/queries";
 import { CONCERN_AT_OR_BELOW } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -51,6 +55,14 @@ async function aTrip(picPersonId: string, memberPersonId: string) {
 /** Every Rating comfortably above the threshold — an overnight trip that went well. */
 const FINE: PerjadinEvaluationRatings = { lodging: 9, transport: 9, meals: 9, punctuality: 9 };
 
+/** No Komentar on any Aspect — the common case when nothing was Rated low. */
+const NO_COMMENTS: PerjadinEvaluationComments = {
+  lodging: null,
+  transport: null,
+  meals: null,
+  punctuality: null,
+};
+
 /** How many Perjadin Evaluations landed against a trip. */
 async function evaluationCount(perjadinId: string) {
   const rows = await db
@@ -71,8 +83,7 @@ describe("filePerjadinEvaluation", () => {
     const result = await filePerjadinEvaluation(traveller, {
       perjadinId: trip.id,
       ratings: FINE,
-      problems: null,
-      suggestions: null,
+      comments: NO_COMMENTS,
     });
 
     expect(result.outcome).toBe("filed");
@@ -87,8 +98,7 @@ describe("filePerjadinEvaluation", () => {
     const result = await filePerjadinEvaluation(pic, {
       perjadinId: trip.id,
       ratings: FINE,
-      problems: null,
-      suggestions: null,
+      comments: NO_COMMENTS,
     });
 
     expect(result.outcome).toBe("filed");
@@ -102,8 +112,7 @@ describe("filePerjadinEvaluation", () => {
     const result = await filePerjadinEvaluation(traveller, {
       perjadinId: trip.id,
       ratings: { ...FINE, lodging: null },
-      problems: null,
-      suggestions: null,
+      comments: NO_COMMENTS,
     });
 
     expect(result.outcome).toBe("filed");
@@ -118,8 +127,7 @@ describe("filePerjadinEvaluation", () => {
     const result = await filePerjadinEvaluation(outsider, {
       perjadinId: trip.id,
       ratings: FINE,
-      problems: null,
-      suggestions: null,
+      comments: NO_COMMENTS,
     });
 
     expect(result).toEqual({ outcome: "not-a-group-member" });
@@ -134,8 +142,7 @@ describe("filePerjadinEvaluation", () => {
     const result = await filePerjadinEvaluation(traveller, {
       perjadinId: trip.id,
       ratings: { ...FINE, transport: 4 },
-      problems: null,
-      suggestions: null,
+      comments: NO_COMMENTS,
     });
 
     expect(result).toEqual({ outcome: "prose-required" });
@@ -150,11 +157,38 @@ describe("filePerjadinEvaluation", () => {
     const result = await filePerjadinEvaluation(traveller, {
       perjadinId: trip.id,
       ratings: { ...FINE, transport: 4 },
-      problems: "Mobil sewaan telat dua jam",
-      suggestions: null,
+      comments: { ...NO_COMMENTS, transport: "Mobil sewaan telat dua jam" },
     });
 
     expect(result.outcome).toBe("filed");
+  });
+
+  it("refuses a low Aspect whose OWN Komentar is blank — a comment on another Aspect does not satisfy it", async () => {
+    const pic = await staff();
+    const traveller = await member();
+    const trip = await aTrip(pic.id, traveller.id);
+
+    // `transport` is the low Aspect, but the prose sits on `meals`. The old shared Kendala would
+    // have accepted this; the per-Aspect rule (#163) refuses it, because a comment about the food
+    // cannot explain a low transport score.
+    const refused = await filePerjadinEvaluation(traveller, {
+      perjadinId: trip.id,
+      ratings: { ...FINE, transport: 4 },
+      comments: { ...NO_COMMENTS, meals: "Makan siang enak" },
+    });
+
+    expect(refused).toEqual({ outcome: "prose-required" });
+    expect(await evaluationCount(trip.id)).toBe(0);
+
+    // The same low Aspect, now with its OWN Komentar, files.
+    const filed = await filePerjadinEvaluation(traveller, {
+      perjadinId: trip.id,
+      ratings: { ...FINE, transport: 4 },
+      comments: { ...NO_COMMENTS, transport: "Mobil sewaan telat dua jam" },
+    });
+
+    expect(filed.outcome).toBe("filed");
+    expect(await evaluationCount(trip.id)).toBe(1);
   });
 
   it("refuses a second Evaluation from the same member for the same trip", async () => {
@@ -164,8 +198,7 @@ describe("filePerjadinEvaluation", () => {
     const evaluation = {
       perjadinId: trip.id,
       ratings: FINE,
-      problems: null,
-      suggestions: null,
+      comments: NO_COMMENTS,
     };
 
     await filePerjadinEvaluation(traveller, evaluation);
@@ -203,7 +236,6 @@ describe("the nullable lodging invariant", () => {
         transport: 9,
         meals: 9,
         punctuality: 9,
-        problems: null,
       })
       .returning({ id: schema.perjadinEvaluation.id });
 
@@ -221,7 +253,6 @@ describe("the nullable lodging invariant", () => {
         transport: 4,
         meals: 9,
         punctuality: 9,
-        problems: null,
       }),
     );
 
@@ -238,7 +269,6 @@ describe("the nullable lodging invariant", () => {
       transport: 9,
       meals: 9,
       punctuality: 9,
-      problems: null,
     });
 
     // The predicate the concerns index carries, read back against the row, with the threshold

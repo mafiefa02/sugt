@@ -4,6 +4,7 @@ import { db, schema } from "@sugt/db";
 import type {
   ClassKind,
   ParticipantFeedbackAspect,
+  PerjadinAspect,
   SessionStatus,
   Stream,
   Role,
@@ -324,15 +325,27 @@ export type PerjadinEvaluationFixture = {
   /** The one nullable Rating — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
   lodging?: number | null;
   ratings?: Partial<Record<"transport" | "meals" | "punctuality", number>>;
+  /**
+   * Optional Komentar per Aspect, as the form is (#163). A low Aspect with none supplied gets
+   * `WENT_WRONG` on its OWN comment so `perjadin_evaluation_low_rating_needs_prose` is satisfied —
+   * so a caller passing FINE Ratings needs no comments at all.
+   */
+  comments?: Partial<Record<PerjadinAspect, string>>;
 };
 
-/** How the trip went. Four Aspects, `lodging` nullable, the elaboration rule on the other prose. */
+/** How the trip went. Four Aspects, `lodging` nullable, the elaboration rule now per-Aspect. */
 export async function addPerjadinEvaluation(fixture: PerjadinEvaluationFixture) {
   const ratings = { transport: FINE, meals: FINE, punctuality: FINE, ...fixture.ratings };
   const lodging = fixture.lodging === undefined ? FINE : fixture.lodging;
-  const given = [lodging, ...Object.values(ratings)].filter(
-    (rating): rating is number => rating !== null,
-  );
+  const ratingByAspect: Record<PerjadinAspect, number | null> = { lodging, ...ratings };
+  // A low Aspect owes ITS OWN Komentar (#163) — fill it with WENT_WRONG unless the test supplied
+  // one; a null (skipped) lodging is never low and needs none.
+  const commentFor = (aspect: PerjadinAspect): string | null => {
+    const supplied = fixture.comments?.[aspect];
+    if (supplied !== undefined) return supplied;
+    const rating = ratingByAspect[aspect];
+    return rating !== null && needsProse([rating]) ? WENT_WRONG : null;
+  };
   const [evaluation] = await db
     .insert(schema.perjadinEvaluation)
     .values({
@@ -340,7 +353,10 @@ export async function addPerjadinEvaluation(fixture: PerjadinEvaluationFixture) 
       filedByPersonId: fixture.filedByPersonId,
       lodging,
       ...ratings,
-      problems: needsProse(given) ? WENT_WRONG : null,
+      lodgingComment: commentFor("lodging"),
+      transportComment: commentFor("transport"),
+      mealsComment: commentFor("meals"),
+      punctualityComment: commentFor("punctuality"),
     })
     .returning();
   return evaluation!;

@@ -63,10 +63,10 @@ const ALWAYS_RATED = PERJADIN_ASPECTS.filter(
   (aspect): aspect is AlwaysRated => aspect !== "lodging",
 );
 
-const INSTRUCTION = `Beri nilai ${RATING_MIN}–${RATING_MAX} untuk tiap aspek. Nilai ${CONCERN_AT_OR_BELOW} ke bawah wajib disertai penjelasan pada Kendala.`;
+const INSTRUCTION = `Beri nilai ${RATING_MIN}–${RATING_MAX} untuk tiap aspek. Nilai ${CONCERN_AT_OR_BELOW} ke bawah wajib disertai penjelasan pada Komentar aspek tersebut.`;
 
-/** The message the Kendala field carries when a low Rating owes prose. */
-const PROSE_REQUIRED = `Nilai ${CONCERN_AT_OR_BELOW} ke bawah wajib disertai penjelasan.`;
+/** The message an Aspect's Komentar carries when its own low Rating owes prose. */
+const PROSE_REQUIRED = `Nilai ${CONCERN_AT_OR_BELOW} ke bawah wajib disertai penjelasan pada Komentar aspek ini.`;
 
 /** What a refusal the screen did not predict says — a page held open while the trip's Group changed. */
 const STALE_MESSAGES = {
@@ -79,9 +79,12 @@ function PerjadinEvaluationDialog({ perjadinId }: { perjadinId: string }) {
   const [lodging, setLodging] = useState<number | undefined>(undefined);
   const [noLodging, setNoLodging] = useState(false);
   const [others, setOthers] = useState<Partial<Record<AlwaysRated, number>>>({});
-  const [problems, setProblems] = useState("");
-  const [suggestions, setSuggestions] = useState("");
-  const [proseNeeded, setProseNeeded] = useState(false);
+  // One optional Komentar per Aspect, so a comment belongs to the Rating it explains (#163) — the
+  // shared Kendala/Saran pair is gone. Kept as a record like `others`, driven off the domain list.
+  const [comments, setComments] = useState<Partial<Record<PerjadinAspect, string>>>({});
+  // Which Aspects are lit as owing prose — a set, not one flag, because the requirement is now
+  // per-Aspect: a low `transport` highlights only Transportasi's Komentar.
+  const [proseNeeded, setProseNeeded] = useState<Partial<Record<PerjadinAspect, boolean>>>({});
   const [stale, setStale] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const namePrefix = useId();
@@ -90,6 +93,37 @@ function PerjadinEvaluationDialog({ perjadinId }: { perjadinId: string }) {
   const othersRated = ALWAYS_RATED.every((aspect) => others[aspect] !== undefined);
   const lodgingSettled = noLodging || lodging !== undefined;
   const canSubmit = othersRated && lodgingSettled;
+
+  /** Clear one Aspect's prose warning — its Komentar was typed, or its Rating was raised. */
+  function clearProse(aspect: PerjadinAspect) {
+    setProseNeeded((previous) => ({ ...previous, [aspect]: false }));
+  }
+
+  /**
+   * Which low Aspects still owe their own Komentar. Per-Aspect: prose on a different Aspect does
+   * not satisfy a low one (#163). A null `lodging` is not low — it drops out exactly as Postgres
+   * `least()` leaves a NULL out of the minimum — so it never appears here.
+   */
+  function proseGaps(ratings: PerjadinEvaluationRatings): Partial<Record<PerjadinAspect, boolean>> {
+    const byAspect: Record<PerjadinAspect, number | null> = {
+      lodging: ratings.lodging,
+      transport: ratings.transport,
+      meals: ratings.meals,
+      punctuality: ratings.punctuality,
+    };
+    const gaps: Partial<Record<PerjadinAspect, boolean>> = {};
+    for (const aspect of PERJADIN_ASPECTS) {
+      const rating = byAspect[aspect];
+      if (
+        rating !== null &&
+        rating <= CONCERN_AT_OR_BELOW &&
+        (comments[aspect]?.trim() ?? "") === ""
+      ) {
+        gaps[aspect] = true;
+      }
+    }
+    return gaps;
+  }
 
   function submit() {
     if (!canSubmit) return;
@@ -104,14 +138,11 @@ function PerjadinEvaluationDialog({ perjadinId }: { perjadinId: string }) {
       punctuality: others.punctuality!,
     };
 
-    // Checked here so the message lands on the Kendala field, and again in the write function
-    // so it is a rule rather than a convenience. A null lodging is not in the set, exactly as
-    // Postgres `least()` leaves it out.
-    const given = [ratings.lodging, ratings.transport, ratings.meals, ratings.punctuality].filter(
-      (value): value is number => value !== null,
-    );
-    if (Math.min(...given) <= CONCERN_AT_OR_BELOW && problems.trim() === "") {
-      setProseNeeded(true);
+    // Checked here so each message lands on its own Aspect's Komentar, and again in the write
+    // function so it is a rule rather than a convenience.
+    const gaps = proseGaps(ratings);
+    if (Object.keys(gaps).length > 0) {
+      setProseNeeded(gaps);
       return;
     }
 
@@ -119,14 +150,18 @@ function PerjadinEvaluationDialog({ perjadinId }: { perjadinId: string }) {
       const result = await filePerjadinEvaluationAction({
         perjadinId,
         ratings,
-        problems: blankToNull(problems),
-        suggestions: blankToNull(suggestions),
+        comments: {
+          lodging: blankToNull(comments.lodging ?? ""),
+          transport: blankToNull(comments.transport ?? ""),
+          meals: blankToNull(comments.meals ?? ""),
+          punctuality: blankToNull(comments.punctuality ?? ""),
+        },
       });
       if (result.outcome === "filed") {
         setOpen(false);
         return;
       }
-      if (result.outcome === "prose-required") setProseNeeded(true);
+      if (result.outcome === "prose-required") setProseNeeded(proseGaps(ratings));
       else setStale(STALE_MESSAGES[result.outcome]);
     });
   }
@@ -160,7 +195,7 @@ function PerjadinEvaluationDialog({ perjadinId }: { perjadinId: string }) {
               disabled={noLodging}
               onValueChange={(value) => {
                 setLodging(value);
-                setProseNeeded(false);
+                clearProse("lodging");
               }}
             />
             <Label className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
@@ -169,45 +204,59 @@ function PerjadinEvaluationDialog({ perjadinId }: { perjadinId: string }) {
                 checked={noLodging}
                 onCheckedChange={(checked) => {
                   setNoLodging(checked === true);
-                  if (checked === true) setLodging(undefined);
-                  // Skipping lodging can only lower the minimum's obligations, never raise them,
-                  // so a prose warning from a now-removed low lodging must clear like the others.
-                  setProseNeeded(false);
+                  if (checked === true) {
+                    setLodging(undefined);
+                    // A skipped hotel has no Komentar and owes none — clear both so a stale one
+                    // cannot travel or light up. Skipping only lowers obligations, never raises.
+                    setComments((previous) => ({ ...previous, lodging: "" }));
+                  }
+                  clearProse("lodging");
                 }}
               />
               Tidak menginap (perjalanan pulang-hari)
             </Label>
+            {/* Lodging's Komentar is hidden on a day trip: there is no hotel to comment on. */}
+            {!noLodging && (
+              <ProseField
+                label={`Komentar ${PERJADIN_ASPECT_LABELS.lodging}`}
+                value={comments.lodging ?? ""}
+                invalid={proseNeeded.lodging}
+                message={proseNeeded.lodging ? PROSE_REQUIRED : undefined}
+                onChange={(value) => {
+                  setComments((previous) => ({ ...previous, lodging: value }));
+                  clearProse("lodging");
+                }}
+              />
+            )}
           </div>
 
           {ALWAYS_RATED.map((aspect) => (
-            <RatingField
+            <div
               key={aspect}
-              namePrefix={namePrefix}
-              aspect={aspect}
-              label={PERJADIN_ASPECT_LABELS[aspect]}
-              value={others[aspect]}
-              onValueChange={(value) => {
-                setOthers((previous) => ({ ...previous, [aspect]: value }));
-                setProseNeeded(false);
-              }}
-            />
+              className="grid gap-2"
+            >
+              <RatingField
+                namePrefix={namePrefix}
+                aspect={aspect}
+                label={PERJADIN_ASPECT_LABELS[aspect]}
+                value={others[aspect]}
+                onValueChange={(value) => {
+                  setOthers((previous) => ({ ...previous, [aspect]: value }));
+                  clearProse(aspect);
+                }}
+              />
+              <ProseField
+                label={`Komentar ${PERJADIN_ASPECT_LABELS[aspect]}`}
+                value={comments[aspect] ?? ""}
+                invalid={proseNeeded[aspect]}
+                message={proseNeeded[aspect] ? PROSE_REQUIRED : undefined}
+                onChange={(value) => {
+                  setComments((previous) => ({ ...previous, [aspect]: value }));
+                  clearProse(aspect);
+                }}
+              />
+            </div>
           ))}
-
-          <ProseField
-            label="Kendala"
-            value={problems}
-            invalid={proseNeeded}
-            message={proseNeeded ? PROSE_REQUIRED : undefined}
-            onChange={(value) => {
-              setProblems(value);
-              setProseNeeded(false);
-            }}
-          />
-          <ProseField
-            label="Saran"
-            value={suggestions}
-            onChange={setSuggestions}
-          />
         </div>
 
         <DialogFooter>
@@ -270,7 +319,7 @@ function RatingField({
   );
 }
 
-/** One free-text field. `Kendala` carries the elaboration message when a low Rating owes one. */
+/** One free-text field. An Aspect's Komentar carries the elaboration message when its own Rating is low. */
 function ProseField({
   label,
   value,
