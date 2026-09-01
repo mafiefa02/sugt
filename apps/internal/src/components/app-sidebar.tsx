@@ -7,6 +7,7 @@ import {
   CalendarPlus,
   LayoutDashboard,
   ListVideo,
+  MessageSquare,
   Newspaper,
   Plane,
   School,
@@ -42,6 +43,7 @@ const NAV = [
   { href: "/sekolah", label: "Direktori Sekolah", icon: School, staffOnly: false },
   { href: "/kelompok-sekolah", label: "Kelompok Sekolah", icon: Boxes, staffOnly: false },
   { href: "/concerns", label: "Concerns", icon: TriangleAlert, staffOnly: false },
+  { href: "/feedback", label: "Feedback", icon: MessageSquare, staffOnly: false },
   { href: "/perjadin", label: "Perjadin", icon: Plane, staffOnly: false },
   {
     href: "/rencanakan-perjadin",
