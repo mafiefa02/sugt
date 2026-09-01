@@ -155,11 +155,11 @@ One of the named things an evaluation scores. Each of the four evaluations has i
 _Avoid_: category, criterion, dimension, metric, section
 
 **Rating**:
-The score one person gives one Aspect, from 1 to 10. Ratings are the only thing in the system anything counts. An Aspect reaches the concerns list when any single Rating of it is 7 or below — one low score is enough and is never averaged away — and on a Class Record or a Session Record, a Rating that low cannot be filed without saying why.
+The score one person gives one Aspect, from 1 to 10. Ratings are the only thing in the system anything counts. An Aspect reaches the concerns list when any single Rating of it is 7 or below — one low score is enough and is never averaged away — and on a Class Record, a Session Record or a Perjadin Evaluation, a Rating that low cannot be filed without saying why. On a Perjadin Evaluation that "why" is per-Aspect: the explanation goes on that Aspect's own Komentar, not a shared box.
 _Avoid_: grade, mark, health, RAG, status
 
 **Perjadin Evaluation**:
-How the trip went, as against how the teaching went: a Rating for each of **Lodging**, **Transport**, **Meals** and **Punctuality**, plus what went wrong and what to do differently. Only the Group that travelled may file one, and each of them files at most one. Open to anyone signed in — it carries no money.
+How the trip went, as against how the teaching went: a Rating for each of **Lodging**, **Transport**, **Meals** and **Punctuality**, each carrying an optional comment, required only when that Aspect's own Rating is low (#163, ADR-0023). Only the Group that travelled may file one, and each of them files at most one. Open to anyone signed in — it carries no money.
 _Avoid_: travel evaluation ("travel" is reserved against **Perjadin**), trip report, Perjadin Report (that is the acquittal, and is Staff-only)
 
 **Participant**:

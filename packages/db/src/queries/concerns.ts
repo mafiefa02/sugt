@@ -93,9 +93,11 @@ function unpivot(alias: string, aspects: readonly string[]): SQL {
 }
 
 /**
- * `('aspect', src.aspect, src.aspect_comment), …` — the unpivot for Participant Feedback, where
- * each Aspect carries its own optional comment (#102). Emits `(aspect, rating, said)` triples so a
- * low Rating shows the prose written about *that* Aspect, not one comment shared across all three.
+ * `('aspect', src.aspect, src.aspect_comment), …` — the unpivot for the two sources that carry a
+ * comment per Aspect: Participant Feedback (#102) and Perjadin Evaluation (#163). Emits
+ * `(aspect, rating, said)` triples so a low Rating shows the prose written about *that* Aspect, not
+ * one comment shared across the rubric. The `*_comment` column names line up by convention with the
+ * Aspect names, so this works for any source whose columns follow it.
  */
 function unpivotWithComment(alias: string, aspects: readonly string[]): SQL {
   return sql.raw(
@@ -178,12 +180,12 @@ export async function concerns(_caller: Person): Promise<Concern[]> {
 
         select 'perjadin-evaluation' as source, pj.destination as subject,
                r.aspect as aspect, r.rating as rating, p.full_name as who,
-               e.problems as said, e.created_at as at,
+               r.said as said, e.created_at as at,
                null::uuid as session_id, e.perjadin_id as perjadin_id
           from ${perjadinEvaluation} as e
           join ${perjadin} as pj on pj.id = e.perjadin_id
           join ${person} as p on p.id = e.filed_by_person_id
-          cross join lateral (values ${unpivot("e", PERJADIN_ASPECTS)}) as r(aspect, rating)
+          cross join lateral (values ${unpivotWithComment("e", PERJADIN_ASPECTS)}) as r(aspect, rating, said)
          where ${least("e", PERJADIN_ASPECTS)} <= ${THRESHOLD} and r.rating <= ${THRESHOLD}
       ) as concerns`,
     )

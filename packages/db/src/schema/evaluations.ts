@@ -302,8 +302,18 @@ export const perjadinEvaluation = pgTable(
     meals: rating("meals"),
     punctuality: rating("punctuality"),
 
-    problems: text("problems"),
-    suggestions: text("suggestions"),
+    // One optional comment per Aspect, so a comment belongs to the Rating it explains and the
+    // concerns list can show the prose for the Aspect actually Rated low — the shared `problems`
+    // / `suggestions` pair could not say which of the four it was about (#163, ADR-0023). This is
+    // the #102 reversal applied here, with one difference: the elaboration CHECK below now *forces*
+    // an Aspect's own comment when that Aspect is low, so these are nullable in the column but
+    // conditionally-required per Aspect — a discipline `participant_feedback` never owed. The
+    // trip-wide `suggestions` / Saran box is retired outright: forward-looking advice with no
+    // per-Aspect home now lives inside the relevant Aspect's Komentar, or nowhere.
+    lodgingComment: text("lodging_comment"),
+    transportComment: text("transport_comment"),
+    mealsComment: text("meals_comment"),
+    punctualityComment: text("punctuality_comment"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -316,10 +326,20 @@ export const perjadinEvaluation = pgTable(
       meals: t.meals,
       punctuality: t.punctuality,
     }),
+    // Per-Aspect elaboration, not trip-wide. Each Aspect is either not-low or carries its OWN
+    // Komentar, and all four must hold — so a low `transport` cannot be excused by prose written
+    // about the hotel (#163). `lodging` is guarded by `IS NULL` first, the same way `least()`
+    // drops a skipped hotel out of the minimum: a day trip owes no lodging comment.
     check(
       "perjadin_evaluation_low_rating_needs_prose",
-      sql`least(${t.lodging}, ${t.transport}, ${t.meals}, ${t.punctuality}) > ${sql.raw(String(CONCERN))}
-          or btrim(coalesce(${t.problems}, '')) <> ''`,
+      sql`(${t.lodging} is null or ${t.lodging} > ${sql.raw(String(CONCERN))}
+             or btrim(coalesce(${t.lodgingComment}, '')) <> '')
+          and (${t.transport} > ${sql.raw(String(CONCERN))}
+             or btrim(coalesce(${t.transportComment}, '')) <> '')
+          and (${t.meals} > ${sql.raw(String(CONCERN))}
+             or btrim(coalesce(${t.mealsComment}, '')) <> '')
+          and (${t.punctuality} > ${sql.raw(String(CONCERN))}
+             or btrim(coalesce(${t.punctualityComment}, '')) <> '')`,
     ),
     index("perjadin_evaluation_concerns_idx")
       .on(sql`least(lodging, transport, meals, punctuality)`)

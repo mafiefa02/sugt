@@ -173,6 +173,7 @@ export {
   filePerjadinEvaluation,
   type FilePerjadinEvaluationResult,
   type NewPerjadinEvaluation,
+  type PerjadinEvaluationComments,
   type PerjadinEvaluationRatings,
 } from "./perjadin-evaluation";
 export {

@@ -853,17 +853,23 @@ create table perjadin_evaluation (
   meals        smallint not null check (meals       between 1 and 10),
   punctuality  smallint not null check (punctuality between 1 and 10),
 
-  problems     text,
-  suggestions  text,
+  lodging_comment      text,
+  transport_comment    text,
+  meals_comment        text,
+  punctuality_comment  text,
 
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
 
   unique (perjadin_id, filed_by_person_id),
 
+  -- Per-Aspect elaboration (ADR-0023): each Aspect is not-low or carries its OWN comment, and all
+  -- four must hold. `lodging` is guarded by `is null` first, so a skipped hotel owes no comment.
   check (
-    least(lodging, transport, meals, punctuality) > 7
-    or btrim(coalesce(problems, '')) <> ''
+    (lodging is null or lodging > 7 or btrim(coalesce(lodging_comment, '')) <> '')
+    and (transport   > 7 or btrim(coalesce(transport_comment, ''))   <> '')
+    and (meals       > 7 or btrim(coalesce(meals_comment, ''))       <> '')
+    and (punctuality > 7 or btrim(coalesce(punctuality_comment, '')) <> '')
   )
 );
 
@@ -872,9 +878,15 @@ create index perjadin_evaluation_concerns_idx
   where least(lodging, transport, meals, punctuality) <= 7;
 ```
 
-Same shape as a Session Record, on purpose: one row per person, five or four Ratings beside the
-prose, the same 1–10 scale, the same elaboration rule at the same threshold. Two evaluation
-forms that behave differently would be two things to learn.
+Close to a Session Record's shape — one row per person, four Ratings, the same 1–10 scale and
+threshold — but the prose is no longer a shared `problems`/`suggestions` pair. Each Aspect now
+carries its **own** optional comment, and the elaboration rule is retargeted per-Aspect: a low
+Aspect owes _its own_ comment, not one shared box (#163, [ADR-0023](adr/0023-perjadin-evaluation-has-a-comment-per-aspect.md)).
+A comment about the hotel can no longer excuse a low transport score, and the concerns list shows
+each low Aspect the prose written about that Aspect. The trip-wide "Saran / what to do differently"
+box is retired outright — advice with no per-Aspect home now lives inside the relevant Komentar, or
+nowhere. This mirrors the #102 reversal on `participant_feedback`, plus the per-Aspect CHECK that
+Participant Feedback (which owes no prose) never needed.
 
 **`lodging` is the one nullable Rating in the system, because a day-trip has no hotel.** Not
 every Perjadin involves a night away — the programme budget carries at least one group visiting
@@ -967,13 +979,15 @@ select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
 union all
 
 select 'Perjadin Evaluation', pj.destination, r.aspect, r.rating,
-       p.full_name, e.problems, e.created_at
+       p.full_name, r.said, e.created_at
   from perjadin_evaluation e
   join perjadin pj on pj.id = e.perjadin_id
   join person p on p.id = e.filed_by_person_id
-  cross join lateral (values ('lodging', e.lodging), ('transport',   e.transport),
-                             ('meals',   e.meals),   ('punctuality', e.punctuality))
-                     as r(aspect, rating)
+  cross join lateral (values ('lodging',     e.lodging,     e.lodging_comment),
+                             ('transport',   e.transport,   e.transport_comment),
+                             ('meals',       e.meals,       e.meals_comment),
+                             ('punctuality', e.punctuality, e.punctuality_comment))
+                     as r(aspect, rating, said)
  where r.rating <= 7
 
  order by when_ desc;
