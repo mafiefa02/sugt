@@ -12,7 +12,7 @@ import type {
   EditPerjadinSessionResult,
   PerjadinSession,
 } from "@sugt/db/queries";
-import { formatSessionStartTimeWithWib, STREAMS, type Stream } from "@sugt/domain";
+import { formatSessionStartTimeWithWib, STREAMS, type Stream, timeZoneSuffix } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -279,9 +279,9 @@ function SessionDialog({
               />
             </div>
             <div className="grid gap-1.5">
-              {/* Zone shown in edit mode (the Session's School is known); omitted in add mode, where no School is picked yet — Ticket A2. */}
+              {/* Zone shown in edit mode (the Session's School is known); omitted in add mode, where no School is picked yet, so `session` is undefined and the suffix is empty. */}
               <Label htmlFor={`${idPrefix}-time`}>
-                Jam Mulai{session ? ` (${session.timeZone})` : ""}
+                Jam Mulai{timeZoneSuffix(session?.timeZone)}
               </Label>
               <Input
                 id={`${idPrefix}-time`}
