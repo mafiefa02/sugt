@@ -121,6 +121,17 @@ export function formatSessionStartTimeWithWib(time: string, zone: TimeZone): str
 }
 
 /**
+ * The parenthesised Time Zone tag a time-of-day input label carries so a Staffer knows which
+ * zone they are entering — `" (WITA)"`, or `""` when no zone is in scope yet (a Session with
+ * no School picked, a legacy Perjadin before its return zone is chosen). Prepend it to a label:
+ * `` `Jam Mulai${timeZoneSuffix(zone)}` ``. Named once, like `formatIdr`, so the four internal
+ * labels that carry it cannot drift apart on spacing or on the "no zone yet" empty case.
+ */
+export function timeZoneSuffix(zone: TimeZone | "" | null | undefined): string {
+  return zone ? ` (${zone})` : "";
+}
+
+/**
  * Group a Rupiah amount the way every screen shows it: `id-ID` locale, dot separators,
  * `formatIdr(1000000) === "1.000.000"`. Returns the grouped digits only — each call site
  * keeps its own literal `Rp ` prefix, so this is exactly the `n.toLocaleString("id-ID")` the
