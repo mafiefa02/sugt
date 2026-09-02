@@ -17,8 +17,10 @@
  *    (`./staff-only.ts`), which throws a distinguishable typed error. The app
  *    translates it into a 403 — server-side, at the call site. This convention read
  *    *"Money opens with…"* until Jadwalkan Sesi daring, which is Staff-only and is not
- *    money: reading money is Staff-only by ADR-0004, and **arranging delivery** is
- *    Staff-only by the surface list. One guard, two reasons — see `./staff-only.ts`.
+ *    money — and since #180 money **reads** are open, so the guard is not about reading money
+ *    either: **writing** money is Staff-only (ADR-0026 reversed ADR-0004's read half), and
+ *    **arranging delivery** is Staff-only by the surface list. One guard, two reasons — see
+ *    `./staff-only.ts`.
  * 5. **A write function owns its own transaction.** Several writes are
  *    multi-statement: Rencanakan Perjadin writes `perjadin`, `group_member` and N
  *    `session` rows; a Group is replaced wholesale. The boundary belongs in the function

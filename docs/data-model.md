@@ -1046,10 +1046,12 @@ predicates, which is why moving it is a migration.
 
 A Perjadin Evaluation carries **no money**, so it follows
 [ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md)'s open-delivery rule and
-not the Perjadin Report's Staff-only rule. Anyone signed in can read one; only that trip's Group
-can write one. This is worth stating because the table hangs off a Perjadin and a reader who
-knows the Report is Staff-only will assume this is too. Teaching Team members file these — they
-are the ones who slept in the hotel.
+the same open-to-read rule the Perjadin Report itself now follows (its money-read gate was opened by
+[ADR-0026](./adr/0026-money-is-open-to-read-and-staff-only-to-write.md), #180). Anyone signed in can
+read one; only that trip's Group can write one. This is worth stating because the table hangs off a
+Perjadin, and the difference is not who reads — both are open — but who **writes**: an Evaluation is
+written by the travellers, the Report's money by Staff. Teaching Team members file these — they are
+the ones who slept in the hotel.
 
 ---
 
@@ -1332,10 +1334,12 @@ does not weaken it: naming who a per-diem was paid to says nothing about how the
 This paragraph read _"A transaction is not attributed to a person"_ until that column shipped;
 the sentence is gone rather than corrected in place, because the pot is what it was always about.
 Worth knowing:
-[ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md) justifies hiding money
-from Teaching Team by citing "per-diem amounts and personal travel claims" — the rule still
-holds, its stated reason is just thinner than when it was written. Adding
-`incurred_by_person_id` later is a nullable column, not a migration of meaning.
+[ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md) justified hiding money
+from Teaching Team by citing "per-diem amounts and personal travel claims" — but that money-read
+gate is reversed by [ADR-0026](./adr/0026-money-is-open-to-read-and-staff-only-to-write.md) (#180):
+money is now open to any signed-in Person to **read**, so a Pimpinan reads these lines; only
+_writing_ them stays Staff-only. Adding `incurred_by_person_id` later is a nullable column, not a
+migration of meaning.
 
 **`category` is a closed set read off DITSAMA's own approved budget**, not invented for a
 template nobody has read. The eleven named values are the line items the programme RAB repeats
@@ -1359,7 +1363,10 @@ column, not a migration of meaning" if evidence ever appeared. It has: the RAB b
 `Uang Harian` as `2 orang × N hari`, at different rates for Narasumber and Asisten. Per-diems
 and honoraria carry a person; a taxi and a box of ATK do not. **The Advance is still one pot
 and the acquittal still reconciles the pot**, so
-[ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md) is untouched.
+[ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md)'s reconciliation model is
+untouched — though its money-_read_ gate is amended by
+[ADR-0026](./adr/0026-money-is-open-to-read-and-staff-only-to-write.md) (money read opened to any
+signed-in Person; writing money stays Staff-only).
 
 Note what did **not** enter the table: no cost-centre, no account code, no payee, no
 `Ref Standar Biaya` — the RAB carries the last of these on most lines (`PMK 32/2025 No.28.1`
@@ -1754,27 +1761,30 @@ cancelled rows accumulate without bound. Blocking a legitimate eleventh Session 
 number nobody is disputing is the kind of invented friction
 [ADR-0007](./adr/0007-the-tool-generates-the-acquittal.md) warns has an escape route.
 
-**Access control.** ADR-0004's rule — delivery open to everyone signed in, money Staff-only —
-is application code, not RLS. Better Auth means there is no `auth.uid()` in Postgres, so
-policies would need `SET LOCAL` on every transaction plus a non-superuser role with `FORCE
-ROW LEVEL SECURITY`: a great deal of machinery for one two-role rule. Every money-reading
-query therefore takes the authenticated Person and refuses a non-Staff caller, at a single
-choke point in `@sugt/db`. See
+**Access control.** The rule — delivery and money open to everyone signed in to **read**, money
+and delivery-arranging Staff-only to **write** — is application code, not RLS.
+[ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md) drew the line at
+delivery-vs-money; [ADR-0026](./adr/0026-money-is-open-to-read-and-staff-only-to-write.md) (#180)
+redrew it as read-vs-write, so money reads are open now (a Pimpinan reads all money) and it is money
+_writes_ that the guard closes. Better Auth means there is no `auth.uid()` in Postgres, so policies
+would need `SET LOCAL` on every transaction plus a non-superuser role with `FORCE ROW LEVEL
+SECURITY`: a great deal of machinery for one role rule. Every money-_writing_ query therefore takes
+the authenticated Person and refuses a non-Staff caller, at a single choke point in `@sugt/db`. See
 [ADR-0011](./adr/0011-supabase-and-better-auth.md).
 
 Note what this is _not_: the public/internal boundary is still structural, held by the
-dependency graph. It is only the Staff/Teaching Team line that is a runtime check.
+dependency graph. It is only the Staff/non-Staff write line that is a runtime check.
 
 **Who a caller is, is a type.** This document used to leave open whether the Staff-only choke
 point needed a sibling for "no Person at all, but a valid secret". It does, and the sibling is
 a type rather than a second guard. Three kinds of caller now reach `@sugt/db`, and they are
 three named types rather than one with optional fields:
 
-| Caller             | Is                                                      | May read                      | May write                   |
-| ------------------ | ------------------------------------------------------- | ----------------------------- | --------------------------- |
-| `Person`           | somebody signed in whose `person` row is still `active` | delivery; money only if Staff | their own records           |
-| `ServiceCaller`    | `@sugt/public`, holding `AGGREGATES_SECRET`             | the three aggregate payloads  | nothing                     |
-| `ParticipantToken` | a live Session feedback token                           | nothing                       | `participant_feedback` only |
+| Caller             | Is                                                      | May read                     | May write                              |
+| ------------------ | ------------------------------------------------------- | ---------------------------- | -------------------------------------- |
+| `Person`           | somebody signed in whose `person` row is still `active` | delivery and money           | their own records; money only if Staff |
+| `ServiceCaller`    | `@sugt/public`, holding `AGGREGATES_SECRET`             | the three aggregate payloads | nothing                                |
+| `ParticipantToken` | a live Session feedback token                           | nothing                      | `participant_feedback` only            |
 
 Every query takes one, and the money queries accept only `Person`. A single type carrying
 optional fields would turn "is this a Staff caller" into a runtime shape check — which is

@@ -61,6 +61,11 @@ Advance and its acquittal — which is a **reversal of ADR-0004 for reads**. Tha
 This ticket delivers the role and its **delivery-read** access only; `requireStaff` still guards
 every money read until #180 lands.
 
+> **Now done.** [ADR-0026](./0026-money-is-open-to-read-and-staff-only-to-write.md) (#180) landed the
+> money half: `perjadinAcquittal` lost its `requireStaff`, so a Pimpinan reads all money (the
+> acquittal, its CSV export, the trip money strip and the `/monitoring` budget card), while every
+> money _write_ stays Staff-only. The boundary is now read (any signed-in) vs write (Staff).
+
 ## Consequences
 
 - The `Record<Role, string>` label maps (`ROLE_LABELS`, `PERJADIN_ROLE_LABELS`) now carry a second

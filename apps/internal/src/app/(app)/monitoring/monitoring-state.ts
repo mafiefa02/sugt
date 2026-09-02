@@ -6,10 +6,10 @@ import type { Role } from "@sugt/domain";
  * component. The page's only moving parts are two small decisions, and both live here as plain
  * functions the browser calls and the suite drives directly:
  *
- *   1. **`showBudget`** — the money gate. Today it is a no-op (`Role` is only `"Staff"`), but it
- *      is written as the real predicate so that the first non-Staff signed-in role lands with the
- *      budget already hidden, honouring ADR-0004. Testing the value, not the render, is what lets
- *      the suite prove the gate for a role that does not exist yet.
+ *   1. **`showBudget`** — the money gate. It now returns `true` for both signed-in roles, `"Staff"`
+ *      and the read-only `"Pimpinan"`, because money is open to any signed-in Person to READ
+ *      (ADR-0004 reversed by ADR-0026, #180). Testing the value, not the render, is what lets the
+ *      suite pin which roles see the budget card.
  *   2. **The dismiss state machine** — a warning the operator sets aside moves from `active` to the
  *      end of `ignored`. Modelled as two immutable lists so a reducer over them is a pure
  *      `(state, id) → state`, with the view holding the current state in `useState`.
@@ -22,13 +22,14 @@ export type Warning = { id: string; message: string };
 export type WarningState = { active: Warning[]; ignored: Warning[] };
 
 /**
- * Whether to render the budget figures. `true` only for `"Staff"` — the single role today, so this
- * is a no-op guard now, but it is the real ADR-0004 rule: the moment a non-Staff signed-in role
- * exists, money is hidden from it with no further change here. Written as the predicate (not a
- * literal `true`) precisely so the test can assert it excludes a non-Staff role.
+ * Whether to render the budget figures. `true` for any signed-in role — both `"Staff"` and the
+ * read-only `"Pimpinan"` — because money is open to any signed-in Person to READ now (ADR-0004
+ * reversed by ADR-0026, #180). Leadership monitoring a Programme are meant to see how much of the
+ * budget has been spent. Writing money stays Staff-only, enforced server-side in each money-write
+ * query — this gate is about the read.
  */
 export function showBudget(role: Role): boolean {
-  return role === "Staff";
+  return role === "Staff" || role === "Pimpinan";
 }
 
 /** The starting state: every warning active, nothing ignored yet. Copies the input so the caller's

@@ -9,11 +9,13 @@ import { MonitoringView } from "./monitoring-view";
  * scaffold**: every number on it is a hard-coded mock, isolated in `mock-data.ts`, and wiring it to
  * real data is the follow-up (#177). Nothing here reads the database beyond `requirePerson()`.
  *
- * The server's only real decision is the money gate. `showBudget(person.role)` is a no-op today —
- * `Role` is only `"Staff"` — but it is the ADR-0004 rule spelled out, so the first non-Staff
- * signed-in role arrives with the budget already hidden. The gate is computed here and passed down;
- * the view is otherwise a pure function of the mock module. All of that lives in `monitoring-state.ts`
- * (the pure, tested seam) and `mock-data.ts` (the figures) — see CONTEXT.md → Open questions.
+ * The server's only real decision is the money gate. `showBudget(person.role)` now returns `true`
+ * for both signed-in roles — Staff and the read-only Pimpinan — because money is open to any
+ * signed-in Person to READ (ADR-0004 reversed by ADR-0026, #180); the budget card shows to a
+ * Pimpinan too, and writing money stays Staff-only elsewhere. The gate is computed here and passed
+ * down; the view is otherwise a pure function of the mock module. All of that lives in
+ * `monitoring-state.ts` (the pure, tested seam) and `mock-data.ts` (the figures) — see CONTEXT.md →
+ * Open questions.
  */
 export default async function Page() {
   const person = await requirePerson();
