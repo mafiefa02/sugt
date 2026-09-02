@@ -28,6 +28,7 @@ import {
   addSubCluster,
   refusedBy,
   resetDatabase,
+  revokePerson,
 } from "./support/fixtures";
 
 /**
@@ -804,6 +805,20 @@ describe("editing a Perjadin's Pimpinan", () => {
     expect(await setPerjadinPimpinan(pic, perjadinId, [stranger])).toEqual({
       outcome: "unknown-pimpinan",
       offending: [stranger],
+    });
+    expect(await pimpinanOf(perjadinId)).toEqual([]);
+  });
+
+  it("refuses a revoked Pimpinan, whose id is no longer active, writing nothing", async () => {
+    const { pic, perjadinId } = await trip();
+    // A once-valid Pimpinan, now revoked (active = false) — the roster check requires active, so a
+    // stale id from before the revoke is named rather than recorded.
+    const gone = await pimpinan("Fatimah Azzahra", "fatimah@ditsama.itb.ac.id");
+    await revokePerson(gone.id);
+
+    expect(await setPerjadinPimpinan(pic, perjadinId, [gone.id])).toEqual({
+      outcome: "unknown-pimpinan",
+      offending: [gone.id],
     });
     expect(await pimpinanOf(perjadinId)).toEqual([]);
   });

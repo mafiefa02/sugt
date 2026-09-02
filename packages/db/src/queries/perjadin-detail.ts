@@ -6,7 +6,7 @@ import {
   type TimeZone,
   type TransportMode,
 } from "@sugt/domain";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../client";
@@ -23,6 +23,7 @@ import {
 import type { Person } from "./caller";
 import { duplicatedStaff } from "./group-rules";
 import { derivePreparationChecklist, type PreparationItem } from "./preparation-checklist";
+import { unknownPimpinanIds } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -474,20 +475,8 @@ export async function setPerjadinPimpinan(
   requireStaff(caller);
 
   const unique = [...new Set(personIds)];
-  if (unique.length > 0) {
-    const valid = new Set(
-      (
-        await db
-          .select({ id: person.id })
-          .from(person)
-          .where(
-            and(inArray(person.id, unique), eq(person.active, true), eq(person.role, "Pimpinan")),
-          )
-      ).map((row) => row.id),
-    );
-    const offending = unique.filter((id) => !valid.has(id));
-    if (offending.length > 0) return { outcome: "unknown-pimpinan", offending };
-  }
+  const offending = await unknownPimpinanIds(unique);
+  if (offending.length > 0) return { outcome: "unknown-pimpinan", offending };
 
   return db.transaction(async (tx) => {
     const [trip] = await tx

@@ -6,16 +6,20 @@ import {
   type TimeZone,
   type TransportMode,
 } from "@sugt/domain";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
 import { session, sessionTeachingTeam } from "../schema/delivery";
-import { person } from "../schema/people";
 import { cluster, province, school, subCluster } from "../schema/reference";
 import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
 import { duplicatedStaff } from "./group-rules";
-import { activeRosters, type RosterPerson, type SelectedSchool } from "./rosters";
+import {
+  activeRosters,
+  unknownPimpinanIds,
+  type RosterPerson,
+  type SelectedSchool,
+} from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -277,25 +281,9 @@ export async function planPerjadin(
   // hand-edited payload — validated here against the active-Pimpinan roster and named rather than
   // surfaced as a raw constraint violation.
   const uniquePimpinan = [...new Set(input.pimpinan)];
-  if (uniquePimpinan.length > 0) {
-    const validPimpinan = new Set(
-      (
-        await db
-          .select({ id: person.id })
-          .from(person)
-          .where(
-            and(
-              inArray(person.id, uniquePimpinan),
-              eq(person.active, true),
-              eq(person.role, "Pimpinan"),
-            ),
-          )
-      ).map((row) => row.id),
-    );
-    const unknownPimpinan = uniquePimpinan.filter((id) => !validPimpinan.has(id));
-    if (unknownPimpinan.length > 0)
-      return { outcome: "unknown-pimpinan", offending: unknownPimpinan };
-  }
+  const unknownPimpinan = await unknownPimpinanIds(uniquePimpinan);
+  if (unknownPimpinan.length > 0)
+    return { outcome: "unknown-pimpinan", offending: unknownPimpinan };
 
   // Extra Staff must be distinct from each other and from the PIC — the Group primary key
   // `(perjadin_id, person_id)` holds each person once, so a repeat is a plan to question rather

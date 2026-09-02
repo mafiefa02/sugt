@@ -103,3 +103,30 @@ export async function activeRosters(): Promise<{
 
   return { staff, pimpinan };
 }
+
+/**
+ * Which of these Person ids are **not** an active Pimpinan — the offending set both Pimpinan writes
+ * refuse before touching `perjadin_pimpinan`.
+ *
+ * **One rule, one place.** `planPerjadin` and `setPerjadinPimpinan` each need "is this id an active
+ * Person of role Pimpinan?" (#181); the second module to want it is what earns a shared helper, the
+ * same reasoning `activeRosters` sits here for. The composite `perjadin_pimpinan_is_pimpinan` FK is
+ * the database backstop — this names a stray id up front rather than surfacing a raw violation.
+ *
+ * Takes the ids to check (the caller dedupes for its own insert) and returns those with no matching
+ * active-Pimpinan row, in input order. An empty input is a query with no answer, so it is skipped.
+ */
+export async function unknownPimpinanIds(ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+
+  const valid = new Set(
+    (
+      await db
+        .select({ id: person.id })
+        .from(person)
+        .where(and(inArray(person.id, ids), eq(person.active, true), eq(person.role, "Pimpinan")))
+    ).map((row) => row.id),
+  );
+
+  return ids.filter((id) => !valid.has(id));
+}

@@ -240,9 +240,9 @@ describe("the acquittal payload", () => {
 
   it("names the Pimpinan who joined the trip, ordered, and reads none as an empty list", async () => {
     /**
-     * The Laporan names who travelled (#142). A Pimpinan is record-only — just a name from the
-     * fixed three — so the acquittal carries the names and nothing more, ordered so the screen
-     * and its CSV read the same on every load.
+     * The Laporan names who travelled (#142). A Pimpinan is record-only — now the name of a real
+     * Pimpinan-Person row (#181, joined from `person`) — so the acquittal carries the names and
+     * nothing more, ordered so the screen and its CSV read the same on every load.
      */
     const staff = await pic();
     const fatimah = await addPerson({
