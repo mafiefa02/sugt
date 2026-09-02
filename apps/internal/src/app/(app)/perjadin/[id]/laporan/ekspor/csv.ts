@@ -6,7 +6,8 @@ import type { PerjadinAcquittal } from "@sugt/db/queries";
  * Split out of the Route Handler so it can be driven directly: `csvOf` is a total function of the
  * acquittal payload, and the acceptance for the export ("both Pimpinan appear; none leaves no stray
  * row") is about this text and nothing the HTTP layer adds. The handler stays a thin wrapper that
- * signs in, reads the Staff-only payload and sets the file headers.
+ * signs in, reads the payload — open to any signed-in Person now (ADR-0026, #180) — and sets the
+ * file headers.
  *
  * **The constraint on it is that it invents nothing**, and that constraint is structural rather than
  * a promise: every column below is read off `perjadinAcquittal`, the same payload the screen renders.

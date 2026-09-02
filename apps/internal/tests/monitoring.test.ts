@@ -4,7 +4,6 @@ import {
   showBudget,
   type Warning,
 } from "-/app/(app)/monitoring/monitoring-state";
-import type { Role } from "@sugt/domain";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -23,11 +22,11 @@ describe("showBudget", () => {
     expect(showBudget("Staff")).toBe(true);
   });
 
-  it("hides the budget from a non-Staff role", () => {
-    // `Role` is only "Staff" today, so this casts a role that does not exist yet. Testing the
-    // predicate's logic (not a literal `true`) proves the ADR-0004 gate hides money the moment a
-    // future non-Staff signed-in role lands — the AC that money is omitted when role ≠ Staff.
-    expect(showBudget("Pimpinan" as Role)).toBe(false);
+  it("shows the budget to a Pimpinan too — money is open to any signed-in Person to read (#180)", () => {
+    // ADR-0004 reversed by ADR-0026 (#180): money reads are open to any signed-in Person, so the
+    // read-only Pimpinan sees the budget card too. Writing money stays Staff-only, enforced
+    // server-side and not by this gate. `Pimpinan` is a real `Role` now, so no cast.
+    expect(showBudget("Pimpinan")).toBe(true);
   });
 });
 

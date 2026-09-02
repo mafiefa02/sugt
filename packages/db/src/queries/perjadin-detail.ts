@@ -31,13 +31,12 @@ import { requireStaff } from "./staff-only";
  * **One Perjadin, and the writes on it** — the read open to anyone signed in and carrying no
  * money at all; the writes Staff-only.
  *
- * The no-money part is the Teaching Team variant, and it is a **shape** rather than a rendering
- * rule. The criterion asks for the Advance strip, the transactions and the Report to be *absent, not
- * disabled*; the way to make that true is for the payload never to carry them. Money is
- * `./perjadin-report.ts`'s `perjadinAcquittal`, which opens with the Staff-only choke point — so a
- * professor's screen is money that was never fetched, not money hidden on the way out. The read here
- * needs no role check, because there is nothing here to refuse; every **write** below opens with
- * `requireStaff`.
+ * The no-money part is a **shape** rather than a rendering rule: this payload never carries the
+ * Advance, the transactions or the Report. Money is `./perjadin-report.ts`'s `perjadinAcquittal`, a
+ * separate read — and since #180 (ADR-0026) that read is open to any signed-in Person, so the trip
+ * page fetches it alongside this one and shows the money strip to a Pimpinan too. This query still
+ * carries none of it, and needs no role check because there is nothing here to refuse; every
+ * **write** below opens with `requireStaff`, and reading money stays a job for `perjadinAcquittal`.
  */
 
 /** One member of the Group. Staff-only now (ADR-0020), so `stream` is always null. */
@@ -102,10 +101,10 @@ export type PerjadinDetail = {
   /** Return; null when this trip predates the logistics columns. */
   return: PerjadinTravelLeg | null;
   /**
-   * **The Report deadline is not here.** It is on `perjadinAcquittal`, behind the
-   * Staff-only choke point, because the Perjadin Report *is* the acquittal —
-   * `docs/data-model.md` says so in as many words — and the criterion puts the Report among
-   * what is absent for a Teaching Team member.
+   * **The Report deadline is not here.** It is on `perjadinAcquittal`, because the Perjadin
+   * Report *is* the acquittal — `docs/data-model.md` says so in as many words — and this payload
+   * carries no money-side figure. That acquittal read is open to any signed-in Person since #180
+   * (ADR-0026), so the deadline rides with the money there rather than being duplicated here.
    */
   group: GroupMemberEntry[];
   sessions: PerjadinSession[];

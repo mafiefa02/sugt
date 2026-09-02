@@ -900,14 +900,15 @@ describe("the Perjadin list and detail", () => {
     expect(await perjadinDetail(pic, "00000000-0000-0000-0000-000000000000")).toBeNull();
   });
 
-  it("refuses a non-Staff caller the money, which is the whole of the variant", async () => {
+  it("opens the money read to any signed-in caller now (ADR-0026, #180)", async () => {
     const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
-    await expect(perjadinAcquittal(nonStaff(), planned.perjadinId)).rejects.toSatisfy(
-      isNotStaffError,
-    );
+    // ADR-0004 reversed by ADR-0026 (#180): the money read is open to any signed-in Person, so a
+    // non-Staff caller reads the acquittal rather than being refused it. Writing money stays
+    // Staff-only — see money-read-open.test.ts.
+    await expect(perjadinAcquittal(nonStaff(), planned.perjadinId)).resolves.not.toBeNull();
     await expect(perjadinAcquittal(pic, planned.perjadinId)).resolves.not.toBeNull();
   });
 });

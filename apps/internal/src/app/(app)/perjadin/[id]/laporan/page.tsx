@@ -4,7 +4,6 @@ import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-
 import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
 import { signedReceiptUrl } from "-/lib/receipt-media";
-import { staffSurface } from "-/lib/staff-surface";
 import { perjadinAcquittal, type AcquittalTransaction } from "@sugt/db/queries";
 import { formatIdr } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
@@ -17,11 +16,14 @@ import type { ViewableTransaction } from "./action-types";
  * **The Perjadin Report** — the acquittal of one trip, and the screen ADR-0007 says the whole
  * money side of this tool stands or falls on.
  *
- * **Staff-only at every level, and the guard is the read.** `perjadinAcquittal` opens with the
- * choke point, so a Teaching Team member reaching this URL is refused by the query rather than by
- * anything on this page — `staffSurface` turns that refusal into a 403 server-side. There is no
- * money in any props object here that a non-Staff caller could have received, because the payload
- * was never produced for them.
+ * **Readable by ANY signed-in Person now** (ADR-0004 reversed by [ADR-0026](../../../../../../../../docs/adr/0026-money-is-open-to-read-and-staff-only-to-write.md),
+ * #180). `perjadinAcquittal` is an open money read, so a Pimpinan reaching this URL sees the whole
+ * acquittal — money reads are open. What stays Staff-only is every **write** control on the page:
+ * file report, record transaction, attach receipts and settle each run through a Server Action whose
+ * query (or, for the receipt actions, an explicit `requireStaff`) refuses a non-Staff caller
+ * server-side. So a Pimpinan reads the report but any write is refused — the enforcement is in the
+ * actions, not in what this page chooses to render (hiding the write controls is #182/#183, out of
+ * scope here).
  *
  * It is a child of `/perjadin/[id]` rather than a top-level surface because the Perjadin Report
  * *is* the acquittal state on that Perjadin's row — `data-model.md` is explicit that there is no
@@ -36,7 +38,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
   const person = await requirePerson();
   const { id } = await params;
 
-  const acquittal = await staffSurface(() => perjadinAcquittal(person, id));
+  const acquittal = await perjadinAcquittal(person, id);
   if (!acquittal) notFound();
 
   const transactions = await Promise.all(acquittal.transactions.map(viewable));
@@ -133,10 +135,10 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
  * One line item with a link per receipt.
  *
  * The `receipts` bucket is private, so a receipt renders only through a signed URL, and signing is
- * a network call per object. It happens here — after `perjadinAcquittal` has already refused a
- * non-Staff caller — so the Staff check stays at one choke point and this page never decides
- * anything about access on its own. A `null` URL is an object whose bytes are gone, which renders
- * as a missing file rather than a broken page.
+ * a network call per object. It happens here — for any signed-in reader, since `perjadinAcquittal`
+ * is an open money read now (ADR-0026, #180) — so this page never decides anything about access on
+ * its own; reading is open and every write is refused in its own Server Action. A `null` URL is an
+ * object whose bytes are gone, which renders as a missing file rather than a broken page.
  */
 async function viewable(line: AcquittalTransaction): Promise<ViewableTransaction> {
   const evidence = await Promise.all(

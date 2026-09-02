@@ -143,18 +143,28 @@ export type PerjadinAcquittal = {
 /**
  * One Perjadin's acquittal.
  *
- * Opens with the choke point, which throws `NotStaffError` on a Teaching Team `Person` —
- * **not** an empty result, because an empty return would make a mis-passed caller
- * indistinguishable from a Perjadin that has spent nothing yet.
+ * **An OPEN read now.** ADR-0004 said reading money was Staff-only; [ADR-0026](../../../../docs/adr/0026-money-is-open-to-read-and-staff-only-to-write.md)
+ * ([#180](https://github.com/mafiefa02/sugt/issues/180)) reverses that half: the boundary is now
+ * **read (any signed-in Person) vs write (Staff)**, so this read no longer opens with the choke
+ * point — a Pimpinan reads all money. There is no `requireStaff` here any more.
+ *
+ * **Two write actions used to lean on this read's guard, and now do not.** `mintReceiptUploadsAction`
+ * and `finalizeReceiptsAction` (`perjadin/[id]/laporan/actions.ts`) had no Staff guard of their own —
+ * this read's `requireStaff` was the whole of theirs. Opening the read would have opened those writes
+ * (a receipt-upload credential, a service-role Storage read) to a Pimpinan, so each now calls
+ * `requireStaff` explicitly, ahead of this read. Every other money-write query (`recordTransaction`,
+ * `attachTransactionEvidence`, `markReceiptsSettled`, `filePerjadinReport`) keeps its own `requireStaff`.
  *
  * Returns `null` when there is no such Perjadin. That is a genuinely reachable state — a
- * stale link to a deleted Perjadin — and is distinct from the refusal above, which is not.
+ * stale link to a deleted Perjadin.
  */
 export async function perjadinAcquittal(
-  caller: Person,
+  _caller: Person,
   perjadinId: string,
 ): Promise<PerjadinAcquittal | null> {
-  requireStaff(caller);
+  // No Staff check: money reads are open to any signed-in Person (ADR-0004 reversed by ADR-0026,
+  // #180). The `Person` parameter stays in the signature — the sign-in seam refuses a service
+  // caller or token before this runs — but the role no longer gates the read, so it is unused.
 
   const [trip] = await db
     .select({
