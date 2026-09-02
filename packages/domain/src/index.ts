@@ -268,7 +268,7 @@ export type PerjadinAspect = (typeof PERJADIN_ASPECTS)[number];
 /**
  * Who a Perjadin Evaluation filer says they are — a **self-declared** role, typed alongside a name
  * on the unauthenticated `/ep/{token}` form (ADR-0024). It is not validated against the Group or
- * the `PIMPINAN` enum: the identity is untrusted by design, exactly as `participant_feedback.name`
+ * the Pimpinan roster: the identity is untrusted by design, exactly as `participant_feedback.name`
  * is (ADR-0012). The three cover everyone the evaluation wants to hear from — the name-based
  * **Pengajar** (Teaching Team), the signed-in DITSAMA **Pendamping** who travel, and the
  * record-only **Pimpinan** — none of whom the old signed-in-Group gate could all admit.
@@ -373,25 +373,6 @@ export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number];
  */
 export const TRANSPORT_MODES = ["Pesawat", "Kereta", "Travel", "Mobil Dalam Kota"] as const;
 export type TransportMode = (typeof TRANSPORT_MODES)[number];
-
-/**
- * The leaders of DITSAMA ITB — a **fixed set of three named people** — one of whom may, rarely,
- * join a Perjadin's Kelompok Perjalanan to monitor the offline Sessions. They are recorded on the
- * Perjadin (optional, editable, chosen from this set) and named on the Laporan Perjadin, but are
- * **record-only**: a Pimpinan is not a working Group member and files nothing
- * (see the Pimpinan entry in `CONTEXT.md` and [ADR-0020](../../../docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)).
- *
- * Like `TRANSACTION_CATEGORIES` and `TRANSPORT_MODES`, these are **values a column may hold** — the
- * names go in `perjadin_pimpinan.name`, whose CHECK repeats this list character for character; see
- * `packages/db/src/schema/travel.ts`. The exact strings are the paperwork's, so they are shared
- * from here rather than retyped.
- */
-export const PIMPINAN = [
-  "Prof. Dr. Fatimah Arofiati Noor, S.Si., M.Si.",
-  "Oktofa Yudha Sudrajad, S.T., M.S.M., Ph.D.",
-  "Dr. Anton Timur Jaelani, S.Si., M.Si.",
-] as const;
-export type Pimpinan = (typeof PIMPINAN)[number];
 
 /**
  * The app-enforced caps on the new Perjadin model — ceilings the database deliberately does not

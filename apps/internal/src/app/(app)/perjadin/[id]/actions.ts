@@ -68,14 +68,14 @@ export async function changePerjadinPicAction(
   return result;
 }
 
-/** **Set the Pimpinan recorded on the trip** — a subset of the fixed three. */
+/** **Set the Pimpinan recorded on the trip** — a subset of the Pimpinan roster, by Person id (#181). */
 export async function setPerjadinPimpinanAction(
   perjadinId: string,
-  names: string[],
+  personIds: string[],
 ): Promise<SetPerjadinPimpinanResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => setPerjadinPimpinan(person, perjadinId, names));
+  const result = await staffSurface(() => setPerjadinPimpinan(person, perjadinId, personIds));
   if (result.outcome === "set") revalidatePath(`/perjadin/${perjadinId}`);
   return result;
 }

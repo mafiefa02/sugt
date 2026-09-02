@@ -465,8 +465,9 @@ export type PerjadinFixture = {
   /** Staff. They are the PIC and, by the deferred foreign key, a member of their own Group. */
   picPersonId: string;
   /**
-   * The Pimpinan recorded on the trip — record-only names, each a member of the fixed `PIMPINAN`
-   * three (`perjadin_pimpinan_name_check` refuses anything else). Empty or absent by default.
+   * The Pimpinan recorded on the trip — record-only rows referencing real People of role Pimpinan
+   * (#181). Pass the `person.id`s; the composite `perjadin_pimpinan_is_pimpinan` FK refuses any id
+   * that is not a Pimpinan. Empty or absent by default.
    */
   pimpinan?: string[];
 };
@@ -531,7 +532,7 @@ export async function addPerjadin(fixture: PerjadinFixture) {
     if (fixture.pimpinan && fixture.pimpinan.length > 0) {
       await tx
         .insert(schema.perjadinPimpinan)
-        .values(fixture.pimpinan.map((name) => ({ perjadinId: perjadin!.id, name })));
+        .values(fixture.pimpinan.map((personId) => ({ perjadinId: perjadin!.id, personId })));
     }
 
     return perjadin!;

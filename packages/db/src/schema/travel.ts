@@ -199,11 +199,12 @@ export const perjadinTeacher = pgTable("perjadin_teacher", {
  * member**: they file no Perjadin Evaluation and add nothing to the Preparation Checklist, so they
  * are deliberately not a `group_member` row.
  *
- * `name` CHECKs the three `PIMPINAN` values character for character — the same discipline as the
- * `transaction.category` and `perjadin.*_mode` CHECKs, and for the same reason (`@sugt/domain`'s
- * header): a composed constraint string is not the one the drizzle-kit snapshot holds, and the two
- * would then diff forever. The primary key `(perjadin_id, name)` makes a Pimpinan recordable at most
- * once per trip.
+ * A row references a **real Person of role Pimpinan** — the Pimpinan roster is the single source of
+ * truth now (#181), so the old fixed-three `PIMPINAN` constant and the `name` CHECK that mirrored it
+ * are gone. `role` is pinned to `'Pimpinan'` and the composite `(person_id, role)` foreign key into
+ * `person (id, role)` guarantees a non-Pimpinan can never be recorded here, the same discipline the
+ * PIC-is-Staff family (`perjadin_pic_is_staff`, `group_member_person_role_fk`) enforces. The primary
+ * key `(perjadin_id, person_id)` makes a Pimpinan recordable at most once per trip.
  */
 export const perjadinPimpinan = pgTable(
   "perjadin_pimpinan",
@@ -211,14 +212,17 @@ export const perjadinPimpinan = pgTable(
     perjadinId: uuid("perjadin_id")
       .notNull()
       .references(() => perjadin.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
+    personId: uuid("person_id").notNull(),
+    role: text("role").$type<"Pimpinan">().notNull().default("Pimpinan"),
   },
   (t) => [
-    primaryKey({ columns: [t.perjadinId, t.name] }),
-    check(
-      "perjadin_pimpinan_name_check",
-      sql`${t.name} in ('Prof. Dr. Fatimah Arofiati Noor, S.Si., M.Si.', 'Oktofa Yudha Sudrajad, S.T., M.S.M., Ph.D.', 'Dr. Anton Timur Jaelani, S.Si., M.Si.')`,
-    ),
+    primaryKey({ columns: [t.perjadinId, t.personId] }),
+    check("perjadin_pimpinan_role_check", sql`${t.role} = 'Pimpinan'`),
+    foreignKey({
+      name: "perjadin_pimpinan_is_pimpinan",
+      columns: [t.personId, t.role],
+      foreignColumns: [person.id, person.role],
+    }),
   ],
 );
 

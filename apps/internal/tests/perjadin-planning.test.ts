@@ -10,7 +10,6 @@ import {
   updatePerjadinLogistics,
   type PlanPerjadinInput,
 } from "@sugt/db/queries";
-import { PIMPINAN } from "@sugt/domain";
 import type { Role } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -173,8 +172,9 @@ async function teachersOf(perjadinId: string) {
 
 async function pimpinanOf(perjadinId: string) {
   return db
-    .select({ name: schema.perjadinPimpinan.name })
+    .select({ name: schema.person.fullName })
     .from(schema.perjadinPimpinan)
+    .innerJoin(schema.person, eq(schema.person.id, schema.perjadinPimpinan.personId))
     .where(eq(schema.perjadinPimpinan.perjadinId, perjadinId));
 }
 
@@ -245,14 +245,23 @@ describe("Rencanakan Perjadin", () => {
   it("persists three Sessions, their Streams, the teaching-team links, the teachers and the Pimpinan", async () => {
     const pic = await staff();
     const { subCluster, schools } = await twoSchools();
-    const [pimpinanA, pimpinanB] = PIMPINAN;
+    const pimpinanA = await addPerson({
+      fullName: "Fatimah Arofiati Noor",
+      email: "fatimah@ditsama.itb.ac.id",
+      role: "Pimpinan",
+    });
+    const pimpinanB = await addPerson({
+      fullName: "Anton Timur Jaelani",
+      email: "anton@ditsama.itb.ac.id",
+      role: "Pimpinan",
+    });
 
     const planned = await planPerjadin(pic, {
       subClusterId: subCluster.id,
       advanceIdr: 5_000_000,
       picPersonId: pic.id,
       teacherNames: ["Dr. Andi", "Dr. Bella"],
-      pimpinan: [pimpinanA, pimpinanB],
+      pimpinan: [pimpinanA.id, pimpinanB.id],
       sessions: [
         {
           schoolId: schools[0].id,
@@ -290,7 +299,7 @@ describe("Rencanakan Perjadin", () => {
     expect(teachers.map((row) => row.name).sort()).toEqual(["Dr. Andi", "Dr. Bella"]);
 
     expect((await pimpinanOf(planned.perjadinId)).map((row) => row.name).sort()).toEqual(
-      [pimpinanA, pimpinanB].sort(),
+      [pimpinanA.fullName, pimpinanB.fullName].sort(),
     );
 
     const sessions = await sessionsOf(planned.perjadinId);
@@ -309,25 +318,35 @@ describe("Rencanakan Perjadin", () => {
   /** A trip planned with two Pimpinan writes exactly those two `perjadin_pimpinan` rows. */
   it("records the Pimpinan who join, as record-only rows", async () => {
     const { pic, input } = await validPlan();
-    const [pimpinanA, pimpinanB] = PIMPINAN;
+    const pimpinanA = await addPerson({
+      fullName: "Fatimah Arofiati Noor",
+      email: "fatimah@ditsama.itb.ac.id",
+      role: "Pimpinan",
+    });
+    const pimpinanB = await addPerson({
+      fullName: "Anton Timur Jaelani",
+      email: "anton@ditsama.itb.ac.id",
+      role: "Pimpinan",
+    });
 
-    const planned = await planPerjadin(pic, { ...input, pimpinan: [pimpinanA, pimpinanB] });
+    const planned = await planPerjadin(pic, { ...input, pimpinan: [pimpinanA.id, pimpinanB.id] });
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
     expect((await pimpinanOf(planned.perjadinId)).map((row) => row.name).sort()).toEqual(
-      [pimpinanA, pimpinanB].sort(),
+      [pimpinanA.fullName, pimpinanB.fullName].sort(),
     );
     // Pimpinan are never Group members.
     expect(await groupOf(planned.perjadinId)).toHaveLength(1);
   });
 
-  /** A name outside the fixed three is refused before anything is written. */
-  it("refuses a Pimpinan name that is not one of the three, and writes nothing", async () => {
+  /** An id that is not an active Pimpinan is refused before anything is written. */
+  it("refuses a Pimpinan id that is not an active Pimpinan, and writes nothing", async () => {
     const { pic, input } = await validPlan();
+    // The PIC is a valid Person id, but a Staff — the wrong role for the Pimpinan roster.
 
-    const result = await planPerjadin(pic, { ...input, pimpinan: ["Nobody At All"] });
+    const result = await planPerjadin(pic, { ...input, pimpinan: [pic.id] });
 
-    expect(result).toEqual({ outcome: "unknown-pimpinan", offending: ["Nobody At All"] });
+    expect(result).toEqual({ outcome: "unknown-pimpinan", offending: [pic.id] });
     expect(await perjadinRows()).toEqual([]);
   });
 
