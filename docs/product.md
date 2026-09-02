@@ -256,8 +256,10 @@ _Transport Bandara/Stasiun_, _Transport Lokal Dalam Provinsi_, _Konsumsi_, _Modu
 _Alat dan Bahan Research Project_, _Seminar kit_. They are the line items the Programme's
 approved budget repeats across every travel group, so they are what DITSAMA already itemises
 rather than a scheme invented here, and they are in Indonesian because that is what goes on the
-paperwork. A transaction may also name **who incurred it**, which per-diems and honoraria do
-and a taxi does not; the Advance is still one pot and the acquittal still reconciles the pot.
+paperwork. Each transaction also carries a **participant type** — _Siswa_ or _GTK-MS_ — an axis
+orthogonal to the category that records which cohort the spend served, so the acquittal can split
+how much of the Advance went to the Student cohort versus the GTK and MS cohorts (#182). The
+Advance is still one pot and the acquittal still reconciles the pot.
 
 **The export is generic until the real paperwork exists.** Nobody has filed an acquittal
 for this Programme yet and no prior trip's completed set is available to borrow, so the
