@@ -18,11 +18,11 @@ import type { ViewableTransaction } from "./action-types";
  * **Readable by ANY signed-in Person now** (ADR-0004 reversed by [ADR-0026](../../../../../../../../docs/adr/0026-money-is-open-to-read-and-staff-only-to-write.md),
  * #180). `perjadinAcquittal` is an open money read, so a Pimpinan reaching this URL sees the whole
  * acquittal — money reads are open. What stays Staff-only is every **write** control on the page:
- * file report, record transaction, attach receipts and settle each run through a Server Action whose
- * query (or, for the receipt actions, an explicit `requireStaff`) refuses a non-Staff caller
- * server-side. So a Pimpinan reads the report but any write is refused — the enforcement is in the
- * actions, not in what this page chooses to render (hiding the write controls is #182/#183, out of
- * scope here).
+ * file report, record transaction and attach receipts each run through a Server Action whose query
+ * (or, for the receipt actions, an explicit `requireStaff`) refuses a non-Staff caller server-side.
+ * So a Pimpinan reads the report but any write is refused — the enforcement is in the actions, not
+ * in what this page chooses to render. (The per-member receipts-handed-in checklist that used to sit
+ * here was removed with `group_member.receipts_settled_at`, #183.)
  *
  * It is a child of `/perjadin/[id]` rather than a top-level surface because the Perjadin Report
  * *is* the acquittal state on that Perjadin's row — `data-model.md` is explicit that there is no
