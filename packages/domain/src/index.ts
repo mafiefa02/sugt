@@ -143,14 +143,20 @@ export function formatIdr(n: number): string {
 }
 
 /**
- * The one role in the internal tool. **`Teaching Team` was retired in T3** ([#153](https://github.com/mafiefa02/sugt/issues/153)):
- * once online Sessions named their teachers as free-text `session_teacher_name` (ADR-0022) the
- * Person role had no remaining purpose, so every signed-in Person is now Staff. The Programme's
- * leadership are senior Staff, not a separate role — see
+ * The two roles in the internal tool. **`Teaching Team` was retired in T3** ([#153](https://github.com/mafiefa02/sugt/issues/153)) —
+ * once online Sessions named their teachers as free-text `session_teacher_name` (ADR-0022) that
+ * Person role had no purpose — and for a while Staff stood alone. **`Pimpinan` was then added as a
+ * second signed-in role** ([#179](https://github.com/mafiefa02/sugt/issues/179)): a read-only
+ * principal who reads every non-money delivery surface, writes nothing, and lands on `/monitoring`.
+ * It is a Person role and nothing more — the widened CHECK admits it, but every composite `(id, role)`
+ * FK still pins `'Staff'`, so a Pimpinan is never a Group member, a PIC, a Session-Record filer or a
+ * Story author (see `docs/adr/0025-pimpinan-is-a-second-signed-in-read-only-person-role.md` and the
+ * CHECK in `packages/db/src/schema/people.ts`). The Programme's leadership, once folded into senior
+ * Staff, now have this signed-in read-only role of their own — see
  * `docs/adr/0004-delivery-data-is-open-internally-money-is-not.md`. The teaching **team** concept
- * lives on, but as trip-scoped / session-scoped free-text **names**, not People (ADR-0020, ADR-0022).
+ * lives on too, but as trip-scoped / session-scoped free-text **names**, not People (ADR-0020, ADR-0022).
  */
-export const ROLES = ["Staff"] as const;
+export const ROLES = ["Staff", "Pimpinan"] as const;
 export type Role = (typeof ROLES)[number];
 
 /**
@@ -161,24 +167,31 @@ export type Role = (typeof ROLES)[number];
  * across the `*_role` columns, deliberately avoided ([#116](https://github.com/mafiefa02/sugt/issues/116)).
  * Route any rendered role string through this map; never through the raw value.
  *
- * One key now `Role` has narrowed to `"Staff"` alone (#153); the map still satisfies
- * `Record<Role, string>`.
+ * Two keys now (#179): `Staff` reads **DITSAMA**, and the second signed-in role `Pimpinan` reads
+ * **Pimpinan** — its own name, since a Pimpinan is not one of the organisation's DITSAMA people.
+ * The map is `Record<Role, string>`, so adding a role to `ROLES` forces the new key here (a compile
+ * error otherwise), which is exactly what keeps the label maps in step with the role set.
  */
 export const ROLE_LABELS: Record<Role, string> = {
   Staff: "DITSAMA",
+  Pimpinan: "Pimpinan",
 };
 
 /**
  * How each role is labelled **on a Perjadin surface** — the same stored role seen from the trip's
  * vantage point. There the DITSAMA people are the ones who **accompany** the (name-based) teaching
- * team on the journey, so they read as **Pendamping** rather than the organisation's name. One
- * stored role, two context-dependent labels ([#141](https://github.com/mafiefa02/sugt/issues/141)):
- * `ROLE_LABELS` off a Perjadin, this map on one. Presentation only, keyed on the stored `Role` exactly
- * like `ROLE_LABELS`, so `[member.role]` render sites resolve; the stored value stays `"Staff"`. The
- * PIC tag is orthogonal to this — the PIC is a Pendamping too, but is marked by the more specific fact.
+ * team on the journey, so they read as **Pendamping** rather than the organisation's name. So the
+ * `Staff` role carries two context-dependent labels ([#141](https://github.com/mafiefa02/sugt/issues/141)):
+ * **DITSAMA** off a Perjadin via `ROLE_LABELS`, **Pendamping** on one via this map. The second role
+ * `Pimpinan` (#179) reads **Pimpinan** on both surfaces — it is not a Pendamping and does not travel
+ * as a working member, so the trip has no different name for it. Presentation only, keyed on the
+ * stored `Role` exactly like `ROLE_LABELS`, so `[member.role]` render sites resolve; the stored
+ * values stay `"Staff"` and `"Pimpinan"`. The PIC tag is orthogonal to this — the PIC is a Pendamping
+ * too, but is marked by the more specific fact.
  */
 export const PERJADIN_ROLE_LABELS: Record<Role, string> = {
   Staff: "Pendamping",
+  Pimpinan: "Pimpinan",
 };
 
 /**

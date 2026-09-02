@@ -150,7 +150,7 @@ create table person (
   id          uuid primary key default gen_random_uuid(),
   full_name   text not null,
   email       text not null,
-  role        text not null check (role = 'Staff'),   -- 'Teaching Team' retired in T3, #153
+  role        text not null check (role in ('Staff', 'Pimpinan')),  -- 'Teaching Team' retired (T3, #153); Pimpinan added #179
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
 
@@ -183,10 +183,15 @@ This document previously routed revocation through Better Auth's admin plugin an
 `banned` as `person.active`'s effect; both are gone. See the amendment to
 [ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
 
-**Every Person is Staff** ([#153](https://github.com/mafiefa02/sugt/issues/153)). The `Teaching
-Team` role was retired in T3, so `role` is CHECKed against the single value `'Staff'`: once online
-Sessions named their teachers as `session_teacher_name` (ADR-0022), the role that modelled
-professors as People had no purpose, and `session_teacher` — its last user — was dropped.
+**A Person is Staff or Pimpinan** ([#153](https://github.com/mafiefa02/sugt/issues/153),
+[#179](https://github.com/mafiefa02/sugt/issues/179)). The `Teaching Team` role was retired in T3,
+leaving Staff alone once online Sessions named their teachers as `session_teacher_name` (ADR-0022)
+and `session_teacher` — its last user — was dropped; [#179](https://github.com/mafiefa02/sugt/issues/179)
+then widened `role` to `check (role in ('Staff', 'Pimpinan'))` to admit a second signed-in principal.
+**Only that CHECK widened.** Every composite `(id, role)` foreign key below still pins `role =
+'Staff'`, so the widened role satisfies none of them — a Pimpinan is a login-only, **read-only**
+Person, kept out of Group membership, the PIC seat, a Session Record and a Story authorship by
+exactly those untouched keys ([ADR-0025](./adr/0025-pimpinan-is-a-second-signed-in-read-only-person-role.md)).
 
 **`role` is write-once, and the database already enforces it.** Six composite foreign
 keys point at `person (id, role)` — from `group_member`, `class_record`, `session_record`,
