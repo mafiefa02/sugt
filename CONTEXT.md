@@ -88,13 +88,13 @@ _Avoid_: visit, teaching, meeting, class (a Session is an occurrence; a Class is
 ### People and travel
 
 **Person**:
-A named human the Programme's records refer to. **Every Person is Staff** — the `Teaching Team` role was retired in T3 ([#153](https://github.com/mafiefa02/sugt/issues/153)), because the professors who teach are free-text names who never sign in (see **Teaching Team**), leaving Staff the only role. A Person is named before they ever sign in, because a Group can be formed around someone who has not.
+A named human the Programme's records refer to. **A Person is Staff or Pimpinan** — the `Teaching Team` role was retired in T3 ([#153](https://github.com/mafiefa02/sugt/issues/153)), because the professors who teach are free-text names who never sign in (see **Teaching Team**), and for a while Staff stood alone; **Pimpinan** is the second signed-in role, read-only, added in [#179](https://github.com/mafiefa02/sugt/issues/179) (see **Pimpinan**). A Person is named before they ever sign in, because a Group can be formed around someone who has not.
 _Avoid_: user (a sign-in identity, which a Person may or may not yet have), member, participant, resource
 
 **Staff**:
-A DITSAMA ITB employee working on the Programme, the Programme's leadership included.
+A DITSAMA ITB employee working on the Programme. Leadership now have a signed-in role of their own — **Pimpinan** ([#179](https://github.com/mafiefa02/sugt/issues/179)) — rather than being folded into Staff, so "Staff" is the working delivery-and-money role, not a catch-all for everyone at DITSAMA.
 The internal UI labels this role by context: **DITSAMA** on surfaces away from a **Perjadin**, and **Pendamping** on a Perjadin's own surfaces (see **Pendamping**). The domain term is still **Staff** (a presentation concern — the stored value stays `Staff`).
-_Avoid_: leadership, admin, organiser (senior Staff are Staff; there is no separate role)
+_Avoid_: admin, organiser (Staff is a working role; leadership are **Pimpinan** now, a separate signed-in role — #179)
 
 **Pendamping**:
 The on-**Perjadin** label for the **Staff** role — the DITSAMA people who **accompany** the Teaching Team on the journey. One role, two context-dependent labels: **Staff** reads **DITSAMA** away from a Perjadin and **Pendamping** on one (its Group list, the acquittal receipts, the "confirmed with the Pendamping" **Preparation Item**). Presentation only — the stored value stays `Staff`, and the **PIC** tag is orthogonal (a PIC is a Pendamping too, but is marked by the more specific fact). See [#141](https://github.com/mafiefa02/sugt/issues/141).
@@ -113,8 +113,9 @@ The **Staff** who travel on one Perjadin — the **PIC** plus up to ten other DI
 _Avoid_: team, squad, class
 
 **Pimpinan**:
-A leader of DITSAMA ITB — one of a fixed set of three named people — who, rarely, joins a Perjadin's **Kelompok Perjalanan** for the offline Sessions to monitor and evaluate. Recorded on the Perjadin (optional, editable, chosen from the fixed set) and named on the **Laporan Perjadin**, but **record-only** in the tool: a Pimpinan is not a working **Group** member and adds nothing to the **Preparation Checklist**. A Pimpinan **may now file a Perjadin Evaluation** — it is filed through an unauthenticated token link with a self-declared Role, and `Pimpinan` is one of the three (ADR-0024), reversing the earlier "files no Perjadin Evaluation".
-_Avoid_: leadership (that is the Staff role generally), chairman, director
+DITSAMA ITB's leadership, and — since [#179](https://github.com/mafiefa02/sugt/issues/179) — a **signed-in, read-only Person role** beside **Staff**. A Pimpinan is added open-endedly from **/orang** like any other Person, signs in through the ordinary invite gate, reads every non-money delivery surface and writes nothing, and lands on **/monitoring** ([ADR-0025](./docs/adr/0025-pimpinan-is-a-second-signed-in-read-only-person-role.md)). They are kept out of every working position — **Group** member, **PIC**, **Session Record** filer, **Story** author — by the composite `(id, role)` foreign keys that still pin `Staff`, which is what makes the role read-only.
+**Record-only on a trip** is the older, separate sense: a Pimpinan who joins a Perjadin's **Kelompok Perjalanan** to monitor the offline Sessions is _recorded_ on the Perjadin and named on the **Laporan Perjadin**, but is **not a working Group member** and adds nothing to the **Preparation Checklist** ([ADR-0020](./docs/adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)). That trip record is **not open-ended yet** — it is still chosen from the fixed set of three names (the `PIMPINAN` constant, whose CHECK enforces it); unifying it onto Person rows is deferred to [#181](https://github.com/mafiefa02/sugt/issues/181). A Pimpinan **may also file a Perjadin Evaluation** — through an unauthenticated token link with a self-declared Role, `Pimpinan` being one of the three (ADR-0024) — but that is an untrusted self-declared string, unrelated to this Person role.
+_Avoid_: leadership (that is the general sense; the Staff role no longer includes it), chairman, director
 
 **PIC**:
 The Staff member accountable for one piece of work being filed. A Perjadin has one, answerable for its administrative reporting; an online Session has one of its own, since it has no Group. The PIC files the Session Record — the account of the visit — and no Class Records, because they organised the Session rather than taught it.
@@ -207,7 +208,7 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - A **Perjadin** carries exactly one **Group** and has exactly one **PIC**
 - A **Group** exists for one **Perjadin** only — no **Cluster** has a standing team
 - A **Group** contains one **PIC** and up to ten other **Staff**, and nothing else; its minimum is just the **PIC**. **Teaching Team** are trip-scoped names recorded on the **Perjadin**, not **Group** members, and **Pimpinan** who join are recorded but do not travel as working members
-- **Every Person is Staff** — the `Teaching Team` **Person** role was retired in T3 ([#153](https://github.com/mafiefa02/sugt/issues/153)) once both modes named their teachers as plain names, so there is one role now and the old online `session_teacher` table is dropped
+- **A Person is Staff or Pimpinan** — the `Teaching Team` **Person** role was retired in T3 ([#153](https://github.com/mafiefa02/sugt/issues/153)) once both modes named their teachers as plain names (dropping the old online `session_teacher` table), leaving Staff alone; **[#179](https://github.com/mafiefa02/sugt/issues/179)** then added **Pimpinan**, one signed-in read-only leadership role. **Pimpinan** who join a trip are recorded but do not travel as working members
 - A **Session** records who taught it as **names**, filing nothing: an **online Session** carries session-scoped **Pengajar** names entered on it ([ADR-0022](./docs/adr/0022-online-sessions-carry-a-stream-and-name-teachers-as-session-scoped-names.md)); an **offline Session** records the set of the **Perjadin**'s trip-scoped **Teaching Team** names who taught it in parallel
 - Offline **Sessions** happen during a **Perjadin**; online **Sessions** have no **Perjadin** at all
 - A **Perjadin** goes to exactly one **Sub-Cluster**, and every **School** it teaches at belongs to that **Sub-Cluster**

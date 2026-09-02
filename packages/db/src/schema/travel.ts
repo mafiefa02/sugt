@@ -129,10 +129,12 @@ export const perjadin = pgTable(
  * than something derived, because a member with no transactions is ambiguous between
  * *spent nothing* and *has not handed anything over yet*.
  *
- * **This table is Staff-only, and now so is the whole Person roster** (ADR-0020, and T3/#153): the
- * Group is the PIC plus up to ten other DITSAMA Staff, and the teaching team left it entirely for
- * `perjadin_teacher` (trip-scoped names). With every Person now Staff, `group_member_role_check`
- * pins `'Staff'`, and `stream` can never be carried by a Group member — so the old
+ * **This table is Staff-only** (ADR-0020, and T3/#153): the Group is the PIC plus up to ten other
+ * DITSAMA Staff, and the teaching team left it entirely for `perjadin_teacher` (trip-scoped names).
+ * The roster now carries a second role — `Pimpinan`, a signed-in read-only principal (#179, ADR-0025)
+ * — but the Group does not admit it: `group_member_role_check` still pins `'Staff'` and the composite
+ * `(id, role)` FK below asks `person` for a Staff pair, so a Pimpinan can never be a member. `stream`
+ * can never be carried by a Group member either — so the old
  * `group_member_stream_iff_teaching` equivalence (which pinned Stream to Teaching-Team rows)
  * collapses to `group_member_stream_null`: a Group member holds no Stream at all. See
  * `docs/data-model.md`'s Group section.
@@ -144,10 +146,11 @@ export const groupMember = pgTable(
       .notNull()
       .references(() => perjadin.id, { onDelete: "cascade" }),
     personId: uuid("person_id").notNull(),
-    // `group_member_role_check` and `group_member_stream_check` name exactly the values
-    // `ROLES` and `STREAMS` hold — `role` is now the single value `'Staff'` (T3, #153).
-    // `stream` stays nullable, so it reads as `Stream | null`; the CHECK pins which strings
-    // are allowed, and `group_member_stream_null` below pins that it is always null now.
+    // `group_member_stream_check` names exactly the values `STREAMS` holds. `group_member_role_check`
+    // deliberately pins `'Staff'` alone — a subset of `ROLES` now that `Pimpinan` exists (#179) — which
+    // is what keeps a Pimpinan out of the Group. `stream` stays nullable, so it reads as `Stream | null`;
+    // the CHECK pins which strings are allowed, and `group_member_stream_null` below pins that it is
+    // always null now.
     role: text("role").$type<Role>().notNull(),
     stream: text("stream").$type<Stream>(),
     receiptsSettledAt: timestamp("receipts_settled_at", { withTimezone: true }),
