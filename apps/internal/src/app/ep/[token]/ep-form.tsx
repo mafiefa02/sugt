@@ -1,5 +1,6 @@
 "use client";
 
+import type { PerjadinEvaluationRatings } from "@sugt/db/queries";
 import {
   CONCERN_AT_OR_BELOW,
   PERJADIN_ASPECTS,
@@ -109,12 +110,7 @@ function EpForm({
    * not satisfy a low one (#163). A null `lodging` is not low — it drops out exactly as Postgres
    * `least()` leaves a NULL out of the minimum — so it never appears here.
    */
-  function proseGaps(ratings: {
-    lodging: number | null;
-    transport: number;
-    meals: number;
-    punctuality: number;
-  }): Partial<Record<PerjadinAspect, boolean>> {
+  function proseGaps(ratings: PerjadinEvaluationRatings): Partial<Record<PerjadinAspect, boolean>> {
     const byAspect: Record<PerjadinAspect, number | null> = {
       lodging: ratings.lodging,
       transport: ratings.transport,
@@ -145,7 +141,7 @@ function EpForm({
     // one. The column is nullable by design, so the write cannot catch a mistake here.
     if (!noLodging && lodging === undefined) return;
 
-    const ratings = {
+    const ratings: PerjadinEvaluationRatings = {
       lodging: noLodging ? null : lodging!,
       transport: others.transport!,
       meals: others.meals!,

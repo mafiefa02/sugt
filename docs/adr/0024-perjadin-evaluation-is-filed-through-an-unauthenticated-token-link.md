@@ -56,8 +56,11 @@ and _"every member of a Group may file one… and nobody else may"_ are amended 
   the four `*_comment` columns, the per-Aspect elaboration CHECK (`perjadin_evaluation_low_rating_needs_prose`),
   the nullable `lodging` with its "Tidak menginap" day-trip path, and the concerns index all stand
   as they were. This ticket changes _identity and access_, not the Aspects or their comments.
-- **`concerns.ts` is unchanged** — it reads the same rating and comment columns, and never read the
-  filer.
+- **`concerns.ts`'s rating and comment model is unchanged** — it unpivots the same four Aspects and
+  per-Aspect `*_comment`s (`unpivotWithComment`) exactly as [ADR-0023](./0023-perjadin-evaluation-has-a-comment-per-aspect.md)
+  left them. Its one edit follows the identity change: `who` moved from the filer's `person.full_name`
+  (joined on the now-dropped `filed_by_person_id`) to the self-declared `filed_by_name`, mirroring how
+  the Participant-Feedback branch already reads its `who` off `participant_feedback.name`.
 
 ## What is deliberately given up
 
