@@ -123,7 +123,7 @@ export type PerjadinDetail = {
    * The Preparation Checklist, each item with its tick state ([#114](https://github.com/mafiefa02/sugt/issues/114)).
    * **Derived here, not stored**: `perjadin_preparation_item` holds only the ticks. Its per-teacher
    * derivation is T4's ([#139](https://github.com/mafiefa02/sugt/issues/139)); this ticket leaves it
-   * as it stands. No money, so it rides on this open payload rather than the Staff-only acquittal.
+   * as it stands. No money, so it rides on this payload rather than the separate acquittal read.
    */
   preparation: PreparationItem[];
 };
