@@ -1,6 +1,5 @@
 import {
   REPORT_DEADLINE_DAYS_AFTER_RETURN,
-  type Role,
   type TransactionCategory,
   type TransactionParticipantType,
 } from "@sugt/domain";
@@ -8,13 +7,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { person } from "../schema/people";
-import {
-  groupMember,
-  perjadin,
-  perjadinPimpinan,
-  transaction,
-  transactionEvidence,
-} from "../schema/travel";
+import { perjadin, perjadinPimpinan, transaction, transactionEvidence } from "../schema/travel";
 import type { Person } from "./caller";
 import { requireStaff } from "./staff-only";
 
@@ -75,20 +68,6 @@ export type AcquittalTransaction = {
 };
 
 /**
- * One Group member on the PIC's receipts checklist.
- *
- * `settledAt` is an **explicit mark and never derived**, because a member with no
- * transactions is genuinely ambiguous between *spent nothing* and *has not handed anything
- * over yet*. Counting their transactions would answer the wrong question confidently.
- */
-export type AcquittalReceipt = {
-  personId: string;
-  fullName: string;
-  role: Role;
-  settledAt: Date | null;
-};
-
-/**
  * The whole acquittal screen in one round trip, per the query layer's third convention.
  *
  * `/perjadin/[id]` renders the four figures off the top of this and links onward; the
@@ -133,7 +112,6 @@ export type PerjadinAcquittal = {
    */
   daysRemaining: number;
   transactions: AcquittalTransaction[];
-  receipts: AcquittalReceipt[];
   /**
    * The Pimpinan who joined this trip — record-only, now the names of real Pimpinan-Person rows
    * (#181, joined from `person`), ordered so the Report and its CSV read the same on every load. A
@@ -159,7 +137,7 @@ export type PerjadinAcquittal = {
  * this read's `requireStaff` was the whole of theirs. Opening the read would have opened those writes
  * (a receipt-upload credential, a service-role Storage read) to a Pimpinan, so each now calls
  * `requireStaff` explicitly, ahead of this read. Every other money-write query (`recordTransaction`,
- * `attachTransactionEvidence`, `markReceiptsSettled`, `filePerjadinReport`) keeps its own `requireStaff`.
+ * `attachTransactionEvidence`, `filePerjadinReport`) keeps its own `requireStaff`.
  *
  * Returns `null` when there is no such Perjadin. That is a genuinely reachable state — a
  * stale link to a deleted Perjadin.
@@ -201,9 +179,8 @@ export async function perjadinAcquittal(
 
   if (!trip) return null;
 
-  const [transactions, receipts, pimpinan] = await Promise.all([
+  const [transactions, pimpinan] = await Promise.all([
     transactionsOf(perjadinId),
-    receiptsOf(perjadinId),
     pimpinanOf(perjadinId),
   ]);
 
@@ -226,7 +203,6 @@ export async function perjadinAcquittal(
     gtkMsSpentIdr,
     remainderIdr: trip.advanceIdr - spentIdr,
     transactions,
-    receipts,
     pimpinan,
   };
 }
@@ -283,21 +259,6 @@ async function transactionsOf(perjadinId: string): Promise<AcquittalTransaction[
     ...line,
     evidence: byTransaction.get(line.id) ?? [],
   }));
-}
-
-/** The checklist: every Group member, whether or not they have handed anything over. */
-async function receiptsOf(perjadinId: string): Promise<AcquittalReceipt[]> {
-  return db
-    .select({
-      personId: groupMember.personId,
-      fullName: person.fullName,
-      role: groupMember.role,
-      settledAt: groupMember.receiptsSettledAt,
-    })
-    .from(groupMember)
-    .innerJoin(person, eq(person.id, groupMember.personId))
-    .where(eq(groupMember.perjadinId, perjadinId))
-    .orderBy(asc(person.fullName));
 }
 
 /**
@@ -425,36 +386,6 @@ export async function attachTransactionEvidence(
 
     return { outcome: "attached", count: evidence.length };
   });
-}
-
-export type MarkReceiptsSettledResult =
-  | { outcome: "marked"; settledAt: Date | null }
-  /** The person is not on this Perjadin's Group — a stale screen after a substitution. */
-  | { outcome: "no-such-member" };
-
-/**
- * Tick or untick one Group member on the receipts checklist.
- *
- * The mark is a timestamp rather than a boolean because *when* the PIC accepted somebody's
- * receipts is the useful half; unticking clears it rather than storing a second event, since
- * an undone tick is a correction and not a thing that happened.
- */
-export async function markReceiptsSettled(
-  caller: Person,
-  perjadinId: string,
-  personId: string,
-  settled: boolean,
-): Promise<MarkReceiptsSettledResult> {
-  requireStaff(caller);
-
-  const [member] = await db
-    .update(groupMember)
-    .set({ receiptsSettledAt: settled ? new Date() : null })
-    .where(and(eq(groupMember.perjadinId, perjadinId), eq(groupMember.personId, personId)))
-    .returning({ settledAt: groupMember.receiptsSettledAt });
-
-  if (!member) return { outcome: "no-such-member" };
-  return { outcome: "marked", settledAt: member.settledAt };
 }
 
 export type FilePerjadinReportResult =

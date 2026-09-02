@@ -1177,7 +1177,6 @@ create table group_member (
   person_id            uuid not null,
   role                 text not null check (role = 'Staff'),   -- 'Teaching Team' retired, #153
   stream               text check (stream in ('STEM', 'Research')),
-  receipts_settled_at  timestamptz,
 
   primary key (perjadin_id, person_id),
   foreign key (person_id, role) references person (id, role),
@@ -1205,10 +1204,6 @@ and transactions are untouched — only the membership is destroyed and rebuilt.
 
 That is what makes the last Group rule cheap. See
 [what the database does not hold](#what-the-database-does-not-hold).
-
-`receipts_settled_at` is the PIC's checklist from `product.md`. It has to be an explicit mark
-rather than something derived, because a member with no transactions is genuinely ambiguous
-between _spent nothing_ and _has not handed anything over yet_.
 
 ### The Teaching Team and Pimpinan on a Perjadin
 

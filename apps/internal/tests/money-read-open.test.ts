@@ -2,7 +2,6 @@ import {
   attachTransactionEvidence,
   filePerjadinReport,
   isNotStaffError,
-  markReceiptsSettled,
   perjadinAcquittal,
   recordTransaction,
 } from "@sugt/db/queries";
@@ -94,16 +93,6 @@ describe("a Pimpinan cannot write money", () => {
     const refusal = await attachTransactionEvidence(pimpinan, trip.id, line.id, [
       { storagePath: "a", contentType: "image/jpeg", byteSize: 10 },
     ]).catch((error: unknown) => error);
-
-    expect(isNotStaffError(refusal)).toBe(true);
-  });
-
-  it("is refused by markReceiptsSettled", async () => {
-    const { staff, pimpinan, trip } = await aTripWithAPimpinan();
-
-    const refusal = await markReceiptsSettled(pimpinan, trip.id, staff.id, true).catch(
-      (error: unknown) => error,
-    );
 
     expect(isNotStaffError(refusal)).toBe(true);
   });

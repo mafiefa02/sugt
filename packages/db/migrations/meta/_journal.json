@@ -148,6 +148,13 @@
       "when": 1788355407388,
       "tag": "0020_transaction_participant_type",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788359971403,
+      "tag": "0021_drop_group_member_receipts_settled_at",
+      "breakpoints": true
     }
   ]
 }

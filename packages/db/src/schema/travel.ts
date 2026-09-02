@@ -132,10 +132,6 @@ export const perjadin = pgTable(
  * `role` is denormalised from `person`, but it cannot drift: the composite foreign
  * key means a row can only exist if the pair is true there.
  *
- * `receiptsSettledAt` is the PIC's checklist. It has to be an explicit mark rather
- * than something derived, because a member with no transactions is ambiguous between
- * *spent nothing* and *has not handed anything over yet*.
- *
  * **This table is Staff-only** (ADR-0020, and T3/#153): the Group is the PIC plus up to ten other
  * DITSAMA Staff, and the teaching team left it entirely for `perjadin_teacher` (trip-scoped names).
  * The roster now carries a second role — `Pimpinan`, a signed-in read-only principal (#179, ADR-0025)
@@ -160,7 +156,6 @@ export const groupMember = pgTable(
     // always null now.
     role: text("role").$type<Role>().notNull(),
     stream: text("stream").$type<Stream>(),
-    receiptsSettledAt: timestamp("receipts_settled_at", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ columns: [t.perjadinId, t.personId] }),
