@@ -77,7 +77,7 @@ describe("a Pimpinan cannot write money", () => {
       description: "Taksi",
       amountIdr: 50_000,
       category: "Transport Lokal Dalam Provinsi",
-      incurredByPersonId: null,
+      participantType: "Siswa",
     }).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);

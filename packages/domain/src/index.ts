@@ -363,6 +363,23 @@ export const TRANSACTION_CATEGORIES = [
 export type TransactionCategory = (typeof TRANSACTION_CATEGORIES)[number];
 
 /**
+ * Which cohort a transaction's spend served — an axis orthogonal to `category`. `category` is what
+ * kind of spend it was; `participant_type` is which of the two Classes it was for. `Siswa` is the
+ * Student Class; `GTK-MS` is the GTK and MS Classes taken together. Required on every transaction:
+ * the Laporan splits each acquittal's spend by cohort, so there is no unset state to carry.
+ *
+ * There is deliberately **no "Umum" value**: a shared cost is attributed to whichever type it
+ * predominantly served rather than parked in a third bucket, because a subtotal that leaves spend
+ * unattributed answers the split it exists to make with "some of it".
+ *
+ * Like `TRANSACTION_CATEGORIES`, these are **values a column may hold, not terms `CONTEXT.md`
+ * defines** — Indonesian, a closed set, mirrored by `transaction_participant_type_check` character
+ * for character; see `packages/db/src/schema/travel.ts`.
+ */
+export const TRANSACTION_PARTICIPANT_TYPES = ["Siswa", "GTK-MS"] as const;
+export type TransactionParticipantType = (typeof TRANSACTION_PARTICIPANT_TYPES)[number];
+
+/**
  * How a Group travels to and from a Perjadin — the mode on the Keberangkatan and Kepulangan
  * legs. A closed set of four, in Indonesian because that is what goes on the Surat Tugas, the
  * same reasoning as `TRANSACTION_CATEGORIES` above.

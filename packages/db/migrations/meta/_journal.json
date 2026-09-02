@@ -141,6 +141,13 @@
       "when": 1788349270726,
       "tag": "0019_unify_perjadin_pimpinan_onto_person",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788355407388,
+      "tag": "0020_transaction_participant_type",
+      "breakpoints": true
     }
   ]
 }

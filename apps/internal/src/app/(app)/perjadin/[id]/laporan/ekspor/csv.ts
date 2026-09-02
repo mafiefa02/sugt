@@ -24,18 +24,22 @@ import type { PerjadinAcquittal } from "@sugt/db/queries";
  */
 export function csvOf(acquittal: PerjadinAcquittal): string {
   const rows = [
-    ["Tanggal", "Keterangan", "Kategori", "Atas nama", "Jumlah (Rp)", "Jumlah bukti"],
+    ["Tanggal", "Keterangan", "Kategori", "Tipe Peserta", "Jumlah (Rp)", "Jumlah bukti"],
     ...acquittal.transactions.map((line) => [
       line.spentOn,
       line.description,
       line.category,
-      line.incurredBy?.fullName ?? "",
+      line.participantType,
       String(line.amountIdr),
       String(line.evidence.length),
     ]),
     [],
     ["Uang muka", "", "", "", String(acquittal.advanceIdr), ""],
     ["Terpakai", "", "", "", String(acquittal.spentIdr), ""],
+    // The Terpakai total split by cohort, the same two figures the page tiles show; the payload
+    // carries them so nothing is retyped or re-summed here.
+    ["Total Siswa", "", "", "", String(acquittal.siswaSpentIdr), ""],
+    ["Total GTK-MS", "", "", "", String(acquittal.gtkMsSpentIdr), ""],
     ["Sisa", "", "", "", String(acquittal.remainderIdr), ""],
     // Who travelled, one labelled row per Pimpinan (#142). Omitted entirely when none joined, so
     // no stray section appears. These are existing stored names, inventing no new column.
