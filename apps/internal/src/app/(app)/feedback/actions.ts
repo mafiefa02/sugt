@@ -3,9 +3,13 @@
 import { requirePerson } from "-/lib/person";
 import {
   participantFeedbackPage,
+  perjadinFeedbackPage,
   type FeedbackCursor,
   type FeedbackFilters,
   type ParticipantFeedbackRow,
+  type PerjadinFeedbackCursor,
+  type PerjadinFeedbackFilters,
+  type PerjadinFeedbackRow,
 } from "@sugt/db/queries";
 
 /**
@@ -29,4 +33,20 @@ export async function loadParticipantFeedback(
 ): Promise<{ rows: ParticipantFeedbackRow[]; nextCursor: FeedbackCursor | null }> {
   const person = await requirePerson();
   return participantFeedbackPage(person, { filters, cursor });
+}
+
+/**
+ * **The Perjadin tab's one read**, the twin of `loadParticipantFeedback` over `perjadin_evaluation`
+ * (#169). Both tabs' filter changes and "load more" buttons drive their own action; the two share
+ * nothing but the shape, so a mistaken cursor from one can never reach the other's query.
+ *
+ * `requirePerson()` for the same reason as its twin: a Server Action runs with no layout before it,
+ * so resolving the Person here is the check that counts. No role gate — feedback carries no money.
+ */
+export async function loadPerjadinFeedback(
+  filters: PerjadinFeedbackFilters,
+  cursor: PerjadinFeedbackCursor | null,
+): Promise<{ rows: PerjadinFeedbackRow[]; nextCursor: PerjadinFeedbackCursor | null }> {
+  const person = await requirePerson();
+  return perjadinFeedbackPage(person, { filters, cursor });
 }

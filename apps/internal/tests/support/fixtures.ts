@@ -337,6 +337,12 @@ export type PerjadinEvaluationFixture = {
    * so a caller passing FINE Ratings needs no comments at all.
    */
   comments?: Partial<Record<PerjadinAspect, string>>;
+  /**
+   * When it was filed. Defaults to the schema's `now()`. The Feedback list's Perjadin tab orders on
+   * this and pages by it, so a test that asserts on the order supplies distinct values; existing
+   * callers pass none and keep the default.
+   */
+  createdAt?: Date;
 };
 
 /** How the trip went. Four Aspects, `lodging` nullable, the elaboration rule now per-Aspect. */
@@ -364,6 +370,7 @@ export async function addPerjadinEvaluation(fixture: PerjadinEvaluationFixture) 
       transportComment: commentFor("transport"),
       mealsComment: commentFor("meals"),
       punctualityComment: commentFor("punctuality"),
+      ...(fixture.createdAt ? { createdAt: fixture.createdAt } : {}),
     })
     .returning();
   return evaluation!;
