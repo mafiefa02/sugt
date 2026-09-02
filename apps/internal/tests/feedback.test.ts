@@ -1,11 +1,15 @@
 import {
+  DEFAULT_FEEDBACK_SORT,
   NO_FEEDBACK_FILTERS,
   NO_PERJADIN_FEEDBACK_FILTERS,
   participantFeedbackAverages,
   participantFeedbackPage,
   perjadinFeedbackAverages,
   perjadinFeedbackPage,
+  type FeedbackCursor,
   type FeedbackFilters,
+  type FeedbackSort,
+  type PerjadinFeedbackCursor,
   type PerjadinFeedbackFilters,
 } from "@sugt/db/queries";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -23,10 +27,12 @@ import {
 } from "./support/fixtures";
 
 /**
- * **The Feedback list's Peserta tab** — every Participant submission, filtered and keyset-paged,
- * newest first. The tests prove the four filters cut on the right numbers and AND together, that
- * `reviewType` gates on the raw row average, that the page walks the whole set with no repeat or
- * gap in `submitted_at desc` order, and that the summary averages are dataset-wide.
+ * **The Feedback list's Peserta tab** — every Participant submission, filtered, globally sorted and
+ * OFFSET-paged. The tests prove the four filters cut on the right numbers and AND together, that
+ * `reviewType` gates on the raw row average, that the compound sort orders lowest-average-first (the
+ * default) with the filed date as the tiebreak and both directions selectable, that the page walks
+ * the whole set with no repeat or gap under multiple sort combinations, that the new row fields
+ * (`submittedOn`, `startsAt`, `timeZone`) surface, and that the summary averages are dataset-wide.
  */
 
 async function signedIn(email = "rina@ditsama.itb.ac.id") {
@@ -55,35 +61,110 @@ function filters(overrides: Partial<FeedbackFilters>): FeedbackFilters {
   return { ...NO_FEEDBACK_FILTERS, ...overrides };
 }
 
+/** A sort from the default with a direction or two overridden — terser than spelling both out. */
+function sort(overrides: Partial<FeedbackSort>): FeedbackSort {
+  return { ...DEFAULT_FEEDBACK_SORT, ...overrides };
+}
+
 describe("participantFeedbackPage", () => {
   beforeEach(resetDatabase);
 
-  it("returns everything, newest first, when no filter is set", async () => {
+  it("sorts lowest-average-first, then newest, by default", async () => {
+    const person = await signedIn();
+    const session = await oneSession(person.id);
+    // Two distinct averages plus a tied pair on distinct instants, so the assertion turns on both
+    // the average (primary) and the newest-first date tiebreak (secondary).
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Tinggi",
+      ratings: { materials: 10, instructor: 10, relevance: 10 },
+      submittedAt: new Date("2026-04-01T00:00:00Z"),
+    });
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Rendah",
+      ratings: { materials: 2, instructor: 2, relevance: 2 },
+      submittedAt: new Date("2026-03-01T00:00:00Z"),
+    });
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "SamaLama",
+      ratings: { materials: 6, instructor: 6, relevance: 6 },
+      submittedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "SamaBaru",
+      ratings: { materials: 6, instructor: 6, relevance: 6 },
+      submittedAt: new Date("2026-02-01T00:00:00Z"),
+    });
+
+    const page = await participantFeedbackPage(person, {
+      filters: NO_FEEDBACK_FILTERS,
+      cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
+    });
+    // Rendah (avg 2) first; then the two avg-6 rows newest-first; then Tinggi (avg 10).
+    expect(page.rows.map((row) => row.name)).toEqual(["Rendah", "SamaBaru", "SamaLama", "Tinggi"]);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it("sorts highest-average-first under score desc (Tertinggi)", async () => {
     const person = await signedIn();
     const session = await oneSession(person.id);
     await addParticipantFeedback({
       sessionId: session.id,
       classKind: "Student",
+      name: "Rendah",
+      ratings: { materials: 2, instructor: 2, relevance: 2 },
+    });
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Tinggi",
+      ratings: { materials: 10, instructor: 10, relevance: 10 },
+    });
+
+    const page = await participantFeedbackPage(person, {
+      filters: NO_FEEDBACK_FILTERS,
+      cursor: null,
+      sort: sort({ score: "desc" }),
+    });
+    expect(page.rows.map((row) => row.name)).toEqual(["Tinggi", "Rendah"]);
+  });
+
+  it("breaks equal-average ties oldest-first under date asc (Terlama)", async () => {
+    const person = await signedIn();
+    const session = await oneSession(person.id);
+    // Same average, distinct instants — so only the date tiebreak decides, and date asc is oldest-first.
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
       name: "Lama",
+      ratings: { materials: 6, instructor: 6, relevance: 6 },
       submittedAt: new Date("2026-01-01T00:00:00Z"),
     });
     await addParticipantFeedback({
       sessionId: session.id,
       classKind: "Student",
       name: "Baru",
-      submittedAt: new Date("2026-06-01T00:00:00Z"),
+      ratings: { materials: 6, instructor: 6, relevance: 6 },
+      submittedAt: new Date("2026-02-01T00:00:00Z"),
     });
 
     const page = await participantFeedbackPage(person, {
       filters: NO_FEEDBACK_FILTERS,
       cursor: null,
+      sort: sort({ date: "asc" }),
     });
-    expect(page.rows).toHaveLength(2);
-    expect(page.rows.map((row) => row.name)).toEqual(["Baru", "Lama"]);
-    expect(page.nextCursor).toBeNull();
+    expect(page.rows.map((row) => row.name)).toEqual(["Lama", "Baru"]);
   });
 
-  it("carries the row's shape, and heldOn/mode/schoolName from the joins", async () => {
+  it("carries the row's shape, the joins, and the session time/zone and filed date", async () => {
     const person = await signedIn();
     const session = await oneSession(person.id);
     await addParticipantFeedback({
@@ -91,10 +172,15 @@ describe("participantFeedbackPage", () => {
       classKind: "GTK",
       name: "Ayu",
       ratings: { materials: 8, instructor: 9, relevance: 10 },
+      submittedAt: new Date("2026-06-15T00:00:00Z"),
     });
 
     const [row] = (
-      await participantFeedbackPage(person, { filters: NO_FEEDBACK_FILTERS, cursor: null })
+      await participantFeedbackPage(person, {
+        filters: NO_FEEDBACK_FILTERS,
+        cursor: null,
+        sort: DEFAULT_FEEDBACK_SORT,
+      })
     ).rows;
     expect(row?.name).toBe("Ayu");
     expect(row?.classKind).toBe("GTK");
@@ -102,6 +188,10 @@ describe("participantFeedbackPage", () => {
     expect(row?.sessionMode).toBe("online");
     expect(row?.heldOn).toBe("2026-09-10");
     expect(row?.rowAverage).toBeCloseTo((8 + 9 + 10) / 3, 5);
+    // The new display fields (#184): the session's local start time, its zone, and the filed date.
+    expect(row?.startsAt).toBe("09:00:00");
+    expect(row?.timeZone).toBe("WIB");
+    expect(row?.submittedOn).toBe("2026-06-15");
   });
 
   it("filters on the instructor column with le7 and gt7", async () => {
@@ -123,12 +213,14 @@ describe("participantFeedbackPage", () => {
     const low = await participantFeedbackPage(person, {
       filters: filters({ instructor: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(low.rows.map((row) => row.name)).toEqual(["Rendah"]);
 
     const high = await participantFeedbackPage(person, {
       filters: filters({ instructor: "gt7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(high.rows.map((row) => row.name)).toEqual(["Tinggi"]);
   });
@@ -152,6 +244,7 @@ describe("participantFeedbackPage", () => {
     const low = await participantFeedbackPage(person, {
       filters: filters({ materials: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(low.rows.map((row) => row.name)).toEqual(["Rendah"]);
   });
@@ -175,12 +268,14 @@ describe("participantFeedbackPage", () => {
     const low = await participantFeedbackPage(person, {
       filters: filters({ relevance: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     // 7 is at the threshold, so le7 (<= 7) keeps it and gt7 (> 7) does not.
     expect(low.rows.map((row) => row.name)).toEqual(["Rendah"]);
     const high = await participantFeedbackPage(person, {
       filters: filters({ relevance: "gt7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(high.rows.map((row) => row.name)).toEqual(["Tinggi"]);
   });
@@ -200,6 +295,7 @@ describe("participantFeedbackPage", () => {
     const gt = await participantFeedbackPage(person, {
       filters: filters({ reviewType: "gt7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(gt.rows.map((row) => row.name)).toEqual(["Campuran"]);
     expect(gt.rows[0]?.rowAverage).toBeCloseTo((8 + 8 + 6) / 3, 5);
@@ -207,6 +303,7 @@ describe("participantFeedbackPage", () => {
     const le = await participantFeedbackPage(person, {
       filters: filters({ reviewType: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(le.rows).toHaveLength(0);
   });
@@ -239,54 +336,90 @@ describe("participantFeedbackPage", () => {
     const both = await participantFeedbackPage(person, {
       filters: filters({ instructor: "le7", materials: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(both.rows.map((row) => row.name)).toEqual(["Keduanya"]);
   });
 
-  it("walks the whole set by keyset, 10 per page, newest first, with no repeat or gap", async () => {
+  it("pages the whole set under the default sort with no repeat or gap (score asc)", async () => {
     const person = await signedIn();
     const session = await oneSession(person.id);
-    // 12 submissions on distinct instants, oldest first — so "newest first" is the reverse.
+    // 12 rows spread across averages and instants, so paging must cross a boundary mid-order.
     for (let i = 0; i < 12; i++) {
+      const rating = (i % 10) + 1; // 1..10, so the averages vary and some tie
       await addParticipantFeedback({
         sessionId: session.id,
         classKind: "Student",
         name: `P${String(i).padStart(2, "0")}`,
+        ratings: { materials: rating, instructor: rating, relevance: rating },
         submittedAt: new Date(`2026-06-${String(i + 1).padStart(2, "0")}T00:00:00Z`),
       });
     }
 
-    const first = await participantFeedbackPage(person, {
-      filters: NO_FEEDBACK_FILTERS,
-      cursor: null,
-    });
-    expect(first.rows).toHaveLength(10);
-    expect(first.nextCursor).not.toBeNull();
-    // Newest first: P11 down to P02.
-    expect(first.rows.map((row) => row.name)).toEqual([
-      "P11",
-      "P10",
-      "P09",
-      "P08",
-      "P07",
-      "P06",
-      "P05",
-      "P04",
-      "P03",
-      "P02",
-    ]);
+    const names: string[] = [];
+    const averages: number[] = [];
+    let cursor: FeedbackCursor | null = null;
+    let pages = 0;
+    do {
+      const page = await participantFeedbackPage(person, {
+        filters: NO_FEEDBACK_FILTERS,
+        cursor,
+        sort: DEFAULT_FEEDBACK_SORT,
+      });
+      for (const row of page.rows) {
+        names.push(row.name);
+        averages.push(row.rowAverage);
+      }
+      cursor = page.nextCursor;
+      pages += 1;
+    } while (cursor !== null);
 
-    const second = await participantFeedbackPage(person, {
-      filters: NO_FEEDBACK_FILTERS,
-      cursor: first.nextCursor,
-    });
-    expect(second.rows.map((row) => row.name)).toEqual(["P01", "P00"]);
-    expect(second.nextCursor).toBeNull();
+    // More than one page was walked, and every row came back exactly once — no gap, no duplicate.
+    expect(pages).toBeGreaterThan(1);
+    expect(names).toHaveLength(12);
+    expect(new Set(names).size).toBe(12);
+    // score asc holds across the page boundary: the average never decreases down the whole walk.
+    for (let i = 1; i < averages.length; i++) {
+      expect(averages[i]!).toBeGreaterThanOrEqual(averages[i - 1]!);
+    }
+  });
 
-    // No row appears on both pages, and every row appears once.
-    const all = [...first.rows, ...second.rows].map((row) => row.name);
-    expect(new Set(all).size).toBe(12);
-    expect(all).toHaveLength(12);
+  it("pages the whole set under score desc with no repeat or gap", async () => {
+    const person = await signedIn();
+    const session = await oneSession(person.id);
+    for (let i = 0; i < 12; i++) {
+      const rating = (i % 10) + 1;
+      await addParticipantFeedback({
+        sessionId: session.id,
+        classKind: "Student",
+        name: `P${String(i).padStart(2, "0")}`,
+        ratings: { materials: rating, instructor: rating, relevance: rating },
+        submittedAt: new Date(`2026-06-${String(i + 1).padStart(2, "0")}T00:00:00Z`),
+      });
+    }
+
+    const names: string[] = [];
+    const averages: number[] = [];
+    let cursor: FeedbackCursor | null = null;
+    do {
+      const page = await participantFeedbackPage(person, {
+        filters: NO_FEEDBACK_FILTERS,
+        cursor,
+        sort: sort({ score: "desc" }),
+      });
+      for (const row of page.rows) {
+        names.push(row.name);
+        averages.push(row.rowAverage);
+      }
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+
+    expect(names).toHaveLength(12);
+    expect(new Set(names).size).toBe(12);
+    // score desc holds across the boundary: the average never increases down the walk.
+    for (let i = 1; i < averages.length; i++) {
+      expect(averages[i]!).toBeLessThanOrEqual(averages[i - 1]!);
+    }
   });
 });
 
@@ -324,15 +457,17 @@ describe("participantFeedbackAverages", () => {
 });
 
 /**
- * **The Feedback list's Perjadin tab** — every Perjadin Evaluation, filtered and keyset-paged,
- * newest first. The tests prove the five filters cut on the right numbers and AND together, that
+ * **The Feedback list's Perjadin tab** — every Perjadin Evaluation, filtered, globally sorted and
+ * OFFSET-paged. The tests prove the five filters cut on the right numbers and AND together, that
  * `reviewType` gates on the present-ratings average, that a null `lodging` is averaged over three
- * ratings and excluded from both lodging arms and from the summary hotel average, that the page
- * walks the whole set in `created_at desc` order, and that the stored `filed_by_role` /
- * `filed_by_name` pass through onto the row.
+ * ratings and excluded from both lodging arms and from the summary hotel average, that the compound
+ * sort orders lowest-average-first (default) with the filed date as tiebreak, that the page walks
+ * the whole set with no repeat or gap under multiple sort combinations, that the trip's date range
+ * (`startsOn`/`endsOn`) and the filed date (`createdOn`) surface, and that the stored
+ * `filed_by_role` / `filed_by_name` pass through onto the row.
  */
 
-/** One throwaway Perjadin to hang evaluations on — its destination is asserted on below. */
+/** One throwaway Perjadin to hang evaluations on — its destination and window are asserted below. */
 async function oneTrip(picPersonId: string) {
   return addPerjadin({
     destination: "Kelompok 3: Kabupaten Sleman",
@@ -349,34 +484,102 @@ function perjadinFilters(overrides: Partial<PerjadinFeedbackFilters>): PerjadinF
 describe("perjadinFeedbackPage", () => {
   beforeEach(resetDatabase);
 
-  it("returns everything, newest first, and carries filed_by_role/name and the joined destination", async () => {
+  it("sorts lowest-average-first, then newest, and carries filed_by/destination/date range", async () => {
     const person = await signedIn();
     const trip = await oneTrip(person.id);
     await addPerjadinEvaluation({
       perjadinId: trip.id,
       role: "Pimpinan",
-      name: "Lama",
-      createdAt: new Date("2026-01-01T00:00:00Z"),
+      name: "Tinggi",
+      lodging: 10,
+      ratings: { transport: 10, meals: 10, punctuality: 10 },
+      createdAt: new Date("2026-04-01T00:00:00Z"),
     });
     await addPerjadinEvaluation({
       perjadinId: trip.id,
       role: "Pengajar",
-      name: "Baru",
-      createdAt: new Date("2026-06-01T00:00:00Z"),
+      name: "Rendah",
+      lodging: 2,
+      ratings: { transport: 2, meals: 2, punctuality: 2 },
+      createdAt: new Date("2026-03-01T00:00:00Z"),
     });
 
     const page = await perjadinFeedbackPage(person, {
       filters: NO_PERJADIN_FEEDBACK_FILTERS,
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
-    expect(page.rows.map((row) => row.filedByName)).toEqual(["Baru", "Lama"]);
+    // Lowest average first.
+    expect(page.rows.map((row) => row.filedByName)).toEqual(["Rendah", "Tinggi"]);
     // The stored role and name pass through verbatim — no derivation (ADR-0024, #167).
     expect(page.rows[0]?.filedByRole).toBe("Pengajar");
     expect(page.rows[1]?.filedByRole).toBe("Pimpinan");
     expect(page.rows[0]?.destination).toBe("Kelompok 3: Kabupaten Sleman");
     expect(page.rows[0]?.perjadinId).toBe(trip.id);
-    expect(page.rows[0]?.createdOn).toBe("2026-06-01");
+    expect(page.rows[0]?.createdOn).toBe("2026-03-01");
+    // The trip's date range (#184) — the fixture's defaults.
+    expect(page.rows[0]?.startsOn).toBe("2026-09-01");
+    expect(page.rows[0]?.endsOn).toBe("2026-09-03");
     expect(page.nextCursor).toBeNull();
+  });
+
+  it("sorts highest-average-first under score desc, newest-first within a tie", async () => {
+    const person = await signedIn();
+    const trip = await oneTrip(person.id);
+    await addPerjadinEvaluation({
+      perjadinId: trip.id,
+      name: "Rendah",
+      lodging: 2,
+      ratings: { transport: 2, meals: 2, punctuality: 2 },
+    });
+    await addPerjadinEvaluation({
+      perjadinId: trip.id,
+      name: "SamaLama",
+      lodging: 6,
+      ratings: { transport: 6, meals: 6, punctuality: 6 },
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    await addPerjadinEvaluation({
+      perjadinId: trip.id,
+      name: "SamaBaru",
+      lodging: 6,
+      ratings: { transport: 6, meals: 6, punctuality: 6 },
+      createdAt: new Date("2026-02-01T00:00:00Z"),
+    });
+
+    const page = await perjadinFeedbackPage(person, {
+      filters: NO_PERJADIN_FEEDBACK_FILTERS,
+      cursor: null,
+      sort: sort({ score: "desc" }),
+    });
+    // Highest average first; the avg-6 pair newest-first; then Rendah.
+    expect(page.rows.map((row) => row.filedByName)).toEqual(["SamaBaru", "SamaLama", "Rendah"]);
+  });
+
+  it("breaks equal-average ties oldest-first under date asc", async () => {
+    const person = await signedIn();
+    const trip = await oneTrip(person.id);
+    await addPerjadinEvaluation({
+      perjadinId: trip.id,
+      name: "Lama",
+      lodging: 6,
+      ratings: { transport: 6, meals: 6, punctuality: 6 },
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    await addPerjadinEvaluation({
+      perjadinId: trip.id,
+      name: "Baru",
+      lodging: 6,
+      ratings: { transport: 6, meals: 6, punctuality: 6 },
+      createdAt: new Date("2026-02-01T00:00:00Z"),
+    });
+
+    const page = await perjadinFeedbackPage(person, {
+      filters: NO_PERJADIN_FEEDBACK_FILTERS,
+      cursor: null,
+      sort: sort({ date: "asc" }),
+    });
+    expect(page.rows.map((row) => row.filedByName)).toEqual(["Lama", "Baru"]);
   });
 
   it("filters on each Aspect column with le7 and gt7", async () => {
@@ -406,12 +609,14 @@ describe("perjadinFeedbackPage", () => {
     const transportLow = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ transport: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(transportLow.rows.map((row) => row.filedByName)).toEqual(["Transport rendah"]);
 
     const mealsLow = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ meals: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(mealsLow.rows.map((row) => row.filedByName)).toEqual(["Konsumsi rendah"]);
 
@@ -419,12 +624,14 @@ describe("perjadinFeedbackPage", () => {
     const punctualityLow = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ punctuality: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(punctualityLow.rows.map((row) => row.filedByName)).toEqual(["Ketepatan rendah"]);
 
     const lodgingLow = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ lodging: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(lodgingLow.rows.map((row) => row.filedByName)).toEqual(["Penginapan rendah"]);
   });
@@ -444,6 +651,7 @@ describe("perjadinFeedbackPage", () => {
     const gt = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ reviewType: "gt7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(gt.rows.map((row) => row.filedByName)).toEqual(["Campuran"]);
     expect(gt.rows[0]?.rowAverage).toBeCloseTo((8 + 8 + 8 + 6) / 4, 5);
@@ -451,6 +659,7 @@ describe("perjadinFeedbackPage", () => {
     const le = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ reviewType: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(le.rows).toHaveLength(0);
   });
@@ -478,6 +687,7 @@ describe("perjadinFeedbackPage", () => {
     const both = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ transport: "le7", meals: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(both.rows.map((row) => row.filedByName)).toEqual(["Keduanya"]);
   });
@@ -496,6 +706,7 @@ describe("perjadinFeedbackPage", () => {
     const page = await perjadinFeedbackPage(person, {
       filters: NO_PERJADIN_FEEDBACK_FILTERS,
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(page.rows[0]?.lodging).toBeNull();
     expect(page.rows[0]?.rowAverage).toBeCloseTo((6 + 6 + 9) / 3, 5);
@@ -509,56 +720,93 @@ describe("perjadinFeedbackPage", () => {
     const low = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ lodging: "le7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(low.rows).toHaveLength(0);
     const high = await perjadinFeedbackPage(person, {
       filters: perjadinFilters({ lodging: "gt7" }),
       cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
     });
     expect(high.rows).toHaveLength(0);
   });
 
-  it("walks the whole set by keyset over created_at, 10 per page, newest first, no repeat or gap", async () => {
+  it("pages the whole set under the default sort with no repeat or gap (score asc)", async () => {
     const person = await signedIn();
     const trip = await oneTrip(person.id);
-    // 12 evaluations on distinct instants, oldest first — so "newest first" is the reverse.
+    // 12 evaluations spread across averages and instants, so paging must cross a boundary mid-order.
     for (let i = 0; i < 12; i++) {
+      const rating = (i % 10) + 1;
       await addPerjadinEvaluation({
         perjadinId: trip.id,
         name: `E${String(i).padStart(2, "0")}`,
+        lodging: rating,
+        ratings: { transport: rating, meals: rating, punctuality: rating },
         createdAt: new Date(`2026-06-${String(i + 1).padStart(2, "0")}T00:00:00Z`),
       });
     }
 
-    const first = await perjadinFeedbackPage(person, {
-      filters: NO_PERJADIN_FEEDBACK_FILTERS,
-      cursor: null,
-    });
-    expect(first.rows).toHaveLength(10);
-    expect(first.nextCursor).not.toBeNull();
-    expect(first.rows.map((row) => row.filedByName)).toEqual([
-      "E11",
-      "E10",
-      "E09",
-      "E08",
-      "E07",
-      "E06",
-      "E05",
-      "E04",
-      "E03",
-      "E02",
-    ]);
+    const names: string[] = [];
+    const averages: number[] = [];
+    let cursor: PerjadinFeedbackCursor | null = null;
+    let pages = 0;
+    do {
+      const page = await perjadinFeedbackPage(person, {
+        filters: NO_PERJADIN_FEEDBACK_FILTERS,
+        cursor,
+        sort: DEFAULT_FEEDBACK_SORT,
+      });
+      for (const row of page.rows) {
+        names.push(row.filedByName);
+        averages.push(row.rowAverage);
+      }
+      cursor = page.nextCursor;
+      pages += 1;
+    } while (cursor !== null);
 
-    const second = await perjadinFeedbackPage(person, {
-      filters: NO_PERJADIN_FEEDBACK_FILTERS,
-      cursor: first.nextCursor,
-    });
-    expect(second.rows.map((row) => row.filedByName)).toEqual(["E01", "E00"]);
-    expect(second.nextCursor).toBeNull();
+    expect(pages).toBeGreaterThan(1);
+    expect(names).toHaveLength(12);
+    expect(new Set(names).size).toBe(12);
+    for (let i = 1; i < averages.length; i++) {
+      expect(averages[i]!).toBeGreaterThanOrEqual(averages[i - 1]!);
+    }
+  });
 
-    const all = [...first.rows, ...second.rows].map((row) => row.filedByName);
-    expect(new Set(all).size).toBe(12);
-    expect(all).toHaveLength(12);
+  it("pages the whole set under score desc with no repeat or gap", async () => {
+    const person = await signedIn();
+    const trip = await oneTrip(person.id);
+    for (let i = 0; i < 12; i++) {
+      const rating = (i % 10) + 1;
+      await addPerjadinEvaluation({
+        perjadinId: trip.id,
+        name: `E${String(i).padStart(2, "0")}`,
+        lodging: rating,
+        ratings: { transport: rating, meals: rating, punctuality: rating },
+        createdAt: new Date(`2026-06-${String(i + 1).padStart(2, "0")}T00:00:00Z`),
+      });
+    }
+
+    const names: string[] = [];
+    const averages: number[] = [];
+    let cursor: PerjadinFeedbackCursor | null = null;
+    do {
+      const page = await perjadinFeedbackPage(person, {
+        filters: NO_PERJADIN_FEEDBACK_FILTERS,
+        cursor,
+        sort: sort({ score: "desc" }),
+      });
+      for (const row of page.rows) {
+        names.push(row.filedByName);
+        averages.push(row.rowAverage);
+      }
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+
+    expect(names).toHaveLength(12);
+    expect(new Set(names).size).toBe(12);
+    for (let i = 1; i < averages.length; i++) {
+      expect(averages[i]!).toBeLessThanOrEqual(averages[i - 1]!);
+    }
   });
 });
 

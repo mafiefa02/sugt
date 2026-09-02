@@ -7,12 +7,13 @@ import type {
   FeedbackCursor,
   FeedbackFilters,
   FeedbackFilterValue,
+  FeedbackSort,
   ParticipantFeedbackRow,
   PerjadinFeedbackCursor,
   PerjadinFeedbackFilters,
   PerjadinFeedbackRow,
 } from "@sugt/db/queries";
-import type { ClassKind } from "@sugt/domain";
+import { formatSessionStartTime, type ClassKind } from "@sugt/domain";
 import { Badge } from "@sugt/ui/components/badge";
 import { Button } from "@sugt/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@sugt/ui/components/card";
@@ -30,21 +31,24 @@ import { useState, useTransition } from "react";
 /**
  * **The Feedback screen.** Two tabs — Peserta (what Participants said about a Session) and Perjadin
  * (what a filer said about a trip) — each with summary cards that never move, server-side filters,
- * and a keyset-paged card list driven from its own Server Action.
+ * two sort dropdowns (average, then date), and an OFFSET-paged card list driven from its own Server
+ * Action. The list is sorted lowest-average-first by default, so the rows that need attention rise.
  *
  * **The averages are props and stay props.** They are dataset-wide and unfiltered by design, so
  * nothing here recomputes them when the filters narrow the list; the cards read the overall standing
  * while the list below reads a slice of it.
  *
- * **Filtering and paging are the server's, not the browser's.** The set is unbounded — a submission
- * per Participant, an evaluation per filer — so both the filters and "load more" go back to the
- * query. A filter change refetches the first page (cursor `null`) and REPLACES the list, resetting
- * paging; "load more" fetches the next page and APPENDS it.
+ * **Filtering, sorting and paging are the server's, not the browser's.** The set is unbounded — a
+ * submission per Participant, an evaluation per filer — so the filters, the sort and "load more" all
+ * go back to the query. A filter or sort change refetches the first page (cursor `null`) and REPLACES
+ * the list, resetting paging; "load more" carries the current sort and the cursor (an OFFSET) and
+ * APPENDS the next page.
  *
- * **Switching tabs resets filters and pagination to defaults.** Each tab is its own child component,
- * seeded from the server's initial page and averages; only the active one is mounted, so switching
- * away unmounts it and switching back mounts it fresh — the target tab always shows its first page
- * with all filters at `all`, and no round trip is needed because the server sent both tabs' data.
+ * **Switching tabs resets filters, sort and pagination to defaults.** Each tab is its own child
+ * component, seeded from the server's initial page and averages; only the active one is mounted, so
+ * switching away unmounts it and switching back mounts it fresh — the target tab always shows its
+ * first page with all filters at `all` and the default sort, and no round trip is needed because the
+ * server sent both tabs' data (paged under that same default sort).
  */
 
 /** The two tabs. Peserta is the default and first; Perjadin second. */
@@ -70,6 +74,26 @@ const ALL_PERJADIN_FILTERS: PerjadinFeedbackFilters = {
   transport: "all",
   meals: "all",
   punctuality: "all",
+};
+
+/**
+ * The default sort — lowest average first, newest within a tie — mirroring the server's
+ * `DEFAULT_FEEDBACK_SORT`. Declared here rather than imported for the same reason as the filter
+ * defaults above: it is a runtime value on `@sugt/db`, and this client component takes only types
+ * from that package. The server seeds the first paint with the same shape, so the two agree.
+ */
+const DEFAULT_SORT: FeedbackSort = { score: "asc", date: "desc" };
+
+/** The two directions of the average sort, in Indonesian — lowest ("Terendah") or highest first. */
+const SCORE_SORT_OPTIONS: Record<FeedbackSort["score"], string> = {
+  asc: "Terendah",
+  desc: "Tertinggi",
+};
+
+/** The two directions of the date tiebreak, in Indonesian — newest ("Terbaru") or oldest first. */
+const DATE_SORT_OPTIONS: Record<FeedbackSort["date"], string> = {
+  desc: "Terbaru",
+  asc: "Terlama",
 };
 
 /** GTK and MS keep their acronyms; a Participant of the student Class is a Siswa on screen. */
@@ -182,11 +206,12 @@ function FeedbackView({
 }
 
 /**
- * The Peserta tab: three summary cards, four server-side filters, and a keyset-paged card list.
+ * The Peserta tab: three summary cards, four server-side filters, two sort dropdowns, and an
+ * OFFSET-paged card list.
  *
- * A filter change refetches the first page (cursor `null`) and REPLACES the list; "load more"
- * carries the current filters and cursor and APPENDS what comes back. The pending state covers each
- * round trip so a second change cannot race the first.
+ * A filter or sort change refetches the first page (cursor `null`) and REPLACES the list; "load
+ * more" carries the current filters, sort and cursor and APPENDS what comes back. The pending state
+ * covers each round trip so a second change cannot race the first.
  */
 function ParticipantTab({
   initialRows,
@@ -200,13 +225,23 @@ function ParticipantTab({
   const [rows, setRows] = useState(initialRows);
   const [cursor, setCursor] = useState(initialCursor);
   const [filters, setFilters] = useState<FeedbackFilters>(ALL_FILTERS);
+  const [sort, setSort] = useState<FeedbackSort>(DEFAULT_SORT);
   const [pending, startTransition] = useTransition();
 
   function changeFilter(key: keyof FeedbackFilters, value: FeedbackFilterValue) {
     const next = { ...filters, [key]: value };
     setFilters(next);
     startTransition(async () => {
-      const page = await loadParticipantFeedback(next, null);
+      const page = await loadParticipantFeedback(next, null, sort);
+      setRows(page.rows);
+      setCursor(page.nextCursor);
+    });
+  }
+
+  function changeSort(next: FeedbackSort) {
+    setSort(next);
+    startTransition(async () => {
+      const page = await loadParticipantFeedback(filters, null, next);
       setRows(page.rows);
       setCursor(page.nextCursor);
     });
@@ -215,7 +250,7 @@ function ParticipantTab({
   function loadMore() {
     if (cursor === null) return;
     startTransition(async () => {
-      const page = await loadParticipantFeedback(filters, cursor);
+      const page = await loadParticipantFeedback(filters, cursor, sort);
       setRows((previous) => [...previous, ...page.rows]);
       setCursor(page.nextCursor);
     });
@@ -236,6 +271,28 @@ function ParticipantTab({
         <AverageCard
           label="Relevansi"
           value={averages.relevance}
+        />
+      </div>
+
+      {/* The two sort dropdowns. Each change refetches the first page and resets paging. */}
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SortSelect
+          ariaLabel="Urutkan nilai"
+          options={SCORE_SORT_OPTIONS}
+          value={sort.score}
+          disabled={pending}
+          onChange={(value) => {
+            changeSort({ ...sort, score: value });
+          }}
+        />
+        <SortSelect
+          ariaLabel="Urutkan tanggal"
+          options={DATE_SORT_OPTIONS}
+          value={sort.date}
+          disabled={pending}
+          onChange={(value) => {
+            changeSort({ ...sort, date: value });
+          }}
         />
       </div>
 
@@ -304,9 +361,9 @@ function ParticipantTab({
 }
 
 /**
- * The Perjadin tab: four summary cards, five server-side filters, and a keyset-paged card list. The
- * shape is the Peserta tab's — the extra Aspect (`lodging`) is the only difference — so the filter
- * and paging machinery is identical, just over `loadPerjadinFeedback`.
+ * The Perjadin tab: four summary cards, five server-side filters, two sort dropdowns, and an
+ * OFFSET-paged card list. The shape is the Peserta tab's — the extra Aspect (`lodging`) is the only
+ * difference — so the filter, sort and paging machinery is identical, just over `loadPerjadinFeedback`.
  */
 function PerjadinTab({
   initialRows,
@@ -320,13 +377,23 @@ function PerjadinTab({
   const [rows, setRows] = useState(initialRows);
   const [cursor, setCursor] = useState(initialCursor);
   const [filters, setFilters] = useState<PerjadinFeedbackFilters>(ALL_PERJADIN_FILTERS);
+  const [sort, setSort] = useState<FeedbackSort>(DEFAULT_SORT);
   const [pending, startTransition] = useTransition();
 
   function changeFilter(key: keyof PerjadinFeedbackFilters, value: FeedbackFilterValue) {
     const next = { ...filters, [key]: value };
     setFilters(next);
     startTransition(async () => {
-      const page = await loadPerjadinFeedback(next, null);
+      const page = await loadPerjadinFeedback(next, null, sort);
+      setRows(page.rows);
+      setCursor(page.nextCursor);
+    });
+  }
+
+  function changeSort(next: FeedbackSort) {
+    setSort(next);
+    startTransition(async () => {
+      const page = await loadPerjadinFeedback(filters, null, next);
       setRows(page.rows);
       setCursor(page.nextCursor);
     });
@@ -335,7 +402,7 @@ function PerjadinTab({
   function loadMore() {
     if (cursor === null) return;
     startTransition(async () => {
-      const page = await loadPerjadinFeedback(filters, cursor);
+      const page = await loadPerjadinFeedback(filters, cursor, sort);
       setRows((previous) => [...previous, ...page.rows]);
       setCursor(page.nextCursor);
     });
@@ -360,6 +427,28 @@ function PerjadinTab({
         <AverageCard
           label="Ketepatan Waktu"
           value={averages.punctuality}
+        />
+      </div>
+
+      {/* The two sort dropdowns. Each change refetches the first page and resets paging. */}
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SortSelect
+          ariaLabel="Urutkan nilai"
+          options={SCORE_SORT_OPTIONS}
+          value={sort.score}
+          disabled={pending}
+          onChange={(value) => {
+            changeSort({ ...sort, score: value });
+          }}
+        />
+        <SortSelect
+          ariaLabel="Urutkan tanggal"
+          options={DATE_SORT_OPTIONS}
+          value={sort.date}
+          disabled={pending}
+          onChange={(value) => {
+            changeSort({ ...sort, date: value });
+          }}
         />
       </div>
 
@@ -514,11 +603,59 @@ function FilterSelect({
 }
 
 /**
+ * One sort dropdown — the `FilterSelect` shape over a generic string value rather than the three
+ * filter arms. Both the average sort (`asc`/`desc`) and the date tiebreak (`desc`/`asc`) drive one,
+ * so the value type is the option map's own key. The value is always a valid key, so no placeholder.
+ */
+function SortSelect<T extends string>({
+  ariaLabel,
+  options,
+  value,
+  disabled,
+  onChange,
+}: {
+  ariaLabel: string;
+  options: Record<T, string>;
+  value: T;
+  disabled: boolean;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <Select
+      items={options}
+      value={value}
+      onValueChange={(next) => {
+        onChange(next as T);
+      }}
+    >
+      <SelectTrigger
+        aria-label={ariaLabel}
+        className="w-full"
+        disabled={disabled}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {(Object.entries(options) as [T, string][]).map(([key, label]) => (
+          <SelectItem
+            key={key}
+            value={key}
+          >
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/**
  * One Participant's submission.
  *
- * The header names who left it, from which Class, at which School, in which mode, on which day,
- * with the row average as the headline number. The mode label is the mode word only — `Luring` /
- * `Daring` — because the data model carries no session ordinal to number them with (#168).
+ * The header names who left it, from which Class, at which School, in which mode, on which Session
+ * day and start time (in the School's zone), the day the Participant filed it ("Diisi"), and the
+ * row average as the headline number. The mode label is the mode word only — `Luring` / `Daring` —
+ * because the data model carries no session ordinal to number them with (#168).
  *
  * Below it, the three Aspects in a fixed order, each with its score and — when the Participant
  * left one — the comment they wrote about that Aspect.
@@ -535,8 +672,11 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
           <span className="text-muted-foreground">·</span>
           <span className="text-sm text-muted-foreground">{MODE_LABELS[row.sessionMode]}</span>
           <span className="text-muted-foreground">·</span>
-          <span className="text-sm text-muted-foreground">{row.heldOn}</span>
-          <span className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
+            Sesi {row.heldOn} {formatSessionStartTime(row.startsAt, row.timeZone)}
+          </span>
+          <span className="ml-auto text-sm text-muted-foreground">Diisi {row.submittedOn}</span>
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             Rata-rata
             <AverageBadge value={row.rowAverage} />
           </span>
@@ -568,7 +708,8 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
  *
  * The header names who filed it (`filedByName`), a badge for their self-declared role, the trip's
  * destination linking to `/perjadin/[id]` — the one card here that links, because a trip has a home
- * page a submission does not — the day it was filed, and the row average as the headline number.
+ * page a submission does not — the trip's date range, the day the filer filed it ("Diisi"), and the
+ * row average as the headline number.
  *
  * Below it, the four Aspects in a fixed order, each with its score and — when the filer left one —
  * the comment about that Aspect. **The Penginapan row is omitted entirely when `lodging` is null**:
@@ -589,8 +730,11 @@ function PerjadinCard({ row }: { row: PerjadinFeedbackRow }) {
             {shortenKabupaten(row.destination)}
           </Link>
           <span className="text-muted-foreground">·</span>
-          <span className="text-sm text-muted-foreground">{row.createdOn}</span>
-          <span className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
+            {row.startsOn} - {row.endsOn}
+          </span>
+          <span className="ml-auto text-sm text-muted-foreground">Diisi {row.createdOn}</span>
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             Rata-rata
             <AverageBadge value={row.rowAverage} />
           </span>

@@ -6,6 +6,7 @@ import {
   perjadinFeedbackPage,
   type FeedbackCursor,
   type FeedbackFilters,
+  type FeedbackSort,
   type ParticipantFeedbackRow,
   type PerjadinFeedbackCursor,
   type PerjadinFeedbackFilters,
@@ -13,11 +14,11 @@ import {
 } from "@sugt/db/queries";
 
 /**
- * **The Feedback list's one read, driven from the client.** Both the filter change and the
- * "load more" button call it: a filter change sends the chosen filters with a `null` cursor and
- * gets the first page back to REPLACE the list; "load more" sends the same filters with the
- * current cursor and gets the next page to APPEND. One action serves both because they are the
- * same query — the cursor is the only thing that differs.
+ * **The Feedback list's one read, driven from the client.** The filter change, the sort change and
+ * the "load more" button all call it: a filter or sort change sends the chosen filters and sort with
+ * a `null` cursor and gets the first page back to REPLACE the list; "load more" sends the same
+ * filters and sort with the current cursor (the OFFSET) and gets the next page to APPEND. One action
+ * serves all three because they are the same query — only the cursor and sort differ.
  *
  * `requirePerson()` here is the check that counts. A Next.js layout does not run before a Server
  * Action (see `./caller.ts`), so resolving the Person at the top of the action is what closes the
@@ -30,15 +31,17 @@ import {
 export async function loadParticipantFeedback(
   filters: FeedbackFilters,
   cursor: FeedbackCursor | null,
+  sort: FeedbackSort,
 ): Promise<{ rows: ParticipantFeedbackRow[]; nextCursor: FeedbackCursor | null }> {
   const person = await requirePerson();
-  return participantFeedbackPage(person, { filters, cursor });
+  return participantFeedbackPage(person, { filters, cursor, sort });
 }
 
 /**
  * **The Perjadin tab's one read**, the twin of `loadParticipantFeedback` over `perjadin_evaluation`
- * (#169). Both tabs' filter changes and "load more" buttons drive their own action; the two share
- * nothing but the shape, so a mistaken cursor from one can never reach the other's query.
+ * (#169). Both tabs' filter changes, sort changes and "load more" buttons drive their own action;
+ * the two share nothing but the shape, so a mistaken cursor from one can never reach the other's
+ * query.
  *
  * `requirePerson()` for the same reason as its twin: a Server Action runs with no layout before it,
  * so resolving the Person here is the check that counts. No role gate — feedback carries no money.
@@ -46,7 +49,8 @@ export async function loadParticipantFeedback(
 export async function loadPerjadinFeedback(
   filters: PerjadinFeedbackFilters,
   cursor: PerjadinFeedbackCursor | null,
+  sort: FeedbackSort,
 ): Promise<{ rows: PerjadinFeedbackRow[]; nextCursor: PerjadinFeedbackCursor | null }> {
   const person = await requirePerson();
-  return perjadinFeedbackPage(person, { filters, cursor });
+  return perjadinFeedbackPage(person, { filters, cursor, sort });
 }
