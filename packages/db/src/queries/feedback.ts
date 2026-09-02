@@ -149,8 +149,11 @@ function bound(value: FeedbackFilterValue, expr: SQLWrapper): SQL | null {
  * **Paging is OFFSET/LIMIT, not keyset.** The average being the primary key would need a
  * direction-aware compound keyset over `{average, date, id}` across four sort combinations, a bug
  * magnet the ruling on #184 traded away. The cursor is the count of rows already loaded, passed as
- * the OFFSET; the total order above means OFFSET never drops or duplicates a row even under inserts
- * on a dataset this small (one submission per Participant/Session).
+ * the OFFSET; the total order above means one page read drops or duplicates nothing. What OFFSET
+ * gives up versus keyset is insert-stability — a submission arriving before the current offset
+ * between two "load more" clicks shifts the boundary, so a row could repeat or be skipped. On this
+ * bounded, near-static dataset (one submission per Participant/Session) that window is acceptable,
+ * which is exactly the trade #184 made.
  *
  * **Fetch one more than the batch to know whether there is a next page.** The query asks for
  * `BATCH + 1` rows; if it gets them, the extra one proves a next page exists — so the extra is

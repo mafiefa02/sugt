@@ -421,6 +421,82 @@ describe("participantFeedbackPage", () => {
       expect(averages[i]!).toBeLessThanOrEqual(averages[i - 1]!);
     }
   });
+
+  it("pages the whole set under date asc with no repeat or gap, oldest-first within ties", async () => {
+    const person = await signedIn();
+    const session = await oneSession(person.id);
+    // Every row shares one average, so the date direction is the operative order across the page
+    // boundary — the combination the score-direction paging tests above do not exercise.
+    for (let i = 0; i < 12; i++) {
+      await addParticipantFeedback({
+        sessionId: session.id,
+        classKind: "Student",
+        name: `P${String(i).padStart(2, "0")}`,
+        ratings: { materials: 5, instructor: 5, relevance: 5 },
+        submittedAt: new Date(`2026-06-${String(i + 1).padStart(2, "0")}T00:00:00Z`),
+      });
+    }
+
+    const names: string[] = [];
+    const submittedOns: string[] = [];
+    let cursor: FeedbackCursor | null = null;
+    let pages = 0;
+    do {
+      const page = await participantFeedbackPage(person, {
+        filters: NO_FEEDBACK_FILTERS,
+        cursor,
+        sort: sort({ date: "asc" }),
+      });
+      for (const row of page.rows) {
+        names.push(row.name);
+        submittedOns.push(row.submittedOn);
+      }
+      cursor = page.nextCursor;
+      pages += 1;
+    } while (cursor !== null);
+
+    expect(pages).toBeGreaterThan(1);
+    expect(names).toHaveLength(12);
+    expect(new Set(names).size).toBe(12);
+    // Averages tie, so date asc is the order: the submitted date never decreases down the walk.
+    for (let i = 1; i < submittedOns.length; i++) {
+      expect(submittedOns[i]! >= submittedOns[i - 1]!).toBe(true);
+    }
+  });
+
+  it("composes a filter with a non-default sort", async () => {
+    const person = await signedIn();
+    const session = await oneSession(person.id);
+    // Three low-average rows kept by le7 and one high row dropped, so the WHERE cuts and the
+    // non-default score-desc ORDER BY orders what remains — the two applied together.
+    for (const [name, rating] of [
+      ["Tiga", 3],
+      ["Lima", 5],
+      ["Tujuh", 7],
+    ] as const) {
+      await addParticipantFeedback({
+        sessionId: session.id,
+        classKind: "Student",
+        name,
+        ratings: { materials: rating, instructor: rating, relevance: rating },
+      });
+    }
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Sepuluh",
+      ratings: { materials: 10, instructor: 10, relevance: 10 },
+    });
+
+    const page = await participantFeedbackPage(person, {
+      filters: filters({ reviewType: "le7" }),
+      cursor: null,
+      sort: sort({ score: "desc" }),
+    });
+
+    // The high-average row is filtered out; the three kept rows come back highest-average first.
+    expect(page.rows.map((row) => row.name)).toEqual(["Tujuh", "Lima", "Tiga"]);
+  });
 });
 
 describe("participantFeedbackAverages", () => {
