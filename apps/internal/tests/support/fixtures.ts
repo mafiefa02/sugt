@@ -11,6 +11,7 @@ import type {
   Role,
   TimeZone,
   TransactionCategory,
+  TransactionParticipantType,
 } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 
@@ -545,8 +546,8 @@ export type TransactionFixture = {
   description?: string;
   spentOn?: string;
   category?: TransactionCategory;
-  /** Only per-diems and honoraria carry one, so the default is the common case: nobody. */
-  incurredByPersonId?: string;
+  /** Which cohort the spend served. Required on the column; defaults to `Siswa`, overridable. */
+  participantType?: TransactionParticipantType;
   createdByPersonId: string;
 };
 
@@ -566,7 +567,7 @@ export async function addTransaction(fixture: TransactionFixture) {
       description: fixture.description ?? "Transport lokal",
       amountIdr: fixture.amountIdr,
       category: fixture.category ?? "Transport Lokal Dalam Provinsi",
-      incurredByPersonId: fixture.incurredByPersonId ?? null,
+      participantType: fixture.participantType ?? "Siswa",
       createdByPersonId: fixture.createdByPersonId,
     })
     .returning();

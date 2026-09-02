@@ -96,6 +96,18 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
             amountIdr={acquittal.spentIdr}
           />
           {/*
+            The same Terpakai total split by the cohort each transaction served — the two sum to
+            `spentIdr`, since `participant_type` is required and has no third value.
+          */}
+          <Figure
+            label="Total Siswa"
+            amountIdr={acquittal.siswaSpentIdr}
+          />
+          <Figure
+            label="Total GTK-MS"
+            amountIdr={acquittal.gtkMsSpentIdr}
+          />
+          {/*
             Derived and never stored: the Advance less every transaction against it. Negative
             means the Group overspent, which is a real state and not an error.
           */}
@@ -120,7 +132,6 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
       <AcquittalTransactions
         perjadinId={id}
         transactions={transactions}
-        group={acquittal.receipts}
       />
 
       <AcquittalReceipts

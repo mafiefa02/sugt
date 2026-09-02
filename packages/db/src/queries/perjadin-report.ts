@@ -2,6 +2,7 @@ import {
   REPORT_DEADLINE_DAYS_AFTER_RETURN,
   type Role,
   type TransactionCategory,
+  type TransactionParticipantType,
 } from "@sugt/domain";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
@@ -60,9 +61,8 @@ export type AcquittalEvidence = {
 /**
  * One line item against the Advance.
  *
- * `incurredBy` is null on most of them and that absence is not a gap: per-diems and
- * honoraria carry a person, a taxi and a box of ATK do not. The Advance is still one pot
- * either way.
+ * `category` and `participantType` are two orthogonal axes: what kind of spend it was, and which
+ * cohort it served (`Siswa` or `GTK-MS`). The latter is what the Laporan's per-type subtotals sum.
  */
 export type AcquittalTransaction = {
   id: string;
@@ -70,7 +70,7 @@ export type AcquittalTransaction = {
   description: string;
   amountIdr: number;
   category: TransactionCategory;
-  incurredBy: { personId: string; fullName: string } | null;
+  participantType: TransactionParticipantType;
   evidence: AcquittalEvidence[];
 };
 
@@ -105,6 +105,10 @@ export type PerjadinAcquittal = {
   advanceIdr: number;
   /** The sum of every transaction against the Advance. Zero when none has been entered. */
   spentIdr: number;
+  /** Of `spentIdr`, the spend attributed to the Siswa cohort. */
+  siswaSpentIdr: number;
+  /** Of `spentIdr`, the spend attributed to the GTK-MS cohort. */
+  gtkMsSpentIdr: number;
   /** What is left of the Advance to hand back. Negative means the Group overspent. */
   remainderIdr: number;
   /**
@@ -206,10 +210,20 @@ export async function perjadinAcquittal(
   // Summed here rather than in a second `sum()` round trip: every row is already loaded, and
   // two sources for one figure is a way for the screen's total to disagree with its own list.
   const spentIdr = transactions.reduce((total, line) => total + line.amountIdr, 0);
+  // The two cohort subtotals, summed off the same loaded rows for the same reason `spentIdr` is:
+  // a second `sum()` round trip is a second place for the screen's split to disagree with its list.
+  const siswaSpentIdr = transactions
+    .filter((l) => l.participantType === "Siswa")
+    .reduce((t, l) => t + l.amountIdr, 0);
+  const gtkMsSpentIdr = transactions
+    .filter((l) => l.participantType === "GTK-MS")
+    .reduce((t, l) => t + l.amountIdr, 0);
 
   return {
     ...trip,
     spentIdr,
+    siswaSpentIdr,
+    gtkMsSpentIdr,
     remainderIdr: trip.advanceIdr - spentIdr,
     transactions,
     receipts,
@@ -232,11 +246,9 @@ async function transactionsOf(perjadinId: string): Promise<AcquittalTransaction[
       description: transaction.description,
       amountIdr: transaction.amountIdr,
       category: transaction.category,
-      incurredByPersonId: transaction.incurredByPersonId,
-      incurredByFullName: person.fullName,
+      participantType: transaction.participantType,
     })
     .from(transaction)
-    .leftJoin(person, eq(person.id, transaction.incurredByPersonId))
     .where(eq(transaction.perjadinId, perjadinId))
     .orderBy(asc(transaction.spentOn), asc(transaction.createdAt));
 
@@ -267,14 +279,8 @@ async function transactionsOf(perjadinId: string): Promise<AcquittalTransaction[
     else byTransaction.set(transactionId, [file]);
   }
 
-  return lines.map(({ incurredByPersonId, incurredByFullName, ...line }) => ({
+  return lines.map((line) => ({
     ...line,
-    // Both come off the same left join, so they are set together or not at all. The
-    // condition names the id because that is the column that decides it.
-    incurredBy:
-      incurredByPersonId && incurredByFullName
-        ? { personId: incurredByPersonId, fullName: incurredByFullName }
-        : null,
     evidence: byTransaction.get(line.id) ?? [],
   }));
 }
@@ -317,8 +323,8 @@ export type NewTransaction = {
   description: string;
   amountIdr: number;
   category: TransactionCategory;
-  /** Null for anything the Advance paid for without paying a particular person. */
-  incurredByPersonId: string | null;
+  /** Which cohort the spend served — `Siswa` or `GTK-MS`. Required, like `category`. */
+  participantType: TransactionParticipantType;
 };
 
 export type RecordTransactionResult =
@@ -334,14 +340,6 @@ export type RecordTransactionResult =
  * Every refusal here is something a PIC can type honestly, so each comes back as a value and
  * earns a field-level message rather than an error page. `NotStaffError` is the opposite
  * case and still throws.
- *
- * **`incurredByPersonId` is not checked against the Group**, and the omission is deliberate
- * rather than missing. The obvious rule — "only somebody who travelled can have incurred a
- * cost on this trip" — is false against the category list it would police:
- * `Honorarium Narasumber` pays a speaker, who is a `Person` the Programme knows and is on no
- * Group. The foreign key into `person` is the constraint `docs/data-model.md` specifies, and
- * it is the whole of what this column claims. The acquittal form offers the Group because
- * that is the common case, not because the write refuses anybody else.
  */
 export async function recordTransaction(
   caller: Person,
@@ -366,7 +364,7 @@ export async function recordTransaction(
         description: input.description,
         amountIdr: input.amountIdr,
         category: input.category,
-        incurredByPersonId: input.incurredByPersonId,
+        participantType: input.participantType,
         createdByPersonId: caller.id,
       })
       .returning({ id: transaction.id });

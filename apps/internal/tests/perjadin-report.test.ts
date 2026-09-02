@@ -183,39 +183,46 @@ describe("the acquittal payload", () => {
     expect(acquittal?.transactions[0]?.evidence).toHaveLength(2);
   });
 
-  it("names who incurred a line item, and leaves it null where nobody did", async () => {
-    // `incurred_by_person_id` is a foreign key into `person` — nothing more — so whoever ran up
-    // the cost need only be a Person, not a Group member. T3 (#153) retired the Teaching Team, so
-    // the traveller here is Staff; the column's claim is the same either way.
+  it("carries each line's participant type and splits the spend by cohort", async () => {
+    // `participant_type` is an axis orthogonal to `category` — which cohort the spend served. The
+    // acquittal returns it per line and sums the two subtotals off the loaded rows, so a mix of
+    // Siswa and GTK-MS spend splits into `siswaSpentIdr` / `gtkMsSpentIdr` that add back to
+    // `spentIdr`.
     const { staff, trip } = await aTrip();
-    const traveller = await addPerson({
-      fullName: "Budi Santoso",
-      email: "budi@gmail.com",
-      role: "Staff",
-    });
     await addTransaction({
       perjadinId: trip.id,
       amountIdr: 600_000,
       description: "Uang harian",
       spentOn: "2026-09-01",
       category: "Uang Harian",
-      incurredByPersonId: traveller.id,
+      participantType: "Siswa",
+      createdByPersonId: staff.id,
+    });
+    await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 400_000,
+      description: "Konsumsi",
+      spentOn: "2026-09-02",
+      category: "Konsumsi",
+      participantType: "GTK-MS",
       createdByPersonId: staff.id,
     });
     await addTransaction({
       perjadinId: trip.id,
       amountIdr: 75_000,
-      spentOn: "2026-09-02",
+      spentOn: "2026-09-03",
+      participantType: "Siswa",
       createdByPersonId: staff.id,
     });
 
     const acquittal = await perjadinAcquittal(staff, trip.id);
 
-    expect(acquittal?.transactions[0]?.incurredBy).toEqual({
-      personId: traveller.id,
-      fullName: "Budi Santoso",
-    });
-    expect(acquittal?.transactions[1]?.incurredBy).toBeNull();
+    expect(acquittal?.transactions[0]?.participantType).toBe("Siswa");
+    expect(acquittal?.transactions[1]?.participantType).toBe("GTK-MS");
+    expect(acquittal?.siswaSpentIdr).toBe(675_000);
+    expect(acquittal?.gtkMsSpentIdr).toBe(400_000);
+    // The two cohorts partition the spend: there is no third type and no unset state.
+    expect(acquittal!.siswaSpentIdr + acquittal!.gtkMsSpentIdr).toBe(acquittal?.spentIdr);
   });
 
   it("lists every Group member on the receipts checklist, settled or not", async () => {
@@ -289,7 +296,7 @@ describe("the category", () => {
         description: category,
         amountIdr: 10_000,
         category,
-        incurredByPersonId: null,
+        participantType: "Siswa",
       });
       expect(result.outcome).toBe("recorded");
     }
@@ -336,6 +343,8 @@ describe("the category", () => {
         // The cast is the point: this is what a caller bypassing the type would send, and
         // the database is what has to refuse it.
         category: "Parkir" as (typeof TRANSACTION_CATEGORIES)[number],
+        // Valid, so the category check is the one that fires rather than the not-null on this.
+        participantType: "Siswa",
         createdByPersonId: staff.id,
       }),
     );
@@ -356,26 +365,16 @@ describe("recording a line item", () => {
       description: "Taksi",
       amountIdr: 50_000,
       category: "Transport Lokal Dalam Provinsi",
-      incurredByPersonId: null,
+      participantType: "Siswa",
     }).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);
   });
 
-  it("names somebody who did not travel, because an honorarium is paid to exactly that", async () => {
-    /**
-     * The tempting rule — only a Group member can have incurred a cost on this trip — is false
-     * against the category list it would police. `Honorarium Narasumber` pays a speaker, who is
-     * a Person the Programme knows and is on no Group. The foreign key into `person` is the
-     * whole of what this column claims — so the speaker is just a Person, Staff now that T3 (#153)
-     * retired the Teaching Team Role, and on no Group regardless.
-     */
+  it("records the participant type the form collected, and reads it back on the acquittal", async () => {
+    // `participant_type` is required and orthogonal to `category`; the write persists it and the
+    // acquittal returns it unchanged, which is what the Laporan's per-cohort split reads.
     const { staff, trip } = await aTrip();
-    const speaker = await addPerson({
-      fullName: "Sari Wulandari",
-      email: "sari@gmail.com",
-      role: "Staff",
-    });
 
     const result = await recordTransaction(staff, {
       perjadinId: trip.id,
@@ -383,15 +382,14 @@ describe("recording a line item", () => {
       description: "Honorarium narasumber",
       amountIdr: 600_000,
       category: "Honorarium Narasumber",
-      incurredByPersonId: speaker.id,
+      participantType: "GTK-MS",
     });
 
     expect(result.outcome).toBe("recorded");
     const acquittal = await perjadinAcquittal(staff, trip.id);
-    expect(acquittal?.transactions[0]?.incurredBy).toEqual({
-      personId: speaker.id,
-      fullName: "Sari Wulandari",
-    });
+    expect(acquittal?.transactions[0]?.participantType).toBe("GTK-MS");
+    expect(acquittal?.gtkMsSpentIdr).toBe(600_000);
+    expect(acquittal?.siswaSpentIdr).toBe(0);
   });
 
   it("comes back as a value on a stale Perjadin link and on a non-positive amount", async () => {
@@ -404,7 +402,7 @@ describe("recording a line item", () => {
         description: "Taksi",
         amountIdr: 50_000,
         category: "Transport Lokal Dalam Provinsi",
-        incurredByPersonId: null,
+        participantType: "Siswa",
       }),
     ).resolves.toEqual({ outcome: "no-such-perjadin" });
 
@@ -415,7 +413,7 @@ describe("recording a line item", () => {
         description: "Taksi",
         amountIdr: 0,
         category: "Transport Lokal Dalam Provinsi",
-        incurredByPersonId: null,
+        participantType: "Siswa",
       }),
     ).resolves.toEqual({ outcome: "amount-not-positive" });
   });
@@ -573,7 +571,7 @@ describe("filing the Report", () => {
       description: "Taksi bandara",
       amountIdr: 150_000,
       category: "Transport Bandara/Stasiun",
-      incurredByPersonId: null,
+      participantType: "Siswa",
     });
     expect(recorded.outcome).toBe("recorded");
 

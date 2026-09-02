@@ -1316,7 +1316,7 @@ create table transaction (
                           'Transport Bandara/Stasiun', 'Transport Lokal Dalam Provinsi',
                           'Konsumsi', 'Modul', 'ATK',
                           'Alat dan Bahan Research Project', 'Seminar kit', 'Lainnya')),
-  incurred_by_person_id uuid references person (id),
+  participant_type      text not null check (participant_type in ('Siswa', 'GTK-MS')),
   created_by_person_id  uuid not null references person (id),
   created_at            timestamptz not null default now()
 );
@@ -1333,17 +1333,18 @@ create table transaction_evidence (
 ```
 
 **The Advance is one pot and the acquittal reconciles the pot** — a transaction consumes the
-Advance rather than a person's share of it. That is the claim, and `incurred_by_person_id` below
-does not weaken it: naming who a per-diem was paid to says nothing about how the pot reconciles.
-This paragraph read _"A transaction is not attributed to a person"_ until that column shipped;
-the sentence is gone rather than corrected in place, because the pot is what it was always about.
-Worth knowing:
+Advance rather than a person's share of it. Worth knowing:
 [ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md) justified hiding money
 from Teaching Team by citing "per-diem amounts and personal travel claims" — but that money-read
 gate is reversed by [ADR-0026](./adr/0026-money-is-open-to-read-and-staff-only-to-write.md) (#180):
 money is now open to any signed-in Person to **read**, so a Pimpinan reads these lines; only
-_writing_ them stays Staff-only. Adding `incurred_by_person_id` later is a nullable column, not a
-migration of meaning.
+_writing_ them stays Staff-only.
+
+**`incurred_by_person_id` is gone (#182).** The column shipped in migration `0006` as a nullable
+"who a per-diem was paid to" and never earned its keep: naming that person said nothing about how
+the pot reconciles, and the Laporan needed a different cut of the spend than it offered. It is
+dropped, replaced by the required `participant_type` below. (ADR-0004 still names the column as a
+point-in-time record; that is history and is left as written.)
 
 **`category` is a closed set read off DITSAMA's own approved budget**, not invented for a
 template nobody has read. The eleven named values are the line items the programme RAB repeats
@@ -1361,11 +1362,13 @@ beyond these columns, and it is still replaced rather than corrected when a comp
 arrives. `Uang Harian` stays one category; the Narasumber/Asisten split in the RAB is a rate
 difference, not a different kind of spend.
 
-**`incurred_by_person_id` is nullable, and its absence is not a gap.** This document previously
-said a transaction is not attributed to a person at all, and offered the column as "a nullable
-column, not a migration of meaning" if evidence ever appeared. It has: the RAB budgets
-`Uang Harian` as `2 orang × N hari`, at different rates for Narasumber and Asisten. Per-diems
-and honoraria carry a person; a taxi and a box of ATK do not. **The Advance is still one pot
+**`participant_type` is required, and it is an axis orthogonal to `category` (#182).** `category`
+is _what kind of spend_ a line was; `participant_type` is _which cohort_ it served — `Siswa` (the
+Student Class) or `GTK-MS` (the GTK and MS Classes together). The Laporan splits every acquittal's
+Terpakai total into a Siswa and a GTK-MS subtotal, so the column is `NOT NULL`: there is no unset
+state to carry and no third `Umum` value — a shared cost is attributed to whichever type it
+predominantly served. It is character-for-character `TRANSACTION_PARTICIPANT_TYPES` in
+`packages/domain/src/index.ts`, CHECKed the same way `category` is. **The Advance is still one pot
 and the acquittal still reconciles the pot**, so
 [ADR-0004](./adr/0004-delivery-data-is-open-internally-money-is-not.md)'s reconciliation model is
 untouched — though its money-_read_ gate is amended by

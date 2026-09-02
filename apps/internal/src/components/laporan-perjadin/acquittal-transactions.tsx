@@ -9,8 +9,13 @@ import {
   mintReceiptUploadsAction,
   recordTransactionAction,
 } from "-/app/(app)/perjadin/[id]/laporan/actions";
-import type { AcquittalReceipt } from "@sugt/db/queries";
-import { formatIdr, TRANSACTION_CATEGORIES, type TransactionCategory } from "@sugt/domain";
+import {
+  formatIdr,
+  TRANSACTION_CATEGORIES,
+  TRANSACTION_PARTICIPANT_TYPES,
+  type TransactionCategory,
+  type TransactionParticipantType,
+} from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -49,20 +54,15 @@ import { useId, useRef, useState, useTransition } from "react";
 function AcquittalTransactions({
   perjadinId,
   transactions,
-  group,
 }: {
   perjadinId: string;
   transactions: ViewableTransaction[];
-  group: AcquittalReceipt[];
 }) {
   return (
     <div className="border-b border-border px-7 py-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Transaksi</h2>
-        <RecordTransaction
-          perjadinId={perjadinId}
-          group={group}
-        />
+        <RecordTransaction perjadinId={perjadinId} />
       </div>
 
       {transactions.length === 0 ? (
@@ -84,7 +84,7 @@ function AcquittalTransactions({
   );
 }
 
-/** One line item: what it was, what it cost, who incurred it, and what evidences it. */
+/** One line item: what it was, which cohort it served, what it cost, and what evidences it. */
 function TransactionRow({ perjadinId, line }: { perjadinId: string; line: ViewableTransaction }) {
   return (
     <li className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 py-2.5 text-sm">
@@ -94,12 +94,8 @@ function TransactionRow({ perjadinId, line }: { perjadinId: string; line: Viewab
           <span>{line.description}</span>
         </p>
         <p className="text-muted-foreground">
-          {line.category}
-          {/*
-            Named only where somebody incurred it. Per-diems and honoraria carry a person; a
-            taxi does not, and an empty label would read as missing rather than as inapplicable.
-          */}
-          {line.incurredBy !== null && ` · ${line.incurredBy.fullName}`}
+          {/* Two axes: what kind of spend, and which cohort it served. Both are always present. */}
+          {line.category} · {line.participantType}
         </p>
       </div>
 
@@ -240,24 +236,23 @@ function Receipts({ perjadinId, line }: { perjadinId: string; line: ViewableTran
 }
 
 /** The entry form. One line item at a time, which is how a PIC has them. */
-function RecordTransaction({
-  perjadinId,
-  group,
-}: {
-  perjadinId: string;
-  group: AcquittalReceipt[];
-}) {
+function RecordTransaction({ perjadinId }: { perjadinId: string }) {
   const [open, setOpen] = useState(false);
   const [spentOn, setSpentOn] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<TransactionCategory | "">("");
-  const [incurredBy, setIncurredBy] = useState("");
+  const [participantType, setParticipantType] = useState<TransactionParticipantType | "">("");
   const [refusal, setRefusal] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const fields = useId();
 
-  const complete = spentOn !== "" && description.trim() !== "" && amount !== "" && category !== "";
+  const complete =
+    spentOn !== "" &&
+    description.trim() !== "" &&
+    amount !== "" &&
+    category !== "" &&
+    participantType !== "";
 
   function submit() {
     startSaving(async () => {
@@ -266,11 +261,12 @@ function RecordTransaction({
         perjadinId,
         spentOn,
         description: description.trim(),
-        // Whole rupiah, which is what the column holds. `Number` on a `type="number"` field
-        // can only produce a finite value or `NaN`, and `NaN` fails the positivity check.
+        // Whole rupiah, which is what the column holds. `amount` holds raw digits (the mask
+        // strips everything else on change), so `Number` is finite or `NaN`, and `NaN` fails the
+        // positivity check.
         amountIdr: Math.trunc(Number(amount)),
         category: category as TransactionCategory,
-        incurredByPersonId: incurredBy === "" ? null : incurredBy,
+        participantType: participantType as TransactionParticipantType,
       });
 
       if (result.outcome === "recorded") {
@@ -279,7 +275,7 @@ function RecordTransaction({
         setDescription("");
         setAmount("");
         setCategory("");
-        setIncurredBy("");
+        setParticipantType("");
         return;
       }
       setRefusal(REFUSALS[result.outcome]);
@@ -342,14 +338,21 @@ function RecordTransaction({
 
           <div className="grid gap-1.5">
             <Label htmlFor={`${fields}-amount`}>Jumlah (Rp)</Label>
+            {/*
+              A masked text input, not `type="number"`: it groups the thousands as they type so a
+              large amount's magnitude is legible at the point of entry — the same pattern the plan
+              form's Uang muka uses. `amount` stays a plain digit string in state; every non-digit
+              is stripped back out on change, so submit's `Number(...)` and the `complete` guard are
+              unchanged.
+            */}
             <Input
               id={`${fields}-amount`}
-              type="number"
-              min={1}
-              step={1}
-              value={amount}
+              type="text"
+              inputMode="numeric"
+              value={amount === "" ? "" : `Rp ${formatIdr(Number(amount))}`}
               onChange={(event) => {
-                setAmount(event.target.value);
+                const digits = event.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+                setAmount(digits);
               }}
             />
           </div>
@@ -383,38 +386,29 @@ function RecordTransaction({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor={`${fields}-incurred-by`}>Atas nama (opsional)</Label>
+            <Label htmlFor={`${fields}-participant-type`}>Tipe Peserta</Label>
             {/*
-              Offered from the Group, because the write refuses anybody who did not travel.
-              Most line items leave it empty: the Advance is one pot, and only per-diems and
-              honoraria carry a person.
+              An axis orthogonal to Kategori — which cohort the spend served. The two values come
+              from `@sugt/domain`, the same list `transaction_participant_type_check` pins in the
+              database. Required, so there is no empty option: a shared cost is attributed to
+              whichever type it predominantly served.
             */}
             <Select
-              value={incurredBy}
+              value={participantType}
               onValueChange={(value) => {
-                // The control clears to `null`; the column's absence is what that means, and
-                // the action turns the empty string back into `null` on the way out.
-                setIncurredBy(value ?? "");
+                setParticipantType(value as TransactionParticipantType);
               }}
             >
-              <SelectTrigger id={`${fields}-incurred-by`}>
-                {/*
-                  A function-child, because the `SelectItem` value is the `personId` while the
-                  visible label is the `fullName` — without this the trigger would show the raw
-                  id. Scoped to this call site on purpose (#101); the shared wrapper's general
-                  value≠label handling is a separate cross-cutting change.
-                */}
-                <SelectValue placeholder="Tidak atas nama siapa pun">
-                  {(value) => group.find((member) => member.personId === value)?.fullName}
-                </SelectValue>
+              <SelectTrigger id={`${fields}-participant-type`}>
+                <SelectValue placeholder="Pilih tipe peserta" />
               </SelectTrigger>
               <SelectContent>
-                {group.map((member) => (
+                {TRANSACTION_PARTICIPANT_TYPES.map((option) => (
                   <SelectItem
-                    key={member.personId}
-                    value={member.personId}
+                    key={option}
+                    value={option}
                   >
-                    {member.fullName}
+                    {option}
                   </SelectItem>
                 ))}
               </SelectContent>
