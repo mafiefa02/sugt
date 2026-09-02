@@ -39,7 +39,7 @@
  * **This package resolves nobody.** `@sugt/internal` produces the `Person` these
  * take; see `./caller.ts`.
  */
-export type { Caller, ParticipantToken, Person, ServiceCaller } from "./caller";
+export type { Caller, ParticipantToken, PerjadinToken, Person, ServiceCaller } from "./caller";
 export {
   delivery,
   publishedStories,
@@ -171,7 +171,9 @@ export {
 } from "./roster";
 export {
   filePerjadinEvaluation,
+  issuePerjadinFeedbackToken,
   type FilePerjadinEvaluationResult,
+  type IssuePerjadinFeedbackTokenResult,
   type NewPerjadinEvaluation,
   type PerjadinEvaluationComments,
   type PerjadinEvaluationRatings,

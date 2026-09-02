@@ -5,6 +5,7 @@ import type {
   ClassKind,
   ParticipantFeedbackAspect,
   PerjadinAspect,
+  PerjadinEvaluationRole,
   SessionStatus,
   Stream,
   Role,
@@ -320,8 +321,13 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
 
 export type PerjadinEvaluationFixture = {
   perjadinId: string;
-  /** A Group member. Membership is the application's rule; the row references `person`. */
-  filedByPersonId: string;
+  /**
+   * The self-declared filer (ADR-0024). `filed_by_role` is one of `PERJADIN_EVALUATION_ROLES` and
+   * `filed_by_name` is free text — neither references `person` any more. Both default so a test
+   * that does not care about identity stays terse.
+   */
+  role?: PerjadinEvaluationRole;
+  name?: string;
   /** The one nullable Rating — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
   lodging?: number | null;
   ratings?: Partial<Record<"transport" | "meals" | "punctuality", number>>;
@@ -350,7 +356,8 @@ export async function addPerjadinEvaluation(fixture: PerjadinEvaluationFixture) 
     .insert(schema.perjadinEvaluation)
     .values({
       perjadinId: fixture.perjadinId,
-      filedByPersonId: fixture.filedByPersonId,
+      filedByRole: fixture.role ?? "Pendamping",
+      filedByName: fixture.name ?? "Dewi Lestari",
       lodging,
       ...ratings,
       lodgingComment: commentFor("lodging"),
@@ -360,6 +367,44 @@ export async function addPerjadinEvaluation(fixture: PerjadinEvaluationFixture) 
     })
     .returning();
   return evaluation!;
+}
+
+export type PerjadinFeedbackTokenFixture = {
+  perjadinId: string;
+  /** Any signed-in Person issued it. `perjadin_feedback_token.issued_by_person_id` references one. */
+  issuedByPersonId: string;
+  /** Defaults to a fresh random token. Pass one to drive the resolver at a known value. */
+  token?: string;
+  /**
+   * When the token was issued. Defaults to the schema's `now()`. Pass a past `Date` **with** a past
+   * `expiresAt` to build an already-expired token — `perjadin_feedback_token_expiry_check` refuses
+   * `expires_at <= issued_at`, so an expired token needs both in the past.
+   */
+  issuedAt?: Date;
+  /**
+   * When the token dies. Defaults to the schema's 14-days-from-now. Pass a past `Date` to build an
+   * already-expired token — the resolver enforces expiry itself, so a test needs a real one.
+   */
+  expiresAt?: Date;
+};
+
+/**
+ * One Perjadin's feedback token — the link's target (ADR-0024). The primary key is `perjadin_id`,
+ * so a second one for the same trip replaces the first, which is how a reissue kills the old link.
+ * The sibling of `addFeedbackToken`.
+ */
+export async function addPerjadinFeedbackToken(fixture: PerjadinFeedbackTokenFixture) {
+  const [token] = await db
+    .insert(schema.perjadinFeedbackToken)
+    .values({
+      perjadinId: fixture.perjadinId,
+      token: fixture.token ?? randomUUID(),
+      issuedByPersonId: fixture.issuedByPersonId,
+      ...(fixture.issuedAt ? { issuedAt: fixture.issuedAt } : {}),
+      ...(fixture.expiresAt ? { expiresAt: fixture.expiresAt } : {}),
+    })
+    .returning();
+  return token!;
 }
 
 export type FeedbackTokenFixture = {
@@ -572,6 +617,9 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
  * the table.) `perjadin_evaluation` sits beside it for the same reason: no fixture writes one,
  * but the Perjadin Evaluation write-path tests file them directly, and `cascade` from
  * `public."perjadin"` reaches it, so naming it is for the same reason and not for a fixture.
+ * `perjadin_feedback_token` is named for the fixture reason `session_feedback_token` is:
+ * `addPerjadinFeedbackToken` writes it (ADR-0024), even though `cascade` from `public."perjadin"`
+ * already reaches it.
  *
  * `public."session"` and `better_auth."session"` are both here and both qualified.
  * That collision is the whole reason Better Auth was given a Postgres schema of its
@@ -596,6 +644,7 @@ export async function resetDatabase() {
       public."participant_feedback",
       public."session_feedback_token",
       public."perjadin_evaluation",
+      public."perjadin_feedback_token",
       public."perjadin",
       public."group_member",
       public."transaction",

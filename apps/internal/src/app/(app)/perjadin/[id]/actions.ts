@@ -1,5 +1,6 @@
 "use server";
 
+import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import {
@@ -8,7 +9,7 @@ import {
   cancelSession,
   changePerjadinPic,
   editPerjadinSession,
-  filePerjadinEvaluation,
+  issuePerjadinFeedbackToken,
   removePerjadinTeacher,
   renamePerjadinTeacher,
   setPerjadinPimpinan,
@@ -20,8 +21,6 @@ import {
   type CancelSessionResult,
   type ChangePerjadinPicResult,
   type EditPerjadinSessionResult,
-  type FilePerjadinEvaluationResult,
-  type NewPerjadinEvaluation,
   type PerjadinLogisticsInput,
   type PerjadinSessionInput,
   type RemovePerjadinTeacherResult,
@@ -32,6 +31,7 @@ import {
   type UpdatePerjadinLogisticsResult,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
+import QRCode from "qrcode";
 
 /**
  * **The writes Detail Perjadin offers, each beside the page that offers it.**
@@ -172,20 +172,40 @@ export async function cancelPerjadinSessionAction(
 }
 
 /**
- * **File a Perjadin Evaluation** — a Group member's account of how the trip went.
- *
- * No `staffSurface`, unlike the writes above: a Perjadin Evaluation is not Staff-only (ADR-0004 — it
- * carries no money), and `filePerjadinEvaluation` returns `not-a-group-member` as a value rather than
- * throwing. The caller is still resolved, and the query holds the membership rule.
+ * What issuing a Perjadin feedback token hands back to the QR dialog: the link and its QR image.
+ * The mirror of `IssueFeedbackTokenActionResult`, but with no refusal arm — `issuePerjadinFeedbackToken`
+ * always issues, because a Perjadin is a real trip once it exists and there is no cancelled state to
+ * bar (unlike a Session).
  */
-export async function filePerjadinEvaluationAction(
-  input: NewPerjadinEvaluation,
-): Promise<FilePerjadinEvaluationResult> {
+export type IssuePerjadinFeedbackTokenActionResult = { outcome: "issued"; url: string; qr: string };
+
+/**
+ * **Issue — or reissue — the Perjadin Evaluation token, and render its QR** (ADR-0024).
+ *
+ * No `staffSurface` and no role check: a Perjadin Evaluation is not Staff-only (ADR-0004 — it carries
+ * no money), so `issuePerjadinFeedbackToken` takes a plain `Person` and any signed-in Person may share
+ * the link. The QR is generated here, server-side, colours baked into the image (black on white) so a
+ * scanner reads it whatever the theme. The URL points at this app's own `/ep/{token}` — the handler
+ * lives on the internal app, whose base URL is `BETTER_AUTH_URL`, exactly as `issueFeedbackTokenAction`
+ * builds `/f/{token}`.
+ *
+ * No `revalidatePath`: nothing on the page reflects the token, so there is nothing to refresh.
+ */
+export async function issuePerjadinFeedbackTokenAction(
+  perjadinId: string,
+): Promise<IssuePerjadinFeedbackTokenActionResult> {
   const person = await requirePerson();
 
-  const result = await filePerjadinEvaluation(person, input);
-  if (result.outcome === "filed") revalidatePath(`/perjadin/${input.perjadinId}`);
-  return result;
+  const result = await issuePerjadinFeedbackToken(person, perjadinId);
+
+  const url = `${requireEnv("BETTER_AUTH_URL")}/ep/${result.token}`;
+  const qr = await QRCode.toDataURL(url, {
+    color: { dark: "#000000ff", light: "#ffffffff" },
+    margin: 2,
+    width: 320,
+  });
+
+  return { outcome: "issued", url, qr };
 }
 
 /**

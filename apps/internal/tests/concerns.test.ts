@@ -137,10 +137,10 @@ describe("concerns", () => {
 
   it("surfaces a low Perjadin Evaluation Aspect, linked to the trip", async () => {
     const pic = await staff();
-    // The Group is the PIC alone now (T3, #153) — no Teaching Team members — so the PIC is the
-    // Group member who files the Evaluation.
+    // The Evaluation is filed through a token link now, by a self-declared filer (ADR-0024) — no
+    // Group membership and no `person` behind it, so the fixture defaults the Role and Name.
     const trip = await addPerjadin({ advanceIdr: 5_000_000, picPersonId: pic.id });
-    await addPerjadinEvaluation({ perjadinId: trip.id, filedByPersonId: pic.id, lodging: 4 });
+    await addPerjadinEvaluation({ perjadinId: trip.id, lodging: 4 });
 
     const row = find(await concerns(pic), "perjadin-evaluation", "lodging");
     expect(row?.rating).toBe(4);

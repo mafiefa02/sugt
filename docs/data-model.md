@@ -601,7 +601,7 @@ rubric, because each asks a question only that person can answer.
 | `class_record`         | Teaching Team | Class, per professor  | Comprehension, Participation, Readiness, Materials, Delivery, Facilities, Timing |
 | `session_record`       | PIC / Staff   | Session               | Facilities, Turnout, School support, Timing, Coordination                        |
 | `participant_feedback` | Participants  | Class, per respondent | Materials, Instructor, Relevance                                                 |
-| `perjadin_evaluation`  | Group         | Perjadin, per member  | Lodging, Transport, Meals, Punctuality                                           |
+| `perjadin_evaluation`  | Token link    | Perjadin (no dedup)   | Lodging, Transport, Meals, Punctuality                                           |
 
 They share a scale (1–10), a threshold (`CONCERN_AT_OR_BELOW`, 7), and one rule — **a Rating at
 or below the threshold cannot be filed without saying what went wrong** — so all four feed one
@@ -839,14 +839,26 @@ chased in the room, not by the tool.
 
 ## Perjadin Evaluation
 
-How the trip went, as distinct from how the teaching went. Internal, and **only the Group that
-travelled may file one**.
+How the trip went, as distinct from how the teaching went. Filed **without signing in**, through a
+short-lived token link shared from the trip's page, by a filer who **self-declares** a Role and a
+Name (ADR-0024).
 
 ```sql
+create table perjadin_feedback_token (
+  perjadin_id           uuid primary key references perjadin (id) on delete cascade,
+  token                 text not null unique,
+  issued_at             timestamptz not null default now(),
+  expires_at            timestamptz not null default now() + interval '14 days',
+  issued_by_person_id   uuid not null references person (id),
+
+  check (expires_at > issued_at)
+);
+
 create table perjadin_evaluation (
-  id                  uuid primary key default gen_random_uuid(),
-  perjadin_id         uuid not null references perjadin (id) on delete cascade,
-  filed_by_person_id  uuid not null references person (id),
+  id             uuid primary key default gen_random_uuid(),
+  perjadin_id    uuid not null references perjadin (id) on delete cascade,
+  filed_by_role  text not null check (filed_by_role in ('Pengajar', 'Pendamping', 'Pimpinan')),
+  filed_by_name  text not null,
 
   lodging      smallint          check (lodging     between 1 and 10),   -- nullable; see below
   transport    smallint not null check (transport   between 1 and 10),
@@ -860,8 +872,6 @@ create table perjadin_evaluation (
 
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
-
-  unique (perjadin_id, filed_by_person_id),
 
   -- Per-Aspect elaboration (ADR-0023): each Aspect is not-low or carries its OWN comment, and all
   -- four must hold. `lodging` is guarded by `is null` first, so a skipped hotel owes no comment.
@@ -878,8 +888,23 @@ create index perjadin_evaluation_concerns_idx
   where least(lodging, transport, meals, punctuality) <= 7;
 ```
 
-Close to a Session Record's shape — one row per person, four Ratings, the same 1–10 scale and
-threshold — but the prose is no longer a shared `problems`/`suggestions` pair. Each Aspect now
+**`perjadin_feedback_token` mirrors `session_feedback_token`.** One token per Perjadin, keyed on
+`perjadin_id`, so issuing a new one replaces it and every link already shared resolves to nothing.
+`expires_at` defaults **14 days** out — far longer than the Session token's 24 hours, because the
+link is shared by hand after the trip and filed when the recipient gets to it, not scanned in the
+room. Any signed-in Person may issue it; a Perjadin is a real trip once it exists, so there is no
+cancelled state to bar (as the Session token has).
+
+**`filed_by_role` and `filed_by_name` are self-declared and untrusted.** There is no
+`filed_by_person_id` and no foreign key: the filer may be a name-based Pengajar or a record-only
+Pimpinan, neither of whom has a `person` row to point at, so identity is a Role from a fixed three
+(CHECKed character for character, `PERJADIN_EVALUATION_ROLES`) plus a free-text name referenced by
+nothing — exactly as `participant_feedback.name` is. The one-per-filer `unique` is gone with the
+sign-in: with no account behind a submission there is nothing to dedup on, and duplicates are
+allowed, the accepted cost of the token pattern ([ADR-0012](./adr/0012-participants-write-through-a-short-lived-session-token.md), [ADR-0024](./adr/0024-perjadin-evaluation-is-filed-through-an-unauthenticated-token-link.md)).
+
+Close to a Session Record's shape — four Ratings, the same 1–10 scale and threshold — but the
+prose is no longer a shared `problems`/`suggestions` pair. Each Aspect now
 carries its **own** optional comment, and the elaboration rule is retargeted per-Aspect: a low
 Aspect owes _its own_ comment, not one shared box (#163, [ADR-0023](adr/0023-perjadin-evaluation-has-a-comment-per-aspect.md)).
 A comment about the hotel can no longer excuse a low transport score, and the concerns list shows
@@ -912,25 +937,24 @@ that was prompt, and one is the vendor's fault while the other is the plan's.
 
 There is no `covered` field. Nothing was taught on a journey.
 
-### Why there is no foreign key to the Group
+### Why there is no filer foreign key
 
-"Only the Group may file" is exactly the shape that a composite foreign key to
-`group_member (perjadin_id, person_id)` would enforce, matching the pattern used for the PIC and
-for who taught. **It cannot be used here**, and the reason is a decision made earlier in this
-document: a Group is [replaced wholesale](#the-group), by deleting every member row and
-reinserting the new set.
+There is no `filed_by_person_id` and no key into the Group at all. That is a reversal (ADR-0024):
+the Evaluation used to be a signed-in write gated on Group membership, and this section used to
+explain why the gate lived in the application rather than in a composite foreign key to
+`group_member (perjadin_id, person_id)` — a Group is [replaced wholesale](#the-group), so under
+`no action` the delete failed once anyone had filed, and under `cascade` it destroyed every
+evaluation on the trip. Both were tested and both were wrong.
 
-Tested against Postgres, both available behaviours are wrong:
-
-| On delete             | What happens when a Group is corrected                                                                               |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Default (`no action`) | The delete fails outright. Once anyone has filed, the Group can never be edited again.                               |
-| `cascade`             | The delete succeeds and destroys **every** evaluation on the trip — including those filed by members who never left. |
-
-So `filed_by_person_id` references `person` alone, and membership is checked where the
-evaluation is written. This joins the honest list in
-[what the database does not hold](#what-the-database-does-not-hold) — it is the second rule that
-wholesale Group replacement costs, and it is worth knowing that is what it costs.
+That reasoning is now moot, because the filer is not a `person` any more. The people best placed
+to judge a trip include the name-based **Pengajar** and the record-only **Pimpinan**, neither of
+whom signs in — so the signed-in gate excluded exactly the voices the form wanted. Identity is now
+**self-declared and untrusted** (ADR-0024): `filed_by_role` is one of three CHECKed values and
+`filed_by_name` is free text, the same model as `participant_feedback.name`. There is nothing to
+key to the Group, so the wholesale-replacement problem above simply does not arise, and the
+Group-membership rule leaves the honest list in
+[what the database does not hold](#what-the-database-does-not-hold) — it is no longer enforced
+anywhere, because it is no longer a rule.
 
 ### The concerns list in full
 
@@ -979,10 +1003,9 @@ select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
 union all
 
 select 'Perjadin Evaluation', pj.destination, r.aspect, r.rating,
-       p.full_name, r.said, e.created_at
+       e.filed_by_name, r.said, e.created_at
   from perjadin_evaluation e
   join perjadin pj on pj.id = e.perjadin_id
-  join person p on p.id = e.filed_by_person_id
   cross join lateral (values ('lodging',     e.lodging,     e.lodging_comment),
                              ('transport',   e.transport,   e.transport_comment),
                              ('meals',       e.meals,       e.meals_comment),
@@ -1769,11 +1792,12 @@ cannot sign in and file, so no Record can be filed and none is expected. The `cl
 stands unused; how name-taught teaching is evaluated is a later decision (the `CONTEXT.md` open
 question). See [who still owes what](#who-still-owes-what).
 
-**That only the Group filed a Perjadin Evaluation.** `filed_by_person_id` references `person`,
-not `group_member`, so the database will accept an evaluation from someone who was not on the
-trip. This is the second rule wholesale Group replacement costs — the composite foreign key that
-would enforce it either freezes the Group forever or destroys every evaluation when one is
-corrected. See [why there is no foreign key to the Group](#why-there-is-no-foreign-key-to-the-group).
+**Who filed a Perjadin Evaluation.** There is no `filed_by_person_id` at all: the Evaluation is
+filed through an unauthenticated token link now, and the filer self-declares a Role and a Name that
+reference nothing (ADR-0024). The database cannot say whether a submission came from someone who was
+on the trip — the identity is untrusted by design, as `participant_feedback.name` is. The old "only
+the Group may file" rule is not enforced anywhere because it is no longer a rule. See
+[why there is no filer foreign key](#why-there-is-no-filer-foreign-key).
 
 **That the PIC filed theirs.** "The PIC's Record is required" is the one completeness rule in
 the delivery half, and it is unenforceable in the database — the PIC is itself a `coalesce`
