@@ -131,10 +131,10 @@ export type PerjadinAcquittal = {
   transactions: AcquittalTransaction[];
   receipts: AcquittalReceipt[];
   /**
-   * The Pimpinan who joined this trip — record-only names from the fixed three, ordered so the
-   * Report and its CSV read the same on every load. A printed trip report names who travelled;
-   * these carry no money, so they belong on the Laporan rather than a delivery surface ([#142],
-   * ADR-0004). Empty when none joined.
+   * The Pimpinan who joined this trip — record-only, now the names of real Pimpinan-Person rows
+   * (#181, joined from `person`), ordered so the Report and its CSV read the same on every load. A
+   * printed trip report names who travelled; these carry no money, so they belong on the Laporan
+   * rather than a delivery surface ([#142], ADR-0004). Empty when none joined.
    */
   pimpinan: string[];
   returnedToTreasurerIdr: number | null;
@@ -295,16 +295,18 @@ async function receiptsOf(perjadinId: string): Promise<AcquittalReceipt[]> {
 }
 
 /**
- * The Pimpinan recorded on the trip, ordered by name. Record-only — a `perjadin_pimpinan` row is
- * just a name from the fixed three ([ADR-0020]) — so this returns the plain strings. Ordering
- * here rather than at the render sites keeps the Report and its CSV in step on every load.
+ * The Pimpinan recorded on the trip, ordered by name. Record-only — a `perjadin_pimpinan` row now
+ * references a real Person of role Pimpinan (#181), not a fixed-three name — so this joins `person`
+ * for the name and, since the Laporan shows names only, returns the plain strings. Ordering here
+ * rather than at the render sites keeps the Report and its CSV in step on every load.
  */
 async function pimpinanOf(perjadinId: string): Promise<string[]> {
   const rows = await db
-    .select({ name: perjadinPimpinan.name })
+    .select({ name: person.fullName })
     .from(perjadinPimpinan)
+    .innerJoin(person, eq(person.id, perjadinPimpinan.personId))
     .where(eq(perjadinPimpinan.perjadinId, perjadinId))
-    .orderBy(asc(perjadinPimpinan.name));
+    .orderBy(asc(person.fullName));
   return rows.map((row) => row.name);
 }
 

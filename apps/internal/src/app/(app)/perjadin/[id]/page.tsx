@@ -130,6 +130,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
       <PerjadinPimpinan
         perjadinId={trip.id}
         pimpinan={trip.pimpinan}
+        roster={trip.pimpinanRoster}
         canEdit={person.role === "Staff"}
       />
 

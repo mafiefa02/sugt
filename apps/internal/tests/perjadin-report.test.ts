@@ -7,7 +7,7 @@ import {
   perjadinAcquittal,
   recordTransaction,
 } from "@sugt/db/queries";
-import { PIMPINAN, REPORT_DEADLINE_DAYS_AFTER_RETURN, TRANSACTION_CATEGORIES } from "@sugt/domain";
+import { REPORT_DEADLINE_DAYS_AFTER_RETURN, TRANSACTION_CATEGORIES } from "@sugt/domain";
 import type { Role } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -245,15 +245,25 @@ describe("the acquittal payload", () => {
      * and its CSV read the same on every load.
      */
     const staff = await pic();
-    const [fatimah, , anton] = PIMPINAN;
+    const fatimah = await addPerson({
+      fullName: "Fatimah Arofiati Noor",
+      email: "fatimah@ditsama.itb.ac.id",
+      role: "Pimpinan",
+    });
+    const anton = await addPerson({
+      fullName: "Anton Timur Jaelani",
+      email: "anton@ditsama.itb.ac.id",
+      role: "Pimpinan",
+    });
     const trip = await addPerjadin({
       advanceIdr: 1_000_000,
       picPersonId: staff.id,
-      pimpinan: [fatimah, anton],
+      pimpinan: [fatimah.id, anton.id],
     });
 
     const acquittal = await perjadinAcquittal(staff, trip.id);
-    expect(acquittal?.pimpinan).toEqual([fatimah, anton].sort());
+    // Ordered by name — "Anton …" sorts before "Fatimah …".
+    expect(acquittal?.pimpinan).toEqual([anton.fullName, fatimah.fullName]);
 
     const noneTrip = await addPerjadin({ advanceIdr: 1_000_000, picPersonId: staff.id });
     const none = await perjadinAcquittal(staff, noneTrip.id);

@@ -1,5 +1,5 @@
 import type { TimeZone } from "@sugt/domain";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
 import { person } from "../schema/people";
@@ -69,25 +69,37 @@ export async function selectedSchools(schoolIds: string[]): Promise<SelectedScho
 }
 
 /**
- * Everybody a planning form may name.
+ * Everybody a planning form may name, by role.
  *
- * **Only `{ staff }` now** (T3, #153): the `Teaching Team` Person role is retired, so every active
- * Person is Staff. The teaching team a planning form once picked from People is trip-scoped /
- * session-scoped free-text names now (ADR-0020, ADR-0022), typed on the form rather than chosen
- * from a roster. The shape stays an object rather than a bare array so a second half can return
- * here without every call site changing, and because the PIC/extra-Staff combobox reads `.staff`.
+ * **Two rosters now** (#181): `staff` is the active `Staff` People, `pimpinan` the active `Pimpinan`
+ * People — a second signed-in role since #179 (ADR-0025). The two are **disjoint by role**: a Person
+ * holds exactly one, so no id appears in both. Each filters on its role explicitly rather than
+ * assuming every active Person is Staff — the pre-#179 shape did the latter and would now wrongly
+ * fold Pimpinan into `staff`. The teaching team a planning form once picked from People is
+ * trip-scoped / session-scoped free-text names now (ADR-0020, ADR-0022), typed on the form rather
+ * than chosen from a roster.
  *
  * **Revoked People are not here.** `person.active = false` is the whole revocation
  * mechanism ([ADR-0013](../../../../docs/adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md)),
  * and naming a revoked Person commits them to a trip that has not happened. Historical references
  * to them stay intact; a picker is about what happens next.
  */
-export async function activeRosters(): Promise<{ staff: RosterPerson[] }> {
-  const staff = await db
-    .select({ id: person.id, fullName: person.fullName })
-    .from(person)
-    .where(eq(person.active, true))
-    .orderBy(asc(person.fullName));
+export async function activeRosters(): Promise<{
+  staff: RosterPerson[];
+  pimpinan: RosterPerson[];
+}> {
+  const [staff, pimpinan] = await Promise.all([
+    db
+      .select({ id: person.id, fullName: person.fullName })
+      .from(person)
+      .where(and(eq(person.active, true), eq(person.role, "Staff")))
+      .orderBy(asc(person.fullName)),
+    db
+      .select({ id: person.id, fullName: person.fullName })
+      .from(person)
+      .where(and(eq(person.active, true), eq(person.role, "Pimpinan")))
+      .orderBy(asc(person.fullName)),
+  ]);
 
-  return { staff };
+  return { staff, pimpinan };
 }

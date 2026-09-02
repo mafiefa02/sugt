@@ -1221,12 +1221,12 @@ create table perjadin_teacher (
 
 create table perjadin_pimpinan (
   perjadin_id  uuid not null references perjadin (id) on delete cascade,
-  name         text not null check (name in (
-                 'Prof. Dr. Fatimah Arofiati Noor, S.Si., M.Si.',
-                 'Oktofa Yudha Sudrajad, S.T., M.S.M., Ph.D.',
-                 'Dr. Anton Timur Jaelani, S.Si., M.Si.')),
+  person_id    uuid not null,
+  role         text not null default 'Pimpinan' check (role = 'Pimpinan'),
 
-  primary key (perjadin_id, name)
+  primary key (perjadin_id, person_id),
+  constraint perjadin_pimpinan_is_pimpinan
+    foreign key (person_id, role) references person (id, role)
 );
 ```
 
@@ -1241,13 +1241,17 @@ are added, renamed and removed one at a time (T3), and each row has an `id` so
 Stream and no Person FK** — a name is not a Person and a Stream lives on the Session now. `on delete
 cascade`: the names are the trip's and outlive nothing.
 
-**`perjadin_pimpinan` records a Pimpinan on a Perjadin — record-only.** A leader of DITSAMA ITB (one
-of the fixed three) who rarely joins the Kelompok Perjalanan to monitor the offline Sessions is
-noted here and named on the Laporan Perjadin, but is **not a working Group member**: they file no
-Perjadin Evaluation and add nothing to the Preparation Checklist, which is exactly why they are not
-a `group_member` row. `name` CHECKs the three `PIMPINAN` values from `@sugt/domain` character for
-character, the same discipline as `transaction.category`; the primary key `(perjadin_id, name)`
-makes a Pimpinan recordable at most once per trip. Writing and rendering them is T3/T7
+**`perjadin_pimpinan` records a Pimpinan on a Perjadin — record-only.** A leader of DITSAMA ITB who
+rarely joins the Kelompok Perjalanan to monitor the offline Sessions is noted here and named on the
+Laporan Perjadin, but is **not a working Group member**: they file no Perjadin Evaluation and add
+nothing to the Preparation Checklist, which is exactly why they are not a `group_member` row. A row
+references a **real `person` of role Pimpinan** ([#181](https://github.com/mafiefa02/sugt/issues/181)):
+the Pimpinan roster is the single source of truth, so the old fixed-three `name` column with its CHECK
+and the `PIMPINAN` constant in `@sugt/domain` are gone. `role` is pinned to `'Pimpinan'` and the
+composite `(person_id, role)` foreign key into `person (id, role)` guarantees a non-Pimpinan can never
+be recorded — the same PIC-is-Staff discipline as `perjadin_pic_is_staff` and `group_member`'s role
+FK. The primary key `(perjadin_id, person_id)` makes a Pimpinan recordable at most once per trip.
+Writing and rendering them is T3/T7
 ([#138](https://github.com/mafiefa02/sugt/issues/138), [#142](https://github.com/mafiefa02/sugt/issues/142)).
 
 ### The Preparation Checklist

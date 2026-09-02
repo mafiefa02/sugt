@@ -1,5 +1,4 @@
 import type { PerjadinAcquittal } from "@sugt/db/queries";
-import { PIMPINAN } from "@sugt/domain";
 import { describe, expect, it } from "vitest";
 
 import { csvOf } from "../src/app/(app)/perjadin/[id]/laporan/ekspor/csv";
@@ -37,7 +36,10 @@ function acquittal(overrides: Partial<PerjadinAcquittal> = {}): PerjadinAcquitta
 
 describe("the acquittal CSV", () => {
   it("names each Pimpinan on its own labelled row, after the reconciliation", () => {
-    const [fatimah, , anton] = PIMPINAN;
+    // `pimpinan` on the acquittal is a list of Pimpinan names now (#181) — the query orders them, so
+    // the payload here is any two names in the order the query would hand back.
+    const fatimah = "Fatimah Arofiati Noor";
+    const anton = "Anton Timur Jaelani";
     const csv = csvOf(acquittal({ pimpinan: [anton, fatimah] }));
 
     // One labelled row per name, in the order the payload gave — the query orders them, not this.

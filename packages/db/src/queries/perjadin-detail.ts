@@ -1,13 +1,12 @@
 import {
   MAX_EXTRA_STAFF_PER_GROUP,
-  PIMPINAN,
   type Role,
   type SessionStatus,
   type Stream,
   type TimeZone,
   type TransportMode,
 } from "@sugt/domain";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../client";
@@ -110,8 +109,17 @@ export type PerjadinDetail = {
   sessions: PerjadinSession[];
   /** The trip's Teaching Team as trip-scoped names (ADR-0020), for the per-name editor and the "Diajar oleh" pickers. */
   teachers: { id: string; name: string }[];
-  /** The Pimpinan recorded on the trip, for the checkbox editor. A subset of the fixed three. */
-  pimpinan: string[];
+  /**
+   * The Pimpinan recorded on the trip, for the checkbox editor — each a real Person of role Pimpinan
+   * (#181), carried as its `personId` and the person's `name` so the editor can key on the id and
+   * the read-only view can show the name.
+   */
+  pimpinan: { personId: string; name: string }[];
+  /**
+   * The Pimpinan roster the editor picks from — every active Person of role Pimpinan (#181). Mirrors
+   * `staff` below; empty until Pimpinan are added on `/orang`. Revoked People are not offered.
+   */
+  pimpinanRoster: { id: string; fullName: string }[];
   /**
    * Every active Staff member, for the PIC picker and the extra-Staff multi-select. Revoked People
    * are not offered — naming one puts them on a trip they are no longer on.
@@ -148,6 +156,7 @@ export async function perjadinDetail(
     sessions,
     teachers,
     pimpinan,
+    pimpinanRoster,
     staff,
     eligibleSchools,
     teachingLinks,
@@ -206,11 +215,21 @@ export async function perjadinDetail(
       .from(perjadinTeacher)
       .where(eq(perjadinTeacher.perjadinId, perjadinId))
       .orderBy(asc(perjadinTeacher.name)),
-    // The Pimpinan recorded on the trip — record-only names, a subset of the fixed three.
+    // The Pimpinan recorded on the trip — record-only rows referencing a real Person (#181). Joined
+    // to `person` for the display name, in name order for the read-only view.
     db
-      .select({ name: perjadinPimpinan.name })
+      .select({ personId: perjadinPimpinan.personId, name: person.fullName })
       .from(perjadinPimpinan)
-      .where(eq(perjadinPimpinan.perjadinId, perjadinId)),
+      .innerJoin(person, eq(person.id, perjadinPimpinan.personId))
+      .where(eq(perjadinPimpinan.perjadinId, perjadinId))
+      .orderBy(asc(person.fullName)),
+    // The Pimpinan roster the checkbox editor picks from — active Pimpinan People (#181). Mirrors the
+    // Staff roster below, filtering role='Pimpinan'. Revoked People excluded.
+    db
+      .select({ id: person.id, fullName: person.fullName })
+      .from(person)
+      .where(and(eq(person.active, true), eq(person.role, "Pimpinan")))
+      .orderBy(asc(person.fullName)),
     // The Staff roster, for the PIC picker and the extra-Staff multi-select. Revoked People excluded.
     db
       .select({ id: person.id, fullName: person.fullName })
@@ -288,7 +307,8 @@ export async function perjadinDetail(
       taughtBy: taughtBySession.get(row.sessionId) ?? [],
     })),
     teachers,
-    pimpinan: pimpinan.map((row) => row.name),
+    pimpinan: pimpinan.map((row) => ({ personId: row.personId, name: row.name })),
+    pimpinanRoster,
     staff,
     eligibleSchools,
     preparation,
@@ -428,30 +448,46 @@ export async function changePerjadinPic(
 
 export type SetPerjadinPimpinanResult =
   | { outcome: "set" }
-  /** A name outside the fixed three. Not reachable through the checkbox editor, checked anyway. */
+  /**
+   * A personId that is not an active Person of role Pimpinan — a revoked Pimpinan, a Staff id, or a
+   * stranger. Not reachable through the checkbox editor (it offers the roster), checked anyway.
+   */
   | { outcome: "unknown-pimpinan"; offending: string[] }
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" };
 
 /**
- * **Set the Pimpinan recorded on a trip** — the subset of the fixed three who joined. Staff-only.
+ * **Set the Pimpinan recorded on a trip** — the subset of the Pimpinan roster who joined. Staff-only.
  *
  * Record-only rows (ADR-0020): a Pimpinan is not a `group_member`, files no Perjadin Evaluation and
- * adds nothing to the Preparation Checklist. The set is written whole — removed names deleted, added
- * ones inserted — deduped so the `(perjadin_id, name)` primary key cannot collide. A name outside
- * `PIMPINAN` is refused before any write, the way planning refuses it, rather than surfaced as the
- * raw `perjadin_pimpinan_name_check` violation the database would also raise.
+ * adds nothing to the Preparation Checklist. The set is written whole — removed rows deleted, added
+ * ones inserted — deduped so the `(perjadin_id, person_id)` primary key cannot collide. Each id is
+ * validated against the roster (an active Person of role='Pimpinan') before any write, the way
+ * planning validates it; the composite `perjadin_pimpinan_is_pimpinan` FK is the DB backstop that
+ * refuses a non-Pimpinan even from the SQL editor.
  */
 export async function setPerjadinPimpinan(
   caller: Person,
   perjadinId: string,
-  names: string[],
+  personIds: string[],
 ): Promise<SetPerjadinPimpinanResult> {
   requireStaff(caller);
 
-  const unique = [...new Set(names)];
-  const unknown = unique.filter((name) => !(PIMPINAN as readonly string[]).includes(name));
-  if (unknown.length > 0) return { outcome: "unknown-pimpinan", offending: unknown };
+  const unique = [...new Set(personIds)];
+  if (unique.length > 0) {
+    const valid = new Set(
+      (
+        await db
+          .select({ id: person.id })
+          .from(person)
+          .where(
+            and(inArray(person.id, unique), eq(person.active, true), eq(person.role, "Pimpinan")),
+          )
+      ).map((row) => row.id),
+    );
+    const offending = unique.filter((id) => !valid.has(id));
+    if (offending.length > 0) return { outcome: "unknown-pimpinan", offending };
+  }
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
@@ -463,7 +499,9 @@ export async function setPerjadinPimpinan(
 
     await tx.delete(perjadinPimpinan).where(eq(perjadinPimpinan.perjadinId, perjadinId));
     if (unique.length > 0) {
-      await tx.insert(perjadinPimpinan).values(unique.map((name) => ({ perjadinId, name })));
+      await tx
+        .insert(perjadinPimpinan)
+        .values(unique.map((personId) => ({ perjadinId, personId })));
     }
 
     return { outcome: "set" };
