@@ -11,7 +11,6 @@ import {
   Newspaper,
   Plane,
   School,
-  TriangleAlert,
   Users,
   Video,
 } from "lucide-react";
@@ -42,7 +41,6 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, staffOnly: false },
   { href: "/sekolah", label: "Direktori Sekolah", icon: School, staffOnly: false },
   { href: "/kelompok-sekolah", label: "Kelompok Sekolah", icon: Boxes, staffOnly: false },
-  { href: "/concerns", label: "Concerns", icon: TriangleAlert, staffOnly: false },
   { href: "/feedback", label: "Feedback", icon: MessageSquare, staffOnly: false },
   { href: "/perjadin", label: "Perjadin", icon: Plane, staffOnly: false },
   {
