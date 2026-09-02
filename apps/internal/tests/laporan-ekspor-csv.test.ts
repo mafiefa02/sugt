@@ -27,7 +27,6 @@ function acquittal(overrides: Partial<PerjadinAcquittal> = {}): PerjadinAcquitta
     reportDueOn: "2026-09-05",
     daysRemaining: 3,
     transactions: [],
-    receipts: [],
     pimpinan: [],
     returnedToTreasurerIdr: null,
     returnedAt: null,

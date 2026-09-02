@@ -275,10 +275,6 @@ Both are first-class paths. There is no offline support; capture needs connectiv
 where it fails the PIC enters it later, losing convenience but never data. Offline is
 worth adding eventually, not worth blocking on.
 
-Receipts from the other travellers reach the PIC however they reach them today. The tool
-does not collect them from Group members; it tracks who is still outstanding so the PIC
-has a checklist rather than a memory.
-
 **The Report is due two days after the Group gets back**, and the screen shows days
 remaining. Nothing enters that date — it follows from the Perjadin's end date, so it
 cannot be typed wrong and it moves by itself if the trip's dates are corrected.

@@ -3,7 +3,6 @@ import {
   attachTransactionEvidence,
   filePerjadinReport,
   isNotStaffError,
-  markReceiptsSettled,
   perjadinAcquittal,
   recordTransaction,
 } from "@sugt/db/queries";
@@ -26,8 +25,7 @@ import {
  *
  * The invariants under test are the ones no column holds: the reconciliation is derived
  * rather than typed, the evidence rule is checked when the Report is filed rather than when
- * a transaction is entered, the receipts checklist is an explicit mark rather than a count
- * of transactions, and every entry point refuses a non-Staff caller.
+ * a transaction is entered, and every entry point refuses a non-Staff caller.
  *
  * `staff-only.test.ts` covers the choke point itself at the sign-in seam. This file drives
  * the same guard on the four surfaces #30 added, and asserts on rows.
@@ -223,18 +221,6 @@ describe("the acquittal payload", () => {
     expect(acquittal?.gtkMsSpentIdr).toBe(400_000);
     // The two cohorts partition the spend: there is no third type and no unset state.
     expect(acquittal!.siswaSpentIdr + acquittal!.gtkMsSpentIdr).toBe(acquittal?.spentIdr);
-  });
-
-  it("lists every Group member on the receipts checklist, settled or not", async () => {
-    // The Group is the PIC alone now (T3 (#153) made `group_member` Staff-only and Stream-less),
-    // so the checklist is the one member.
-    const { staff, trip } = await aTrip();
-
-    const acquittal = await perjadinAcquittal(staff, trip.id);
-
-    expect(acquittal?.receipts).toHaveLength(1);
-    expect(acquittal?.receipts.map((member) => member.personId)).toEqual([staff.id]);
-    expect(acquittal?.receipts.every((member) => member.settledAt === null)).toBe(true);
   });
 
   it("tells a missing Perjadin apart from a refusal", async () => {
@@ -501,57 +487,6 @@ describe("attaching evidence", () => {
     const refusal = await refusedBy(attachTransactionEvidence(staff, trip.id, line.id, [file]));
 
     expect(refusal).toBe("transaction_evidence_storage_path_unique");
-  });
-});
-
-describe("the receipts checklist", () => {
-  beforeEach(resetDatabase);
-
-  it("is an explicit mark and not a count of transactions", async () => {
-    /**
-     * The member below has no transactions at all. Deriving the checklist would read that as
-     * settled, when it is ambiguous between *spent nothing* and *has not handed anything
-     * over yet* — which is the whole reason the column exists. The Group is the PIC alone now
-     * (T3 (#153)), so the PIC is the member with nothing against them.
-     */
-    const { staff, trip } = await aTrip();
-
-    const before = await perjadinAcquittal(staff, trip.id);
-    expect(before?.receipts.find((m) => m.personId === staff.id)?.settledAt).toBeNull();
-
-    const marked = await markReceiptsSettled(staff, trip.id, staff.id, true);
-    expect(marked.outcome).toBe("marked");
-
-    const after = await perjadinAcquittal(staff, trip.id);
-    expect(after?.receipts.find((m) => m.personId === staff.id)?.settledAt).toBeInstanceOf(Date);
-  });
-
-  it("unticks by clearing the mark rather than storing a second event", async () => {
-    const { staff, trip } = await aTrip();
-
-    await markReceiptsSettled(staff, trip.id, staff.id, true);
-    await expect(markReceiptsSettled(staff, trip.id, staff.id, false)).resolves.toEqual({
-      outcome: "marked",
-      settledAt: null,
-    });
-  });
-
-  it("refuses a non-Staff caller, and reports somebody off the Group as a value", async () => {
-    const { staff, trip } = await aTrip();
-    const outsider = await addPerson({
-      fullName: "Sari Wulandari",
-      email: "sari@gmail.com",
-      role: "Staff",
-    });
-
-    const refusal = await markReceiptsSettled(nonStaff(), trip.id, staff.id, true).catch(
-      (error: unknown) => error,
-    );
-    expect(isNotStaffError(refusal)).toBe(true);
-
-    await expect(markReceiptsSettled(staff, trip.id, outsider.id, true)).resolves.toEqual({
-      outcome: "no-such-member",
-    });
   });
 });
 

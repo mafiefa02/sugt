@@ -335,8 +335,7 @@ export type SetPerjadinStaffResult =
  *
  * **The PIC is re-inserted rather than asked for.** They are the one member the caller cannot drop —
  * `perjadin_pic_is_a_group_member` refuses a Group without them at COMMIT — and the PIC is changed
- * through `changePerjadinPic`, not here. A staying member's `receiptsSettledAt` is preserved across
- * the rewrite, because a member with transactions still owes their receipts afterwards.
+ * through `changePerjadinPic`, not here.
  */
 export async function setPerjadinStaff(
   caller: Person,
@@ -364,15 +363,6 @@ export async function setPerjadinStaff(
     const duplicate = duplicatedStaff(trip.picPersonId, staffPersonIds);
     if (duplicate.length > 0) return { outcome: "duplicate-staff", personIds: duplicate };
 
-    const settled = new Map(
-      (
-        await tx
-          .select({ personId: groupMember.personId, settledAt: groupMember.receiptsSettledAt })
-          .from(groupMember)
-          .where(eq(groupMember.perjadinId, perjadinId))
-      ).map((member) => [member.personId, member.settledAt]),
-    );
-
     await tx.delete(groupMember).where(eq(groupMember.perjadinId, perjadinId));
     await tx.insert(groupMember).values([
       {
@@ -380,14 +370,12 @@ export async function setPerjadinStaff(
         personId: trip.picPersonId,
         role: "Staff" as const,
         stream: null,
-        receiptsSettledAt: settled.get(trip.picPersonId) ?? null,
       },
       ...staffPersonIds.map((personId) => ({
         perjadinId,
         personId,
         role: "Staff" as const,
         stream: null,
-        receiptsSettledAt: settled.get(personId) ?? null,
       })),
     ]);
 

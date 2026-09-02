@@ -128,7 +128,6 @@ describe("staffDashboard", () => {
     const report = dashboard.picReports.find((entry) => entry.perjadinId === perjadin.id);
     expect(report).toMatchObject({
       groupCount: 1,
-      receiptsSettled: 0,
       transactionCount: 1,
       remainderIdr: 4_000_000,
     });

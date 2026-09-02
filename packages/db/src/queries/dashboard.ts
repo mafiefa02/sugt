@@ -62,8 +62,6 @@ export type PicReport = {
   startsOn: string;
   endsOn: string;
   groupCount: number;
-  /** Members who have handed their receipts over — the `2 / 4` the design shows. */
-  receiptsSettled: number;
   transactionCount: number;
   /** Advance minus everything spent. Negative means the Group overspent. */
   remainderIdr: number;
@@ -164,10 +162,6 @@ export async function staffDashboard(caller: Person): Promise<StaffDashboard> {
         endsOn: perjadin.endsOn,
         groupCount:
           sql<number>`(select count(*) from ${groupMember} gm where gm.perjadin_id = ${OUTER_PERJADIN_ID})`.mapWith(
-            Number,
-          ),
-        receiptsSettled:
-          sql<number>`(select count(*) from ${groupMember} gm where gm.perjadin_id = ${OUTER_PERJADIN_ID} and gm.receipts_settled_at is not null)`.mapWith(
             Number,
           ),
         transactionCount:

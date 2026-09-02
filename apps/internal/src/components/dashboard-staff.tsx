@@ -141,12 +141,6 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
                   </span>
                   <span className="text-muted-foreground">
                     <span className="text-foreground tabular-nums">
-                      {report.receiptsSettled} / {report.groupCount}
-                    </span>{" "}
-                    Bukti anggota masuk
-                  </span>
-                  <span className="text-muted-foreground">
-                    <span className="text-foreground tabular-nums">
                       Rp {formatIdr(report.remainderIdr)}
                     </span>{" "}
                     Sisa untuk dikembalikan

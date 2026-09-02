@@ -1,4 +1,3 @@
-import { AcquittalReceipts } from "-/components/laporan-perjadin/acquittal-receipts";
 import { AcquittalTransactions } from "-/components/laporan-perjadin/acquittal-transactions";
 import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-report";
 import { shortenKabupaten } from "-/lib/format-destination";
@@ -132,11 +131,6 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
       <AcquittalTransactions
         perjadinId={id}
         transactions={transactions}
-      />
-
-      <AcquittalReceipts
-        perjadinId={id}
-        receipts={acquittal.receipts}
       />
     </div>
   );

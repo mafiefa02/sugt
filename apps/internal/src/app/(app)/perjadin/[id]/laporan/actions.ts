@@ -6,12 +6,10 @@ import { staffSurface } from "-/lib/staff-surface";
 import {
   attachTransactionEvidence,
   filePerjadinReport,
-  markReceiptsSettled,
   perjadinAcquittal,
   recordTransaction,
   requireStaff,
   type FilePerjadinReportResult,
-  type MarkReceiptsSettledResult,
   type NewEvidence,
   type NewTransaction,
   type RecordTransactionResult,
@@ -133,21 +131,6 @@ export async function finalizeReceiptsAction(
 
   revalidatePath(`/perjadin/${perjadinId}/laporan`);
   return { outcome: "attached", attached: result.count, failed };
-}
-
-/** Tick or untick one Group member on the receipts checklist. */
-export async function markReceiptsSettledAction(
-  perjadinId: string,
-  personId: string,
-  settled: boolean,
-): Promise<MarkReceiptsSettledResult> {
-  const person = await requirePerson();
-
-  const result = await staffSurface(() =>
-    markReceiptsSettled(person, perjadinId, personId, settled),
-  );
-  if (result.outcome === "marked") revalidatePath(`/perjadin/${perjadinId}/laporan`);
-  return result;
 }
 
 /**

@@ -15,7 +15,7 @@ import {
   setPerjadinStaff,
 } from "@sugt/db/queries";
 import type { Role } from "@sugt/domain";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -111,7 +111,6 @@ async function groupOf(perjadinId: string) {
       personId: schema.groupMember.personId,
       role: schema.groupMember.role,
       stream: schema.groupMember.stream,
-      receiptsSettledAt: schema.groupMember.receiptsSettledAt,
     })
     .from(schema.groupMember)
     .where(eq(schema.groupMember.perjadinId, perjadinId));
@@ -649,26 +648,6 @@ describe("editing a Perjadin's Staff and PIC", () => {
     const group = await groupOf(perjadinId);
     expect(group.map((m) => m.personId).sort()).toEqual([pic.id, dewi.id, budi.id].sort());
     expect(group.every((m) => m.role === "Staff" && m.stream === null)).toBe(true);
-  });
-
-  it("preserves a staying member's receipt mark across a set", async () => {
-    const { pic, perjadinId } = await trip();
-    const dewi = await staff("Dewi Koordinator", "dewi@ditsama.itb.ac.id");
-    await setPerjadinStaff(pic, perjadinId, [dewi.id]);
-    await db
-      .update(schema.groupMember)
-      .set({ receiptsSettledAt: new Date("2026-09-04T00:00:00Z") })
-      .where(
-        and(
-          eq(schema.groupMember.perjadinId, perjadinId),
-          eq(schema.groupMember.personId, dewi.id),
-        ),
-      );
-
-    await setPerjadinStaff(pic, perjadinId, [dewi.id]);
-
-    const group = await groupOf(perjadinId);
-    expect(group.find((m) => m.personId === dewi.id)?.receiptsSettledAt).not.toBeNull();
   });
 
   it("refuses more than ten extra Staff, writing nothing", async () => {
