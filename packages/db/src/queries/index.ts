@@ -77,6 +77,7 @@ export {
   type UpdateStoryInput,
 } from "./cerita";
 export {
+  DEFAULT_FEEDBACK_SORT,
   NO_FEEDBACK_FILTERS,
   NO_PERJADIN_FEEDBACK_FILTERS,
   participantFeedbackAverages,
@@ -86,6 +87,7 @@ export {
   type FeedbackCursor,
   type FeedbackFilters,
   type FeedbackFilterValue,
+  type FeedbackSort,
   type ParticipantFeedbackRow,
   type PerjadinFeedbackCursor,
   type PerjadinFeedbackFilters,
