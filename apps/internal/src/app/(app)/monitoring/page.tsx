@@ -16,13 +16,16 @@ import { MonitoringView } from "./monitoring-view";
  * The server's decisions are the money gate and today's date. `showBudget(person.role)` returns
  * `true` for both signed-in roles — Staff and the read-only Pimpinan — because money is open to any
  * signed-in Person to READ (ADR-0004 reversed by ADR-0026, #180); writing money stays Staff-only
- * elsewhere. `today` is this server render's UTC calendar date, which decides which timeline steps
- * are complete and which windows are overdue.
+ * elsewhere. `today` is the **WIB** calendar date — the Programme's zone, the one Session times are
+ * stored in — not UTC: an overdue warning or a completed step turns over at local midnight, and a
+ * UTC date would flip it up to seven hours early against `LURING_SESI_WINDOWS`, which are WIB dates.
  */
 export default async function Page() {
   const person = await requirePerson();
   const data = await monitoringData(person);
-  const today = new Date().toISOString().slice(0, 10);
+  // `en-CA` formats as `YYYY-MM-DD`; `Asia/Jakarta` pins it to WIB so the date compares like-for-like
+  // against the WIB window bounds in `LURING_SESI_WINDOWS`.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
   const derived = deriveMonitoring(data, today);
 
   return (

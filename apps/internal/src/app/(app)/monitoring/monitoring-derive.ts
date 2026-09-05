@@ -89,10 +89,19 @@ export function deliveryMatrix(
   }
   for (const list of rankedBySchool.values()) list.sort(byRank);
 
+  // Group Schools by Cluster once — the grouping is the same for every Sesi row, so folding it here
+  // keeps the per-row work to a single pass over each Cluster's Schools.
+  const schoolsByCluster = new Map<string, School[]>();
+  for (const sc of schools) {
+    const list = schoolsByCluster.get(sc.clusterId);
+    if (list) list.push(sc);
+    else schoolsByCluster.set(sc.clusterId, [sc]);
+  }
+
   const rows: MatrixRow[] = [];
   for (let n = 1; n <= sesiCount; n++) {
     const cells = clusters.map((c) => {
-      const clusterSchools = schools.filter((sc) => sc.clusterId === c.id);
+      const clusterSchools = schoolsByCluster.get(c.id) ?? [];
       let x = 0;
       for (const sc of clusterSchools) {
         const rankN = rankedBySchool.get(sc.id)?.[n - 1];

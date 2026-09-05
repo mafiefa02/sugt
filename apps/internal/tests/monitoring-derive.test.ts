@@ -145,6 +145,12 @@ describe("overdueWarnings", () => {
   it("raises nothing while a window is still open", () => {
     expect(overdueWarnings(luring, windows, "2026-10-06")).toEqual([]);
   });
+
+  it("skips an ended window whose Sesi has no matching row rather than counting it overdue", () => {
+    // Only Sesi 1 has a row; window 2 has ended but indexes past the matrix, so it is skipped.
+    const onlySesi1: MatrixRow[] = [{ session: "Sesi 1", cells: ["2/2", "1/1"] }];
+    expect(overdueWarnings(onlySesi1, windows, "2026-11-21")).toEqual([]);
+  });
 });
 
 describe("deriveMonitoring", () => {
