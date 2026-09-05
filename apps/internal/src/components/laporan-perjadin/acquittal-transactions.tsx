@@ -45,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@sugt/ui/components/select";
-import { useId, useMemo, useRef, useState, useTransition } from "react";
+import { type ReactElement, useId, useMemo, useRef, useState, useTransition } from "react";
 
 /**
  * **The line items, and the two things a PIC does to them**: enter one, and attach the receipts
@@ -386,7 +386,16 @@ function Receipts({ perjadinId, line }: { perjadinId: string; line: ViewableTran
 }
 
 /** The entry form. One line item at a time, which is how a PIC has them. */
-function RecordTransaction({ perjadinId }: { perjadinId: string }) {
+function RecordTransaction({
+  perjadinId,
+  trigger,
+}: {
+  perjadinId: string;
+  // An optional custom trigger so a card elsewhere can open this exact entry form from its own
+  // control. Omitted, the default "Catat transaksi" button renders and `AcquittalTransactions`
+  // behaves exactly as before — it still mounts `<RecordTransaction perjadinId={perjadinId} />`.
+  trigger?: ReactElement;
+}) {
   const [open, setOpen] = useState(false);
   const [spentOn, setSpentOn] = useState("");
   const [description, setDescription] = useState("");
@@ -439,12 +448,14 @@ function RecordTransaction({ perjadinId }: { perjadinId: string }) {
     >
       <DialogTrigger
         render={
-          <Button
-            variant="outline"
-            size="sm"
-          >
-            Catat transaksi
-          </Button>
+          trigger ?? (
+            <Button
+              variant="outline"
+              size="sm"
+            >
+              Catat transaksi
+            </Button>
+          )
         }
       />
       <DialogContent>
@@ -605,4 +616,4 @@ const REFUSALS = {
   "no-such-perjadin": STALE_PAGE,
 } as const;
 
-export { AcquittalTransactions };
+export { AcquittalTransactions, RecordTransaction };

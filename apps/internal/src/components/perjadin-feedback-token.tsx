@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@sugt/ui/components/dialog";
-import { useState, useTransition } from "react";
+import { type ReactElement, useState, useTransition } from "react";
 
 /**
  * **The Perjadin Evaluation QR** (ADR-0024) — the sibling of `feedback-token.tsx`, one trip over.
@@ -29,7 +29,16 @@ import { useState, useTransition } from "react";
  * confirmation naming what dies, so a reissue is a second, deliberate act rather than a repeat of
  * the neutral first-issue notice.
  */
-function PerjadinFeedbackTokenDialog({ perjadinId }: { perjadinId: string }) {
+function PerjadinFeedbackTokenDialog({
+  perjadinId,
+  trigger,
+}: {
+  perjadinId: string;
+  // An optional custom trigger so a card elsewhere (e.g. the Staff dashboard) can open this exact
+  // dialog from its own labelled control. Omitted, the default button below renders and behaviour is
+  // identical to today — every current mount site keeps working unchanged.
+  trigger?: ReactElement;
+}) {
   const [open, setOpen] = useState(false);
   const [issued, setIssued] = useState<{ url: string; qr: string } | null>(null);
   const [confirmingReissue, setConfirmingReissue] = useState(false);
@@ -67,7 +76,7 @@ function PerjadinFeedbackTokenDialog({ perjadinId }: { perjadinId: string }) {
         }
       }}
     >
-      <DialogTrigger render={<Button variant="outline">QR Evaluasi Perjadin</Button>} />
+      <DialogTrigger render={trigger ?? <Button variant="outline">QR Evaluasi Perjadin</Button>} />
       <DialogContent>
         <DialogHeader>
           <DialogTitle>QR Evaluasi Perjadin</DialogTitle>
