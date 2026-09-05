@@ -601,3 +601,49 @@ export async function updatePerjadinLogistics(
     return { outcome: "updated" };
   });
 }
+
+export type UpdatePerjadinAdvanceResult =
+  | { outcome: "updated" }
+  /**
+   * A negative Advance. The DB `perjadin_advance_check` (`advance_idr >= 0`) is the floor;
+   * returning a value lets the edit surface point at the field rather than surfacing a raw
+   * constraint violation. **Zero is allowed** — an unfunded trip is a real state.
+   */
+  | { outcome: "negative-advance" }
+  /** The id names no Perjadin — a stale link, which is reachable. */
+  | { outcome: "no-such-perjadin" };
+
+/**
+ * **Correct a Perjadin's Advance after planning.** Staff-only (money writes stay Staff-only,
+ * ADR-0026); reading it is open, so this write is the only place the figure changes after
+ * `planPerjadin` set it once.
+ *
+ * **No lifecycle gate.** The correction is allowed at any time, *including after the Perjadin
+ * Report is filed* — it is a correction affordance, and the acquittal derives the remainder live
+ * (`remainderIdr = advance − spent`), so a fixed Advance fixes the remainder for free.
+ *
+ * **The only validation is the DB floor** (`advance_idr >= 0`). It is deliberately *not* coupled
+ * to what has already been spent: setting the Advance below current spend yields a negative
+ * remainder (an overspend), which is a real, representable state and not an error.
+ */
+export async function updatePerjadinAdvance(
+  caller: Person,
+  perjadinId: string,
+  advanceIdr: number,
+): Promise<UpdatePerjadinAdvanceResult> {
+  requireStaff(caller);
+
+  // The DB CHECK is the floor; reject a negative value up front so the surface can point at the
+  // field rather than showing a raw constraint violation. Not coupled to spend on purpose.
+  if (advanceIdr < 0) return { outcome: "negative-advance" };
+
+  const updated = await db
+    .update(perjadin)
+    .set({ advanceIdr })
+    .where(eq(perjadin.id, perjadinId))
+    .returning({ id: perjadin.id });
+
+  if (updated.length === 0) return { outcome: "no-such-perjadin" };
+
+  return { outcome: "updated" };
+}
