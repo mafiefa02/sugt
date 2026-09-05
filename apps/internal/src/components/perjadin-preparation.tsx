@@ -17,27 +17,21 @@ import { type ReactElement, useId, useOptimistic, useTransition } from "react";
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
  * **An internal-monitoring aid, and nothing more**: no money, no deadline, not a record, and
- * nothing ever ticks a box automatically. The six fixed items and one per Teaching Team member
- * are derived server-side (`perjadinDetail`); this only flips them.
+ * nothing ever ticks a box automatically. The seven fixed items are derived server-side
+ * (`perjadinDetail`); this only flips them.
  *
  * Each box is **optimistic**: it flips on click, fires the toggle action, and reconciles when the
  * route revalidates. Toggling is offered to Staff only — `togglePreparationItem` re-checks the
  * role, so a professor's page renders the boxes read-only rather than trusting the client.
  *
- * **The list lives in one place, `PreparationChecklist`**, so the two ways it is shown — the inline
- * section on the edit page and the dashboard-card dialog — share the very same optimistic toggle
- * rather than forking it. A stray box ticked in the dialog and the same box on the section behind it
- * would drift apart if each held its own state; one component makes that impossible.
+ * **The optimistic state and the toggle live in one hook, `usePreparationChecklist`**, so the two
+ * surfaces that show the checklist — the inline section on the edit page and the dashboard-card
+ * dialog — run the identical toggle rather than forking it, and each surface's own count and boxes
+ * read the *same* optimistic state (which is why the inline `n/N` pill flips the instant a box does,
+ * not only after a revalidate). The two surfaces are never on screen together, so each mount holding
+ * its own optimistic state is correct — there is nothing to keep in sync between them.
  */
-function PreparationChecklist({
-  perjadinId,
-  items,
-  canToggle,
-}: {
-  perjadinId: string;
-  items: PreparationItem[];
-  canToggle: boolean;
-}) {
+function usePreparationChecklist(perjadinId: string, items: PreparationItem[]) {
   const [optimisticItems, setOptimisticChecked] = useOptimistic(
     items,
     (state, patch: { itemKey: string; checked: boolean }) =>
@@ -46,7 +40,6 @@ function PreparationChecklist({
       ),
   );
   const [, startToggle] = useTransition();
-  const fields = useId();
 
   function toggle(itemKey: string, checked: boolean) {
     startToggle(async () => {
@@ -57,9 +50,24 @@ function PreparationChecklist({
     });
   }
 
+  return { items: optimisticItems, toggle };
+}
+
+/** The checkbox list itself — presentational, over the optimistic items and toggle the hook owns. */
+function PreparationChecklist({
+  items,
+  canToggle,
+  onToggle,
+}: {
+  items: PreparationItem[];
+  canToggle: boolean;
+  onToggle: (itemKey: string, checked: boolean) => void;
+}) {
+  const fields = useId();
+
   return (
     <ul className="mt-2.5 space-y-1.5">
-      {optimisticItems.map((item) => {
+      {items.map((item) => {
         const id = `${fields}-${item.itemKey}`;
         return (
           <li
@@ -71,7 +79,7 @@ function PreparationChecklist({
               checked={item.checked}
               disabled={!canToggle}
               onCheckedChange={(checked) => {
-                toggle(item.itemKey, checked === true);
+                onToggle(item.itemKey, checked === true);
               }}
             />
             <label
@@ -89,9 +97,8 @@ function PreparationChecklist({
 
 /**
  * The inline section on the Perjadin edit page — the framed block with its heading and `done/total`
- * count, wrapping the shared `PreparationChecklist`. The count is derived from `items` here in the
- * header; the list's own optimistic flips still reconcile against the same server state, so the two
- * stay in step across a revalidate.
+ * count, wrapping the shared checklist. The count reads the hook's **optimistic** items, so it flips
+ * with the box on click and reconciles against server state on revalidate, exactly as before.
  */
 function PerjadinPreparation({
   perjadinId,
@@ -102,8 +109,9 @@ function PerjadinPreparation({
   items: PreparationItem[];
   canToggle: boolean;
 }) {
-  const done = items.filter((item) => item.checked).length;
-  const total = items.length;
+  const { items: optimisticItems, toggle } = usePreparationChecklist(perjadinId, items);
+  const done = optimisticItems.filter((item) => item.checked).length;
+  const total = optimisticItems.length;
 
   return (
     <div className="border-b border-border px-7 py-5">
@@ -115,9 +123,9 @@ function PerjadinPreparation({
       </div>
 
       <PreparationChecklist
-        perjadinId={perjadinId}
-        items={items}
+        items={optimisticItems}
         canToggle={canToggle}
+        onToggle={toggle}
       />
     </div>
   );
@@ -126,9 +134,8 @@ function PerjadinPreparation({
 /**
  * The same checklist as a dialog, opened from a caller's own control — the dashboard card's
  * "Persiapan n/7" pill. `trigger` is required because there is no default surface for it here; the
- * pill is the whole reason this variant exists. Live check/uncheck runs through the shared
- * `PreparationChecklist`, so a box ticked in the dialog is the identical optimistic path as the
- * inline section — the toggle is not forked.
+ * pill is the whole reason this variant exists. Live check/uncheck runs through the same
+ * `usePreparationChecklist` hook as the inline section, so the toggle is not forked.
  */
 function PerjadinPreparationDialog({
   perjadinId,
@@ -141,6 +148,8 @@ function PerjadinPreparationDialog({
   canToggle: boolean;
   trigger: ReactElement;
 }) {
+  const { items: optimisticItems, toggle } = usePreparationChecklist(perjadinId, items);
+
   return (
     <Dialog>
       <DialogTrigger render={trigger} />
@@ -150,9 +159,9 @@ function PerjadinPreparationDialog({
         </DialogHeader>
 
         <PreparationChecklist
-          perjadinId={perjadinId}
-          items={items}
+          items={optimisticItems}
           canToggle={canToggle}
+          onToggle={toggle}
         />
       </DialogContent>
     </Dialog>
