@@ -101,6 +101,8 @@ export type ParticipantFeedbackRow = {
   name: string;
   classKind: ClassKind;
   schoolName: string;
+  /** The Session the feedback was filed against — the origin the card links through to (#194). */
+  sessionId: string;
   sessionMode: SessionMode;
   /** The Session's date as `YYYY-MM-DD`; a `date` column, so already a string. */
   heldOn: string;
@@ -180,6 +182,9 @@ export async function participantFeedbackPage(
       name: participantFeedback.name,
       classKind: participantFeedback.classKind,
       schoolName: school.name,
+      // The Session this feedback was filed against, so the card can link through to it (#194). The
+      // `session` table is already inner-joined below, so this is just another selected column.
+      sessionId: session.id,
       sessionMode: session.mode,
       heldOn: session.heldOn,
       startsAt: session.startsAt,
