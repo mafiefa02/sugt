@@ -116,6 +116,7 @@ export {
   perjadinDetail,
   setPerjadinPimpinan,
   setPerjadinStaff,
+  updatePerjadinAdvance,
   updatePerjadinLogistics,
   type ChangePerjadinPicResult,
   type EligibleSchool,
@@ -126,6 +127,7 @@ export {
   type PerjadinTravelLeg,
   type SetPerjadinPimpinanResult,
   type SetPerjadinStaffResult,
+  type UpdatePerjadinAdvanceResult,
   type UpdatePerjadinLogisticsResult,
 } from "./perjadin-detail";
 export {

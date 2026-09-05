@@ -15,6 +15,7 @@ import {
   setPerjadinPimpinan,
   setPerjadinStaff,
   togglePreparationItem,
+  updatePerjadinAdvance,
   updatePerjadinLogistics,
   type AddPerjadinSessionResult,
   type AddPerjadinTeacherResult,
@@ -28,6 +29,7 @@ import {
   type SetPerjadinPimpinanResult,
   type SetPerjadinStaffResult,
   type TogglePreparationItemResult,
+  type UpdatePerjadinAdvanceResult,
   type UpdatePerjadinLogisticsResult,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
@@ -223,6 +225,29 @@ export async function updatePerjadinLogisticsAction(
 
   const result = await staffSurface(() => updatePerjadinLogistics(person, perjadinId, input));
   if (result.outcome === "updated") revalidatePath(`/perjadin/${perjadinId}`);
+  return result;
+}
+
+/**
+ * **Correct a Perjadin's Advance (uang muka)** — the one write that changes the amount after
+ * planning (#192). Money writes stay Staff-only (ADR-0026), so it goes through `staffSurface`.
+ *
+ * **This revalidates two routes.** The Advance shows on the trip page's Uang muka strip *and* on
+ * `/perjadin/[id]/laporan` (the acquittal derives its remainder from it), so both are stale the
+ * moment it is corrected — a deliberate exception to the one-route convention, the same shape
+ * `togglePreparationItemAction` above documents.
+ */
+export async function updatePerjadinAdvanceAction(
+  perjadinId: string,
+  advanceIdr: number,
+): Promise<UpdatePerjadinAdvanceResult> {
+  const person = await requirePerson();
+
+  const result = await staffSurface(() => updatePerjadinAdvance(person, perjadinId, advanceIdr));
+  if (result.outcome === "updated") {
+    revalidatePath(`/perjadin/${perjadinId}`);
+    revalidatePath(`/perjadin/${perjadinId}/laporan`);
+  }
   return result;
 }
 
