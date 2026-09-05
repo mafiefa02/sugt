@@ -448,7 +448,7 @@ the Sub-Cluster onto the Session and make both sides composite foreign keys, exa
 `session → school (id, sub_cluster_id)` and defaults to `NO ACTION`, so Postgres would refuse
 to move a School between Sub-Clusters while **any** Session referenced the old pairing —
 delivered and cancelled ones included. A School would be frozen into its Sub-Cluster by its
-first completed trip, and with four offline Sessions each, that is every School early in the
+first completed trip, and with two offline Sessions each, that is every School early in the
 Programme. `on update cascade` does not rescue it: it would rewrite history, making a past
 Perjadin claim it travelled somewhere it did not, and it fails on its own terms anyway because
 the trip's own `sub_cluster_id` does not move with the School, so the cascade would violate the
@@ -465,7 +465,7 @@ the same reason, as "an arranged offline Session falls inside its Perjadin".
 
 The first CHECK is the sharpest rule in the delivery half of the domain, and it is an
 equivalence rather than an implication in both directions: **an offline Session has a
-Perjadin and an online Session has none.** Six of every ten Sessions are invisible to
+Perjadin and an online Session has none.** Six of every eight Sessions are invisible to
 anything trip-shaped, which is why counting Perjadins never tells you how much teaching has
 happened.
 
@@ -478,7 +478,7 @@ finds it null for every offline row — the PIC of a Session is
 column.
 
 This matters because the PIC is the one person whose Session Record is required rather than
-optional. Without it, six of every ten Sessions would have nobody who owed anything.
+optional. Without it, six of every eight Sessions would have nobody who owed anything.
 
 The composite foreign key uses the default `MATCH SIMPLE`, under which a row with NULLs in
 the referencing columns satisfies the constraint — so offline Sessions, which have neither
