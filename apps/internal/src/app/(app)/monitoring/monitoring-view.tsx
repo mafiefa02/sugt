@@ -29,31 +29,41 @@ import { cn } from "@sugt/ui/lib/utils";
 import { Check } from "lucide-react";
 import { useState } from "react";
 
-import {
-  DARING_MATRIX,
-  KPI,
-  LURING_MATRIX,
-  TIMELINE,
-  WARNINGS,
-  type MockMatrixRow,
-  type MockTimelineStep,
-} from "./mock-data";
-import { dismissWarning, initialWarningState } from "./monitoring-state";
-
-const KLASTER = ["Klaster 1", "Klaster 2", "Klaster 3", "Klaster 4"] as const;
+import type { MatrixRow, TimelineStep } from "./monitoring-derive";
+import { dismissWarning, initialWarningState, type Warning } from "./monitoring-state";
 
 /**
- * The `/monitoring` view — a presentational scaffold (#178). **Everything it renders is mock**,
- * imported from `mock-data.ts`; the only state that moves is the operator setting warnings aside.
+ * The `/monitoring` view — the presentational half of the screen, now fed **real** figures. Every
+ * number is derived on the server by `deriveMonitoring` (`./monitoring-derive.ts`) from the rows
+ * `monitoringData` reads, and handed down as props; this component only lays them out and moves the
+ * one piece of client state — the operator setting a warning aside.
  *
- * That state is deliberately ephemeral. `useState` seeds the two warning lists once from the mock
- * warnings and the reducer (`dismissWarning`, the pure seam in `monitoring-state.ts`) moves an item
- * from `active` to `ignored` on **Abaikan** — a browser-only interaction with no persistence, which
- * is exactly right while the data is fake. When #177 makes the numbers real, this component keeps
- * its shape and swaps its source. `showBudget` gates the money card (ADR-0004), decided on the server.
+ * That state is deliberately ephemeral. `useState` seeds the two warning lists once from the
+ * `warnings` prop and the reducer (`dismissWarning`, the pure seam in `monitoring-state.ts`) moves
+ * an item from `active` to `ignored` on **Abaikan** — a browser-only interaction with no
+ * persistence, which is right for a warning that is recomputed from the data on the next load.
+ * `showBudget` gates the money card (money reads are open, ADR-0026), decided on the server.
  */
-export function MonitoringView({ showBudget }: { showBudget: boolean }) {
-  const [state, setState] = useState(() => initialWarningState(WARNINGS));
+export function MonitoringView({
+  showBudget,
+  activitiesPercent,
+  budget,
+  clusters,
+  luring,
+  daring,
+  timeline,
+  warnings,
+}: {
+  showBudget: boolean;
+  activitiesPercent: number;
+  budget: { usedIdr: number; totalIdr: number; percent: number };
+  clusters: { id: string; name: string }[];
+  luring: MatrixRow[];
+  daring: MatrixRow[];
+  timeline: TimelineStep[];
+  warnings: Warning[];
+}) {
+  const [state, setState] = useState(() => initialWarningState(warnings));
 
   return (
     <div className="flex flex-col gap-6 px-7 py-6">
@@ -100,11 +110,11 @@ export function MonitoringView({ showBudget }: { showBudget: boolean }) {
           <CardHeader>
             <CardDescription>Kegiatan terlaksana</CardDescription>
             <CardTitle className="font-heading text-3xl tabular-nums">
-              {KPI.activitiesPercent}%
+              {activitiesPercent}%
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Progress value={KPI.activitiesPercent} />
+            <Progress value={activitiesPercent} />
           </CardContent>
         </Card>
 
@@ -117,18 +127,18 @@ export function MonitoringView({ showBudget }: { showBudget: boolean }) {
               <div className="flex items-end justify-between gap-4">
                 <div>
                   <div className="font-heading text-2xl tabular-nums">
-                    Rp {formatIdr(KPI.budget.usedIdr)}
+                    Rp {formatIdr(budget.usedIdr)}
                   </div>
                   <div className="text-sm text-muted-foreground">Anggaran terpakai</div>
                 </div>
                 <div className="text-right">
                   <div className="font-heading text-2xl tabular-nums">
-                    Rp {formatIdr(KPI.budget.totalIdr)}
+                    Rp {formatIdr(budget.totalIdr)}
                   </div>
                   <div className="text-sm text-muted-foreground">Total anggaran</div>
                 </div>
               </div>
-              <Progress value={KPI.budget.percent} />
+              <Progress value={budget.percent} />
             </CardContent>
           </Card>
         )}
@@ -140,25 +150,27 @@ export function MonitoringView({ showBudget }: { showBudget: boolean }) {
           <CardTitle className="text-base">Lini masa pelaksanaan</CardTitle>
         </CardHeader>
         <CardContent>
-          <Timeline steps={TIMELINE} />
+          <Timeline steps={timeline} />
         </CardContent>
       </Card>
 
       {/* Delivery matrices, one Card each. */}
       <MatrixCard
-        title="Luring"
-        rows={LURING_MATRIX}
+        title="Luring Terlaksana"
+        clusters={clusters}
+        rows={luring}
       />
       <MatrixCard
-        title="Daring"
-        rows={DARING_MATRIX}
+        title="Daring Terlaksana"
+        clusters={clusters}
+        rows={daring}
       />
     </div>
   );
 }
 
 /** A horizontal stepper: a filled, checked circle for completed steps, a muted ring for pending. */
-function Timeline({ steps }: { steps: MockTimelineStep[] }) {
+function Timeline({ steps }: { steps: TimelineStep[] }) {
   return (
     <ol className="flex items-start">
       {steps.map((step, i) => {
@@ -200,8 +212,20 @@ function Timeline({ steps }: { steps: MockTimelineStep[] }) {
   );
 }
 
-/** One delivery matrix: Klaster columns across, session rows down, "completed/total" per cell. */
-function MatrixCard({ title, rows }: { title: string; rows: MockMatrixRow[] }) {
+/**
+ * One delivery matrix: a Klaster column per Cluster across, Sesi rows down, `"delivered/total"` per
+ * cell. The column headers are the `clusters` prop's names in order, so a cell's `i`th value lines
+ * up under the `i`th Cluster — the same order `deliveryMatrix` builds the cells in.
+ */
+function MatrixCard({
+  title,
+  clusters,
+  rows,
+}: {
+  title: string;
+  clusters: { id: string; name: string }[];
+  rows: MatrixRow[];
+}) {
   return (
     <Card>
       <CardHeader>
@@ -213,8 +237,8 @@ function MatrixCard({ title, rows }: { title: string; rows: MockMatrixRow[] }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Klaster</TableHead>
-                {KLASTER.map((k) => (
-                  <TableHead key={k}>{k}</TableHead>
+                {clusters.map((c) => (
+                  <TableHead key={c.id}>{c.name}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -224,7 +248,7 @@ function MatrixCard({ title, rows }: { title: string; rows: MockMatrixRow[] }) {
                   <TableCell className="font-medium">{row.session}</TableCell>
                   {row.cells.map((cell, i) => (
                     <TableCell
-                      key={KLASTER[i]}
+                      key={clusters[i]?.id ?? i}
                       className="tabular-nums"
                     >
                       {cell}
