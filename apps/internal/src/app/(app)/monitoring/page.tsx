@@ -1,24 +1,29 @@
 import { requirePerson } from "-/lib/person";
+import { monitoringData } from "@sugt/db/queries";
 
+import { deriveMonitoring } from "./monitoring-derive";
 import { showBudget } from "./monitoring-state";
 import { MonitoringView } from "./monitoring-view";
 
 /**
  * **Monitoring** — a one-screen overview of how far Session delivery has got and how much of the
- * Programme budget has been spent, across every Cluster. It ships (#178) as a **presentational
- * scaffold**: every number on it is a hard-coded mock, isolated in `mock-data.ts`, and wiring it to
- * real data is the follow-up (#177). Nothing here reads the database beyond `requirePerson()`.
+ * Programme budget has been spent, across every Cluster. It now reads **real data** (#196): the
+ * mock module is gone. `monitoringData` fetches the raw rows in one round trip and
+ * `deriveMonitoring` (the pure, tested seam in `./monitoring-derive.ts`) folds them — ranking each
+ * School's Sessions into Sesi, building the two matrices, the timeline and the overdue warnings —
+ * against the programme constants in `@sugt/domain`.
  *
- * The server's only real decision is the money gate. `showBudget(person.role)` now returns `true`
- * for both signed-in roles — Staff and the read-only Pimpinan — because money is open to any
- * signed-in Person to READ (ADR-0004 reversed by ADR-0026, #180); the budget card shows to a
- * Pimpinan too, and writing money stays Staff-only elsewhere. The gate is computed here and passed
- * down; the view is otherwise a pure function of the mock module. All of that lives in
- * `monitoring-state.ts` (the pure, tested seam) and `mock-data.ts` (the figures) — see CONTEXT.md →
- * Open questions.
+ * The server's decisions are the money gate and today's date. `showBudget(person.role)` returns
+ * `true` for both signed-in roles — Staff and the read-only Pimpinan — because money is open to any
+ * signed-in Person to READ (ADR-0004 reversed by ADR-0026, #180); writing money stays Staff-only
+ * elsewhere. `today` is this server render's UTC calendar date, which decides which timeline steps
+ * are complete and which windows are overdue.
  */
 export default async function Page() {
   const person = await requirePerson();
+  const data = await monitoringData(person);
+  const today = new Date().toISOString().slice(0, 10);
+  const derived = deriveMonitoring(data, today);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -29,7 +34,16 @@ export default async function Page() {
         </p>
       </header>
 
-      <MonitoringView showBudget={showBudget(person.role)} />
+      <MonitoringView
+        showBudget={showBudget(person.role)}
+        activitiesPercent={derived.activitiesPercent}
+        budget={derived.budget}
+        clusters={derived.clusters}
+        luring={derived.luring}
+        daring={derived.daring}
+        timeline={derived.timeline}
+        warnings={derived.warnings}
+      />
     </div>
   );
 }
