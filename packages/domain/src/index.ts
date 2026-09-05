@@ -204,17 +204,40 @@ export type StoryKind = (typeof STORY_KINDS)[number];
 
 /**
  * How many Sessions each School receives, by mode. The same for every School and
- * fixed from the start, which is what lets progress read as "3 of 10 delivered"
+ * fixed from the start, which is what lets progress read as "3 of 8 delivered"
  * without any planned Sessions existing
  * (see `docs/adr/0006-sessions-are-created-when-arranged.md`).
+ *
+ * Offline is **2** per School (a programme fact, #195): the two Luring Sesi in
+ * `LURING_SESI_WINDOWS` below. Online stays 6, so a School's total is 8.
  */
 export const SESSIONS_PER_SCHOOL = {
-  offline: 4,
+  offline: 2,
   online: 6,
 } as const satisfies Record<SessionMode, number>;
 
 /** Total Sessions a School receives across both modes. */
 export const TOTAL_SESSIONS_PER_SCHOOL = SESSIONS_PER_SCHOOL.offline + SESSIONS_PER_SCHOOL.online;
+
+/**
+ * **The programme's total budget, in whole rupiah** (#195). A single constant — there is no schema
+ * for it — that `/monitoring` reconciles spend against. Whole IDR, like every money column.
+ */
+export const PROGRAMME_BUDGET_IDR = 15_000_000_000;
+
+/**
+ * **The planned period of each Luring (offline) Sesi** (#195). Two windows, one per offline Sesi,
+ * as inclusive `YYYY-MM-DD` date ranges in 2026.
+ *
+ * They drive `/monitoring`'s timeline stepper and its overdue warnings **only** — they do *not*
+ * bucket Sessions into a Sesi. A Session's Sesi is its per-School date **rank**, computed on the fly
+ * (ADR-0027), independent of these calendar windows: a Session delivered outside its window is late,
+ * not re-ranked.
+ */
+export const LURING_SESI_WINDOWS = [
+  { sesi: 1, startsOn: "2026-10-05", endsOn: "2026-10-23" },
+  { sesi: 2, startsOn: "2026-11-02", endsOn: "2026-11-20" },
+] as const;
 
 /**
  * What a Class Record Rates — filed by the Teaching Team member who taught that Class.
