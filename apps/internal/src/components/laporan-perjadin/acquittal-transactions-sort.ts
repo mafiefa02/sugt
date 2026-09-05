@@ -6,9 +6,9 @@ import type { TransactionCategory, TransactionParticipantType } from "@sugt/doma
  * A Perjadin's transactions are bounded and already fully loaded in the client component (no
  * pagination), so — unlike `/feedback`, whose dataset is unbounded and sorts/filters server-side —
  * this is a pure lens over the array the component already holds. It is a plain function rather than
- * a hook so the compound-order and AND-filter rules can be tested without React, and so the
- * component's derived money figures (advance/spent/remainder, the CSV export) stay wired to the
- * *full* set: nothing here touches them.
+ * a hook so the compound-order and AND-filter rules can be tested without React. It touches nothing
+ * but the list: the acquittal's money figures (advance/spent/remainder, the CSV export) are computed
+ * upstream from the full set and never routed through this.
  */
 
 export type SortDirection = "asc" | "desc";
@@ -64,7 +64,9 @@ export function sortAndFilterTransactions<T extends SortableTransaction>(
   const amountDirection = amountSort === "desc" ? -1 : 1;
   const dateDirection = dateSort === "desc" ? -1 : 1;
 
-  return [...filtered].sort((a, b) => {
+  // `filtered` is already a fresh array from `.filter`, so sorting it in place mutates nothing the
+  // caller passed in.
+  return filtered.sort((a, b) => {
     if (a.amountIdr !== b.amountIdr) return amountDirection * (a.amountIdr - b.amountIdr);
     if (a.spentOn !== b.spentOn) return dateDirection * (a.spentOn < b.spentOn ? -1 : 1);
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;

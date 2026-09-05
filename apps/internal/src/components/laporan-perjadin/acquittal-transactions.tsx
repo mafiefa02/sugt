@@ -142,7 +142,7 @@ function AcquittalTransactions({
 
           {visible.length === 0 ? (
             // Distinct from the "no transactions at all" state above: the filters hid everything.
-            <p className="text-sm text-muted-foreground">Tidak ada transaksi yang cocok.</p>
+            <p className="text-sm text-muted-foreground">Tidak ada transaksi yang cocok</p>
           ) : (
             <ul className="space-y-3">
               {visible.map((line) => (
