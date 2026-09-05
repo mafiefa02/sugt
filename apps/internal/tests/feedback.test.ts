@@ -185,6 +185,8 @@ describe("participantFeedbackPage", () => {
     expect(row?.name).toBe("Ayu");
     expect(row?.classKind).toBe("GTK");
     expect(row?.schoolName).toBe("SMAN 8 Jakarta");
+    // The origin the card links through to (#194): the exact Session this feedback was filed against.
+    expect(row?.sessionId).toBe(session.id);
     expect(row?.sessionMode).toBe("online");
     expect(row?.heldOn).toBe("2026-09-10");
     expect(row?.rowAverage).toBeCloseTo((8 + 9 + 10) / 3, 5);

@@ -672,9 +672,22 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
           <span className="text-muted-foreground">·</span>
           <span className="text-sm text-muted-foreground">{MODE_LABELS[row.sessionMode]}</span>
           <span className="text-muted-foreground">·</span>
-          <span className="text-sm text-muted-foreground">
+          {/*
+            The Session this feedback was filed against, linked through to its detail page (#194) —
+            the Participant half of "every feedback links to its origin", parallel to how PerjadinCard
+            links its destination. Routed by mode to skip the redirect hop (`/sesi/[id]` bounces an
+            online id to `/sesi-daring/[id]` as a safety net); a cancelled Session still links.
+          */}
+          <Link
+            href={
+              row.sessionMode === "offline"
+                ? `/sesi/${row.sessionId}`
+                : `/sesi-daring/${row.sessionId}`
+            }
+            className="text-sm text-primary hover:underline"
+          >
             Sesi {row.heldOn} {formatSessionStartTime(row.startsAt, row.timeZone)}
-          </span>
+          </Link>
           <span className="ml-auto text-sm text-muted-foreground">Diisi {row.submittedOn}</span>
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             Rata-rata
