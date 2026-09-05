@@ -21,10 +21,13 @@ export default async function Page() {
   const person = await requirePerson();
   if (person.role !== "Staff") redirect("/monitoring");
 
-  const dashboard = await staffSurface(() => staffDashboard(person));
-  // Scoped *by* the caller, not gated by role, and carrying no money that needs the choke point
-  // (ADR-0026) — so it is read directly rather than behind `staffSurface`, unlike the dashboard.
-  const upcoming = await myUpcomingPerjadin(person);
+  // Two independent reads, in parallel. `myUpcomingPerjadin` is scoped *by* the caller, not gated by
+  // role, and carries no money that needs the choke point (ADR-0026) — so it is read directly rather
+  // than behind `staffSurface`, unlike the dashboard aggregate.
+  const [dashboard, upcoming] = await Promise.all([
+    staffSurface(() => staffDashboard(person)),
+    myUpcomingPerjadin(person),
+  ]);
   return (
     <DashboardStaff
       dashboard={dashboard}
