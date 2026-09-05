@@ -10,6 +10,13 @@ import {
   recordTransactionAction,
 } from "-/app/(app)/perjadin/[id]/laporan/actions";
 import {
+  DEFAULT_TRANSACTION_LIST_CONTROLS,
+  sortAndFilterTransactions,
+  type CategoryFilter,
+  type ParticipantFilter,
+  type SortDirection,
+} from "-/components/laporan-perjadin/acquittal-transactions-sort";
+import {
   formatIdr,
   TRANSACTION_CATEGORIES,
   TRANSACTION_PARTICIPANT_TYPES,
@@ -17,7 +24,9 @@ import {
   type TransactionParticipantType,
 } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
+import { Badge } from "@sugt/ui/components/badge";
 import { Button } from "@sugt/ui/components/button";
+import { Card, CardHeader } from "@sugt/ui/components/card";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@sugt/ui/components/select";
-import { useId, useRef, useState, useTransition } from "react";
+import { useId, useMemo, useRef, useState, useTransition } from "react";
 
 /**
  * **The line items, and the two things a PIC does to them**: enter one, and attach the receipts
@@ -58,6 +67,34 @@ function AcquittalTransactions({
   perjadinId: string;
   transactions: ViewableTransaction[];
 }) {
+  // Sort/filter is a lens on the rendered list only. The list is bounded and already fully loaded,
+  // so this is in-memory (no server round-trip, unlike `/feedback`); the Laporan money figures and
+  // the CSV export are computed from the full set upstream and are deliberately not routed through
+  // `visible`.
+  const [amountSort, setAmountSort] = useState<SortDirection>(
+    DEFAULT_TRANSACTION_LIST_CONTROLS.amountSort,
+  );
+  const [dateSort, setDateSort] = useState<SortDirection>(
+    DEFAULT_TRANSACTION_LIST_CONTROLS.dateSort,
+  );
+  const [participantFilter, setParticipantFilter] = useState<ParticipantFilter>(
+    DEFAULT_TRANSACTION_LIST_CONTROLS.participantFilter,
+  );
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(
+    DEFAULT_TRANSACTION_LIST_CONTROLS.categoryFilter,
+  );
+
+  const visible = useMemo(
+    () =>
+      sortAndFilterTransactions(transactions, {
+        amountSort,
+        dateSort,
+        participantFilter,
+        categoryFilter,
+      }),
+    [transactions, amountSort, dateSort, participantFilter, categoryFilter],
+  );
+
   return (
     <div className="border-b border-border px-7 py-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -70,43 +107,156 @@ function AcquittalTransactions({
           Belum ada transaksi terhadap uang muka ini.
         </p>
       ) : (
-        <ul className="mt-2.5 divide-y divide-border">
-          {transactions.map((line) => (
-            <TransactionRow
-              key={line.id}
-              perjadinId={perjadinId}
-              line={line}
+        <>
+          {/* Two sort dropdowns — amount primary, date tiebreak — both always active, no "off" arm. */}
+          <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ControlSelect
+              ariaLabel="Urutkan jumlah"
+              options={AMOUNT_SORT_OPTIONS}
+              value={amountSort}
+              onChange={setAmountSort}
             />
-          ))}
-        </ul>
+            <ControlSelect
+              ariaLabel="Urutkan tanggal"
+              options={DATE_SORT_OPTIONS}
+              value={dateSort}
+              onChange={setDateSort}
+            />
+          </div>
+
+          {/* Two exact-match filters, ANDed; each defaults to "Semua" (no predicate on that axis). */}
+          <div className="mt-3 mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ControlSelect
+              ariaLabel="Saring tipe peserta"
+              options={PARTICIPANT_FILTER_OPTIONS}
+              value={participantFilter}
+              onChange={setParticipantFilter}
+            />
+            <ControlSelect
+              ariaLabel="Saring kategori"
+              options={CATEGORY_FILTER_OPTIONS}
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+            />
+          </div>
+
+          {visible.length === 0 ? (
+            // Distinct from the "no transactions at all" state above: the filters hid everything.
+            <p className="text-sm text-muted-foreground">Tidak ada transaksi yang cocok.</p>
+          ) : (
+            <ul className="space-y-3">
+              {visible.map((line) => (
+                <li key={line.id}>
+                  <TransactionCard
+                    perjadinId={perjadinId}
+                    line={line}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-/** One line item: what it was, which cohort it served, what it cost, and what evidences it. */
-function TransactionRow({ perjadinId, line }: { perjadinId: string; line: ViewableTransaction }) {
+/**
+ * One line item as a card, in the `/feedback` header style: date · description · category, a badge
+ * for the cohort it served, and — pushed right — the amount and the existing receipts block. Nothing
+ * the old row carried is dropped; there is no rating, so no `destructive` badge.
+ */
+function TransactionCard({ perjadinId, line }: { perjadinId: string; line: ViewableTransaction }) {
   return (
-    <li className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 py-2.5 text-sm">
-      <div className="min-w-0">
-        <p>
-          <span className="text-muted-foreground tabular-nums">{line.spentOn}</span>{" "}
+    <Card size="sm">
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span className="text-muted-foreground tabular-nums">{line.spentOn}</span>
+          <span className="text-muted-foreground">·</span>
           <span>{line.description}</span>
-        </p>
-        <p className="text-muted-foreground">
-          {/* Two axes: what kind of spend, and which cohort it served. Both are always present. */}
-          {line.category} · {line.participantType}
-        </p>
-      </div>
+          <span className="text-muted-foreground">·</span>
+          <span className="text-muted-foreground">{line.category}</span>
+          <Badge variant="secondary">{line.participantType}</Badge>
+          <div className="ml-auto flex items-center gap-4">
+            <span className="tabular-nums">Rp {formatIdr(line.amountIdr)}</span>
+            <Receipts
+              perjadinId={perjadinId}
+              line={line}
+            />
+          </div>
+        </div>
+      </CardHeader>
+    </Card>
+  );
+}
 
-      <div className="flex items-center gap-4">
-        <span className="tabular-nums">Rp {formatIdr(line.amountIdr)}</span>
-        <Receipts
-          perjadinId={perjadinId}
-          line={line}
-        />
-      </div>
-    </li>
+/** The label maps for the four controls. Sort keys are the direction; each filter carries "Semua". */
+const AMOUNT_SORT_OPTIONS = { desc: "Termahal", asc: "Termurah" } satisfies Record<
+  SortDirection,
+  string
+>;
+const DATE_SORT_OPTIONS = { desc: "Terbaru", asc: "Terlama" } satisfies Record<
+  SortDirection,
+  string
+>;
+
+/** Self-labelled options for a closed value set — keeps the two filters in step with `@sugt/domain`. */
+function labelSelf<T extends string>(values: readonly T[]): Record<T, string> {
+  const options = {} as Record<T, string>;
+  for (const value of values) options[value] = value;
+  return options;
+}
+
+const PARTICIPANT_FILTER_OPTIONS: Record<ParticipantFilter, string> = {
+  Semua: "Semua",
+  ...labelSelf(TRANSACTION_PARTICIPANT_TYPES),
+};
+const CATEGORY_FILTER_OPTIONS: Record<CategoryFilter, string> = {
+  Semua: "Semua",
+  ...labelSelf(TRANSACTION_CATEGORIES),
+};
+
+/**
+ * One control dropdown — the `/feedback` `SortSelect`/`FilterSelect` shape, unified because a sort
+ * and a filter here are the same widget over an options map with a value that is always a valid key
+ * (so no placeholder branch). No `disabled`: the work is in-memory, nothing is ever pending.
+ */
+function ControlSelect<T extends string>({
+  ariaLabel,
+  options,
+  value,
+  onChange,
+}: {
+  ariaLabel: string;
+  options: Record<T, string>;
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <Select
+      items={options}
+      value={value}
+      onValueChange={(next) => {
+        onChange(next as T);
+      }}
+    >
+      <SelectTrigger
+        aria-label={ariaLabel}
+        className="w-full"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {(Object.entries(options) as [T, string][]).map(([key, label]) => (
+          <SelectItem
+            key={key}
+            value={key}
+          >
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
