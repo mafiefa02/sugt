@@ -1,5 +1,6 @@
+import { MyPerjadinSection } from "-/components/my-perjadin-section";
 import { shortenKabupaten } from "-/lib/format-destination";
-import type { StaffDashboard } from "@sugt/db/queries";
+import type { MyUpcomingPerjadin, StaffDashboard } from "@sugt/db/queries";
 import { formatIdr } from "@sugt/domain";
 import Link from "next/link";
 
@@ -12,7 +13,13 @@ import Link from "next/link";
  * list is the chase list, and the PIC strip says "Tidak ada gerbang — DITSAMA yang menetapkan
  * tenggat, bukan alat ini." **Participants are never counted** — there is no such figure here.
  */
-function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
+function DashboardStaff({
+  dashboard,
+  upcoming,
+}: {
+  dashboard: StaffDashboard;
+  upcoming: MyUpcomingPerjadin[];
+}) {
   return (
     <div className="flex min-h-full flex-col gap-8 p-7">
       <header>
@@ -20,6 +27,11 @@ function DashboardStaff({ dashboard }: { dashboard: StaffDashboard }) {
         <h1 className="font-heading text-xl font-medium">{dashboard.fullName}</h1>
         <p className="mt-0.5 text-sm text-muted-foreground">DITSAMA · DITSAMA ITB</p>
       </header>
+
+      {/* The caller's own upcoming trips, near the top — their working list comes before the
+          Programme-wide counts. A client island (its dialogs and paging are client-side); this
+          server component stays a server component around it. Absent entirely when they have none. */}
+      <MyPerjadinSection trips={upcoming} />
 
       <section>
         <h2 className="font-heading text-sm font-medium">Program secara keseluruhan</h2>

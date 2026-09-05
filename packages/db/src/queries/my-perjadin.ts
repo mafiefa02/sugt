@@ -9,12 +9,17 @@ import {
   groupMember,
   perjadin,
   perjadinPimpinan,
+  perjadinPreparationItem,
   perjadinTeacher,
   transaction,
 } from "../schema/travel";
 import type { Person } from "./caller";
 import { todayInDeadlineZone } from "./deadline";
-import { PREPARATION_FIXED_KEYS, preparationDoneSubquery } from "./preparation-checklist";
+import {
+  derivePreparationChecklist,
+  type PreparationItem,
+  type PreparationTick,
+} from "./preparation-checklist";
 
 /**
  * **Perjalanan Saya** — the caller's own upcoming trips, for the Staff home strip (#197).
@@ -74,9 +79,11 @@ export type MyPerjadinSchool = {
  * One upcoming trip the caller is on, everything the home strip renders.
  *
  * The six leg fields are straight off `perjadin` and all nullable — a trip planned before the
- * logistics columns existed (#106) carries none. `preparationDone`/`preparationTotal` are the
- * Checklist pill's `x`/`N`, the flat fixed seven (amendment to ADR-0018), the same derivation
- * `perjadinDirectory` uses.
+ * logistics columns existed (#106) carries none. `preparation` is the flat fixed seven (amendment
+ * to ADR-0018), each item carrying its tick state — the same `derivePreparationChecklist` the detail
+ * read runs. It carries the whole checklist rather than a bare `x`/`N` because the card's pill *and*
+ * its Persiapan dialog read from one payload: the pill is `preparation.filter(i => i.checked).length`
+ * out of `preparation.length` (always seven), and the dialog toggles the very items shown here.
  */
 export type MyUpcomingPerjadin = {
   id: string;
@@ -104,8 +111,8 @@ export type MyUpcomingPerjadin = {
   returnAt: string | null;
   returnZone: TimeZone | null;
   returnMode: TransportMode | null;
-  preparationDone: number;
-  preparationTotal: number;
+  /** The fixed seven, each with its current tick state — the pill's `x`/`N` and the dialog's boxes. */
+  preparation: PreparationItem[];
   /**
    * Who is on the trip, in three lists the way `docs/data-model.md` splits them: the Staff Group,
    * the trip-scoped teacher names, and the record-only Pimpinan. `anggotaTotal` is their combined
@@ -149,11 +156,6 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
       returnAt: perjadin.returnAt,
       returnZone: perjadin.returnZone,
       returnMode: perjadin.returnMode,
-      // The pill's `N` (the fixed seven, amendment to ADR-0018) and its `x`, the shared correlated
-      // subquery `perjadinDirectory` uses too (`./preparation-checklist.ts`) so the fragment has one
-      // home (convention 3), correlated on this query's `perjadin.id`.
-      preparationTotal: sql<number>`${PREPARATION_FIXED_KEYS.length}`.mapWith(Number),
-      preparationDone: preparationDoneSubquery(perjadin.id),
     })
     .from(perjadin)
     .innerJoin(
@@ -172,76 +174,90 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
 
   const tripIds = trips.map((trip) => trip.id);
 
-  // The five hanging lists, gathered concurrently and each scoped to just these trips.
-  const [spentRows, staffRows, pengajarRows, pimpinanRows, sessionRows] = await Promise.all([
-    // Spend per trip: `sum(amount_idr)` over the trip's line items, grouped by `perjadin_id`, so a
-    // trip with no transactions is absent and defaults to 0 below. The **same rule** as
-    // `perjadinAcquittal` — every line item counts, nothing filtered — summed in SQL here since this
-    // list shows no line items, where the acquittal reduces its loaded rows in JS. A test pins the
-    // two equal, so the UI's `advanceIdr - spentIdr` matches the acquittal's `remainderIdr`.
-    db
-      .select({
-        perjadinId: transaction.perjadinId,
-        spentIdr: sql<number>`sum(${transaction.amountIdr})`.mapWith(Number),
-      })
-      .from(transaction)
-      .where(inArray(transaction.perjadinId, tripIds))
-      .groupBy(transaction.perjadinId),
-    // The Staff Group, joined to `person` for the name, in name order. `isPic` is derived per row
-    // below rather than joined, since the PIC id is already on each trip.
-    db
-      .select({
-        perjadinId: groupMember.perjadinId,
-        personId: groupMember.personId,
-        fullName: person.fullName,
-      })
-      .from(groupMember)
-      .innerJoin(person, eq(person.id, groupMember.personId))
-      .where(and(inArray(groupMember.perjadinId, tripIds), eq(groupMember.role, "Staff")))
-      .orderBy(asc(person.fullName)),
-    // The trip-scoped teacher names (ADR-0020), in name order.
-    db
-      .select({
-        perjadinId: perjadinTeacher.perjadinId,
-        id: perjadinTeacher.id,
-        name: perjadinTeacher.name,
-      })
-      .from(perjadinTeacher)
-      .where(inArray(perjadinTeacher.perjadinId, tripIds))
-      .orderBy(asc(perjadinTeacher.name)),
-    // The record-only Pimpinan (#181), joined to `person` for the display name, in name order.
-    db
-      .select({
-        perjadinId: perjadinPimpinan.perjadinId,
-        personId: perjadinPimpinan.personId,
-        name: person.fullName,
-      })
-      .from(perjadinPimpinan)
-      .innerJoin(person, eq(person.id, perjadinPimpinan.personId))
-      .where(inArray(perjadinPimpinan.perjadinId, tripIds))
-      .orderBy(asc(person.fullName)),
-    // Every offline Session on these trips, with its School and the School's Province zone.
-    // Cancelled ones are **included** — this is the trip's shape, the Schools it visited, not how
-    // much teaching it delivered. Ordered by School name, then within a School by (held_on,
-    // starts_at, id) for a total order.
-    db
-      .select({
-        perjadinId: session.perjadinId,
-        schoolId: session.schoolId,
-        schoolName: school.name,
-        kabupatenKota: school.kabupatenKota,
-        timeZone: province.timeZone,
-        sessionId: session.id,
-        heldOn: session.heldOn,
-        startsAt: session.startsAt,
-        status: session.status,
-      })
-      .from(session)
-      .innerJoin(school, eq(school.id, session.schoolId))
-      .innerJoin(province, eq(province.code, school.provinceCode))
-      .where(and(inArray(session.perjadinId, tripIds), eq(session.mode, "offline")))
-      .orderBy(asc(school.name), asc(session.heldOn), asc(session.startsAt), asc(session.id)),
-  ]);
+  // The six hanging lists, gathered concurrently and each scoped to just these trips.
+  const [spentRows, staffRows, pengajarRows, pimpinanRows, sessionRows, preparationRows] =
+    await Promise.all([
+      // Spend per trip: `sum(amount_idr)` over the trip's line items, grouped by `perjadin_id`, so a
+      // trip with no transactions is absent and defaults to 0 below. The **same rule** as
+      // `perjadinAcquittal` — every line item counts, nothing filtered — summed in SQL here since this
+      // list shows no line items, where the acquittal reduces its loaded rows in JS. A test pins the
+      // two equal, so the UI's `advanceIdr - spentIdr` matches the acquittal's `remainderIdr`.
+      db
+        .select({
+          perjadinId: transaction.perjadinId,
+          spentIdr: sql<number>`sum(${transaction.amountIdr})`.mapWith(Number),
+        })
+        .from(transaction)
+        .where(inArray(transaction.perjadinId, tripIds))
+        .groupBy(transaction.perjadinId),
+      // The Staff Group, joined to `person` for the name, in name order. `isPic` is derived per row
+      // below rather than joined, since the PIC id is already on each trip.
+      db
+        .select({
+          perjadinId: groupMember.perjadinId,
+          personId: groupMember.personId,
+          fullName: person.fullName,
+        })
+        .from(groupMember)
+        .innerJoin(person, eq(person.id, groupMember.personId))
+        .where(and(inArray(groupMember.perjadinId, tripIds), eq(groupMember.role, "Staff")))
+        .orderBy(asc(person.fullName)),
+      // The trip-scoped teacher names (ADR-0020), in name order.
+      db
+        .select({
+          perjadinId: perjadinTeacher.perjadinId,
+          id: perjadinTeacher.id,
+          name: perjadinTeacher.name,
+        })
+        .from(perjadinTeacher)
+        .where(inArray(perjadinTeacher.perjadinId, tripIds))
+        .orderBy(asc(perjadinTeacher.name)),
+      // The record-only Pimpinan (#181), joined to `person` for the display name, in name order.
+      db
+        .select({
+          perjadinId: perjadinPimpinan.perjadinId,
+          personId: perjadinPimpinan.personId,
+          name: person.fullName,
+        })
+        .from(perjadinPimpinan)
+        .innerJoin(person, eq(person.id, perjadinPimpinan.personId))
+        .where(inArray(perjadinPimpinan.perjadinId, tripIds))
+        .orderBy(asc(person.fullName)),
+      // Every offline Session on these trips, with its School and the School's Province zone.
+      // Cancelled ones are **included** — this is the trip's shape, the Schools it visited, not how
+      // much teaching it delivered. Ordered by School name, then within a School by (held_on,
+      // starts_at, id) for a total order.
+      db
+        .select({
+          perjadinId: session.perjadinId,
+          schoolId: session.schoolId,
+          schoolName: school.name,
+          kabupatenKota: school.kabupatenKota,
+          timeZone: province.timeZone,
+          sessionId: session.id,
+          heldOn: session.heldOn,
+          startsAt: session.startsAt,
+          status: session.status,
+        })
+        .from(session)
+        .innerJoin(school, eq(school.id, session.schoolId))
+        .innerJoin(province, eq(province.code, school.provinceCode))
+        .where(and(inArray(session.perjadinId, tripIds), eq(session.mode, "offline")))
+        .orderBy(asc(school.name), asc(session.heldOn), asc(session.startsAt), asc(session.id)),
+      // Every fixed-item tick on these trips. Not a count like `perjadinDirectory`'s pill: the card's
+      // Persiapan dialog toggles the boxes, so it needs the whole tick per item (who and when), which
+      // `derivePreparationChecklist` folds into the fixed seven below — the same derivation the detail
+      // read runs. A `dosen:` orphan the old model left behind matches no fixed key, so it drops out.
+      db
+        .select({
+          perjadinId: perjadinPreparationItem.perjadinId,
+          itemKey: perjadinPreparationItem.itemKey,
+          checkedBy: perjadinPreparationItem.checkedBy,
+          checkedAt: perjadinPreparationItem.checkedAt,
+        })
+        .from(perjadinPreparationItem)
+        .where(inArray(perjadinPreparationItem.perjadinId, tripIds)),
+    ]);
 
   // Spend keyed by trip; a trip absent from the grouped sum spent nothing.
   const spentByTrip = new Map(spentRows.map((row) => [row.perjadinId, row.spentIdr]));
@@ -264,6 +280,16 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
     const list = pimpinanByTrip.get(row.perjadinId) ?? [];
     list.push({ personId: row.personId, name: row.name });
     pimpinanByTrip.set(row.perjadinId, list);
+  }
+
+  // Preparation ticks bucketed by trip; `derivePreparationChecklist` folds each bucket into the
+  // fixed seven below. A trip absent here has no ticks, and `derivePreparationChecklist([])` gives
+  // the same seven all unchecked — so the pill reads `0/7` rather than the trip dropping its pill.
+  const preparationTicksByTrip = new Map<string, PreparationTick[]>();
+  for (const row of preparationRows) {
+    const list = preparationTicksByTrip.get(row.perjadinId) ?? [];
+    list.push({ itemKey: row.itemKey, checkedBy: row.checkedBy, checkedAt: row.checkedAt });
+    preparationTicksByTrip.set(row.perjadinId, list);
   }
 
   // Sessions grouped by (trip, School), preserving the query's School-then-Session order. A trip's
@@ -307,6 +333,7 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
     return {
       ...trip,
       spentIdr: spentByTrip.get(trip.id) ?? 0,
+      preparation: derivePreparationChecklist(preparationTicksByTrip.get(trip.id) ?? []),
       anggota: {
         staff,
         pengajar,
