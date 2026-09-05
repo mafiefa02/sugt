@@ -149,6 +149,15 @@ export {
 } from "./perjadin-sessions";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
+  myUpcomingPerjadin,
+  type MyPerjadinPengajar,
+  type MyPerjadinPimpinan,
+  type MyPerjadinSchool,
+  type MyPerjadinSession,
+  type MyPerjadinStaff,
+  type MyUpcomingPerjadin,
+} from "./my-perjadin";
+export {
   togglePreparationItem,
   type TogglePreparationItemInput,
   type TogglePreparationItemResult,
