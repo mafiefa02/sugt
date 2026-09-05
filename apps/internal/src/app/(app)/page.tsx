@@ -1,7 +1,7 @@
 import { DashboardStaff } from "-/components/dashboard-staff";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
-import { staffDashboard } from "@sugt/db/queries";
+import { myUpcomingPerjadin, staffDashboard } from "@sugt/db/queries";
 import { redirect } from "next/navigation";
 
 /**
@@ -22,5 +22,13 @@ export default async function Page() {
   if (person.role !== "Staff") redirect("/monitoring");
 
   const dashboard = await staffSurface(() => staffDashboard(person));
-  return <DashboardStaff dashboard={dashboard} />;
+  // Scoped *by* the caller, not gated by role, and carrying no money that needs the choke point
+  // (ADR-0026) — so it is read directly rather than behind `staffSurface`, unlike the dashboard.
+  const upcoming = await myUpcomingPerjadin(person);
+  return (
+    <DashboardStaff
+      dashboard={dashboard}
+      upcoming={upcoming}
+    />
+  );
 }

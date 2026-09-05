@@ -331,10 +331,10 @@ describe("myUpcomingPerjadin builds the visited-Schools tree", () => {
   });
 });
 
-describe("myUpcomingPerjadin reports the Preparation Checklist pill", () => {
+describe("myUpcomingPerjadin derives the Preparation Checklist", () => {
   beforeEach(resetDatabase);
 
-  it("counts ticked fixed items against the constant seven", async () => {
+  it("returns the fixed seven, marking only the ticked ones and dropping orphans", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -345,7 +345,7 @@ describe("myUpcomingPerjadin reports the Preparation Checklist pill", () => {
       endsOn: daysFromToday(4),
     });
     // Two fixed items ticked, plus a `dosen:` orphan the old model left behind — the orphan matches
-    // no fixed key, so it never counts.
+    // no fixed key, so it has no item here and never shows as checked.
     await db.insert(schema.perjadinPreparationItem).values([
       { perjadinId: trip.id, itemKey: "sk_perjalanan", checkedBy: caller.id },
       { perjadinId: trip.id, itemKey: "tiket_keberangkatan", checkedBy: caller.id },
@@ -353,7 +353,31 @@ describe("myUpcomingPerjadin reports the Preparation Checklist pill", () => {
     ]);
 
     const [mine] = await myUpcomingPerjadin(caller);
-    expect(mine?.preparationTotal).toBe(7);
-    expect(mine?.preparationDone).toBe(2);
+    if (!mine) throw new Error("expected the trip");
+
+    // The card derives its `x/N` pill from this: N is the length (always seven), x the checked count.
+    expect(mine.preparation).toHaveLength(7);
+    const checked = mine.preparation.filter((item) => item.checked).map((item) => item.itemKey);
+    expect(checked.sort()).toEqual(["sk_perjalanan", "tiket_keberangkatan"]);
+    // Every other fixed item comes back unchecked; the `dosen:` orphan never appears at all.
+    expect(mine.preparation.filter((item) => !item.checked)).toHaveLength(5);
+    expect(mine.preparation.some((item) => item.itemKey.startsWith("dosen:"))).toBe(false);
+  });
+
+  it("gives a trip with no ticks all seven items unchecked", async () => {
+    const caller = asPerson(
+      await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
+    );
+    const trip = await addPerjadin({
+      picPersonId: caller.id,
+      advanceIdr: 1_000_000,
+      startsOn: daysFromToday(1),
+      endsOn: daysFromToday(4),
+    });
+
+    const [mine] = await myUpcomingPerjadin(caller);
+    expect(mine?.id).toBe(trip.id);
+    expect(mine?.preparation).toHaveLength(7);
+    expect(mine?.preparation.every((item) => !item.checked)).toBe(true);
   });
 });
