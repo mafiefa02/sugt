@@ -9,6 +9,7 @@ import { db } from "../client";
 import { person } from "../schema/people";
 import { perjadin, perjadinPimpinan, transaction, transactionEvidence } from "../schema/travel";
 import type { Person } from "./caller";
+import { todayInDeadlineZone } from "./deadline";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -26,17 +27,6 @@ import { requireStaff } from "./staff-only";
  * Nothing is gated on the deadline: DITSAMA sets it for itself, and the tool is never
  * stricter than the process it serves.
  */
-
-/**
- * The zone "days remaining" counts in. DITSAMA is in Bandung and the deadline is its own, so
- * this is the office's calendar rather than a School's — Indonesia spans three zones and a
- * Perjadin's Schools may sit in more than one of them.
- *
- * It is a named constant rather than a literal in the SQL so that the one decision is visible,
- * and it stays here rather than in `@sugt/domain` because it is a fact about where the
- * Programme is administered, not a term `CONTEXT.md` defines.
- */
-const DEADLINE_TIME_ZONE = "Asia/Jakarta";
 
 /**
  * One uploaded receipt. `storagePath` is an opaque key in the private `receipts` bucket —
@@ -163,12 +153,12 @@ export async function perjadinAcquittal(
       reportDueOn: sql<string>`to_char(
         ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}, 'YYYY-MM-DD'
       )`,
-      // `now() at time zone` yields a timestamp *in* that zone; casting it to `date` is the
-      // calendar day there. Bare `current_date` would be the session's zone instead, which
-      // nothing in this repository sets — see the field's own comment.
+      // The deadline less today, both in the office's zone: `todayInDeadlineZone` is the shared
+      // `(now() at time zone …)::date` fragment (`./deadline.ts`), the calendar day in Bandung's
+      // zone rather than the session's default, which nothing in this repository sets.
       daysRemaining: sql<number>`(
         ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}
-        - (now() at time zone ${DEADLINE_TIME_ZONE})::date
+        - ${todayInDeadlineZone}
       )`.mapWith(Number),
       returnedToTreasurerIdr: perjadin.returnedToTreasurerIdr,
       returnedAt: perjadin.returnedAt,

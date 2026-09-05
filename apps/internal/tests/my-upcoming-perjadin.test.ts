@@ -37,6 +37,14 @@ function daysFromToday(offset: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Today in the query's own zone (WIB), `YYYY-MM-DD` — the exact day the `ends_on >= today` cutoff
+ * compares against, so a trip ending on it sits *on* the inclusive boundary. `en-CA` renders ISO.
+ */
+function wibToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
+}
+
 /** Put the caller on a trip whose PIC is someone else — the membership this read filters by. */
 async function addGroupMember(perjadinId: string, personId: string) {
   await db.insert(schema.groupMember).values({ perjadinId, personId, role: "Staff", stream: null });
@@ -118,6 +126,25 @@ describe("myUpcomingPerjadin filters on ends_on >= today and sorts soonest first
 
     // Sorted by starts_on ascending: the in-progress trip (earlier start) before the future one.
     expect(trips.map((t) => t.id)).toEqual([inProgress.id, future.id]);
+  });
+
+  it("keeps a trip ending exactly today — the cutoff is inclusive (ends_on >= today)", async () => {
+    const caller = asPerson(
+      await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
+    );
+    // ends_on is today in the query's own WIB zone, so the trip sits on the inclusive boundary: a
+    // `> today` cutoff would drop it, `>= today` keeps it. Starts a few days back so it is otherwise
+    // a plain in-progress trip.
+    const endsToday = await addPerjadin({
+      picPersonId: caller.id,
+      advanceIdr: 1_000_000,
+      startsOn: daysFromToday(-3),
+      endsOn: wibToday(),
+    });
+
+    const trips = await myUpcomingPerjadin(caller);
+
+    expect(trips.map((t) => t.id)).toEqual([endsToday.id]);
   });
 });
 

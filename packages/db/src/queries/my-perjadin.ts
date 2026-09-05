@@ -9,12 +9,12 @@ import {
   groupMember,
   perjadin,
   perjadinPimpinan,
-  perjadinPreparationItem,
   perjadinTeacher,
   transaction,
 } from "../schema/travel";
 import type { Person } from "./caller";
-import { PREPARATION_FIXED_KEYS } from "./preparation-checklist";
+import { todayInDeadlineZone } from "./deadline";
+import { PREPARATION_FIXED_KEYS, preparationDoneSubquery } from "./preparation-checklist";
 
 /**
  * **Perjalanan Saya** — the caller's own upcoming trips, for the Staff home strip (#197).
@@ -31,15 +31,6 @@ import { PREPARATION_FIXED_KEYS } from "./preparation-checklist";
  * personal work list — "how much of my Advance is left" is the point of it — and money reads are
  * open now (ADR-0026), so `advanceIdr`/`spentIdr` sit here directly rather than behind a second call.
  */
-
-/**
- * The zone "today" is reckoned in. The same fact `./perjadin-report.ts` states at length: the
- * cutoff is DITSAMA's own calendar, DITSAMA is in Bandung, and Indonesia spans three zones — so a
- * trip's `ends_on` is compared against *Bandung's* current day, not the database session's default
- * zone. Named rather than a literal in the SQL so the one decision is visible, and kept here rather
- * than in `@sugt/domain` because it is a fact about where the Programme is administered.
- */
-const DEADLINE_TIME_ZONE = "Asia/Jakarta";
 
 /** One Staff member of the trip's Group. `isPic` flags the one the reader looks for first. */
 export type MyPerjadinStaff = {
@@ -98,10 +89,11 @@ export type MyUpcomingPerjadin = {
   advanceIdr: number;
   /**
    * The sum of every transaction against the Advance; zero when none has been entered. **The same
-   * derivation `perjadinAcquittal.spentIdr` uses** — `sum(transaction.amount_idr)` over the trip's
-   * line items — so the two figures agree, and the UI derives Tersisa the same way the acquittal
-   * derives its remainder: `advanceIdr - spentIdr`. A different remainder rule here would let a
-   * trip's home-strip figure disagree with its own Report.
+   * rule `perjadinAcquittal` applies** — every one of the trip's line items counts, nothing is
+   * filtered out — so the two figures agree and the UI derives Tersisa the way the acquittal derives
+   * its remainder: `advanceIdr - spentIdr`. It is summed in SQL here because this list renders no
+   * line items, where the acquittal reduces in JS the rows it already loaded to show; a test pins the
+   * two against each other so the rule cannot drift into two answers.
    */
   spentIdr: number;
   /** Departure from Bandung's date and time; null when this trip predates the logistics columns. */
@@ -157,19 +149,11 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
       returnAt: perjadin.returnAt,
       returnZone: perjadin.returnZone,
       returnMode: perjadin.returnMode,
-      // The pill's `N` and `x`, exactly as `perjadinDirectory` computes them: `N` is the fixed seven
-      // (amendment to ADR-0018) and `x` counts the present ticks whose key is one of the seven, so a
-      // `dosen:` orphan the old model left behind never counts and `x` never exceeds `N`. Bound from
-      // the one list so the keys cannot drift from the strings the rows hold.
+      // The pill's `N` (the fixed seven, amendment to ADR-0018) and its `x`, the shared correlated
+      // subquery `perjadinDirectory` uses too (`./preparation-checklist.ts`) so the fragment has one
+      // home (convention 3), correlated on this query's `perjadin.id`.
       preparationTotal: sql<number>`${PREPARATION_FIXED_KEYS.length}`.mapWith(Number),
-      preparationDone: sql<number>`(
-        select count(*) from ${perjadinPreparationItem} pi
-        where pi.perjadin_id = ${perjadin.id}
-        and pi.item_key in (${sql.join(
-          PREPARATION_FIXED_KEYS.map((key) => sql`${key}`),
-          sql`, `,
-        )})
-      )`.mapWith(Number),
+      preparationDone: preparationDoneSubquery(perjadin.id),
     })
     .from(perjadin)
     .innerJoin(
@@ -177,11 +161,10 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
       and(eq(groupMember.perjadinId, perjadin.id), eq(groupMember.personId, caller.id)),
     )
     .innerJoin(person, eq(person.id, perjadin.picPersonId))
-    // "Today" is the WIB calendar day, the idiom `perjadinAcquittal` uses: `now() at time zone`
-    // yields a timestamp *in* that zone, and casting it to `date` is the calendar day there. Bare
-    // `current_date` would be the session's zone, which nothing in this repository sets, so a trip
-    // ending on the boundary would read differently across sessions at one instant.
-    .where(sql`${perjadin.endsOn} >= (now() at time zone ${DEADLINE_TIME_ZONE})::date`)
+    // Not yet over: `ends_on` on or after today, reckoned in the office's zone via the shared
+    // `todayInDeadlineZone` fragment (`./deadline.ts`) — the same calendar the acquittal's
+    // `daysRemaining` counts in, not the database session's default zone.
+    .where(sql`${perjadin.endsOn} >= ${todayInDeadlineZone}`)
     // A trip is remembered by when it happens; `id` breaks the tie so the order is total.
     .orderBy(asc(perjadin.startsOn), asc(perjadin.id));
 
@@ -191,10 +174,11 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
 
   // The five hanging lists, gathered concurrently and each scoped to just these trips.
   const [spentRows, staffRows, pengajarRows, pimpinanRows, sessionRows] = await Promise.all([
-    // Spend per trip, the **same derivation as `perjadinAcquittal`** — `sum(amount_idr)` over the
-    // trip's line items. Grouped by `perjadin_id`, so a trip with no transactions is absent from the
-    // result and defaults to 0 below; a single derivation is what keeps this figure and the Report's
-    // in step, and the UI's `advanceIdr - spentIdr` matches the acquittal's `remainderIdr`.
+    // Spend per trip: `sum(amount_idr)` over the trip's line items, grouped by `perjadin_id`, so a
+    // trip with no transactions is absent and defaults to 0 below. The **same rule** as
+    // `perjadinAcquittal` — every line item counts, nothing filtered — summed in SQL here since this
+    // list shows no line items, where the acquittal reduces its loaded rows in JS. A test pins the
+    // two equal, so the UI's `advanceIdr - spentIdr` matches the acquittal's `remainderIdr`.
     db
       .select({
         perjadinId: transaction.perjadinId,
