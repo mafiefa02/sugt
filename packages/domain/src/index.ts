@@ -119,11 +119,20 @@ function minutesToHhMm(minutes: number): string {
 }
 
 /**
+ * A Postgres `time` value as a bare wall-clock `"HH:MM"`, seconds dropped and no zone — for a place
+ * that already names the zone once, such as the `/sesi-daring` table's "Jam Mulai (WIB)" header
+ * (#344), where repeating " WIB" in every cell would only be noise.
+ */
+export function formatWallClockTime(time: string): string {
+  return minutesToHhMm(startTimeToMinutes(time));
+}
+
+/**
  * A Session's start time in its own Time Zone: `"09:00 WIT"`. The `time` is a Postgres
  * `time` value local to the School, and the zone is the School's Province's.
  */
 export function formatSessionStartTime(time: string, zone: TimeZone): string {
-  return `${minutesToHhMm(startTimeToMinutes(time))} ${zone}`;
+  return `${formatWallClockTime(time)} ${zone}`;
 }
 
 /**

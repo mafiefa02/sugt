@@ -1,4 +1,6 @@
+import { db, schema } from "@sugt/db";
 import { onlineSessionDirectory } from "@sugt/db/queries";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -85,6 +87,19 @@ describe("onlineSessionDirectory", () => {
       "2026-09-12 08:00:00",
       "2026-09-10 09:00:00",
     ]);
+  });
+
+  /** The table's Jam Selesai column (#344) — a nullable `time`: Sessions recorded before #283 have none. */
+  it("carries each row's end time, and null where none was recorded", async () => {
+    const pic = await staff();
+    const { a, b } = await twoSchools();
+    await addSession({ schoolId: a.id, heldOn: "2026-09-10", startsAt: "09:00", endsAt: "10:30" });
+    const older = await addSession({ schoolId: b.id, heldOn: "2026-09-09", startsAt: "09:00" });
+    await db.update(schema.session).set({ endsAt: null }).where(eq(schema.session.id, older.id));
+
+    const rows = await onlineSessionDirectory(pic);
+
+    expect(rows.map((row) => row.endsAt)).toEqual(["10:30:00", null]);
   });
 
   it("carries the School and the status on each row (no PIC, no Peserta; #284, #318)", async () => {

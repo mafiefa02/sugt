@@ -1,4 +1,8 @@
-import { formatSessionStartTime, formatSessionStartTimeWithWib } from "@sugt/domain";
+import {
+  formatSessionStartTime,
+  formatSessionStartTimeWithWib,
+  formatWallClockTime,
+} from "@sugt/domain";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -18,6 +22,18 @@ describe("formatSessionStartTime", () => {
     expect(() => formatSessionStartTime("9am", "WIB")).toThrow();
     expect(() => formatSessionStartTime("25:00", "WIB")).toThrow();
     expect(() => formatSessionStartTime("09:60", "WIB")).toThrow();
+  });
+});
+
+/** The bare `HH:MM` a table cell shows when its header already names the zone (#344). */
+describe("formatWallClockTime", () => {
+  it("renders HH:MM with no zone, dropping seconds", () => {
+    expect(formatWallClockTime("09:00:00")).toBe("09:00");
+    expect(formatWallClockTime("14:30")).toBe("14:30");
+  });
+
+  it("rejects a value that is not a time", () => {
+    expect(() => formatWallClockTime("9am")).toThrow();
   });
 });
 

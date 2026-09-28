@@ -26,10 +26,16 @@ export type DirectoryOnlineSession = {
   heldOn: string;
   startsAt: string;
   /**
+   * The WIB wall-clock end time (#283), for the table's Jam Selesai column (#344). **Nullable**:
+   * Sessions recorded before the column existed carry none, and the table shows "—" for them.
+   */
+  endsAt: string | null;
+  /**
    * Always `"WIB"` for an online Session (#283). Online Sessions are scheduled and stored as WIB
    * wall-clock nationally — the Zoom host is in WIB — so the row no longer derives the zone from the
-   * School's Province the way offline surfaces do. Kept as a `TimeZone` field so the page renders it
-   * through the same `formatSessionStartTimeWithWib` helper, which simply shows `"HH:MM WIB"`.
+   * School's Province the way offline surfaces do. The `/sesi-daring` table names WIB once, in its
+   * "Jam Mulai (WIB)" and "Jam Selesai (WIB)" headers (#344), and shows bare `HH:MM` in the cells; the
+   * field stays on the payload as the row's own statement of its zone.
    */
   timeZone: TimeZone;
   status: SessionStatus;
@@ -59,6 +65,7 @@ export async function onlineSessionDirectory(_caller: Person): Promise<Directory
       schoolSlug: school.slug,
       heldOn: session.heldOn,
       startsAt: session.startsAt,
+      endsAt: session.endsAt,
       status: session.status,
     })
     .from(session)
