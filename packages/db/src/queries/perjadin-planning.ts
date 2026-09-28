@@ -205,10 +205,11 @@ export type PlanPerjadinResult =
   | { outcome: "school-outside-sub-cluster"; offending: string[] }
   /**
    * Two **different** Schools sharing a date **and** a time. The Group is in one place at a time,
-   * so this is impossible. Since ADR-0019 there is **no database backstop** — the old
-   * `session_one_school_at_a_time_per_perjadin` index forbade parallel Sessions at one School too
-   * and had to go, so this rule is the application's alone (see `data-model.md`'s "what the
-   * database does not hold"). Two Sessions at the *same* School and moment are `duplicate-session`.
+   * so this is impossible. There is **no database backstop** — ADR-0019 dropped the trip-wide
+   * `session_one_school_at_a_time_per_perjadin` index because it forbade parallel Sessions at one
+   * School too, and ADR-0038's index is per School — so this rule is the application's alone (see
+   * `data-model.md`'s "what the database does not hold"). Two Sessions at the *same* School and
+   * moment are `duplicate-session`.
    */
   | { outcome: "session-time-clash"; clashes: SessionTimeClash[] }
   /**
@@ -359,9 +360,9 @@ export async function planPerjadin(
 
   // Both moment rules read the same grouping — planned Sessions by `(date, time)`:
   //
-  // - Two *different* Schools in one slot is the Group being in two places at once. Since ADR-0019
-  //   no index refuses it — the old `session_one_school_at_a_time_per_perjadin` was dropped — so this
-  //   app check is the only guard for the different-Schools rule. Sharing a date alone stays legal;
+  // - Two *different* Schools in one slot is the Group being in two places at once. No index refuses
+  //   it — ADR-0019 dropped the trip-wide `session_one_school_at_a_time_per_perjadin`, and ADR-0038's
+  //   index is per School — so this app check is the only guard for the different-Schools rule. Sharing a date alone stays legal;
   //   that is what the per-School start time serves.
   // - The *same* School twice in one slot is a duplicate (ADR-0038): parallel rooms are one Session
   //   now, and `session_no_duplicate_offline_per_school_per_perjadin` would refuse the second row at

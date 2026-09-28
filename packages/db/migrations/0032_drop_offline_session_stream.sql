@@ -6,7 +6,8 @@
 -- narrowed index would refuse. Unlike 0028 this migration resolves nothing itself — merging or
 -- cancelling a real Session is a human's call — so it looks for those pairs first and aborts, listing
 -- each one, before anything is dropped. Cancelled Sessions stay outside the index and are ignored here.
--- A human resolves the listed pairs and re-runs. No-op on an empty or already-unique database.
+-- A human resolves the listed pairs and re-runs. The check passes silently on an empty or
+-- already-unique database, and the drops below then run.
 DO $$
 DECLARE
   conflicts text;

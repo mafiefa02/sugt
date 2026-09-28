@@ -447,9 +447,12 @@ listing them** rather than merging or cancelling a real Session itself. Partial 
 `status <> 'cancelled'`, so a cancelled Session never blocks its slot. The count of Sessions per
 School is an app cap (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule. The rule that
 **two _different_ Schools cannot share a date and time** on one trip — the Group is one travelling
-party — cannot be a plain unique index, because it must ignore same-School rows; it moves to the
-application (enforced when a trip is planned) and is listed in
-[what the database does not hold](#what-the-database-does-not-hold).
+party — stays the application's (enforced when a trip is planned, and when a Session is added or
+edited) and is listed in [what the database does not hold](#what-the-database-does-not-hold). Under
+ADR-0019 it could not be a plain unique index, because same-School pairs had to pass. Since
+ADR-0038 they no longer do, so the two rules together are one live offline Session per trip per
+moment, and the trip-wide `(perjadin_id, held_on, starts_at)` index could hold both. #342 kept the
+per-School key it specified; restoring the trip-wide index would be its own change.
 
 **There is no `sub_cluster_id` on a Session, and the reason is worth stating because the column
 is an obvious thing to reach for.** The rule it would enforce — every School a Perjadin teaches
@@ -1754,9 +1757,10 @@ the hand-ticked "Pengajar sudah lengkap" box, not a constraint.
 
 **"Two _different_ Schools cannot share a date and time on one Perjadin."** The Group is one
 travelling party and cannot be in two places at once. This used to be the
-`session_one_school_at_a_time_per_perjadin` index, but ADR-0019 dropped it, and a plain unique index
-cannot forbid two _different_ Schools at one moment while leaving the same-School rule to a
-different key. So it is now the application's, checked when a trip is planned (`planPerjadin` groups
+`session_one_school_at_a_time_per_perjadin` index, but ADR-0019 dropped it because it also forbade
+two Sessions at the _same_ School and moment, which ADR-0019 allowed. ADR-0038 forbids those again —
+through its own per-School index, not by restoring the trip-wide one (see the Delivery section) — so
+the different-Schools rule is still the application's, checked when a trip is planned (`planPerjadin` groups
 the planned Sessions by `(date, time)` and refuses any slot holding more than one distinct School,
 naming the pair) and when a Session is added or edited on the trip. The database does reject two
 live Sessions at the _same_ School, date and time — one Session per School per moment (ADR-0038) —

@@ -44,9 +44,9 @@ type TripTeacher = { id: string; name: string };
  * A Perjadin's offline Sessions, and — for Staff — the per-Session controls: add one, edit an
  * arranged one's School, date, time and "Diajar oleh", and cancel one (which is how a Session is
  * removed, kept visible as an attempt). Every rule the plan form checks — inside the trip's window, at
- * a School of its Sub-Cluster, no two *different* Schools sharing a moment, one Session per School
- * per moment (ADR-0038), the ten-per-School ceiling — is re-checked by the write against the trip's
- * other Sessions.
+ * a School of its Sub-Cluster, no two *different* Schools sharing a moment, the ten-per-School
+ * ceiling — is re-checked by the write against the trip's other Sessions; one Session per School per
+ * moment (ADR-0038) is left to the database index, whose refusal comes back as `duplicate-session`.
  *
  * The list is shown to everyone (a Session carries no money); the controls appear only for Staff.
  */

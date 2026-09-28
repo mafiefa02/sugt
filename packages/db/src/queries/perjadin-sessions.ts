@@ -20,9 +20,11 @@ import { requireStaff } from "./staff-only";
  * Schools sharing a moment, the ten-per-School ceiling — is re-checked here against the trip's
  * **existing** Sessions plus the one being written, because that is now the whole set. The
  * different-Schools clash has no database backstop since ADR-0019 (the old
- * `session_one_school_at_a_time_per_perjadin` index was dropped so Sessions at several moments at one
- * School became legal), so this application check is its only guard. The *same* School twice at one
- * moment is the database's to refuse (ADR-0038), reported as `duplicate-session`.
+ * `session_one_school_at_a_time_per_perjadin` index was dropped so two Sessions at the *same* School
+ * and moment became legal), so this application check is its only guard. ADR-0038 made that same-School
+ * pair illegal again, but refuses it through its own per-School index rather than restoring the
+ * trip-wide one: the *same* School twice at one moment is the database's to refuse, reported as
+ * `duplicate-session`, and is not pre-checked here.
  *
  * "Diajar oleh" is the set of the trip's `perjadin_teacher` names who staffed the Session's parallel
  * rooms, written as `session_teaching_team` links. It is replaced whole on each write — a name the

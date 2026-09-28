@@ -153,9 +153,11 @@ export const session = pgTable(
     // (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule.
     //
     // The old `session_one_school_at_a_time_per_perjadin` — one that forbade two Sessions at
-    // one moment across the *whole* trip — is dropped: "two DIFFERENT Schools cannot share a
-    // date and time" survives as a rule but is not expressible as a plain unique index (it
-    // must ignore same-School rows), so it moves to the application (see T2) and to
+    // one moment across the *whole* trip — was dropped by ADR-0019, because it also forbade the
+    // same-School pair ADR-0019 allowed. ADR-0038 forbids that pair again, so the two rules together
+    // now amount to one live offline Session per trip per moment, which that trip-wide index could
+    // hold once more. #342 specified this narrower per-School key instead, so "two DIFFERENT Schools
+    // cannot share a date and time" stays the application's (see T2) and is listed in
     // `data-model.md`'s "what the database does not hold". Partial in the same way as the
     // online index: cancelled rows accumulate and must not collide with their replacements —
     // a cancelled Session never blocks its slot — and online Sessions are untouched because their
