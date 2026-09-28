@@ -124,7 +124,6 @@ async function sessionsOf(perjadinId: string) {
       schoolId: schema.session.schoolId,
       heldOn: schema.session.heldOn,
       startsAt: schema.session.startsAt,
-      stream: schema.session.stream,
       status: schema.session.status,
     })
     .from(schema.session)
@@ -304,7 +303,7 @@ describe("editing a Perjadin's Teaching Team", () => {
 describe("editing a Perjadin's Sessions", () => {
   beforeEach(resetDatabase);
 
-  it("adds an offline Session with its Stream and 'Diajar oleh' links", async () => {
+  it("adds an offline Session with its 'Diajar oleh' links", async () => {
     const { pic, perjadinId, schools } = await trip();
     const andi = await addPerjadinTeacher(pic, perjadinId, "Dr. Andi");
     const bella = await addPerjadinTeacher(pic, perjadinId, "Dr. Bella");
@@ -314,7 +313,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: "10:00",
-      stream: "STEM",
       taughtByTeacherIds: [andi.teacherId, bella.teacherId],
     });
 
@@ -324,7 +322,6 @@ describe("editing a Perjadin's Sessions", () => {
     expect(row).toMatchObject({
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
-      stream: "STEM",
       status: "arranged",
     });
     expect(row?.startsAt).toMatch(/^10:00/);
@@ -339,7 +336,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: "09:00",
-      stream: "STEM",
       taughtByTeacherIds: [],
     });
 
@@ -347,7 +343,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[1].id,
       heldOn: "2026-09-02",
       startsAt: "09:00",
-      stream: "Research",
       taughtByTeacherIds: [],
     });
 
@@ -358,35 +353,17 @@ describe("editing a Perjadin's Sessions", () => {
     expect(await sessionsOf(perjadinId)).toHaveLength(1);
   });
 
-  it("allows two Sessions at the same School and moment with different Streams", async () => {
-    const { pic, perjadinId, schools } = await trip();
-    await addPerjadinSession(pic, perjadinId, {
-      schoolId: schools[0].id,
-      heldOn: "2026-09-02",
-      startsAt: "09:00",
-      stream: "STEM",
-      taughtByTeacherIds: [],
-    });
-
-    const result = await addPerjadinSession(pic, perjadinId, {
-      schoolId: schools[0].id,
-      heldOn: "2026-09-02",
-      startsAt: "09:00",
-      stream: "Research",
-      taughtByTeacherIds: [],
-    });
-
-    expect(result.outcome).toBe("added");
-    expect(await sessionsOf(perjadinId)).toHaveLength(2);
-  });
-
-  it("refuses an exact duplicate Session — same School, date, time and Stream", async () => {
+  /**
+   * ADR-0038, reversing ADR-0019: one live Session per School per date and start time. Parallel rooms
+   * are one Session now, so a second at the same moment is refused by
+   * `session_no_duplicate_offline_per_school_per_perjadin` and comes back as a value.
+   */
+  it("refuses a second Session at the same School, date and time as a duplicate", async () => {
     const { pic, perjadinId, schools } = await trip();
     const input = {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: "09:00",
-      stream: "STEM" as const,
       taughtByTeacherIds: [],
     };
     await addPerjadinSession(pic, perjadinId, input);
@@ -397,6 +374,58 @@ describe("editing a Perjadin's Sessions", () => {
     expect(await sessionsOf(perjadinId)).toHaveLength(1);
   });
 
+  it("refuses an edit that moves a Session onto another live Session's School, date and time", async () => {
+    const { pic, perjadinId, schools } = await trip();
+    await addOfflineSession({
+      schoolId: schools[0].id,
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+      perjadinId,
+    });
+    const moving = await addOfflineSession({
+      schoolId: schools[0].id,
+      heldOn: "2026-09-02",
+      startsAt: "13:00",
+      perjadinId,
+    });
+
+    const result = await editPerjadinSession(pic, moving.id, {
+      schoolId: schools[0].id,
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+      taughtByTeacherIds: [],
+    });
+
+    expect(result).toEqual({ outcome: "duplicate-session" });
+    const moved = (await sessionsOf(perjadinId)).find((row) => row.id === moving.id);
+    expect(moved?.startsAt).toMatch(/^13:00/);
+  });
+
+  /** The index is partial on `status <> 'cancelled'`, so a cancelled Session never blocks its slot. */
+  it("adds a Session at the slot of a cancelled one", async () => {
+    const { pic, perjadinId, schools } = await trip();
+    const cancelled = await addOfflineSession({
+      schoolId: schools[0].id,
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+      perjadinId,
+    });
+    await cancelSession(pic, cancelled.id, "Sekolah libur");
+
+    const result = await addPerjadinSession(pic, perjadinId, {
+      schoolId: schools[0].id,
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+      taughtByTeacherIds: [],
+    });
+
+    expect(result.outcome).toBe("added");
+    expect((await sessionsOf(perjadinId)).map((row) => row.status).sort()).toEqual([
+      "arranged",
+      "cancelled",
+    ]);
+  });
+
   it("refuses a Session dated outside the trip", async () => {
     const { pic, perjadinId, schools } = await trip();
 
@@ -404,7 +433,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-09",
       startsAt: "09:00",
-      stream: "STEM",
       taughtByTeacherIds: [],
     });
 
@@ -435,7 +463,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: stray.id,
       heldOn: "2026-09-02",
       startsAt: "09:00",
-      stream: "STEM",
       taughtByTeacherIds: [],
     });
 
@@ -450,7 +477,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: "09:00",
-      stream: "STEM",
       taughtByTeacherIds: [stray],
     });
 
@@ -474,7 +500,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: "13:00",
-      stream: "STEM",
       taughtByTeacherIds: [],
     });
 
@@ -486,7 +511,7 @@ describe("editing a Perjadin's Sessions", () => {
     });
   });
 
-  it("edits a Session's School, date, time, Stream and 'Diajar oleh'", async () => {
+  it("edits a Session's School, date, time and 'Diajar oleh'", async () => {
     const { pic, perjadinId, schools } = await trip();
     const andi = await addPerjadinTeacher(pic, perjadinId, "Dr. Andi");
     if (andi.outcome !== "added") throw new Error("fixture failed");
@@ -494,7 +519,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-01",
       startsAt: "09:00",
-      stream: "STEM",
       perjadinId,
     });
 
@@ -502,7 +526,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[1].id,
       heldOn: "2026-09-03",
       startsAt: "11:30",
-      stream: "Research",
       taughtByTeacherIds: [andi.teacherId],
     });
 
@@ -511,7 +534,6 @@ describe("editing a Perjadin's Sessions", () => {
     expect(row).toMatchObject({
       schoolId: schools[1].id,
       heldOn: "2026-09-03",
-      stream: "Research",
     });
     expect(row?.startsAt).toMatch(/^11:30/);
     expect(await linkedTeacherIds(session.id)).toEqual([andi.teacherId]);
@@ -531,7 +553,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-01",
       startsAt: "09:00",
-      stream: "Research",
       taughtByTeacherIds: [],
     });
 
@@ -554,7 +575,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[1].id,
       heldOn: "2026-09-01",
       startsAt: "09:00",
-      stream: "STEM",
       taughtByTeacherIds: [],
     });
 
@@ -580,7 +600,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: "09:00",
-      stream: "STEM",
       taughtByTeacherIds: [],
     });
 
@@ -600,7 +619,6 @@ describe("editing a Perjadin's Sessions", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: "09:00",
-      stream: "STEM",
       taughtByTeacherIds: [],
     });
 
@@ -629,7 +647,6 @@ describe("editing a Perjadin's Sessions", () => {
         schoolId: schools[0].id,
         heldOn: "2026-09-02",
         startsAt: "09:00",
-        stream: "STEM",
         taughtByTeacherIds: [],
       }),
     ).rejects.toSatisfy(isNotStaffError);
@@ -826,7 +843,7 @@ describe("editing a Perjadin's Pimpinan", () => {
 describe("perjadinDetail's new payload", () => {
   beforeEach(resetDatabase);
 
-  it("carries the trip's teacher names, Pimpinan, eligible Schools and each Session's Stream and 'Diajar oleh'", async () => {
+  it("carries the trip's teacher names, Pimpinan, eligible Schools and each Session's 'Diajar oleh'", async () => {
     const { pic, perjadinId, schools } = await trip();
     const andi = await addPerjadinTeacher(pic, perjadinId, "Dr. Andi");
     if (andi.outcome !== "added") throw new Error("fixture failed");
@@ -836,7 +853,6 @@ describe("perjadinDetail's new payload", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: "10:00",
-      stream: "Research",
       taughtByTeacherIds: [andi.teacherId],
     });
     if (added.outcome !== "added") throw new Error("fixture failed to add session");
@@ -856,7 +872,6 @@ describe("perjadinDetail's new payload", () => {
     // The Group is Staff-only, so no People roster of Teaching Team is carried any more.
     expect(detail).not.toHaveProperty("teachingTeam");
     const session = detail?.sessions[0];
-    expect(session?.stream).toBe("Research");
     expect(session?.taughtBy).toEqual([{ id: andi.teacherId, name: "Dr. Andi" }]);
   });
 });

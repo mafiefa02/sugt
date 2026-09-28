@@ -105,7 +105,6 @@ describe("Planning derives the range from the leg dates", () => {
           schoolId: school.id,
           heldOn: "2026-09-02",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
       ],

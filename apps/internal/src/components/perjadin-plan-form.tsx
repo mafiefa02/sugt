@@ -2,6 +2,7 @@
 
 import { planPerjadinAction } from "-/app/(app)/perjadin/baru/actions";
 import { MultiSelectCombobox } from "-/components/multi-select-combobox";
+import { duplicateSessionRows } from "-/components/perjadin-plan-duplicates";
 import { PersonSelect } from "-/components/person-select";
 import type {
   PlannablePerson,
@@ -14,10 +15,8 @@ import {
   MAX_EXTRA_STAFF_PER_GROUP,
   MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN,
   MAX_TEACHING_TEAM_PER_PERJADIN,
-  STREAMS,
   timeZoneSuffix,
   TRANSPORT_MODES,
-  type Stream,
   type TransportMode,
 } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
@@ -39,18 +38,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition } from "react";
 
-/** One offline Session on a School's list: its date, time, Stream and "Diajar oleh" teacher indexes. */
+/** One offline Session on a School's list: its date, time and "Diajar oleh" teacher indexes. */
 type SessionDraft = {
   date: string;
   time: string;
-  /** `""` until a Stream is chosen; the submit guard proves it is set before the cast. */
-  stream: Stream | "";
   /** Indexes into `teacherNames` — which of the trip's teachers staffed this Session. May be empty. */
   taughtBy: number[];
 };
 
 function emptySession(): SessionDraft {
-  return { date: "", time: "", stream: "", taughtBy: [] };
+  return { date: "", time: "", taughtBy: [] };
 }
 
 /**
@@ -59,8 +56,10 @@ function emptySession(): SessionDraft {
  *
  * **Planning starts from a Sub-Cluster** (#69): pick one, and its Schools appear. Each School holds
  * a repeatable list of Sessions — a School is "kept" on the trip exactly when it has at least one —
- * and each Session carries its own date, start time, Stream and the subset of the trip's Teaching
- * Team who taught it. The Teaching Team are **free-text names**, not People (ADR-0020): typed in one
+ * and each Session carries its own date, start time and the subset of the trip's Teaching Team who
+ * taught it — no Stream, since a Session teaches both (ADR-0038). One School holds at most one
+ * Session per date and start time: parallel rooms are one Session, so a repeated slot is flagged on
+ * its row and holds back submit. The Teaching Team are **free-text names**, not People (ADR-0020): typed in one
  * at a time and shown as removable chips. Pimpinan are chosen from the Pimpinan roster (#181).
  *
  * A client component because every row is editable and none of that state is worth a URL. The
@@ -124,6 +123,9 @@ function PerjadinPlanForm({
   const schools = selected?.schools ?? [];
   const keptSchools = schools.filter((school) => (sessions[school.id]?.length ?? 0) > 0);
   const totalSessions = Object.values(sessions).reduce((sum, list) => sum + list.length, 0);
+  // Rows repeating an earlier row's School, date and time (ADR-0038) — flagged in place and caught
+  // here before submit; `planPerjadin` refuses the same payload as `duplicate-session` regardless.
+  const duplicateRows = duplicateSessionRows(sessions);
 
   // "Diajar oleh" offers this trip's teacher names, referenced by their index. A blank name has no
   // chip and cannot be referenced, so options are the non-blank names paired with their real index.
@@ -203,8 +205,9 @@ function PerjadinPlanForm({
     logistics.returnMode === "" ||
     totalSessions === 0 ||
     Object.values(sessions).some((list) =>
-      list.some((draft) => draft.date === "" || draft.time === "" || draft.stream === ""),
-    );
+      list.some((draft) => draft.date === "" || draft.time === ""),
+    ) ||
+    duplicateRows.size > 0;
 
   function submit() {
     startSaving(async () => {
@@ -215,14 +218,12 @@ function PerjadinPlanForm({
         extraStaffPersonIds: extraStaff,
         teacherNames: teacherNames.map((name) => name.trim()).filter((name) => name !== ""),
         pimpinan,
-        // Flatten each kept School's Sessions. The guard above proves date, time and stream are set,
-        // so the `stream` cast holds.
+        // Flatten each kept School's Sessions. The guard above proves date and time are set.
         sessions: keptSchools.flatMap((school) =>
           (sessions[school.id] ?? []).map((draft) => ({
             schoolId: school.id,
             heldOn: draft.date,
             startsAt: draft.time,
-            stream: draft.stream as Stream,
             taughtByTeacherIndexes: draft.taughtBy,
           })),
         ),
@@ -526,118 +527,100 @@ function PerjadinPlanForm({
 
                 {list.length > 0 && (
                   <ul className="mt-3 grid gap-3">
-                    {list.map((draft, index) => (
-                      <li
-                        // A Session row carries editable state, but the list only grows at the end or
-                        // shrinks by removal, so a positional key does not swap one row's state for
-                        // another's between renders.
-                        key={`${school.id}-session-${index}`}
-                        className="flex flex-wrap items-end gap-x-5 gap-y-2 rounded-2xl bg-muted/40 px-4 py-3"
-                      >
-                        <Field
-                          id={`${idPrefix}-date-${school.id}-${index}`}
-                          label="Tanggal Sesi"
+                    {list.map((draft, index) => {
+                      const duplicate = duplicateRows.has(`${school.id}-${index}`);
+                      return (
+                        <li
+                          // A Session row carries editable state, but the list only grows at the end or
+                          // shrinks by removal, so a positional key does not swap one row's state for
+                          // another's between renders.
+                          key={`${school.id}-session-${index}`}
+                          className="flex flex-wrap items-end gap-x-5 gap-y-2 rounded-2xl bg-muted/40 px-4 py-3"
                         >
-                          <Input
+                          <Field
                             id={`${idPrefix}-date-${school.id}-${index}`}
-                            type="date"
-                            className="w-44"
-                            // The range is the departure→return span now (ADR-0021), so a Session's
-                            // date is bounded by the leg dates rather than by typed Mulai/Selesai.
-                            min={logistics.departureDate || undefined}
-                            max={logistics.returnDate || undefined}
-                            value={draft.date}
-                            onChange={(event) => {
-                              patchSession(school.id, index, { date: event.target.value });
-                            }}
-                          />
-                        </Field>
-
-                        <Field
-                          id={`${idPrefix}-time-${school.id}-${index}`}
-                          label={`Jam Mulai${timeZoneSuffix(school.timeZone)}`}
-                        >
-                          <TimeField
-                            id={`${idPrefix}-time-${school.id}-${index}`}
-                            className="w-32"
-                            value={draft.time}
-                            onValueChange={(value) => {
-                              patchSession(school.id, index, { time: value });
-                            }}
-                          />
-                        </Field>
-
-                        <Field
-                          id={`${idPrefix}-stream-${school.id}-${index}`}
-                          label="Aliran"
-                        >
-                          <Select
-                            items={Object.fromEntries(STREAMS.map((stream) => [stream, stream]))}
-                            value={draft.stream === "" ? null : draft.stream}
-                            onValueChange={(value) => {
-                              patchSession(school.id, index, {
-                                stream: (value as Stream | null) ?? "",
-                              });
-                            }}
+                            label="Tanggal Sesi"
                           >
-                            <SelectTrigger
-                              id={`${idPrefix}-stream-${school.id}-${index}`}
-                              aria-label="Aliran"
-                              className="w-36"
-                            >
-                              <SelectValue placeholder="Pilih Aliran" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STREAMS.map((stream) => (
-                                <SelectItem
-                                  key={stream}
-                                  value={stream}
-                                >
-                                  {stream}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </Field>
-
-                        <Field
-                          id={`${idPrefix}-taught-${school.id}-${index}`}
-                          label="Diajar oleh"
-                        >
-                          <div className="w-64">
-                            <MultiSelectCombobox
-                              id={`${idPrefix}-taught-${school.id}-${index}`}
-                              aria-label="Diajar oleh"
-                              placeholder={
-                                teacherOptions.length === 0
-                                  ? "Belum ada pengajar"
-                                  : "Pilih pengajar…"
-                              }
-                              emptyLabel="Tidak ada pengajar."
-                              options={teacherOptions}
-                              value={draft.taughtBy.map(String)}
-                              onValueChange={(next) => {
-                                patchSession(school.id, index, {
-                                  taughtBy: next.map(Number),
-                                });
+                            <Input
+                              id={`${idPrefix}-date-${school.id}-${index}`}
+                              type="date"
+                              className="w-44"
+                              // The range is the departure→return span now (ADR-0021), so a Session's
+                              // date is bounded by the leg dates rather than by typed Mulai/Selesai.
+                              min={logistics.departureDate || undefined}
+                              max={logistics.returnDate || undefined}
+                              aria-invalid={duplicate || undefined}
+                              value={draft.date}
+                              onChange={(event) => {
+                                patchSession(school.id, index, { date: event.target.value });
                               }}
                             />
-                          </div>
-                        </Field>
+                          </Field>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="Hapus Sesi"
-                          onClick={() => {
-                            removeSession(school.id, index);
-                          }}
-                        >
-                          <XIcon className="size-4" />
-                        </Button>
-                      </li>
-                    ))}
+                          <Field
+                            id={`${idPrefix}-time-${school.id}-${index}`}
+                            label={`Jam Mulai${timeZoneSuffix(school.timeZone)}`}
+                          >
+                            <TimeField
+                              id={`${idPrefix}-time-${school.id}-${index}`}
+                              className="w-32"
+                              aria-invalid={duplicate || undefined}
+                              value={draft.time}
+                              onValueChange={(value) => {
+                                patchSession(school.id, index, { time: value });
+                              }}
+                            />
+                          </Field>
+
+                          <Field
+                            id={`${idPrefix}-taught-${school.id}-${index}`}
+                            label="Diajar oleh"
+                          >
+                            <div className="w-64">
+                              <MultiSelectCombobox
+                                id={`${idPrefix}-taught-${school.id}-${index}`}
+                                aria-label="Diajar oleh"
+                                placeholder={
+                                  teacherOptions.length === 0
+                                    ? "Belum ada pengajar"
+                                    : "Pilih pengajar…"
+                                }
+                                emptyLabel="Tidak ada pengajar."
+                                options={teacherOptions}
+                                value={draft.taughtBy.map(String)}
+                                onValueChange={(next) => {
+                                  patchSession(school.id, index, {
+                                    taughtBy: next.map(Number),
+                                  });
+                                }}
+                              />
+                            </div>
+                          </Field>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Hapus Sesi"
+                            onClick={() => {
+                              removeSession(school.id, index);
+                            }}
+                          >
+                            <XIcon className="size-4" />
+                          </Button>
+
+                          {duplicate && (
+                            <p
+                              role="alert"
+                              className="basis-full text-sm text-destructive"
+                            >
+                              Sekolah ini sudah punya Sesi pada tanggal dan jam yang sama. Sesi
+                              paralel dicatat sebagai satu Sesi — hapus baris ini atau ubah jamnya.
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </li>
@@ -737,6 +720,18 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
               <ul className="mt-1.5 list-disc pl-4">
                 {result.offending.map((schoolId) => (
                   <li key={schoolId}>{nameOf(schoolId)}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {result.outcome === "duplicate-session" && (
+            <>
+              <p>Satu Sekolah tidak bisa punya dua Sesi pada tanggal dan jam yang sama:</p>
+              <ul className="mt-1.5 list-disc pl-4">
+                {result.duplicates.map((duplicate) => (
+                  <li key={`${duplicate.schoolId} ${duplicate.heldOn} ${duplicate.startsAt}`}>
+                    {nameOf(duplicate.schoolId)} · {duplicate.heldOn} {duplicate.startsAt}
+                  </li>
                 ))}
               </ul>
             </>

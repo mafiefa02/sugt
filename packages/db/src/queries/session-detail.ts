@@ -233,8 +233,17 @@ export type CancelSessionResult =
 export type MoveSessionDateResult =
   | { outcome: "moved" }
   | { outcome: "not-arranged"; status: PastArranged }
-  /** The School already has an online Session that still stands on the new date. */
-  | { outcome: "collided"; constraint: "session_one_online_per_school_per_day" }
+  /**
+   * The new slot is taken. Online: the School already has an online Session that still stands on the
+   * new date. Offline: the trip already has a live Session at this School on the new date and time
+   * (ADR-0038). `constraint` says which, so the screen can word the sentence for the mode.
+   */
+  | {
+      outcome: "collided";
+      constraint:
+        | "session_one_online_per_school_per_day"
+        | "session_no_duplicate_offline_per_school_per_perjadin";
+    }
   /** An arranged offline Session may not leave the trip it happens on. */
   | { outcome: "outside-perjadin"; startsOn: string; endsOn: string };
 
@@ -369,12 +378,16 @@ function shiftTime(end: string, newStart: string, oldStart: string): string {
  *   School. That is `session_one_online_per_school_per_day`, and it is left to refuse the
  *   write rather than pre-read: a pre-read is a race, and the index is not.
  * - **Offline** — the new date must stay inside the Perjadin's window. No CHECK can carry
- *   that, since the range sits on another table, so it is held here beside the write.
+ *   that, since the range sits on another table, so it is held here beside the write. And the
+ *   new date and time must not land on another live Session at the same School on the trip —
+ *   `session_no_duplicate_offline_per_school_per_perjadin` (ADR-0038), left to refuse the write
+ *   for the same race-free reason as the online index.
  *
  * **The start time moves with the date, in the same write** ([#72](https://github.com/mafiefa02/sugt/issues/72)):
  * moving a Session is one act, and a dialog that changed the date while silently keeping a
- * time nobody can see would be a trap. The index keys on `(school_id, held_on)`, not
- * `starts_at`, so the collision rule is unaffected by carrying the time.
+ * time nobody can see would be a trap. The online index keys on `(school_id, held_on)`, not
+ * `starts_at`, so the online collision rule is unaffected by carrying the time; the offline one
+ * keys on the time as well, so there the carried time is part of what collides.
  *
  * **`ends_at` (#283) moves with the start, preserving the Session's duration.** Offline Sessions
  * hold no end time (it is an online-only field), so this is a no-op for them — but the query is not
@@ -436,7 +449,10 @@ export async function moveSessionDate(
     // those as "that date is taken" would report a bug as a user state. (The `session` table has no
     // composite foreign keys any more — the online PIC one was dropped in #284.)
     const constraint = (error as { cause?: { constraint_name?: string } }).cause?.constraint_name;
-    if (constraint === "session_one_online_per_school_per_day") {
+    if (
+      constraint === "session_one_online_per_school_per_day" ||
+      constraint === "session_no_duplicate_offline_per_school_per_perjadin"
+    ) {
       return { outcome: "collided", constraint };
     }
     throw error;
