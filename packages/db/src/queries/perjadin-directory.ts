@@ -8,8 +8,6 @@ import { groupMember, perjadin, perjadinPreparationItem, perjadinTeacher } from 
 import type { Person } from "./caller";
 import {
   derivePreparationChecklist,
-  PREPARATION_FIXED_KEYS,
-  preparationDoneSubquery,
   type PreparationItem,
   type PreparationTick,
 } from "./preparation-checklist";
@@ -54,8 +52,8 @@ export type DirectoryPerjadin = {
   preparationTotal: number;
   /**
    * The fixed seven with their tick state, for the Persiapan dialog the Staff pill opens (#343) — the
-   * same `derivePreparationChecklist` `myUpcomingPerjadin` and the detail read run. Read from the same
-   * ticks as `preparationDone`, so the pill and the dialog's boxes agree.
+   * same `derivePreparationChecklist` `myUpcomingPerjadin` and the detail read run. `preparationDone`
+   * and `preparationTotal` are counted off this very list, so the pill and the dialog's boxes agree.
    */
   preparation: PreparationItem[];
   /**
@@ -72,7 +70,7 @@ export type DirectoryPerjadin = {
 
 /**
  * The three name arrays the `/perjadin` search reads (#334), each a **correlated aggregate
- * subquery** — the shape `preparationDoneSubquery` uses, kept off the outer `session` left join so it
+ * subquery**, kept off the outer `session` left join so it
  * stays a scalar and never fans the row out. A plain join would multiply the row and break the
  * existing `count(distinct session.school_id)` and the `groupBy`; these open their own scans instead.
  * `coalesce(…, '{}'::text[])` makes a trip with none an empty array rather than `null`, mirroring
@@ -110,10 +108,10 @@ const schoolNames = sql<string[]>`coalesce(
 )`;
 
 /**
- * The Terlaksana counts (#343), each a **correlated scalar subquery** like `preparationDoneSubquery`
- * — not a `count(...) filter` on the outer `session` left join. A join aggregate would work today, but
- * the subquery keeps each count independent of whatever else the outer query joins, the reason the
- * name arrays above are shaped this way too. Cancelled Sessions count toward neither.
+ * The Terlaksana counts (#343), each a **correlated scalar subquery**, as the ticket asked, so neither
+ * depends on the outer query's joins. `schoolCount` below is the exception that stays a join
+ * aggregate: it already reads the outer `session` left join for its `count(distinct …)`, and adding a
+ * `filter` there changes nothing else about the query. Cancelled Sessions count toward neither.
  */
 const sessionsDelivered = sql<number>`(
   select count(*) from ${session} s
@@ -150,12 +148,6 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
         ),
       sessionsDelivered,
       sessionsTotal,
-      // The pill's `N` (the flat fixed seven, amendment to ADR-0018) and its `x` — the shared
-      // correlated subquery in `./preparation-checklist.ts`, correlated on this query's `perjadin.id`
-      // and kept off the `session` left join above so it never fans out. `myUpcomingPerjadin` builds
-      // the same pill from the same helper, so the fragment has one home (convention 3).
-      preparationTotal: sql<number>`${PREPARATION_FIXED_KEYS.length}`.mapWith(Number),
-      preparationDone: preparationDoneSubquery(perjadin.id),
       pengajarNames,
       groupMemberNames,
       schoolNames,
@@ -168,7 +160,7 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
 
   if (trips.length === 0) return [];
 
-  // The checklist items for the Persiapan dialog (#343): one batched read of every trip's ticks,
+  // The checklist for the Persiapan pill and its dialog (#343): one batched read of every trip's ticks,
   // bucketed by trip and folded into the fixed seven — the shape `myUpcomingPerjadin` uses, rather
   // than a join that would multiply each trip row by its ticks. A trip absent here has no ticks.
   const tickRows = await db
@@ -192,8 +184,16 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
     ticksByTrip.set(perjadinId, bucket);
   }
 
-  return trips.map((trip) => ({
-    ...trip,
-    preparation: derivePreparationChecklist(ticksByTrip.get(trip.id) ?? []),
-  }));
+  // The pill's `x/N` is counted off the same derived checklist the dialog shows — one read of the
+  // ticks for both, the way `myUpcomingPerjadin`'s card does it, so the pill and the boxes agree.
+  // `N` is the flat fixed seven (amendment to ADR-0018); an orphan `dosen:` tick matches no item.
+  return trips.map((trip) => {
+    const preparation = derivePreparationChecklist(ticksByTrip.get(trip.id) ?? []);
+    return {
+      ...trip,
+      preparation,
+      preparationDone: preparation.filter((item) => item.checked).length,
+      preparationTotal: preparation.length,
+    };
+  });
 }

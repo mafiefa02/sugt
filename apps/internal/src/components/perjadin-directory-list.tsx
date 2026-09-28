@@ -97,26 +97,26 @@ function PerjadinDirectoryList({
             <StickyTableHeader>
               <TableRow>
                 <SortableTableHead
-                  column="perjadin"
+                  column="destination"
                   {...head}
                 >
                   Perjadin
                 </SortableTableHead>
                 <SortableTableHead
-                  column="sekolah"
+                  column="schools"
                   className="text-right"
                   {...head}
                 >
                   Sekolah
                 </SortableTableHead>
                 <SortableTableHead
-                  column="keberangkatan"
+                  column="departure"
                   {...head}
                 >
                   Keberangkatan
                 </SortableTableHead>
                 <SortableTableHead
-                  column="kepulangan"
+                  column="return"
                   {...head}
                 >
                   Kepulangan
@@ -128,13 +128,13 @@ function PerjadinDirectoryList({
                   PIC
                 </SortableTableHead>
                 <SortableTableHead
-                  column="persiapan"
+                  column="preparation"
                   {...head}
                 >
                   Persiapan
                 </SortableTableHead>
                 <SortableTableHead
-                  column="terlaksana"
+                  column="delivered"
                   {...head}
                 >
                   Terlaksana
@@ -203,8 +203,9 @@ function CountBadge({ done, total }: { done: number; total: number }) {
 /**
  * **The Persiapan pill** ([#114](https://github.com/mafiefa02/sugt/issues/114)), `x/N` in the shared
  * progress tone. For Staff it is the trigger of the checklist dialog, toggleable — the same pill the
- * home strip's trip card wears (`my-perjadin-section.tsx`); for anyone else it is a static badge. The
- * wrapper stops the click from reaching the row, so opening the dialog never also opens the trip.
+ * home strip's trip card wears (`my-perjadin-section.tsx`); for anyone else it is a static badge.
+ * Opening the dialog never also opens the trip: `ClickableTableRow` ignores a click on a button, and
+ * one inside the dialog's portal, so the click stops short of the row's navigation.
  */
 function PreparationPill({ trip, canToggle }: { trip: DirectoryPerjadin; canToggle: boolean }) {
   if (!canToggle) {
@@ -217,29 +218,23 @@ function PreparationPill({ trip, canToggle }: { trip: DirectoryPerjadin; canTogg
   }
 
   return (
-    <span
-      onClick={(event) => {
-        event.stopPropagation();
-      }}
-    >
-      <PerjadinPreparationDialog
-        perjadinId={trip.id}
-        items={trip.preparation}
-        canToggle
-        trigger={
-          <button
-            type="button"
-            aria-label={`Persiapan ${trip.preparationDone} dari ${trip.preparationTotal}`}
-            className={cn(
-              "rounded-full px-2 py-0.5 text-xs font-medium tabular-nums transition-opacity hover:opacity-80",
-              progressTone(trip.preparationDone, trip.preparationTotal),
-            )}
-          >
-            {trip.preparationDone}/{trip.preparationTotal}
-          </button>
-        }
-      />
-    </span>
+    <PerjadinPreparationDialog
+      perjadinId={trip.id}
+      items={trip.preparation}
+      canToggle
+      trigger={
+        <button
+          type="button"
+          aria-label={`Persiapan ${trip.preparationDone} dari ${trip.preparationTotal}`}
+          className={cn(
+            "rounded-full px-2 py-0.5 text-xs font-medium tabular-nums transition-opacity hover:opacity-80",
+            progressTone(trip.preparationDone, trip.preparationTotal),
+          )}
+        >
+          {trip.preparationDone}/{trip.preparationTotal}
+        </button>
+      }
+    />
   );
 }
 

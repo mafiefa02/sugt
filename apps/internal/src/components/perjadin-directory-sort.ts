@@ -7,19 +7,23 @@ import type { DirectoryPerjadin } from "@sugt/db/queries";
  * React.
  */
 
-/** The seven columns, left to right. */
+/**
+ * The seven columns, left to right — keyed in English like the rest of the code (CONTEXT.md); the
+ * headers the screen shows are Perjadin, Sekolah, Keberangkatan, Kepulangan, PIC, Persiapan and
+ * Terlaksana.
+ */
 export type PerjadinColumn =
-  | "perjadin"
-  | "sekolah"
-  | "keberangkatan"
-  | "kepulangan"
+  | "destination"
+  | "schools"
+  | "departure"
+  | "return"
   | "pic"
-  | "persiapan"
-  | "terlaksana";
+  | "preparation"
+  | "delivered";
 
 /** Keberangkatan, newest first — the order the list has always had. */
 export const PERJADIN_DEFAULT_SORT: TableSort<PerjadinColumn> = {
-  key: "keberangkatan",
+  key: "departure",
   direction: "desc",
 };
 
@@ -45,14 +49,14 @@ function deliveredRatio(trip: SortablePerjadin): number {
 /** Each column ascending. The direction is applied on top; ties are left to `tiebreak`. */
 const ASCENDING: Record<PerjadinColumn, (a: SortablePerjadin, b: SortablePerjadin) => number> = {
   // Numeric-aware, so "Kelompok 2" sorts before "Kelompok 12".
-  perjadin: (a, b) => a.destination.localeCompare(b.destination, "id", { numeric: true }),
-  sekolah: (a, b) => a.schoolCount - b.schoolCount,
+  destination: (a, b) => a.destination.localeCompare(b.destination, "id", { numeric: true }),
+  schools: (a, b) => a.schoolCount - b.schoolCount,
   // ISO `YYYY-MM-DD`, so the string order is the date order.
-  keberangkatan: (a, b) => a.startsOn.localeCompare(b.startsOn),
-  kepulangan: (a, b) => a.endsOn.localeCompare(b.endsOn),
+  departure: (a, b) => a.startsOn.localeCompare(b.startsOn),
+  return: (a, b) => a.endsOn.localeCompare(b.endsOn),
   pic: (a, b) => a.picFullName.localeCompare(b.picFullName, "id"),
-  persiapan: (a, b) => a.preparationDone - b.preparationDone,
-  terlaksana: (a, b) =>
+  preparation: (a, b) => a.preparationDone - b.preparationDone,
+  delivered: (a, b) =>
     deliveredRatio(a) - deliveredRatio(b) || a.sessionsDelivered - b.sessionsDelivered,
 };
 

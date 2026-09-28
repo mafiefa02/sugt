@@ -7,11 +7,12 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import type * as React from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * **The app's sortable-table pieces** (#343): a table whose header stays pinned while the page
- * scrolls, a header cell that sorts, and a row that opens its record. Built for `/perjadin` and
- * reused by `/sesi-daring` (#344).
+ * scrolls, a header cell that sorts, and a row that opens its record. Built for `/perjadin`, and
+ * generic over the column key so `/sesi-daring` can take them up next (#344).
  *
  * They live in the app rather than in `@sugt/ui` because the sort state and the navigation are app
  * behaviour, and `@sugt/ui` stays presentational (ADR-0010). They compose the `@sugt/ui` table
@@ -19,22 +20,52 @@ import type * as React from "react";
  */
 
 /**
- * The table, **without** the primitive's scroll container. `@sugt/ui`'s `Table` wraps itself in
+ * The table, **without** the primitive's fixed scroll container. `@sugt/ui`'s `Table` wraps itself in
  * `overflow-x-auto`, and any overflow other than `visible` makes that `div` the sticky header's
  * scrolling ancestor — one that never scrolls vertically, so `sticky top-0` would pin against it and
  * do nothing while the page scrolls. The primitive is left alone so `/sekolah` does not change.
  *
- * From `md` up the wrapper has no overflow, so the header pins against the page; below `md` it keeps
- * the horizontal scroll a narrow screen needs, and the header scrolls away with the rows there. The
- * app shell's sidebar is `sticky top-0` beside `<main>`, not above it, so nothing overlaps `top-0`.
+ * **Two modes, chosen by measuring**, so the header stays visible at every width:
+ *
+ * - **The table fits** — the wrapper has no overflow, and the header pins to the top of the page as
+ *   the page scrolls. The app shell's sidebar is `sticky top-0` *beside* `<main>`, not above it, so
+ *   nothing else claims `top-0`.
+ * - **The table is wider than its column** (a phone, or `md` up to about a laptop beside the 240px
+ *   sidebar) — letting it spill would scroll the whole page sideways and carry the sidebar off with
+ *   it, so the wrapper becomes a scroll box, at most one viewport tall, in both axes. The header then
+ *   pins to the top of that box, and the box scrolls sideways on its own.
+ *
+ * The table's width follows the wrapper's, not the mode, so switching modes cannot flip it back.
  */
 function StickyTable({ className, ...props }: React.ComponentProps<"table">) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const table = tableRef.current;
+    if (!container || !table) return;
+    const measure = () => {
+      setOverflowing(table.offsetWidth > container.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    observer.observe(table);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   return (
     <div
+      ref={containerRef}
       data-slot="table-container"
-      className="relative w-full max-md:overflow-x-auto"
+      className={cn("relative w-full", overflowing && "max-h-dvh overflow-auto")}
     >
       <table
+        ref={tableRef}
         data-slot="table"
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
@@ -112,13 +143,16 @@ function SortableTableHead<K extends string>({
  * does not act on a click that lands on a link, button or other control inside it, so that link
  * navigates once and a control such as a dialog trigger does its own thing. Nor on a click that did
  * not happen inside the row's own DOM: React bubbles events out of a portal to its React parent, so a
- * click inside a dialog opened from a cell would otherwise reach this row and navigate away.
+ * click inside a dialog opened from a cell would otherwise reach this row and navigate away. Nor when
+ * the click ends a drag that selected text — copying a name out of a row is not opening it.
+ *
+ * The row owns its `onClick`, so the prop is not accepted.
  */
 function ClickableTableRow<T extends string>({
   href,
   className,
   ...props
-}: React.ComponentProps<"tr"> & { href: Route<T> }) {
+}: Omit<React.ComponentProps<"tr">, "onClick"> & { href: Route<T> }) {
   const router = useRouter();
 
   return (
@@ -128,6 +162,7 @@ function ClickableTableRow<T extends string>({
         const target = event.target as Element;
         if (!event.currentTarget.contains(target)) return;
         if (target.closest("a, button, input, select, textarea, [role='button']")) return;
+        if (window.getSelection()?.isCollapsed === false) return;
         router.push(href);
       }}
       {...props}

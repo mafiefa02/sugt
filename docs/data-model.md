@@ -1381,7 +1381,7 @@ upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than d
 is a single box** — "confirmed with the Pendamping" (the on-Perjadin label for the DITSAMA role,
 [#141](https://github.com/mafiefa02/sugt/issues/141)), not one row per member; the stored key stays
 `staff`. `N` is therefore the
-constant **7**, and the Perjadin list's `Persiapan: x/N` pill counts the ticks whose key is one of
+constant **7**, and the Perjadin list's Persiapan `x/N` pill counts the ticks whose key is one of
 the seven fixed items.
 
 ---

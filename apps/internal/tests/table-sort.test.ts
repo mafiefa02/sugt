@@ -85,11 +85,11 @@ describe("sortPerjadinDirectory", () => {
       trip("twelve", { destination: "Kelompok 12: Kab. Sragen" }),
       trip("two", { destination: "Kelompok 2: Kota Bandung" }),
     ];
-    expect(ids(sortPerjadinDirectory(rows, { key: "perjadin", direction: "asc" }))).toEqual([
+    expect(ids(sortPerjadinDirectory(rows, { key: "destination", direction: "asc" }))).toEqual([
       "two",
       "twelve",
     ]);
-    expect(ids(sortPerjadinDirectory(rows, { key: "perjadin", direction: "desc" }))).toEqual([
+    expect(ids(sortPerjadinDirectory(rows, { key: "destination", direction: "desc" }))).toEqual([
       "twelve",
       "two",
     ]);
@@ -100,16 +100,16 @@ describe("sortPerjadinDirectory", () => {
       trip("a", { schoolCount: 3, endsOn: "2026-09-05", picFullName: "Budi", preparationDone: 1 }),
       trip("b", { schoolCount: 1, endsOn: "2026-09-09", picFullName: "Andi", preparationDone: 7 }),
     ];
-    expect(ids(sortPerjadinDirectory(rows, { key: "sekolah", direction: "desc" }))).toEqual([
+    expect(ids(sortPerjadinDirectory(rows, { key: "schools", direction: "desc" }))).toEqual([
       "a",
       "b",
     ]);
-    expect(ids(sortPerjadinDirectory(rows, { key: "kepulangan", direction: "desc" }))).toEqual([
+    expect(ids(sortPerjadinDirectory(rows, { key: "return", direction: "desc" }))).toEqual([
       "b",
       "a",
     ]);
     expect(ids(sortPerjadinDirectory(rows, { key: "pic", direction: "asc" }))).toEqual(["b", "a"]);
-    expect(ids(sortPerjadinDirectory(rows, { key: "persiapan", direction: "desc" }))).toEqual([
+    expect(ids(sortPerjadinDirectory(rows, { key: "preparation", direction: "desc" }))).toEqual([
       "b",
       "a",
     ]);
@@ -122,7 +122,7 @@ describe("sortPerjadinDirectory", () => {
       trip("half-of-4", { sessionsDelivered: 2, sessionsTotal: 4 }),
       trip("all", { sessionsDelivered: 2, sessionsTotal: 2 }),
     ];
-    expect(ids(sortPerjadinDirectory(rows, { key: "terlaksana", direction: "desc" }))).toEqual([
+    expect(ids(sortPerjadinDirectory(rows, { key: "delivered", direction: "desc" }))).toEqual([
       "all",
       "half-of-4",
       "half-of-2",
@@ -137,10 +137,10 @@ describe("sortPerjadinDirectory", () => {
       trip("b", { schoolCount: 2, startsOn: "2026-10-01" }),
     ];
     const expected = ["c", "b", "a"];
-    expect(ids(sortPerjadinDirectory(rows, { key: "sekolah", direction: "desc" }))).toEqual(
+    expect(ids(sortPerjadinDirectory(rows, { key: "schools", direction: "desc" }))).toEqual(
       expected,
     );
-    expect(ids(sortPerjadinDirectory(rows, { key: "sekolah", direction: "asc" }))).toEqual(
+    expect(ids(sortPerjadinDirectory(rows, { key: "schools", direction: "asc" }))).toEqual(
       expected,
     );
   });

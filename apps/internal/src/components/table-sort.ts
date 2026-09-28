@@ -1,6 +1,6 @@
 /**
- * **The sort state behind the app's sortable tables** (#343) — `/perjadin`, and `/sesi-daring` after
- * it (#344). Plain functions rather than a hook so the click rule is testable without React, the
+ * **The sort state behind the app's sortable tables** (#343) — `/perjadin` first, and generic over
+ * the column key so `/sesi-daring` can take it up next (#344). Plain functions rather than a hook so the click rule is testable without React, the
  * reason `acquittal-transactions-sort.ts` is one. The state itself lives in the table's `useState`,
  * not the URL.
  */
