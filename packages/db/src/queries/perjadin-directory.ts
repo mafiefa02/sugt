@@ -1,12 +1,18 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
 import { school } from "../schema/reference";
-import { groupMember, perjadin, perjadinTeacher } from "../schema/travel";
+import { groupMember, perjadin, perjadinPreparationItem, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
-import { PREPARATION_FIXED_KEYS, preparationDoneSubquery } from "./preparation-checklist";
+import {
+  derivePreparationChecklist,
+  PREPARATION_FIXED_KEYS,
+  preparationDoneSubquery,
+  type PreparationItem,
+  type PreparationTick,
+} from "./preparation-checklist";
 
 /**
  * **The Perjadin list** — every trip, open to anyone signed in.
@@ -25,8 +31,17 @@ export type DirectoryPerjadin = {
   destination: string;
   startsOn: string;
   endsOn: string;
-  /** How many Schools the Group teaches at. The trip's size, in the only unit that matters. */
+  /**
+   * How many Schools the Group teaches at — those with at least one **non-cancelled** Session (#343).
+   * A School whose every Session on the trip was cancelled is no longer being taught there.
+   */
   schoolCount: number;
+  /**
+   * The Terlaksana badge's `x` and `N` (#343): delivered Sessions on the trip, over its
+   * **non-cancelled** Sessions. A trip with no live Session reads `0/0`.
+   */
+  sessionsDelivered: number;
+  sessionsTotal: number;
   picFullName: string;
   /**
    * The Preparation Checklist pill's `x` and `N` ([#114](https://github.com/mafiefa02/sugt/issues/114)).
@@ -37,6 +52,12 @@ export type DirectoryPerjadin = {
    */
   preparationDone: number;
   preparationTotal: number;
+  /**
+   * The fixed seven with their tick state, for the Persiapan dialog the Staff pill opens (#343) — the
+   * same `derivePreparationChecklist` `myUpcomingPerjadin` and the detail read run. Read from the same
+   * ticks as `preparationDone`, so the pill and the dialog's boxes agree.
+   */
+  preparation: PreparationItem[];
   /**
    * The three name axes the `/perjadin` search matches on beyond `destination` and `picFullName`
    * (#334) — the trip-scoped Teaching-Team names, the Group (Kelompok Perjalanan) member names, and
@@ -89,6 +110,22 @@ const schoolNames = sql<string[]>`coalesce(
 )`;
 
 /**
+ * The Terlaksana counts (#343), each a **correlated scalar subquery** like `preparationDoneSubquery`
+ * — not a `count(...) filter` on the outer `session` left join. A join aggregate would work today, but
+ * the subquery keeps each count independent of whatever else the outer query joins, the reason the
+ * name arrays above are shaped this way too. Cancelled Sessions count toward neither.
+ */
+const sessionsDelivered = sql<number>`(
+  select count(*) from ${session} s
+  where s.perjadin_id = ${perjadin.id} and s.status = 'delivered'
+)`.mapWith(Number);
+
+const sessionsTotal = sql<number>`(
+  select count(*) from ${session} s
+  where s.perjadin_id = ${perjadin.id} and s.status <> 'cancelled'
+)`.mapWith(Number);
+
+/**
  * Every Perjadin, newest trip first.
  *
  * Ordered by `starts_on` rather than by `created_at`: a trip is remembered by when it
@@ -96,19 +133,23 @@ const schoolNames = sql<string[]>`coalesce(
  * so the order is total.
  */
 export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerjadin[]> {
-  return db
+  const trips = await db
     .select({
       id: perjadin.id,
       destination: perjadin.destination,
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
       picFullName: person.fullName,
-      // **`distinct`, and on the School rather than the Session.** Cancelled Sessions count
-      // here, unlike everywhere else — this is how big the trip is, not how much teaching it
-      // delivered — and both partial unique indexes are predicated on `status <> 'cancelled'`
-      // precisely so a cancelled Session and the one that replaced it coexist on one trip.
-      // Counting Sessions would report a two-School trip as three the first time that happens.
-      schoolCount: sql<number>`count(distinct ${session.schoolId})`.mapWith(Number),
+      // **`distinct`, and on the School rather than the Session**, so a School taught over several
+      // Sessions — or a cancelled Session and the one that replaced it — counts once. **Live
+      // Sessions only (#343):** a School whose every Session on this trip was cancelled is no longer
+      // visited, so the `filter` drops it; `count` over the left join's null row still reads 0.
+      schoolCount:
+        sql<number>`count(distinct ${session.schoolId}) filter (where ${session.status} <> 'cancelled')`.mapWith(
+          Number,
+        ),
+      sessionsDelivered,
+      sessionsTotal,
       // The pill's `N` (the flat fixed seven, amendment to ADR-0018) and its `x` — the shared
       // correlated subquery in `./preparation-checklist.ts`, correlated on this query's `perjadin.id`
       // and kept off the `session` left join above so it never fans out. `myUpcomingPerjadin` builds
@@ -124,4 +165,35 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
     .leftJoin(session, eq(session.perjadinId, perjadin.id))
     .groupBy(perjadin.id, person.fullName)
     .orderBy(desc(perjadin.startsOn), desc(perjadin.id));
+
+  if (trips.length === 0) return [];
+
+  // The checklist items for the Persiapan dialog (#343): one batched read of every trip's ticks,
+  // bucketed by trip and folded into the fixed seven — the shape `myUpcomingPerjadin` uses, rather
+  // than a join that would multiply each trip row by its ticks. A trip absent here has no ticks.
+  const tickRows = await db
+    .select({
+      perjadinId: perjadinPreparationItem.perjadinId,
+      itemKey: perjadinPreparationItem.itemKey,
+      checkedBy: perjadinPreparationItem.checkedBy,
+      checkedAt: perjadinPreparationItem.checkedAt,
+    })
+    .from(perjadinPreparationItem)
+    .where(
+      inArray(
+        perjadinPreparationItem.perjadinId,
+        trips.map((trip) => trip.id),
+      ),
+    );
+  const ticksByTrip = new Map<string, PreparationTick[]>();
+  for (const { perjadinId, ...tick } of tickRows) {
+    const bucket = ticksByTrip.get(perjadinId) ?? [];
+    bucket.push(tick);
+    ticksByTrip.set(perjadinId, bucket);
+  }
+
+  return trips.map((trip) => ({
+    ...trip,
+    preparation: derivePreparationChecklist(ticksByTrip.get(trip.id) ?? []),
+  }));
 }

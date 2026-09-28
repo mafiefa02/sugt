@@ -17,8 +17,9 @@ export const metadata: Metadata = { title: "Perjadin" };
  * read now (ADR-0004 reversed by ADR-0026, #180); this list simply never fetches money, and
  * writing money stays Staff-only.
  *
- * The list rendering lives in the `"use client"` `PerjadinDirectoryList`, which filters the payload
- * in the browser (#334) — the page stays a Server Component that fetches the full list once.
+ * The table lives in the `"use client"` `PerjadinDirectoryList`, which filters (#334) and sorts
+ * (#343) the payload in the browser — the page stays a Server Component that fetches the full list
+ * once. Only Staff toggle the Persiapan checklist from it; for a Pimpinan the pill is static.
  *
  * The route keeps the `/perjadin` slug [#14](https://github.com/mafiefa02/sugt/issues/14)
  * chose. It mirrors the surface name enumerated in
@@ -55,7 +56,10 @@ export default async function Page() {
           Belum ada Perjadin. Buka Rencanakan Perjadin untuk merencanakan yang pertama.
         </p>
       ) : (
-        <PerjadinDirectoryList trips={trips} />
+        <PerjadinDirectoryList
+          trips={trips}
+          canTogglePreparation={person.role === "Staff"}
+        />
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { PerjadinAnggotaModal } from "-/components/perjadin-anggota-modal";
 import { PerjadinFeedbackTokenDialog } from "-/components/perjadin-feedback-token";
 import { PerjadinMarkDeliveredDialog } from "-/components/perjadin-mark-delivered";
 import { PerjadinPreparationDialog } from "-/components/perjadin-preparation";
+import { progressTone } from "-/components/progress-tone";
 import { shortenKabupaten } from "-/lib/format-destination";
 import type { MyPerjadinSchool, MyUpcomingPerjadin } from "@sugt/db/queries";
 import {
@@ -77,16 +78,10 @@ function TripCard({ trip }: { trip: MyUpcomingPerjadin }) {
   // for both, so the pill and the boxes can never disagree. `N` is always seven (amendment to ADR-0018).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
   const preparationTotal = trip.preparation.length;
-  // The same three-way progress tone `/perjadin`'s `PreparationPill` wears — neutral before
-  // anything is ticked, amber part-way, emerald once every item is done — so the two screens read
-  // the pill the same way. This one stays a button (the checklist opens from it); the tone replaces
-  // the plain border rather than the click.
-  const preparationTone =
-    preparationDone === preparationTotal
-      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-      : preparationDone > 0
-        ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200"
-        : "bg-muted text-muted-foreground";
+  // The shared three-way progress tone `/perjadin`'s pill wears too — neutral before anything is
+  // ticked, amber part-way, emerald once every item is done — so the two screens read the pill the
+  // same way. This one stays a button (the checklist opens from it).
+  const preparationTone = progressTone(preparationDone, preparationTotal);
 
   return (
     <li className="rounded-lg border border-border p-4">
