@@ -11,8 +11,8 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * **The app's sortable-table pieces** (#343): a table whose header stays pinned while the page
- * scrolls, a header cell that sorts, and a row that opens its record. Built for `/perjadin`, and
- * generic over the column key so `/sesi-daring` can take them up next (#344).
+ * scrolls, a header cell that sorts, and a row that opens its record. Built for `/perjadin` (#343) and
+ * shared with `/sesi-daring` (#344), generic over each table's column key.
  *
  * They live in the app rather than in `@sugt/ui` because the sort state and the navigation are app
  * behaviour, and `@sugt/ui` stays presentational (ADR-0010). They compose the `@sugt/ui` table

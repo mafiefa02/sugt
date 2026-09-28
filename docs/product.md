@@ -207,6 +207,12 @@ times and the two Pengajar — are editable from its detail page, and a Session 
 reason, remains for offline Sessions, and only while one is still arranged — a Session that was
 delivered and then went wrong is a correction, not a cancellation.)
 
+**The Sesi daring list is a table** ([#344](https://github.com/sugt-itb/sugt-itb-26/issues/344)),
+built from the same pieces as the Perjadin list: Sekolah, Tanggal, Jam Mulai (WIB), Jam Selesai
+(WIB) — "—" when none was recorded — and Status. Only Tanggal sorts, newest first; same-day Sessions
+follow their start time the same way. The header stays in view, a row opens its Session, and the
+search box above narrows it by School.
+
 ### Perjadin
 
 Created inside the tool, because the Group rule is enforced at creation: **one PIC, and
