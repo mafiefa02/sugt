@@ -84,7 +84,7 @@ export async function setPerjadinPimpinanAction(
 
 /**
  * **Add one trip-scoped teacher name.** The teacher writes clear the "Pengajar sudah lengkap"
- * Preparation tick, which shows on the `/perjadin` list's `Persiapan: x/N` pill — so, like
+ * Preparation tick, which shows on the `/perjadin` list's Persiapan `x/N` pill — so, like
  * `togglePreparationItemAction`, this revalidates both routes.
  */
 export async function addPerjadinTeacherAction(
@@ -255,7 +255,7 @@ export async function updatePerjadinAdvanceAction(
  * **Tick or un-tick one Preparation Checklist box.**
  *
  * **This revalidates two routes**, which the convention otherwise forbids. The `/perjadin` list
- * carries a `Persiapan: x/N` pill genuinely derived from this write, so the list is stale the moment
+ * carries a Persiapan `x/N` pill genuinely derived from this write, so the list is stale the moment
  * a box is ticked from the detail page — a deliberate exception, not a route's action reaching into
  * an unrelated one.
  */

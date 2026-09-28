@@ -247,9 +247,17 @@ pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid 
 no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Every trip has
 the same six fixed boxes — SK Perjalanan, the two tickets, lodging, local transport and one
 "confirmed with the Staff" — plus one per Teaching Team member of the Group. Any Staff member may
-tick any box; the boxes flip optimistically. On the Perjadin list each trip shows a
-`Persiapan: x/N` pill that greys at zero, ambers part-way and greens when everything is done — the
-one place the checklist's state leaves the trip's own screen.
+tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
+screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
+the Persiapan column of the Perjadin list, and on the trip cards of the Staff home strip. For Staff
+the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
+
+**The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):
+Perjadin, Sekolah (Schools with a Session that was not cancelled), Keberangkatan, Kepulangan, PIC,
+Persiapan and Terlaksana — delivered over not-cancelled Sessions, as an `x/N` badge in the same three
+tones, `0/0` grey. It opens newest Keberangkatan first; every column sorts, a new column descending
+first. The header stays in view while the list scrolls, a row opens its trip, and the search box
+above narrows it.
 
 ### The acquittal — the most important screen
 
