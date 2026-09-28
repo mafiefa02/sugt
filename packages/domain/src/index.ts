@@ -98,9 +98,9 @@ const MINUTES_PER_DAY = 24 * 60;
 
 /**
  * Read a Postgres `time` value — `"09:00"` or `"09:00:00"` — as minutes since midnight.
- * Seconds are dropped: a Session's start time is a wall-clock hour and minute.
+ * Seconds are dropped: a Session's start and end times are wall-clock hours and minutes.
  */
-function startTimeToMinutes(time: string): number {
+function wallClockToMinutes(time: string): number {
   const match = /^(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(time);
   const hours = match ? Number(match[1]) : Number.NaN;
   const minutes = match ? Number(match[2]) : Number.NaN;
@@ -120,11 +120,11 @@ function minutesToHhMm(minutes: number): string {
 
 /**
  * A Postgres `time` value as a bare wall-clock `"HH:MM"`, seconds dropped and no zone — for a place
- * that already names the zone once, such as the `/sesi-daring` table's "Jam Mulai (WIB)" header
- * (#344), where repeating " WIB" in every cell would only be noise.
+ * that already names the zone once, such as a column header, where repeating it in every cell would
+ * only be noise.
  */
 export function formatWallClockTime(time: string): string {
-  return minutesToHhMm(startTimeToMinutes(time));
+  return minutesToHhMm(wallClockToMinutes(time));
 }
 
 /**
@@ -147,7 +147,7 @@ export function formatSessionStartTimeWithWib(time: string, zone: TimeZone): str
   const local = formatSessionStartTime(time, zone);
   if (zone === "WIB") return local;
   const wibMinutes =
-    startTimeToMinutes(time) - (TIME_ZONE_OFFSET_HOURS[zone] - TIME_ZONE_OFFSET_HOURS.WIB) * 60;
+    wallClockToMinutes(time) - (TIME_ZONE_OFFSET_HOURS[zone] - TIME_ZONE_OFFSET_HOURS.WIB) * 60;
   return `${local} · ${minutesToHhMm(wibMinutes)} WIB`;
 }
 

@@ -1,4 +1,4 @@
-import type { SessionStatus, TimeZone } from "@sugt/domain";
+import type { SessionStatus } from "@sugt/domain";
 import { desc, eq } from "drizzle-orm";
 
 import { db } from "../client";
@@ -18,26 +18,23 @@ import type { Person } from "./caller";
  * and ADR-0004 opens that to everyone signed in. Arranging one stays Staff-only, on the form.
  */
 
-/** One online Session, as the list shows it. */
+/**
+ * One online Session, as the `/sesi-daring` table shows it (#344): the School, the date, the two WIB
+ * wall-clock times and the status. **No zone field and no School slug**: an online Session is always
+ * WIB (#283), which the table states once in its "Jam Mulai (WIB)" / "Jam Selesai (WIB)" headers, and
+ * the row links to the Session rather than to `/sekolah/…` — convention 3, nothing the screen does
+ * not render.
+ */
 export type DirectoryOnlineSession = {
   id: string;
   schoolName: string;
-  schoolSlug: string;
   heldOn: string;
   startsAt: string;
   /**
-   * The WIB wall-clock end time (#283), for the table's Jam Selesai column (#344). **Nullable**:
-   * Sessions recorded before the column existed carry none, and the table shows "—" for them.
+   * The WIB wall-clock end time (#283). Nullable because `session.ends_at` is — an offline row carries
+   * none — though every online Session recorded since #318 has one; the table shows "—" for a null.
    */
   endsAt: string | null;
-  /**
-   * Always `"WIB"` for an online Session (#283). Online Sessions are scheduled and stored as WIB
-   * wall-clock nationally — the Zoom host is in WIB — so the row no longer derives the zone from the
-   * School's Province the way offline surfaces do. The `/sesi-daring` table names WIB once, in its
-   * "Jam Mulai (WIB)" and "Jam Selesai (WIB)" headers (#344), and shows bare `HH:MM` in the cells; the
-   * field stays on the payload as the row's own statement of its zone.
-   */
-  timeZone: TimeZone;
   status: SessionStatus;
 };
 
@@ -49,20 +46,16 @@ export type DirectoryOnlineSession = {
  * The School join is inner and NOT NULL by construction, so it cannot drop an online row. **No PIC
  * join any more (#284):** an online Session tracks no PIC, so nothing here reads `person`. **The
  * Province join is gone too (#283)**: an online Session's zone is always WIB, not derived from the
- * School's Province.
+ * School's Province, so nothing here reads a zone at all.
  *
  * **`where mode = 'online'` is the explicit exclusion of offline Sessions** — the readable statement
  * of intent, and now the only thing that excludes them (there is no PIC-null side effect to lean on).
- *
- * `timeZone` is folded in afterwards as the constant `"WIB"` rather than selected — it is no longer
- * a column of any joined table.
  */
 export async function onlineSessionDirectory(_caller: Person): Promise<DirectoryOnlineSession[]> {
-  const rows = await db
+  return db
     .select({
       id: session.id,
       schoolName: school.name,
-      schoolSlug: school.slug,
       heldOn: session.heldOn,
       startsAt: session.startsAt,
       endsAt: session.endsAt,
@@ -72,6 +65,4 @@ export async function onlineSessionDirectory(_caller: Person): Promise<Directory
     .innerJoin(school, eq(school.id, session.schoolId))
     .where(eq(session.mode, "online"))
     .orderBy(desc(session.heldOn), desc(session.startsAt), desc(session.id));
-
-  return rows.map((row) => ({ ...row, timeZone: "WIB" as const }));
 }
