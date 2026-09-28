@@ -1,4 +1,4 @@
-import { MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN, type Stream } from "@sugt/domain";
+import { MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN } from "@sugt/domain";
 import { and, eq, inArray, ne } from "drizzle-orm";
 
 import { db } from "../client";
@@ -20,15 +20,16 @@ import { requireStaff } from "./staff-only";
  * Schools sharing a moment, the ten-per-School ceiling — is re-checked here against the trip's
  * **existing** Sessions plus the one being written, because that is now the whole set. The
  * different-Schools clash has no database backstop since ADR-0019 (the old
- * `session_one_school_at_a_time_per_perjadin` index was dropped so parallel Sessions at one School
- * became legal), so this application check is its only guard.
+ * `session_one_school_at_a_time_per_perjadin` index was dropped so Sessions at several moments at one
+ * School became legal), so this application check is its only guard. The *same* School twice at one
+ * moment is the database's to refuse (ADR-0038), reported as `duplicate-session`.
  *
  * "Diajar oleh" is the set of the trip's `perjadin_teacher` names who staffed the Session's parallel
  * rooms, written as `session_teaching_team` links. It is replaced whole on each write — a name the
  * payload comes back without is a name Staff removed from that Session.
  */
 
-/** The fields a Session on the detail screen sets: its School, day, time, Stream and who taught it. */
+/** The fields a Session on the detail screen sets: its School, day, time and who taught it. */
 export type PerjadinSessionInput = {
   /** A School of the trip's Sub-Cluster — the eligible set, the same rule planning enforces. */
   schoolId: string;
@@ -36,8 +37,6 @@ export type PerjadinSessionInput = {
   heldOn: string;
   /** Local wall-clock start time (`HH:MM`), in the School's Time Zone. */
   startsAt: string;
-  /** STEM or Research (ADR-0019); an offline Session must carry one. */
-  stream: Stream;
   /** `perjadin_teacher` ids of this trip whose names taught the Session. May be empty. */
   taughtByTeacherIds: string[];
 };
@@ -162,18 +161,17 @@ export type AddPerjadinSessionResult =
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" }
   /**
-   * An *exact* duplicate — same School, date, time and Stream — which
-   * `session_no_duplicate_offline_per_school_per_perjadin` refuses at the database. Parallel rooms
-   * differ by nothing the row records, so the database collapses them and this is where a genuine
-   * re-add of the same Session is reported rather than crashing.
+   * A second live Session at the same School, date and time on the trip, which
+   * `session_no_duplicate_offline_per_school_per_perjadin` refuses at the database (ADR-0038).
+   * Parallel rooms are one Session now, whose Teaching Team lists everyone who taught, so this is
+   * where a second one at the same moment is reported rather than crashing.
    */
   | { outcome: "duplicate-session" }
   | SessionPlacementRefusal;
 
 /**
  * Add one offline Session to a trip. Staff-only, arranged by construction (ADR-0006), carrying its
- * Stream and its "Diajar oleh" links, checked against the trip's other Sessions before it is
- * written.
+ * "Diajar oleh" links, checked against the trip's other Sessions before it is written.
  */
 export async function addPerjadinSession(
   caller: Person,
@@ -204,7 +202,6 @@ export async function addPerjadinSession(
           schoolId: input.schoolId,
           perjadinId,
           mode: "offline",
-          stream: input.stream,
           heldOn: input.heldOn,
           startsAt: input.startsAt,
         })
@@ -220,13 +217,13 @@ export async function addPerjadinSession(
 
 export type EditPerjadinSessionResult =
   | { outcome: "edited" }
-  /** A Session past `arranged` — its School, date, time and Stream are settled once it happened. */
+  /** A Session past `arranged` — its School, date and time are settled once it happened. */
   | { outcome: "not-arranged"; status: PastArranged }
   | { outcome: "duplicate-session" }
   | SessionPlacementRefusal;
 
 /**
- * Edit one offline Session's School, date, time, Stream and "Diajar oleh". Staff-only, and offered
+ * Edit one offline Session's School, date, time and "Diajar oleh". Staff-only, and offered
  * only while the Session is `arranged` — a delivered Session records something that happened, so its
  * fields are fixed. The same placement rules apply, checked against the trip's other Sessions with
  * this one excluded so it does not clash with, or count against, itself.
@@ -278,7 +275,6 @@ export async function editPerjadinSession(
         .update(session)
         .set({
           schoolId: input.schoolId,
-          stream: input.stream,
           heldOn: input.heldOn,
           startsAt: input.startsAt,
         })
@@ -293,7 +289,7 @@ export async function editPerjadinSession(
 }
 
 /**
- * Turn the exact-duplicate index violation into a refusal value; rethrow everything else.
+ * Turn the one-per-School-per-moment index violation into a refusal value; rethrow everything else.
  *
  * Named rather than caught wholesale: this row satisfies several CHECKs and a foreign key, and
  * swallowing any of those as "that Session already exists" would report a bug as a user state.

@@ -2,7 +2,6 @@ import {
   MAX_EXTRA_STAFF_PER_GROUP,
   MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN,
   MAX_TEACHING_TEAM_PER_PERJADIN,
-  type Stream,
   type TimeZone,
   type TransportMode,
 } from "@sugt/domain";
@@ -34,18 +33,18 @@ import { requireStaff } from "./staff-only";
  * **Planning starts from a Sub-Cluster**, not from a Coverage selection
  * ([#69](https://github.com/mafiefa02/sugt/issues/69)). The screen picks a Sub-Cluster and
  * reveals its Schools — all eligible — and lets each kept School hold **several** Sessions, each
- * with its own date, time and Stream (ADR-0019). The Sub-Cluster says which Schools may appear on
- * the trip at all; the plan says which are visited this time (`docs/product.md`, the Perjadin
- * section).
+ * with its own date and time (ADR-0019) and no Stream (ADR-0038). The Sub-Cluster says which
+ * Schools may appear on the trip at all; the plan says which are visited this time
+ * (`docs/product.md`, the Perjadin section).
  */
 
 /**
- * One offline Session on the trip: the School, the day and time it runs, the Stream it teaches,
- * and which of the trip's Teaching Team names staffed it.
+ * One offline Session on the trip: the School, the day and time it runs, and which of the trip's
+ * Teaching Team names staffed it. No Stream — a Session teaches both (ADR-0038).
  *
  * A School gets **many** of these now (ADR-0019) — the form repeats a Session per School, each on
- * its own date and time, each single-Stream — so a School appears once per Session it holds rather
- * than once overall. A School is "kept" on the trip exactly when it has at least one Session.
+ * its own date and time — so a School appears once per Session it holds rather than once overall.
+ * A School is "kept" on the trip exactly when it has at least one Session.
  */
 export type PlannedSession = {
   schoolId: string;
@@ -54,15 +53,10 @@ export type PlannedSession = {
   /**
    * Local wall-clock start time (`HH:MM`), in the School's Time Zone. `session.starts_at` is NOT
    * NULL, so a value is always written. Two **different** Schools may share a date, but not a date
-   * **and** a time — see the `session-time-clash` refusal; two Sessions at the *same* School and
-   * moment are allowed (ADR-0019).
+   * **and** a time — see the `session-time-clash` refusal — and one School may not hold two
+   * Sessions at the same moment either — see `duplicate-session` (ADR-0038).
    */
   startsAt: string;
-  /**
-   * The Session's Stream — STEM or Research (ADR-0019). Required: the schema forces every offline
-   * Session to carry one (`session_offline_iff_stream`), and the form supplies it per Session.
-   */
-  stream: Stream;
   /**
    * "Diajar oleh" — indexes into this trip's `teacherNames`, naming which of the Perjadin's
    * trip-scoped teacher names staffed this Session's parallel rooms. Each index is written as a
@@ -214,9 +208,24 @@ export type PlanPerjadinResult =
    * so this is impossible. Since ADR-0019 there is **no database backstop** — the old
    * `session_one_school_at_a_time_per_perjadin` index forbade parallel Sessions at one School too
    * and had to go, so this rule is the application's alone (see `data-model.md`'s "what the
-   * database does not hold"). Two Sessions at the *same* School and moment are allowed.
+   * database does not hold"). Two Sessions at the *same* School and moment are `duplicate-session`.
    */
-  | { outcome: "session-time-clash"; clashes: SessionTimeClash[] };
+  | { outcome: "session-time-clash"; clashes: SessionTimeClash[] }
+  /**
+   * One School planned twice at the same date **and** time (ADR-0038). Parallel rooms are one
+   * Session now, whose Teaching Team lists everyone who taught, so a second row at the same moment is
+   * a mistake. `session_no_duplicate_offline_per_school_per_perjadin` refuses it at the database too;
+   * checked here against the whole payload so the form gets a value naming each slot rather than a
+   * unique-violation thrown from inside the transaction. The form catches it before submit as well.
+   */
+  | { outcome: "duplicate-session"; duplicates: DuplicateSessionSlot[] };
+
+/** A School planned more than once at one date and time — see the `duplicate-session` refusal. */
+export type DuplicateSessionSlot = {
+  schoolId: string;
+  heldOn: string;
+  startsAt: string;
+};
 
 /**
  * Plan a Perjadin: the trip, its Staff-only Group, its trip-scoped Teaching Team names, its
@@ -348,21 +357,28 @@ export async function planPerjadin(
   );
   if (outside.length > 0) return { outcome: "school-outside-sub-cluster", offending: outside };
 
-  // Two *different* Schools on the same date and the same time is the Group being in two places at
-  // once. Since ADR-0019 no index refuses it — the old `session_one_school_at_a_time_per_perjadin`
-  // was dropped so parallel Sessions at one School become possible — so this app check is the only
-  // guard for the different-Schools rule. It groups planned Sessions by `(date, time)` and flags a
-  // slot holding two or more **distinct** Schools. Two Sessions at the *same* School and moment are
-  // now allowed (parallel Streams or split rooms), so same-School rows collapse to one entry and do
-  // not clash; sharing a date alone stays legal too — that is what the per-School start time serves.
-  const slots = new Map<string, { heldOn: string; startsAt: string; schoolIds: Set<string> }>();
+  // Both moment rules read the same grouping — planned Sessions by `(date, time)`:
+  //
+  // - Two *different* Schools in one slot is the Group being in two places at once. Since ADR-0019
+  //   no index refuses it — the old `session_one_school_at_a_time_per_perjadin` was dropped — so this
+  //   app check is the only guard for the different-Schools rule. Sharing a date alone stays legal;
+  //   that is what the per-School start time serves.
+  // - The *same* School twice in one slot is a duplicate (ADR-0038): parallel rooms are one Session
+  //   now, and `session_no_duplicate_offline_per_school_per_perjadin` would refuse the second row at
+  //   the database. Caught here so it comes back as a value naming the slot, not a raw violation.
+  const slots = new Map<
+    string,
+    { heldOn: string; startsAt: string; schoolIds: Set<string>; repeated: Set<string> }
+  >();
   for (const planned of input.sessions) {
     const key = `${planned.heldOn} ${planned.startsAt}`;
     const slot = slots.get(key) ?? {
       heldOn: planned.heldOn,
       startsAt: planned.startsAt,
       schoolIds: new Set<string>(),
+      repeated: new Set<string>(),
     };
+    if (slot.schoolIds.has(planned.schoolId)) slot.repeated.add(planned.schoolId);
     slot.schoolIds.add(planned.schoolId);
     slots.set(key, slot);
   }
@@ -374,6 +390,15 @@ export async function planPerjadin(
       schoolIds: [...slot.schoolIds],
     }));
   if (clashes.length > 0) return { outcome: "session-time-clash", clashes };
+
+  const duplicates: DuplicateSessionSlot[] = [...slots.values()].flatMap((slot) =>
+    [...slot.repeated].map((schoolId) => ({
+      schoolId,
+      heldOn: slot.heldOn,
+      startsAt: slot.startsAt,
+    })),
+  );
+  if (duplicates.length > 0) return { outcome: "duplicate-session", duplicates };
 
   // The destination is derived, not typed: the planner has already picked the Sub-Cluster and
   // seen its Schools, so a free-text box would only restate that and could drift from it (#105).
@@ -438,7 +463,7 @@ export async function planPerjadin(
           ).map((row) => row.id)
         : [];
 
-    // The Sessions, each carrying its Stream (ADR-0019). RETURNING keeps them in input order, so
+    // The Sessions. RETURNING keeps them in input order, so
     // `sessionIds[i]` is the row for `input.sessions[i]` — the join key the teaching-team links use.
     const sessionIds = (
       await tx
@@ -448,7 +473,6 @@ export async function planPerjadin(
             schoolId: planned.schoolId,
             perjadinId: id,
             mode: "offline" as const,
-            stream: planned.stream,
             heldOn: planned.heldOn,
             startsAt: planned.startsAt,
           })),

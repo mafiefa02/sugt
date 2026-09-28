@@ -35,8 +35,8 @@ export default async function Page() {
         <h1 className="font-heading text-lg font-medium">Rencanakan Perjadin</h1>
         <p className="text-sm text-muted-foreground">
           Pilih Kelompok Sekolah, lalu tambahkan Sesi untuk tiap Sekolah yang dikunjungi —
-          masing-masing dengan tanggal, jam, dan Aliran sendiri. Setiap tanggal harus berada di
-          dalam rentang Perjadin.
+          masing-masing dengan tanggal dan jam sendiri. Setiap tanggal harus berada di dalam rentang
+          Perjadin.
         </p>
       </header>
 

@@ -147,7 +147,7 @@ export async function addPerjadinSessionAction(
   return result;
 }
 
-/** **Edit one arranged offline Session's School, date, time, Stream and "Diajar oleh".** */
+/** **Edit one arranged offline Session's School, date, time and "Diajar oleh".** */
 export async function editPerjadinSessionAction(
   perjadinId: string,
   sessionId: string,

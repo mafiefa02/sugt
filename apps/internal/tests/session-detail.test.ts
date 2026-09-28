@@ -555,6 +555,67 @@ describe("moving a date", () => {
   });
 
   /**
+   * One live offline Session per School per moment on a trip (ADR-0038). Moving onto another live
+   * Session's School, date and time is refused by `session_no_duplicate_offline_per_school_per_perjadin`
+   * and comes back as a value naming that index, not as a raw violation.
+   */
+  it("refuses to move an offline Session onto another live Session's School, date and time", async () => {
+    const pic = await staff();
+    const school = await oneSchool();
+    const perjadin = await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: 5_000_000,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-03",
+    });
+    await addOfflineSession({
+      schoolId: school.id,
+      heldOn: "2026-09-03",
+      startsAt: "09:00",
+      perjadinId: perjadin.id,
+    });
+    const moving = await addOfflineSession({
+      schoolId: school.id,
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+      perjadinId: perjadin.id,
+    });
+
+    expect(await moveSessionDate(pic, moving.id, "2026-09-03", "09:00")).toEqual({
+      outcome: "collided",
+      constraint: "session_no_duplicate_offline_per_school_per_perjadin",
+    });
+    // A different time on that day is a different slot, and moves.
+    expect((await moveSessionDate(pic, moving.id, "2026-09-03", "13:00")).outcome).toBe("moved");
+  });
+
+  it("moves an offline Session onto the slot of a cancelled one", async () => {
+    const pic = await staff();
+    const school = await oneSchool();
+    const perjadin = await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: 5_000_000,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-03",
+    });
+    await addOfflineSession({
+      schoolId: school.id,
+      heldOn: "2026-09-03",
+      startsAt: "09:00",
+      status: "cancelled",
+      perjadinId: perjadin.id,
+    });
+    const moving = await addOfflineSession({
+      schoolId: school.id,
+      heldOn: "2026-09-02",
+      startsAt: "09:00",
+      perjadinId: perjadin.id,
+    });
+
+    expect((await moveSessionDate(pic, moving.id, "2026-09-03", "09:00")).outcome).toBe("moved");
+  });
+
+  /**
    * Both ends of the window are inside it — a trip teaches on the day it arrives and on
    * the day it leaves. Driven through the write rather than against the validator alone,
    * so the boundary is proven where it is actually applied.

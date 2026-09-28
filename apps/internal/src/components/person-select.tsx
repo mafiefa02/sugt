@@ -21,17 +21,16 @@ type SelectablePerson = {
  * distinguish "nobody chosen yet" from a chosen Person, and every one of them already
  * treats the empty string that way when it decides whether a form is complete.
  *
- * This exists because there are three of these — the PIC and each Stream's professor on
- * Rencanakan Perjadin, each Stream on Tandai terlaksana, and the shared PIC and per-row
- * teachers on Jadwalkan Sesi daring. The convention beside `@sugt/db` is that the second
- * module wanting an expression earns the helper; this is the third.
+ * This exists because more than one form picks a Person: the PIC on Rencanakan Perjadin and
+ * the PIC on Detail Perjadin's Group editor. It was earned when there were more — each Stream's
+ * professor, each Stream on Tandai terlaksana and Jadwalkan Sesi daring's per-row teachers —
+ * before teaching went name-based (ADR-0020, ADR-0022) and Sessions lost their Stream
+ * (ADR-0034, ADR-0038).
  *
- * **`unassignedLabel` is what Jadwalkan Sesi daring needs and the others do not.** There,
- * choosing nobody is an act rather than an absence: the shared PIC is a *default*, and a row
- * has to be able to say "leave this one empty on purpose" before the default is applied
- * again. That is an item in the list, not a state of the trigger. Omit the prop and there is
- * no such item, which is what the two Session forms want — a Stream with nobody on it is not
- * something anybody chooses there.
+ * **`unassignedLabel` is for a picker where choosing nobody is an act rather than an
+ * absence** — a row that must be able to say "leave this one empty on purpose". That is an
+ * item in the list, not a state of the trigger. Omit the prop and there is no such item, which
+ * is what both PIC pickers want: a trip always has a PIC.
  *
  * It lives in the app rather than in `@sugt/ui` because it takes a roster of People, and
  * `@sugt/ui` stays presentational — AGENTS.md rule 4. A component that knows what a Person

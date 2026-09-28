@@ -115,14 +115,12 @@ async function validPlan(kabupatenKota?: [string, string]) {
         schoolId: schools[0].id,
         heldOn: "2026-09-01",
         startsAt: "09:00",
-        stream: "STEM",
         taughtByTeacherIndexes: [],
       },
       {
         schoolId: schools[1].id,
         heldOn: "2026-09-03",
         startsAt: "09:00",
-        stream: "Research",
         taughtByTeacherIndexes: [],
       },
     ],
@@ -156,7 +154,6 @@ async function sessionsOf(perjadinId: string) {
       schoolId: schema.session.schoolId,
       heldOn: schema.session.heldOn,
       startsAt: schema.session.startsAt,
-      stream: schema.session.stream,
       mode: schema.session.mode,
       status: schema.session.status,
     })
@@ -198,7 +195,7 @@ describe("Rencanakan Perjadin", () => {
   /**
    * The core criterion: the trip, its Staff-only Group and its Sessions come into existence
    * together. The Group is now the PIC alone — the Teaching Team have left `group_member` for
-   * trip-scoped names (ADR-0020) — and every offline Session carries a Stream (ADR-0019).
+   * trip-scoped names (ADR-0020). No offline Session carries a Stream any more (ADR-0038).
    */
   it("writes the Perjadin, a Staff-only Group and a Session per School in one transaction", async () => {
     const { pic, schools, input } = await validPlan();
@@ -217,10 +214,9 @@ describe("Rencanakan Perjadin", () => {
     expect(sessions.map((row) => row.schoolId).sort()).toEqual(
       schools.map((school) => school.id).sort(),
     );
-    // Offline by construction, already arranged, and each carrying its Stream.
+    // Offline by construction, and already arranged.
     expect(sessions.every((row) => row.mode === "offline")).toBe(true);
     expect(sessions.every((row) => row.status === "arranged")).toBe(true);
-    expect(sessions.every((row) => row.stream !== null)).toBe(true);
   });
 
   /**
@@ -238,12 +234,12 @@ describe("Rencanakan Perjadin", () => {
   });
 
   /**
-   * The rich acceptance scenario: one School with **three** offline Sessions — Research, STEM, STEM
-   * — at different times, a two-name Teaching Team each Session draws from, and two Pimpinan. Every
-   * piece is asserted: the `session.stream` values, the `session_teaching_team` links, and the
-   * `perjadin_teacher` and `perjadin_pimpinan` rows.
+   * The rich acceptance scenario: one School with **three** offline Sessions at different times, a
+   * two-name Teaching Team each Session draws from, and two Pimpinan. Every piece is asserted: the
+   * Sessions, the `session_teaching_team` links, and the `perjadin_teacher` and `perjadin_pimpinan`
+   * rows.
    */
-  it("persists three Sessions, their Streams, the teaching-team links, the teachers and the Pimpinan", async () => {
+  it("persists three Sessions, the teaching-team links, the teachers and the Pimpinan", async () => {
     const pic = await staff();
     const { subCluster, schools } = await twoSchools();
     const pimpinanA = await addPerson({
@@ -268,21 +264,18 @@ describe("Rencanakan Perjadin", () => {
           schoolId: schools[0].id,
           heldOn: "2026-09-01",
           startsAt: "08:00",
-          stream: "Research",
           taughtByTeacherIndexes: [0],
         },
         {
           schoolId: schools[0].id,
           heldOn: "2026-09-01",
           startsAt: "10:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [0, 1],
         },
         {
           schoolId: schools[0].id,
           heldOn: "2026-09-01",
           startsAt: "13:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [1],
         },
       ],
@@ -305,11 +298,9 @@ describe("Rencanakan Perjadin", () => {
 
     const sessions = await sessionsOf(planned.perjadinId);
     expect(sessions).toHaveLength(3);
-    // Each Session by its start time, so the Stream and links can be checked against the plan.
+    // Each Session by its start time, so the links can be checked against the plan.
     const byTime = new Map(sessions.map((row) => [row.startsAt.slice(0, 5), row]));
-    expect(byTime.get("08:00")?.stream).toBe("Research");
-    expect(byTime.get("10:00")?.stream).toBe("STEM");
-    expect(byTime.get("13:00")?.stream).toBe("STEM");
+    expect([...byTime.keys()].sort()).toEqual(["08:00", "10:00", "13:00"]);
 
     expect(await taughtBy(byTime.get("08:00")!.id)).toEqual(["Dr. Andi"]);
     expect(await taughtBy(byTime.get("10:00")!.id)).toEqual(["Dr. Andi", "Dr. Bella"]);
@@ -388,7 +379,6 @@ describe("Rencanakan Perjadin", () => {
           schoolId: schools[0].id,
           heldOn: "2026-09-09",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -403,7 +393,6 @@ describe("Rencanakan Perjadin", () => {
           schoolId: schools[0].id,
           heldOn: "2026-09-09",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -421,14 +410,12 @@ describe("Rencanakan Perjadin", () => {
           schoolId: schools[0].id,
           heldOn: "2026-09-01",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
         {
           schoolId: schools[1].id,
           heldOn: "2026-09-03",
           startsAt: "09:00",
-          stream: "Research",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -437,8 +424,8 @@ describe("Rencanakan Perjadin", () => {
     expect(result.outcome).toBe("planned");
   });
 
-  /** Each Session keeps its own date, start time and Stream. */
-  it("writes each Session's own date, start time and Stream", async () => {
+  /** Each Session keeps its own date and start time. */
+  it("writes each Session's own date and start time", async () => {
     const { pic, schools, input } = await validPlan();
 
     const planned = await planPerjadin(pic, {
@@ -448,14 +435,12 @@ describe("Rencanakan Perjadin", () => {
           schoolId: schools[0].id,
           heldOn: "2026-09-02",
           startsAt: "08:30",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
         {
           schoolId: schools[1].id,
           heldOn: "2026-09-02",
           startsAt: "13:15",
-          stream: "Research",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -465,9 +450,9 @@ describe("Rencanakan Perjadin", () => {
     const rows = await sessionsOf(planned.perjadinId);
     const first = rows.find((row) => row.schoolId === schools[0].id);
     const second = rows.find((row) => row.schoolId === schools[1].id);
-    expect(first).toMatchObject({ heldOn: "2026-09-02", stream: "STEM" });
+    expect(first).toMatchObject({ heldOn: "2026-09-02" });
     expect(first?.startsAt).toMatch(/^08:30/);
-    expect(second).toMatchObject({ heldOn: "2026-09-02", stream: "Research" });
+    expect(second).toMatchObject({ heldOn: "2026-09-02" });
     expect(second?.startsAt).toMatch(/^13:15/);
   });
 
@@ -498,7 +483,6 @@ describe("Rencanakan Perjadin", () => {
           schoolId: stray.id,
           heldOn: "2026-09-02",
           startsAt: "10:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -523,14 +507,12 @@ describe("Rencanakan Perjadin", () => {
           schoolId: schools[0].id,
           heldOn: "2026-09-02",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
         {
           schoolId: schools[1].id,
           heldOn: "2026-09-02",
           startsAt: "09:00",
-          stream: "Research",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -545,10 +527,41 @@ describe("Rencanakan Perjadin", () => {
   });
 
   /**
-   * The case that changed with ADR-0019: two Sessions at the **same** School and the same moment,
-   * different Streams, are now allowed — parallel rooms. Not a clash.
+   * The case that changed with ADR-0038, reversing ADR-0019: two Sessions at the **same** School and
+   * the same moment are refused. Parallel rooms are one Session now, whose Teaching Team lists
+   * everyone who taught — so the second row comes back as a value naming the slot, not as a unique
+   * violation thrown from inside the transaction.
    */
-  it("accepts two Sessions at the same School and moment with different Streams", async () => {
+  it("refuses two Sessions at the same School and moment as a duplicate, naming the slot, and writes nothing", async () => {
+    const { pic, schools, input } = await validPlan();
+
+    const result = await planPerjadin(pic, {
+      ...input,
+      sessions: [
+        {
+          schoolId: schools[0].id,
+          heldOn: "2026-09-02",
+          startsAt: "09:00",
+          taughtByTeacherIndexes: [],
+        },
+        {
+          schoolId: schools[0].id,
+          heldOn: "2026-09-02",
+          startsAt: "09:00",
+          taughtByTeacherIndexes: [],
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      outcome: "duplicate-session",
+      duplicates: [{ schoolId: schools[0].id, heldOn: "2026-09-02", startsAt: "09:00" }],
+    });
+    expect(await perjadinRows()).toEqual([]);
+  });
+
+  /** One School may still hold several Sessions on one day — at different start times. */
+  it("accepts two Sessions at the same School on one date at different times", async () => {
     const { pic, schools, input } = await validPlan();
 
     const planned = await planPerjadin(pic, {
@@ -558,14 +571,12 @@ describe("Rencanakan Perjadin", () => {
           schoolId: schools[0].id,
           heldOn: "2026-09-02",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
         {
           schoolId: schools[0].id,
           heldOn: "2026-09-02",
-          startsAt: "09:00",
-          stream: "Research",
+          startsAt: "13:00",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -573,8 +584,7 @@ describe("Rencanakan Perjadin", () => {
 
     expect(planned.outcome).toBe("planned");
     if (planned.outcome !== "planned") return;
-    const streams = (await sessionsOf(planned.perjadinId)).map((row) => row.stream).sort();
-    expect(streams).toEqual(["Research", "STEM"]);
+    expect(await sessionsOf(planned.perjadinId)).toHaveLength(2);
   });
 
   /** Two Schools sharing a date but not a time is legal — that is what the per-School time serves. */
@@ -588,14 +598,12 @@ describe("Rencanakan Perjadin", () => {
           schoolId: schools[0].id,
           heldOn: "2026-09-02",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
         {
           schoolId: schools[1].id,
           heldOn: "2026-09-02",
           startsAt: "13:00",
-          stream: "Research",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -729,7 +737,6 @@ describe("Rencanakan Perjadin caps", () => {
       schoolId: schools[0].id,
       heldOn: "2026-09-02",
       startsAt: `09:${String(n).padStart(2, "0")}`,
-      stream: "STEM" as const,
       taughtByTeacherIndexes: [],
     }));
 
@@ -755,7 +762,6 @@ describe("the derived Perjadin destination", () => {
           schoolId: schools[0]!.id,
           heldOn: "2026-09-01",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -802,7 +808,6 @@ describe("the derived Perjadin destination", () => {
           schoolId: schools[0]!.id,
           heldOn: "2026-09-01",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -837,7 +842,6 @@ describe("the Perjadin list and detail", () => {
           schoolId: input.sessions[0]!.schoolId,
           heldOn: "2026-10-01",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -890,7 +894,6 @@ describe("the Perjadin list and detail", () => {
           schoolId: schools[0]!.id,
           heldOn: "2026-09-01",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
       ],
@@ -905,7 +908,6 @@ describe("the Perjadin list and detail", () => {
       schoolId: schools[0]!.id,
       perjadinId: planned.perjadinId,
       mode: "offline",
-      stream: "STEM",
       heldOn: "2026-09-02",
       startsAt: "09:00",
     });
@@ -1093,14 +1095,12 @@ describe("extra Staff and travel logistics", () => {
           schoolId: bandung.id,
           heldOn: "2026-09-02",
           startsAt: "09:00",
-          stream: "STEM",
           taughtByTeacherIndexes: [],
         },
         {
           schoolId: samarinda.id,
           heldOn: "2026-09-04",
           startsAt: "09:00",
-          stream: "Research",
           taughtByTeacherIndexes: [],
         },
       ],
