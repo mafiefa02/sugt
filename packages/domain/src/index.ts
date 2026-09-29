@@ -177,10 +177,11 @@ export function formatIdr(n: number): string {
 /**
  * The one way money is displayed: `Rp` immediately followed by the grouped digits, with no
  * space — `formatRupiah(15000000000) === "Rp15.000.000.000"`. The `Rp` prefix lives here and
- * nowhere else, so no display site carries its own literal `"Rp "`.
+ * nowhere else, so no display site carries its own literal `"Rp "`. A negative amount — an
+ * overspent travel float (ADR-0029) — carries its sign before the prefix: `"-Rp50.000"`.
  */
 export function formatRupiah(n: number): string {
-  return `Rp${formatIdr(n)}`;
+  return n < 0 ? `-Rp${formatIdr(-n)}` : `Rp${formatIdr(n)}`;
 }
 
 /**

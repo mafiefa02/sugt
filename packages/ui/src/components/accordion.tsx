@@ -24,24 +24,48 @@ function AccordionItem({ className, ...props }: AccordionPrimitive.Item.Props) {
   );
 }
 
-function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.Trigger.Props) {
+function AccordionHeader({ className, ...props }: AccordionPrimitive.Header.Props) {
   return (
     <AccordionPrimitive.Header
       data-slot="accordion-header"
-      className="flex"
-    >
-      <AccordionPrimitive.Trigger
-        data-slot="accordion-trigger"
+      className={cn("flex", className)}
+      {...props}
+    />
+  );
+}
+
+/**
+ * The bare trigger: no header of its own and no chevron, for a header row that holds more than the
+ * trigger — place it inside an `AccordionHeader` and draw any chevron beside it. `AccordionTrigger`
+ * below is this plus both.
+ */
+function AccordionPlainTrigger({ className, ...props }: AccordionPrimitive.Trigger.Props) {
+  return (
+    <AccordionPrimitive.Trigger
+      data-slot="accordion-trigger"
+      className={cn(
+        "text-left outline-none disabled:pointer-events-none disabled:opacity-50",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+function AccordionTrigger({ className, children, ...props }: AccordionPrimitive.Trigger.Props) {
+  return (
+    <AccordionHeader>
+      <AccordionPlainTrigger
         className={cn(
-          "flex flex-1 items-center justify-between gap-4 px-4 py-3 text-left text-sm font-medium text-foreground transition-all outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&[data-panel-open]>svg]:rotate-180",
+          "flex flex-1 items-center justify-between gap-4 px-4 py-3 text-sm font-medium text-foreground transition-all hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 [&[data-panel-open]>svg]:rotate-180",
           className,
         )}
         {...props}
       >
         {children}
         <ChevronDown className="pointer-events-none size-4 shrink-0 text-muted-foreground transition-transform duration-200" />
-      </AccordionPrimitive.Trigger>
-    </AccordionPrimitive.Header>
+      </AccordionPlainTrigger>
+    </AccordionHeader>
   );
 }
 
@@ -57,4 +81,11 @@ function AccordionPanel({ className, children, ...props }: AccordionPrimitive.Pa
   );
 }
 
-export { Accordion, AccordionItem, AccordionTrigger, AccordionPanel };
+export {
+  Accordion,
+  AccordionItem,
+  AccordionHeader,
+  AccordionPlainTrigger,
+  AccordionTrigger,
+  AccordionPanel,
+};
