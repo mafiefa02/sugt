@@ -34,8 +34,8 @@ import { useState } from "react";
  * all open from a card's own labelled control rather than a page of their own. Each trip is a card in
  * one single-open accordion (#348), all collapsed to start, with the Anggota roster shown inline.
  *
- * A client component for reasons that have nothing to do with the data: the "show more" paging and
- * the accordion's open card are local state, and every dialog it mounts is itself a client component. The data is fetched on the
+ * A client component for two reasons that have nothing to do with the data: the "show more" paging is
+ * local state, and every dialog it mounts is itself a client component. The data is fetched on the
  * server and passed down whole, so this never refetches — paging only widens the slice already here.
  *
  * The whole section — heading included — is absent when the caller is on no upcoming trip, rather
@@ -124,7 +124,7 @@ function TripCard({ trip }: { trip: MyUpcomingPerjadin }) {
     >
       <div className="relative flex items-start gap-3 p-4">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
-          <AccordionHeader className="min-w-0 font-heading text-base font-normal text-foreground">
+          <AccordionHeader className="min-w-0 font-heading text-lg font-normal text-foreground">
             <AccordionPlainTrigger className="after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50">
               {/* Same render-time abbreviation the trip's own page and its dialogs use (#105). */}
               {shortenKabupaten(trip.destination)}
