@@ -35,10 +35,15 @@ export default async function Page() {
     staffSurface(() => staffDashboard(person)),
     myUpcomingPerjadin(person),
   ]);
+  // `en-CA` formats as `YYYY-MM-DD`; `Asia/Jakarta` pins it to WIB. Read here, on the server, and
+  // passed down so the trip timeline's done legs never depend on a clock read during client render
+  // — a server/client disagreement there is a hydration mismatch (#302).
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
   return (
     <DashboardStaff
       dashboard={dashboard}
       upcoming={upcoming}
+      today={today}
     />
   );
 }
