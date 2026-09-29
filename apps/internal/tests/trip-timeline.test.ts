@@ -63,7 +63,7 @@ describe("tripTimeline", () => {
     ]);
   });
 
-  it("drops a leg whose fields are null, as on a trip planned before the logistics columns", () => {
+  it("drops both legs on a trip planned before the logistics columns, all six fields null", () => {
     const pre106 = trip({
       departureAt: null,
       departureZone: null,
@@ -74,6 +74,12 @@ describe("tripTimeline", () => {
       schools: [school("a", [session("s1", "2026-09-16", "09:00:00")])],
     });
     expect(keys(pre106)).toEqual(["s1"]);
+  });
+
+  it("drops a leg when any one of its three fields is null, keeping the other leg", () => {
+    expect(keys(trip({ departureMode: null }))).toEqual(["return"]);
+    expect(keys(trip({ returnAt: null }))).toEqual(["departure"]);
+    expect(keys(trip({ returnZone: null }))).toEqual(["departure"]);
   });
 
   it("drops cancelled Sessions", () => {

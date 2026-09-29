@@ -262,8 +262,8 @@ function AnggotaRoster({ anggota }: { anggota: MyUpcomingPerjadin["anggota"] }) 
  * sequence.
  *
  * Each node is a circle on a vertical rail: done is solid primary with a check, pending a muted ring
- * with a primary dot. The rail segment below a node is primary only when that node is done, so the
- * travelled part of the trip reads as one coloured line.
+ * with a primary dot. The rail segment below a node is primary only when that node is done; every
+ * other segment is muted.
  */
 function TripTimeline({ nodes }: { nodes: TimelineNode[] }) {
   if (nodes.length === 0) return null;

@@ -4,7 +4,7 @@ import type { TimeZone, TransportMode } from "@sugt/domain";
 /**
  * **Perjalanan Dinas Anda's trip timeline and money bar** (#349). The ordering, the done/pending state
  * and the spent ratio are plain functions so each rule is testable without React; the card renders
- * what they return and decides nothing itself.
+ * what they return, deciding only which controls a Session row offers.
  *
  * `today` is an argument, never read from a clock here: it is a WIB `YYYY-MM-DD` computed on the
  * server and passed down, so the server render and the client hydration agree on which legs are done
@@ -28,8 +28,9 @@ export type TimelineNode =
   | {
       kind: "leg";
       key: "departure" | "return";
-      /** The wall-clock date and `HH:MM`, seconds dropped, in the leg's own zone. */
+      /** The wall-clock date, `YYYY-MM-DD`. */
       date: string;
+      /** The wall-clock `HH:MM`, seconds dropped, in the leg's own zone. */
       time: string;
       zone: TimeZone;
       mode: TransportMode;
@@ -78,9 +79,9 @@ export function tripTimeline(trip: TimelineTrip, today: string): TimelineNode[] 
     trip.departureMode,
     today,
   );
-  const ret = leg("return", trip.returnAt, trip.returnZone, trip.returnMode, today);
+  const returnLeg = leg("return", trip.returnAt, trip.returnZone, trip.returnMode, today);
 
-  return [...(departure ? [departure] : []), ...sessions, ...(ret ? [ret] : [])];
+  return [...(departure ? [departure] : []), ...sessions, ...(returnLeg ? [returnLeg] : [])];
 }
 
 /** One leg node, or null when the trip does not carry the leg. `at` is `"YYYY-MM-DD HH:MM:SS"`. */
