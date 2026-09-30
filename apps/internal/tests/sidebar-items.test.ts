@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 /**
  * **The sidebar's links, in order, per viewer** (#353). Pure over three booleans and a Role — no DB,
- * no React. The inputs come from the real `hasGrant` / `canViewDashboard`, exactly as the shell
+ * nothing mounted. The inputs come from the real `hasGrant` / `canViewDashboard`, exactly as the shell
  * computes them, so each row is the sidebar a Person with that Role and those Grants actually sees.
  */
 

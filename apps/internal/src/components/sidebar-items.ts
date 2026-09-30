@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { Route } from "next";
 
-type NavItem = {
+export type NavItem = {
   href: Route;
   label: string;
   icon: LucideIcon;
@@ -79,7 +79,7 @@ const NAV: NavItem[] = [
 
 /**
  * **The links one viewer sees, in the order they see them.** A plain module rather than part of the
- * `"use client"` sidebar so the rule is testable without React, the reason `table-sort.ts` is one.
+ * `"use client"` sidebar so the rule is testable without mounting it, the reason `table-sort.ts` is one.
  * The filter decides the set; the Pendamping-first exception only reorders it.
  */
 export function sidebarItems({
@@ -98,8 +98,6 @@ export function sidebarItems({
       (!item.dashboardView || canViewDashboard),
   );
   if (canViewDashboard) return visible;
-  return [
-    ...visible.filter((item) => item.href === "/pendamping"),
-    ...visible.filter((item) => item.href !== "/pendamping"),
-  ];
+  const isPendamping = (item: NavItem) => item.href === "/pendamping";
+  return [...visible.filter(isPendamping), ...visible.filter((item) => !isPendamping(item))];
 }

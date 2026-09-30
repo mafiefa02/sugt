@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Pretest" };
  * non-editor — so it gates *rendering* on the Editor Grant (an Administrator implies it, `hasGrant`)
  * and `forbidden()`s everyone else into a 403. That is a courtesy gate: `requireGrant` inside `setAssessmentCompletion` is the real
  * enforcement, since a layout does not run before a Server Action. The sidebar hides the link from
- * the same non-holders (`app-sidebar.tsx`), so the 403 is only ever reached by a direct URL.
+ * the same non-holders (`sidebar-items.ts`), so the 403 is only ever reached by a direct URL.
  */
 export default async function Page() {
   const person = await requirePerson();
