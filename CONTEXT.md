@@ -224,6 +224,7 @@ _Avoid_: post (imports blog assumptions — a feed, comments, an author byline �
 
 **Field Story** / **Final Project Story**:
 The two kinds a **Story** may be. A Field Story is an account of teaching at a **School**; a Final Project Story is a curated piece about what a **Project Team** produced. They differ in where the public site lists them and in nothing else — same author, same photographs, same rule that neither is derived from a record. A Final Project Story is how a **Final Project** reaches the public without becoming a tracked record.
+On screen a Field Story is labelled _Cerita_ — the same word as **Story** itself, deliberately — and a Final Project Story _Final Project_. A Story that names no **Stream** is about both, and reads _STEM & Research_ — deliberately the **Track**'s own name.
 _Avoid_: showcase (that is the section, not the piece), case study, portfolio item
 
 ## Relationships

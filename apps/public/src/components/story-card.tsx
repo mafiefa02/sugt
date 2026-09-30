@@ -1,10 +1,11 @@
 import { StoryImage } from "-/components/story-image";
+import { streamLabel } from "-/components/story-labels";
 import type { StoryListItem } from "-/lib/aggregates-types";
 import { Badge } from "@sugt/ui/components/badge";
 import Link from "next/link";
 
 /**
- * **One Story in a list grid** — cover, title, excerpt, and its Stream if it has one.
+ * **One Story in a list grid** — cover, title, excerpt, and its Stream.
  *
  * The whole card is one link to the Story's detail page, which is `/cerita/[slug]` for **both** kinds
  * (`docs/product.md`: the Final Project section is a second *list* route, and a Story detail is one
@@ -28,14 +29,12 @@ function StoryCard({ story }: { story: StoryListItem }) {
         />
       )}
       <div className="flex flex-1 flex-col gap-2 p-4">
-        {story.stream !== null && (
-          <Badge
-            variant="secondary"
-            className="w-fit"
-          >
-            {story.stream}
-          </Badge>
-        )}
+        <Badge
+          variant="secondary"
+          className="w-fit"
+        >
+          {streamLabel(story.stream)}
+        </Badge>
         <h3 className="font-semibold group-hover:underline">{story.title}</h3>
         <p className="text-sm leading-relaxed text-muted-foreground">{story.excerpt}</p>
       </div>
