@@ -8,6 +8,9 @@
  * Both take `next-themes`' `theme` string, `"light" | "dark"` once mounted but `undefined` for
  * the first paint — an unknown value folds to `light`, which also absorbs a stale persisted
  * `"system"` from before #126 in a single tap.
+ *
+ * The phone top bar's button uses those two. The desktop sidebar's **Mode Gelap** switch (#358)
+ * uses `isDarkTheme` for whether it is on, with the same fold.
  */
 type ThemeSetting = "light" | "dark";
 

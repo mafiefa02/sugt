@@ -22,6 +22,8 @@ import { useEffect, useState } from "react";
  * with `aria-disabled` plus `pointer-events-none opacity-50`, never base-ui's `disabled`, whose
  * state is resolved through a hook and produced a hydration mismatch there. Those are static
  * literals, so the placeholder's markup is the same on the server and the client's first paint.
+ * The two rows carry different `key`s so the live switch mounts fresh rather than updating the
+ * placeholder's: in Dark it would otherwise visibly slide from off to on after every full load.
  */
 function ThemeSwitchRow() {
   const { theme, setTheme } = useTheme();
@@ -33,7 +35,10 @@ function ThemeSwitchRow() {
 
   if (!mounted) {
     return (
-      <label className={cn(ROW, "pointer-events-none opacity-50")}>
+      <label
+        key="placeholder"
+        className={cn(ROW, "pointer-events-none opacity-50")}
+      >
         <Sun className={ICON} />
         <span className="flex-1">Mode Gelap</span>
         <Switch
@@ -48,7 +53,10 @@ function ThemeSwitchRow() {
   const Icon = dark ? Moon : Sun;
 
   return (
-    <label className={cn(ROW, "cursor-pointer")}>
+    <label
+      key="live"
+      className={cn(ROW, "cursor-pointer")}
+    >
       <Icon className={ICON} />
       <span className="flex-1">Mode Gelap</span>
       <Switch

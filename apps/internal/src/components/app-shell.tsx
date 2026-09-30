@@ -58,7 +58,7 @@ function AppShell({
 
       {/*
         Clamp the sidebar to the viewport and pin it: `h-dvh` + `sticky top-0` keep the footer
-        (name + sign-out) on screen while `<main>` scrolls under it. Without this the `<aside>`
+        (Mode Gelap, name + sign-out) on screen while `<main>` scrolls under it. Without this the `<aside>`
         stretches to the full document height and `mt-auto` drops the footer below the fold on any
         tall page (#119). The explicit `h-dvh` also defeats the flex row's default `align-items:
         stretch` — a fixed cross-size is never stretched — so the aside stays viewport-height, and
@@ -124,12 +124,7 @@ function SidebarBody({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1 leading-tight">
-            <div
-              className="truncate text-sm font-medium"
-              title={personName}
-            >
-              {personName}
-            </div>
+            <div className="truncate text-sm font-medium">{personName}</div>
             <div className="truncate text-xs text-muted-foreground">{ROLE_LABELS[role]}</div>
           </div>
           {footerAction ? <div className="shrink-0">{footerAction}</div> : null}

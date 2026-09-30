@@ -22,7 +22,6 @@ export function SignOutButton() {
       variant="ghost"
       size="icon-sm"
       aria-label="Keluar"
-      title="Keluar"
       disabled={pending}
       onClick={async () => {
         setPending(true);
