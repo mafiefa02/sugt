@@ -138,8 +138,9 @@ export type PerjadinAcquittal = {
  * this read's `requireStaff` was the whole of theirs. Opening the read would have opened those writes
  * (a receipt-upload credential, a service-role Storage read) to a Pimpinan, so each now calls
  * `requireStaff` explicitly, ahead of this read. `recordTransactionAction` does the same since
- * ADR-0039, because it reads receipts back from Storage before it records the line. Every other money-write query (`recordTransaction`,
- * `attachTransactionEvidence`, `filePerjadinReport`) keeps its own `requireStaff`.
+ * ADR-0039, because it reads receipts back from Storage before it records the line. Every other
+ * money-write query (`recordTransaction`, `attachTransactionEvidence`, `filePerjadinReport`) keeps
+ * its own `requireStaff`.
  *
  * Returns `null` when there is no such Perjadin. That is a genuinely reachable state — a
  * stale link to a deleted Perjadin.

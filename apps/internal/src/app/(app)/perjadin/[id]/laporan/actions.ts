@@ -1,6 +1,6 @@
 "use server";
 
-import { requirePerson } from "-/lib/person";
+import { requirePerson, type Person } from "-/lib/person";
 import { mintReceiptUpload, readReceiptFacts, type ReceiptUploadTarget } from "-/lib/receipt-media";
 import { staffSurface } from "-/lib/staff-surface";
 import {
@@ -29,10 +29,50 @@ import type {
  * them rewrites the payload of the screen the user is looking at, so every one revalidates that
  * screen and nothing else.
  *
- * None opens a transaction and none re-checks a role. The boundary is the query layer's fifth
- * convention and lives in `@sugt/db`; `requireStaff` inside each query is what actually closes the
- * path, since a layout does not run before a Server Action. Every refusal comes back as a value.
+ * None opens a transaction. The boundary is the query layer's fifth convention and lives in
+ * `@sugt/db`; `requireStaff` inside each query is what closes the path, since a layout does not run
+ * before a Server Action. The three that touch Storage — minting, and the two that read receipts
+ * back — also call it themselves, first, through `staffOnTrip`, because Storage is reached before
+ * any query runs. Every refusal comes back as a value.
  */
+
+/**
+ * **The guard every receipt write runs before it touches Storage**: an explicit `requireStaff`, then
+ * a read of the Perjadin. Returns whether the Perjadin exists.
+ *
+ * The order is load-bearing. The mint hands out a write credential for the private `receipts`
+ * bucket, and the read-back uses the service-role key, which bypasses every policy on it; doing
+ * either first would give a non-Staff caller an upload URL, or tell them whether an object exists and
+ * how big it is. The `requireStaff` is what closes this: `perjadinAcquittal` is an open money read
+ * since #180 (ADR-0026), so the read alone no longer refuses a Pimpinan.
+ */
+async function staffOnTrip(person: Person, perjadinId: string): Promise<boolean> {
+  const acquittal = await staffSurface(() => {
+    requireStaff(person);
+    return perjadinAcquittal(person, perjadinId);
+  });
+  return acquittal !== null;
+}
+
+/**
+ * Read each landed receipt's real content type and size back from Storage — the server never saw
+ * the bytes — so the evidence row holds what Storage recorded, not what the browser claimed. One
+ * whose read-back fails is a PUT that never landed: it is counted in `failed`, never written with
+ * guessed columns. What a miss means is the caller's to decide. Run only after `staffOnTrip`.
+ */
+async function readBack(
+  receipts: ReceiptToFinalize[],
+): Promise<{ ready: NewEvidence[]; failed: number }> {
+  const facts = await Promise.all(
+    receipts.map(async (item): Promise<NewEvidence | null> => {
+      const read = await readReceiptFacts(item.path);
+      if (!read) return null;
+      return { storagePath: item.path, contentType: read.contentType, byteSize: read.byteSize };
+    }),
+  );
+  const ready = facts.filter((file): file is NewEvidence => file !== null);
+  return { ready, failed: receipts.length - ready.length };
+}
 
 /**
  * Record one line item against the Advance, **with the receipts the dialog has already uploaded**
@@ -44,22 +84,17 @@ import type {
  * is refused rather than recorded short. The objects that did land stay in the bucket unreferenced,
  * the way ADR-0018 already leaves orphans; the keys are opaque and the bucket private.
  *
- * **The Staff check and the Perjadin read run before Storage is touched**, for the reason
- * `finalizeReceiptsAction` gives below: the read-back uses the service-role key. A batch over
- * `MAX_RECEIPTS_PER_TRANSACTION` is refused before the read-back too, so a caller cannot make this
- * read back an unbounded list; `recordTransaction` refuses the count again, and that is the rule's
- * real home — this early return only saves the Storage calls.
+ * **The Staff check and the Perjadin read run before Storage is touched** (`staffOnTrip`). A batch
+ * over `MAX_RECEIPTS_PER_TRANSACTION` is refused before the read-back too, so a caller cannot make
+ * this read back an unbounded list; `recordTransaction` refuses the count again, and that is the
+ * rule's real home — this early return only saves the Storage calls.
  */
 export async function recordTransactionAction(
   input: TransactionToRecord,
 ): Promise<RecordTransactionActionResult> {
   const person = await requirePerson();
 
-  const acquittal = await staffSurface(() => {
-    requireStaff(person);
-    return perjadinAcquittal(person, input.perjadinId);
-  });
-  if (!acquittal) return { outcome: "no-such-perjadin" };
+  if (!(await staffOnTrip(person, input.perjadinId))) return { outcome: "no-such-perjadin" };
 
   const { receipts, ...line } = input;
   if (receipts.length > MAX_RECEIPTS_PER_TRANSACTION) {
@@ -70,19 +105,10 @@ export async function recordTransactionAction(
     };
   }
 
-  const facts = await Promise.all(
-    receipts.map(async (item): Promise<NewEvidence | null> => {
-      const read = await readReceiptFacts(item.path);
-      if (!read) return null;
-      return { storagePath: item.path, contentType: read.contentType, byteSize: read.byteSize };
-    }),
-  );
-  const evidence = facts.filter((file): file is NewEvidence => file !== null);
-  if (evidence.length < receipts.length) {
-    return { outcome: "receipts-not-landed", failed: receipts.length - evidence.length };
-  }
+  const { ready, failed } = await readBack(receipts);
+  if (failed > 0) return { outcome: "receipts-not-landed", failed };
 
-  const result = await staffSurface(() => recordTransaction(person, { ...line, evidence }));
+  const result = await staffSurface(() => recordTransaction(person, { ...line, evidence: ready }));
   if (result.outcome === "recorded") revalidatePath(`/perjadin/${input.perjadinId}/laporan`);
   return result;
 }
@@ -91,15 +117,10 @@ export async function recordTransactionAction(
  * Mint upload URLs for `count` receipts — never more than one line may carry
  * (`MAX_RECEIPTS_PER_TRANSACTION`), whichever path is asking.
  *
- * **Gated on Staff and on the Perjadin existing**, by an explicit `requireStaff` ahead of a read,
- * both before any URL is minted: an upload URL is a write credential for the private `receipts`
- * bucket, so it is not handed out against a trip nobody can file for or that is not there.
- *
- * The `requireStaff` is load-bearing here in a way it was not before #180. Minting is a money WRITE
- * and has no guard of its own; it used to lean on `perjadinAcquittal`'s `requireStaff`, but that
- * read is open to any signed-in Person now (money reads are open — ADR-0026), so opening it would
- * have handed a Pimpinan an upload credential. The explicit check refuses a non-Staff caller before
- * a URL is minted.
+ * **Gated on Staff and on the Perjadin existing** (`staffOnTrip`), both before any URL is minted:
+ * an upload URL is a write credential, so it is not handed out against a trip nobody can file for or
+ * that is not there. Minting is a money WRITE with no query of its own to hold the guard, which is
+ * why the explicit check has been load-bearing here since #180.
  */
 export async function mintReceiptUploadsAction(
   perjadinId: string,
@@ -107,11 +128,9 @@ export async function mintReceiptUploadsAction(
 ): Promise<ReceiptUploadTarget[]> {
   const person = await requirePerson();
 
-  const acquittal = await staffSurface(() => {
-    requireStaff(person);
-    return perjadinAcquittal(person, perjadinId);
-  });
-  if (!acquittal) throw new Error(`No Perjadin ${perjadinId} to attach receipts to.`);
+  if (!(await staffOnTrip(person, perjadinId))) {
+    throw new Error(`No Perjadin ${perjadinId} to attach receipts to.`);
+  }
 
   const wanted = Math.min(Math.max(0, Math.trunc(count)), MAX_RECEIPTS_PER_TRANSACTION);
   return Promise.all(Array.from({ length: wanted }, () => mintReceiptUpload()));
@@ -121,19 +140,13 @@ export async function mintReceiptUploadsAction(
  * Record the receipts whose bytes have landed, against a line that already exists — its row's own
  * "Unggah bukti".
  *
- * For each, the real content type and size are read back from Storage — the server never saw the
- * bytes — and one whose read-back fails is a PUT that never landed: it is dropped and counted, not
- * written with guessed columns. Partial success is a real state here and is reported rather than
- * swallowed: the line already stands, so a receipt that did land is worth keeping. (Recording a new
- * line is the opposite — `recordTransactionAction` refuses on any miss.)
- *
- * **The Staff check runs before Storage is touched, and that order is load-bearing.** The read-back
- * uses the service-role key, which bypasses every policy on a private bucket, so doing it first
- * would tell a non-Staff caller whether an object exists and how big it is — and, when every
- * read-back failed, would return normally without any Staff check having run at all. The guard is
- * therefore an explicit `requireStaff` plus a read of the Perjadin, ahead of `readReceiptFacts`,
- * exactly as the mint above does it. The `requireStaff` is what closes this now: `perjadinAcquittal`
- * is an open money read since #180 (ADR-0026), so the read alone no longer refuses a Pimpinan.
+ * Each is read back from Storage (`readBack`), after the Staff check (`staffOnTrip`) — without that
+ * order, a caller whose every read-back failed would return normally with no Staff check having run
+ * at all. A receipt whose read-back fails is dropped and counted. Partial success is a real state
+ * here and is reported rather than swallowed: the line already stands, so a receipt that did land is
+ * worth keeping. (Recording a new line is the opposite — `recordTransactionAction` refuses on any
+ * miss.) A batch larger than one line may carry is refused before the read-back, so the Storage calls
+ * stay bounded; `attachTransactionEvidence` holds the real count, against what the line has already.
  *
  * The key is opaque, so unlike Cerita there is no prefix to check; `receipt-media.ts` explains why
  * that gives nothing up here. What is checked instead is the pair the boundary actually rests on —
@@ -147,21 +160,12 @@ export async function finalizeReceiptsAction(
 ): Promise<FinalizeReceiptsResult> {
   const person = await requirePerson();
 
-  const acquittal = await staffSurface(() => {
-    requireStaff(person);
-    return perjadinAcquittal(person, perjadinId);
-  });
-  if (!acquittal) return { outcome: "no-such-perjadin" };
+  if (!(await staffOnTrip(person, perjadinId))) return { outcome: "no-such-perjadin" };
+  if (landed.length > MAX_RECEIPTS_PER_TRANSACTION) {
+    return { outcome: "too-many-receipts", limit: MAX_RECEIPTS_PER_TRANSACTION };
+  }
 
-  const facts = await Promise.all(
-    landed.map(async (item): Promise<NewEvidence | null> => {
-      const read = await readReceiptFacts(item.path);
-      if (!read) return null;
-      return { storagePath: item.path, contentType: read.contentType, byteSize: read.byteSize };
-    }),
-  );
-  const ready = facts.filter((file): file is NewEvidence => file !== null);
-  const failed = landed.length - ready.length;
+  const { ready, failed } = await readBack(landed);
 
   if (ready.length === 0) return { outcome: "attached", attached: 0, failed };
 
@@ -172,7 +176,9 @@ export async function finalizeReceiptsAction(
   const result = await staffSurface(() =>
     attachTransactionEvidence(person, perjadinId, transactionId, ready),
   );
-  if (result.outcome !== "attached") return result;
+  if (result.outcome === "no-such-transaction") return result;
+  if (result.outcome === "too-many-receipts")
+    return { outcome: result.outcome, limit: result.limit };
 
   revalidatePath(`/perjadin/${perjadinId}/laporan`);
   return { outcome: "attached", attached: result.count, failed };

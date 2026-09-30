@@ -80,6 +80,24 @@ function jakartaToday(): string {
 }
 
 /**
+ * Resolve once some other connection to this database is waiting on a lock — the observable moment
+ * a concurrent write has reached a row another transaction holds. Polled rather than slept, so a
+ * slow machine waits longer instead of passing for the wrong reason.
+ */
+async function untilSomeoneWaitsOnALock() {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const [row] = await db.execute<{ waiting: number }>(sql`
+      select count(*)::int as waiting
+      from pg_stat_activity
+      where datname = current_database() and wait_event_type = 'Lock'
+    `);
+    if ((row?.waiting ?? 0) > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("No connection ever waited on a lock.");
+}
+
+/**
  * `count` receipts as Storage would describe them once landed. Each has its own opaque key, since
  * `transaction_evidence.storage_path` is unique.
  */
@@ -695,8 +713,10 @@ describe("attaching evidence", () => {
     await held;
 
     const second = attachTransactionEvidence(staff, trip.id, line.id, receipts(3));
-    // Long enough for the second to reach the row it has to wait on before the first commits.
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Let the first commit only once the second is blocked on a lock, so it cannot have counted
+    // before the first's rows existed. With `for update` the wait is on the parent row; without it,
+    // on the evidence FK's key-share lock — either way the second is past the point of choosing.
+    await untilSomeoneWaitsOnALock();
     release();
     await first;
 

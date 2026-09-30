@@ -51,7 +51,8 @@ export type FinalizeReceiptsResult =
   | { outcome: "attached"; attached: number; failed: number }
   | { outcome: "no-such-transaction" }
   | { outcome: "no-such-perjadin" }
-  | { outcome: "too-many-receipts"; limit: number; existing: number };
+  /** The batch would take the line past `limit` receipts, or is larger than one line may carry. */
+  | { outcome: "too-many-receipts"; limit: number };
 
 /**
  * One receipt as the screen renders it: the row, minus the object key, plus a short-lived signed

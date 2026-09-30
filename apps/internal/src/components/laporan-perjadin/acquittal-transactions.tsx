@@ -404,6 +404,8 @@ function RecordTransaction({
   // Files chosen but not yet uploaded — one to five, all PUT by `submit` before the line is
   // recorded. A refusal leaves them staged, so a retry needs no re-pick.
   const [staged, setStaged] = useState<File[]>([]);
+  // Picks cut off at the ceiling, said out loud rather than dropped silently — as the row does.
+  const [pickNote, setPickNote] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const picker = useRef<HTMLInputElement>(null);
@@ -412,7 +414,9 @@ function RecordTransaction({
   const complete =
     spentOn !== "" &&
     description.trim() !== "" &&
-    amount !== "" &&
+    // Positive, not just present: the server refuses zero, and catching it here keeps a refusal the
+    // form can predict from uploading receipts first and leaving them orphaned.
+    Number(amount) > 0 &&
     category !== "" &&
     participantType !== "" &&
     staged.length >= 1 &&
@@ -425,6 +429,7 @@ function RecordTransaction({
     setCategory("");
     setParticipantType("");
     setStaged([]);
+    setPickNote(null);
   }
 
   /**
@@ -675,10 +680,13 @@ function RecordTransaction({
               onChange={(event) => {
                 const chosen = Array.from(event.target.files ?? []);
                 event.target.value = "";
-                if (chosen.length > 0)
-                  setStaged((current) =>
-                    [...current, ...chosen].slice(0, MAX_RECEIPTS_PER_TRANSACTION),
-                  );
+                if (chosen.length === 0) return;
+                const next = [...staged, ...chosen];
+                setStaged(next.slice(0, MAX_RECEIPTS_PER_TRANSACTION));
+                const dropped = next.length - MAX_RECEIPTS_PER_TRANSACTION;
+                setPickNote(
+                  dropped > 0 ? `${dropped} berkas tidak ditambahkan: ${CAP_NOTE}` : null,
+                );
               }}
             />
             <Button
@@ -690,6 +698,8 @@ function RecordTransaction({
             >
               Unggah bukti
             </Button>
+
+            {pickNote !== null && <p className="text-sm text-destructive">{pickNote}</p>}
 
             {staged.length > 0 && (
               <ul className="grid gap-1">
@@ -705,6 +715,7 @@ function RecordTransaction({
                       disabled={saving}
                       onClick={() => {
                         setStaged((current) => current.filter((_, at) => at !== index));
+                        setPickNote(null);
                       }}
                     >
                       Hapus
@@ -790,7 +801,7 @@ async function uploadReceipts(
  */
 const STALE_PAGE = "Halaman ini sudah tidak sesuai. Muat ulang untuk melihat keadaannya.";
 
-/** Why a row's upload stopped short: the line is at its five-receipt ceiling. */
+/** The five-receipt ceiling, as each place that meets it says it: a row upload or a dialog pick cut short, or a refused line. */
 const CAP_NOTE = `Maksimal ${MAX_RECEIPTS_PER_TRANSACTION} bukti per transaksi.`;
 
 /** Receipts that did not land — nothing is recorded, and "Catat" again retries all of them. */

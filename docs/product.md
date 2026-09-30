@@ -298,9 +298,9 @@ the real form, which is the one thing this screen exists to stop; see the amendm
 not yet placed.
 
 Transactions can be entered **as they happen or after returning** — whichever suits,
-with the receipt in hand either way. Both are first-class paths. There is no offline support; capture needs connectivity, and
-where it fails the PIC enters it later, losing convenience but never data. Offline is
-worth adding eventually, not worth blocking on.
+with the receipt in hand either way. Both are first-class paths. There is no offline
+support; capture needs connectivity, and where it fails the PIC enters it later, losing
+convenience but never data. Offline is worth adding eventually, not worth blocking on.
 
 **The Report is due two days after the Group gets back**, and the screen shows days
 remaining. Nothing enters that date — it follows from the Perjadin's end date, so it

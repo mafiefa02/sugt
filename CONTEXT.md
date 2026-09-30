@@ -181,7 +181,7 @@ The Staff member who releases an Advance and receives whatever is left of it.
 _Avoid_: finance, bendahara (the codebase is English)
 
 **Perjadin Report**:
-The acquittal of one Perjadin — every transaction that consumed the Advance, each evidenced, reconciled against what was left over — covering the whole Group and filed by its PIC against a deadline DITSAMA sets for itself.
+The acquittal of one Perjadin — every transaction that consumed the Advance, each evidenced by one to five receipts recorded with it ([ADR-0039](./docs/adr/0039-every-transaction-is-recorded-with-its-evidence.md)), reconciled against what was left over — covering the whole Group and filed by its PIC against a deadline DITSAMA sets for itself.
 _Avoid_: report (unqualified), expense report, reimbursement (nothing is claimed back; the money was transferred upfront)
 
 **Session Record**:

@@ -25,6 +25,22 @@ vi.mock("-/lib/person", () => ({ requirePerson: vi.fn() }));
 vi.mock("-/lib/receipt-media", () => ({ mintReceiptUpload: vi.fn(), readReceiptFacts: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+/**
+ * What a non-Staff caller gets back: `staffSurface` turns `NotStaffError` into `forbidden()`, whose
+ * error carries this digest — the 403 `forbidden.tsx` renders. `forbidden()` needs Next's auth
+ * interrupts switched on, which `next.config` does at build time and the test does below, as
+ * `staff-only.test.ts` does.
+ */
+const FORBIDDEN = "NEXT_HTTP_ERROR_FALLBACK;403";
+
+async function digestOf(call: Promise<unknown>) {
+  const thrown = await call.then(
+    () => null,
+    (error: unknown) => error,
+  );
+  return (thrown as { digest?: string } | null)?.digest;
+}
+
 const signedInAs = vi.mocked(requirePerson);
 const readBack = vi.mocked(readReceiptFacts);
 const mint = vi.mocked(mintReceiptUpload);
@@ -59,6 +75,7 @@ function aLine(perjadinId: string, paths: string[]) {
 beforeEach(async () => {
   await resetDatabase();
   vi.clearAllMocks();
+  vi.stubEnv("__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS", "1");
   readBack.mockResolvedValue({ contentType: "image/webp", byteSize: 4096 });
   mint.mockImplementation(async () => ({ path: "key", signedUrl: "https://storage.test/put" }));
 });
@@ -68,7 +85,7 @@ describe("recordTransactionAction", () => {
     const { pimpinan, trip } = await aTrip();
     signedInAs.mockResolvedValue(pimpinan);
 
-    await expect(recordTransactionAction(aLine(trip.id, ["a"]))).rejects.toThrow();
+    await expect(digestOf(recordTransactionAction(aLine(trip.id, ["a"])))).resolves.toBe(FORBIDDEN);
 
     expect(readBack).not.toHaveBeenCalled();
     await expect(db.select().from(schema.transaction)).resolves.toHaveLength(0);
@@ -135,8 +152,31 @@ describe("finalizeReceiptsAction", () => {
     });
     signedInAs.mockResolvedValue(pimpinan);
 
-    await expect(finalizeReceiptsAction(trip.id, line.id, [{ path: "a" }])).rejects.toThrow();
+    await expect(digestOf(finalizeReceiptsAction(trip.id, line.id, [{ path: "a" }]))).resolves.toBe(
+      FORBIDDEN,
+    );
 
+    expect(readBack).not.toHaveBeenCalled();
+  });
+});
+
+describe("finalizeReceiptsAction's bound", () => {
+  it("refuses more receipts than a line may carry without reading any of them back", async () => {
+    const { staff, trip } = await aTrip();
+    const line = await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 50_000,
+      createdByPersonId: staff.id,
+    });
+    signedInAs.mockResolvedValue(staff);
+    const landed = Array.from({ length: MAX_RECEIPTS_PER_TRANSACTION + 1 }, (_, i) => ({
+      path: `k${i}`,
+    }));
+
+    await expect(finalizeReceiptsAction(trip.id, line.id, landed)).resolves.toEqual({
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+    });
     expect(readBack).not.toHaveBeenCalled();
   });
 });
