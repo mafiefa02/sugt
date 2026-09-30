@@ -1,4 +1,4 @@
-import { nextTheme, themeToggleLabel } from "-/components/theme-cycle";
+import { isDarkTheme, nextTheme, themeToggleLabel } from "-/components/theme-cycle";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -55,6 +55,19 @@ describe("themeToggleLabel", () => {
     for (const state of ["light", "dark"]) {
       expect(themeToggleLabel(state)).toContain(`Ganti ke ${spoken[state]}`);
       expect(named[nextTheme(state)]).toBe(spoken[state]);
+    }
+  });
+});
+
+describe("isDarkTheme", () => {
+  it("is on for Dark only — the sidebar's Mode Gelap switch (#358)", () => {
+    expect(isDarkTheme("dark")).toBe(true);
+    expect(isDarkTheme("light")).toBe(false);
+  });
+
+  it("reads an unknown, stale, or pre-mount value as off, the way nextTheme folds it to Light", () => {
+    for (const value of [undefined, "", "garbage", "system"]) {
+      expect(isDarkTheme(value)).toBe(false);
     }
   });
 });

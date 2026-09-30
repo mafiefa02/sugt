@@ -30,7 +30,7 @@ import { useEffect, useRef, useState } from "react";
  * - **The table fits** — the wrapper has no overflow, and the header pins to the top of the page as
  *   the page scrolls. The app shell's sidebar is `sticky top-0` *beside* `<main>`, not above it, so
  *   nothing else claims `top-0`.
- * - **The table is wider than its column** (a phone, or `md` up to about a laptop beside the 240px
+ * - **The table is wider than its column** (a phone, or `md` up to about a laptop beside the 288px
  *   sidebar) — letting it spill would scroll the whole page sideways and carry the sidebar off with
  *   it, so the wrapper becomes a scroll box, at most one viewport tall, in both axes. The header then
  *   pins to the top of that box, and the box scrolls sideways on its own.

@@ -15,10 +15,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 /**
- * The shell's phone header: a top bar carrying the logo and `Internal` wordmark on the
- * left, and the theme toggle beside a hamburger on the right (#127) — shown only below
- * `md` (`md:hidden`). At `md` and up it is gone and the fixed sidebar in `AppShell` is
- * what renders — desktop is untouched, its toggle staying in the sidebar footer.
+ * The shell's phone header: a top bar carrying the brand (`AppBrand` — logomark and "SUGT ITB
+ * Internal") on the left, and the theme toggle beside a hamburger on the right (#127) — shown only
+ * below `md` (`md:hidden`). At `md` and up it is gone and the fixed sidebar in `AppShell` is what
+ * renders, its theme control being the footer's Mode Gelap row (#358).
  *
  * The hamburger opens the drawer, whose contents are handed in as `children`: the same
  * `SidebarBody` the desktop `<aside>` renders, so the two never drift. That body is a
@@ -53,7 +53,8 @@ function AppShellMobileBar({ children }: { children: React.ReactNode }) {
       {/* Toggle and hamburger grouped on the right, mirroring the public header
           (`site-shell.tsx`, where `<ThemeToggle/>` sits beside `<SiteNav/>`). The theme
           control is reachable from the top bar so a phone user need not open the drawer to
-          change it (#127); on desktop it lives in the sidebar footer instead. */}
+          change it (#127); on desktop it is the sidebar footer's Mode Gelap row instead, and the
+          drawer shows no theme control. */}
       <div className="ml-auto flex items-center gap-2">
         <ThemeToggle />
 

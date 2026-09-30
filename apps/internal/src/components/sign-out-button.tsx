@@ -2,6 +2,7 @@
 
 import { authClient } from "-/lib/auth-client";
 import { Button } from "@sugt/ui/components/button";
+import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -9,9 +10,8 @@ import { useState } from "react";
  * One control that ends the session and returns to `/masuk`. The endpoint came free
  * with the mounted handler; this is the button.
  *
- * Where it eventually sits — a sidebar, an account menu — belongs to the app shell and
- * the two dashboards. A signed-in layout with no way out is not a defensible first
- * iteration, and one button is not a design.
+ * An icon button, labelled "Keluar" for a screen reader, at the right end of the sidebar's
+ * profile row (#358), where a text button crowded the name beside it.
  */
 export function SignOutButton() {
   const router = useRouter();
@@ -20,7 +20,9 @@ export function SignOutButton() {
   return (
     <Button
       variant="ghost"
-      size="sm"
+      size="icon-sm"
+      aria-label="Keluar"
+      title="Keluar"
       disabled={pending}
       onClick={async () => {
         setPending(true);
@@ -29,7 +31,7 @@ export function SignOutButton() {
         router.refresh();
       }}
     >
-      Keluar
+      <LogOut />
     </Button>
   );
 }

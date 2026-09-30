@@ -32,5 +32,15 @@ function themeToggleLabel(current: string | undefined): string {
   return LABEL[current as ThemeSetting] ?? LABEL.light;
 }
 
-export { nextTheme, themeToggleLabel };
+/**
+ * Whether the sidebar's **Mode Gelap** switch is on (#358): Dark and nothing else. An unknown,
+ * stale or pre-mount value reads as off, the same fold `nextTheme` makes to Light. The switch sets
+ * the theme it is flipped to — `checked ? "dark" : "light"` — rather than rotating, so the value it
+ * shows and the value a flip writes cannot disagree.
+ */
+function isDarkTheme(current: string | undefined): boolean {
+  return current === "dark";
+}
+
+export { isDarkTheme, nextTheme, themeToggleLabel };
 export type { ThemeSetting };
