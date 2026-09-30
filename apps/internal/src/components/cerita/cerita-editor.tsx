@@ -10,6 +10,7 @@ import {
   setStoryCoverAction,
   withdrawStoryAction,
 } from "-/app/(app)/cerita/actions";
+import { STORY_KIND_LABELS, streamLabel } from "-/components/cerita/story-labels";
 import type { RevalidationReport } from "-/lib/revalidate-public";
 import type { PublishResult } from "@sugt/db/queries";
 import { STORY_KINDS, type StoryKind, type Stream } from "@sugt/domain";
@@ -200,17 +201,17 @@ export function CeritaEditor({
           options={[
             { value: "STEM" as const, label: "STEM" },
             { value: "Research" as const, label: "Research" },
-            { value: null, label: "Keduanya" },
+            { value: null, label: streamLabel(null) },
           ]}
           onSelect={edit(setStream)}
-          hint='"Keduanya" menulis NULL. Itu pilihan, bukan kolom yang lupa diisi.'
+          hint='"STEM & Research" berarti Cerita ini tentang kedua Stream.'
         />
         <Pills
           label="Jenis"
           value={kind}
           options={STORY_KINDS.map((value) => ({
             value,
-            label: value === "field" ? "Cerita lapangan" : "Final Project",
+            label: STORY_KIND_LABELS[value],
           }))}
           onSelect={edit(setKind)}
         />
@@ -340,7 +341,7 @@ function RevalidationSteps({ report }: { report: RevalidationReport }) {
   );
 }
 
-/** A row of mutually exclusive pill buttons. `null` is a real option — Stream's "Keduanya". */
+/** A row of mutually exclusive pill buttons. `null` is a real option — Stream's "STEM & Research". */
 function Pills<T>({
   label,
   value,

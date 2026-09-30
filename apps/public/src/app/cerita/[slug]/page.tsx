@@ -2,7 +2,7 @@ import { Band } from "-/components/band";
 import { Prose } from "-/components/prose";
 import { StoryGallery } from "-/components/story-gallery";
 import { StoryImage } from "-/components/story-image";
-import { STORY_KIND_LABELS } from "-/components/story-labels";
+import { STORY_KIND_LABELS, streamLabel } from "-/components/story-labels";
 import { getStories, getStory } from "-/lib/aggregates";
 import { StoryBody } from "@sugt/story-format/story-body";
 import { Badge } from "@sugt/ui/components/badge";
@@ -62,14 +62,12 @@ export default async function Page({ params }: PageProps<"/cerita/[slug]">) {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
-        {story.stream !== null && (
-          <Badge
-            variant="secondary"
-            className="mt-4"
-          >
-            {story.stream}
-          </Badge>
-        )}
+        <Badge
+          variant="secondary"
+          className="mt-4"
+        >
+          {streamLabel(story.stream)}
+        </Badge>
         <h1 className="mt-3 font-heading text-4xl font-bold tracking-tight text-balance">
           {story.title}
         </h1>
