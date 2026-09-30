@@ -46,6 +46,7 @@ function PersonSelect({
   invalid,
   className,
   "aria-label": ariaLabel,
+  "aria-required": ariaRequired,
 }: {
   people: SelectablePerson[];
   value: string;
@@ -57,6 +58,7 @@ function PersonSelect({
   invalid?: boolean;
   className?: string;
   "aria-label"?: string;
+  "aria-required"?: React.AriaAttributes["aria-required"];
 }) {
   return (
     <Select
@@ -74,6 +76,7 @@ function PersonSelect({
       <SelectTrigger
         id={id}
         aria-label={ariaLabel}
+        aria-required={ariaRequired}
         aria-invalid={invalid}
         className={className}
       >
