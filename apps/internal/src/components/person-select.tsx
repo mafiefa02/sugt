@@ -58,7 +58,7 @@ function PersonSelect({
   invalid?: boolean;
   className?: string;
   "aria-label"?: string;
-  "aria-required"?: boolean;
+  "aria-required"?: React.AriaAttributes["aria-required"];
 }) {
   return (
     <Select

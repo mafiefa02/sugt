@@ -258,7 +258,7 @@ function PerjadinPlanForm({
         />
       )}
 
-      <div className="border-b border-border px-7 pt-5">
+      <div className="px-7 pt-5">
         <RequiredLegend />
       </div>
 
@@ -304,7 +304,7 @@ function PerjadinPlanForm({
         >
           <PersonSelect
             id={picId}
-            aria-required
+            aria-required="true"
             people={staff}
             value={trip.picPersonId}
             placeholder="Pilih PIC"
@@ -799,10 +799,9 @@ function Field({
 }
 
 /**
- * One travel leg on the plan form: a date, a wall-clock time and a transport mode, all three required
- * to submit. No zone
- * picker — the departure zone is WIB and the return zone is derived server-side from the last
- * School, so a control for it would offer a choice the form does not make.
+ * One travel leg on the plan form: a date, a wall-clock time and a transport mode, all three
+ * required to submit. No zone picker — the departure zone is WIB and the return zone is derived
+ * server-side from the last School, so a control for it would offer a choice the form does not make.
  */
 function TravelLeg({
   idPrefix,

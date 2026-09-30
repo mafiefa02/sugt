@@ -5,12 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 /**
  * **Which fields on Rencanakan Perjadin say they are required** (#354). The form is rendered to static
  * markup, before any Sub-Cluster is picked — so the per-Session rows are not on screen yet and
- * Tanggal Sesi / Jam Mulai are not covered here. The router and the Server Action are stubbed:
- * nothing is submitted, and what is read is only labels and attributes.
+ * Tanggal Sesi / Jam Mulai are not covered here. Only the router is stubbed, because a client
+ * component calling `useRouter` needs a mounted app router; nothing is submitted, and what is read is
+ * only labels and attributes.
  */
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined }) }));
-vi.mock("-/app/(app)/perjadin/baru/actions", () => ({ planPerjadinAction: vi.fn() }));
 
 function render() {
   return renderToStaticMarkup(
@@ -22,21 +22,30 @@ function render() {
   );
 }
 
-const MARK = '<span aria-hidden="true"';
-
-/** Every `<label>` on the form, as its visible text and whether it carries the required marker. */
+/**
+ * Every `<label>` on the form: its visible text, the control it names (`for`), and whether it carries
+ * the required mark.
+ */
 function labels(html: string) {
-  return [...html.matchAll(/<label[^>]*>(.*?)<\/label>/g)].map(([, inner = ""]) => ({
-    text: inner
-      .replace(/<[^>]+>/g, "")
-      .replace("*", "")
-      .trim(),
-    required: inner.includes(MARK),
-  }));
+  return [...html.matchAll(/<label([^>]*)>(.*?)<\/label>/g)].map(
+    ([, attributes = "", inner = ""]) => ({
+      text: inner
+        .replace(/<[^>]+>/g, "")
+        .replace("*", "")
+        .trim(),
+      htmlFor: /\bfor="([^"]+)"/.exec(attributes)?.[1],
+      required: inner.includes('data-slot="required-mark"'),
+    }),
+  );
+}
+
+/** The opening tag of the element with this `id`. */
+function tagWithId(html: string, id: string) {
+  return new RegExp(`<[^>]*\\bid="${id}"[^>]*>`).exec(html)?.[0] ?? "";
 }
 
 describe("PerjadinPlanForm's required markers", () => {
-  it("marks exactly the fields the submit guard requires", () => {
+  it("marks exactly the fields the submit guard requires, outside the Session rows", () => {
     const required = labels(render())
       .filter((label) => label.required)
       .map((label) => label.text);
@@ -63,10 +72,18 @@ describe("PerjadinPlanForm's required markers", () => {
     expect(html).not.toContain("opsional");
   });
 
-  it("shows the legend once, and flags each required control for a screen reader", () => {
+  it("flags the control behind each marked label, and no other, for a screen reader", () => {
     const html = render();
+    const marked = labels(html).filter((label) => label.required);
 
-    expect(html.match(/wajib diisi/g)).toHaveLength(1);
-    expect(html.match(/aria-required="true"/g)).toHaveLength(9);
+    for (const label of marked) {
+      expect(label.htmlFor, label.text).toBeDefined();
+      expect(tagWithId(html, label.htmlFor ?? ""), label.text).toContain('aria-required="true"');
+    }
+    expect(html.match(/aria-required="true"/g)).toHaveLength(marked.length);
+  });
+
+  it("shows the legend once", () => {
+    expect(render().match(/wajib diisi/g)).toHaveLength(1);
   });
 });

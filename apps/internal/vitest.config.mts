@@ -31,8 +31,9 @@ export default defineConfig({
       DATABASE_URL: TEST_DATABASE_URL,
       /**
        * Values, not secrets. The Google ones are never sent anywhere: the tests stub
-       * Google's token endpoint at the network boundary, which is the only thing they
-       * fake and the only thing a test genuinely cannot reach.
+       * Google's token endpoint at the network boundary, which is the only service they
+       * fake and the only thing a test genuinely cannot reach. (A static render of a client
+       * component also stubs `next/navigation`'s router, which needs a mounted app router.)
        */
       BETTER_AUTH_SECRET: "test-secret-not-used-outside-vitest",
       BETTER_AUTH_URL: "http://localhost:3001",
