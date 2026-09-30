@@ -4,6 +4,7 @@ import { planPerjadinAction } from "-/app/(app)/perjadin/baru/actions";
 import { MultiSelectCombobox } from "-/components/multi-select-combobox";
 import { duplicateSessionRows } from "-/components/perjadin-plan-duplicates";
 import { PersonSelect } from "-/components/person-select";
+import { RequiredLegend, RequiredMark } from "-/components/required-mark";
 import type {
   PlannablePerson,
   PlannableSchool,
@@ -257,10 +258,15 @@ function PerjadinPlanForm({
         />
       )}
 
+      <div className="border-b border-border px-7 pt-5">
+        <RequiredLegend />
+      </div>
+
       <div className="grid gap-4 border-b border-border px-7 py-5 sm:grid-cols-2">
         <Field
           id={subClusterFieldId}
           label="Kelompok Sekolah"
+          required
         >
           <Select
             items={Object.fromEntries(
@@ -274,6 +280,7 @@ function PerjadinPlanForm({
             <SelectTrigger
               id={subClusterFieldId}
               aria-label="Kelompok Sekolah"
+              aria-required="true"
             >
               <SelectValue placeholder="Pilih Kelompok Sekolah" />
             </SelectTrigger>
@@ -293,9 +300,11 @@ function PerjadinPlanForm({
         <Field
           id={picId}
           label="PIC"
+          required
         >
           <PersonSelect
             id={picId}
+            aria-required
             people={staff}
             value={trip.picPersonId}
             placeholder="Pilih PIC"
@@ -308,6 +317,7 @@ function PerjadinPlanForm({
         <Field
           id={advanceId}
           label="Uang Perjalanan (Rp)"
+          required
         >
           {/*
             Fixed at planning and transferred before departure, so a Perjadin is never in an
@@ -320,6 +330,7 @@ function PerjadinPlanForm({
           */}
           <Input
             id={advanceId}
+            aria-required="true"
             type="text"
             inputMode="numeric"
             value={trip.advanceIdr === "" ? "" : formatIdr(Number(trip.advanceIdr))}
@@ -334,7 +345,7 @@ function PerjadinPlanForm({
       <div className="border-b border-border px-7 py-5">
         <h2 className="font-heading text-sm font-medium">Teaching Team</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Nama pengajar untuk Perjadin ini (opsional). Tambahkan satu per satu; hingga{" "}
+          Nama pengajar untuk Perjadin ini. Tambahkan satu per satu; hingga{" "}
           {MAX_TEACHING_TEAM_PER_PERJADIN} nama.
         </p>
 
@@ -395,7 +406,7 @@ function PerjadinPlanForm({
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field
             id={extraStaffId}
-            label="Pendamping tambahan (opsional)"
+            label="Pendamping tambahan"
           >
             <p className="-mt-0.5 mb-1 text-xs text-muted-foreground">
               Koordinator, bendahara, atau dokumentator — selain PIC, hingga{" "}
@@ -416,7 +427,7 @@ function PerjadinPlanForm({
           </Field>
 
           <div className="grid gap-1.5">
-            <Label>Pimpinan (opsional)</Label>
+            <Label>Pimpinan</Label>
             <p className="-mt-0.5 text-xs text-muted-foreground">
               Pimpinan DITSAMA yang ikut memantau — tercatat saja, bukan anggota Group.
             </p>
@@ -540,9 +551,11 @@ function PerjadinPlanForm({
                           <Field
                             id={`${idPrefix}-date-${school.id}-${index}`}
                             label="Tanggal Sesi"
+                            required
                           >
                             <Input
                               id={`${idPrefix}-date-${school.id}-${index}`}
+                              aria-required="true"
                               type="date"
                               className="w-44"
                               // The range is the departure→return span now (ADR-0021), so a Session's
@@ -560,9 +573,11 @@ function PerjadinPlanForm({
                           <Field
                             id={`${idPrefix}-time-${school.id}-${index}`}
                             label={`Jam Mulai${timeZoneSuffix(school.timeZone)}`}
+                            required
                           >
                             <TimeField
                               id={`${idPrefix}-time-${school.id}-${index}`}
+                              aria-required="true"
                               className="w-32"
                               aria-invalid={duplicate || undefined}
                               value={draft.time}
@@ -754,17 +769,38 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
   );
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
+/**
+ * A label over its control. `required` adds the asterisk only — the control beside it carries its own
+ * `aria-required`, since this cannot reach into `children` to set it.
+ */
+function Field({
+  id,
+  label,
+  required = false,
+  children,
+}: {
+  id: string;
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className="grid gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
+      <Label
+        htmlFor={id}
+        className="gap-1"
+      >
+        {label}
+        {required && <RequiredMark />}
+      </Label>
       {children}
     </div>
   );
 }
 
 /**
- * One travel leg on the plan form: a date, a wall-clock time and a transport mode. No zone
+ * One travel leg on the plan form: a date, a wall-clock time and a transport mode, all three required
+ * to submit. No zone
  * picker — the departure zone is WIB and the return zone is derived server-side from the last
  * School, so a control for it would offer a choice the form does not make.
  */
@@ -795,9 +831,11 @@ function TravelLeg({
         <Field
           id={`${idPrefix}-date`}
           label="Tanggal"
+          required
         >
           <Input
             id={`${idPrefix}-date`}
+            aria-required="true"
             type="date"
             value={date}
             onChange={(event) => {
@@ -808,9 +846,11 @@ function TravelLeg({
         <Field
           id={`${idPrefix}-time`}
           label="Jam"
+          required
         >
           <TimeField
             id={`${idPrefix}-time`}
+            aria-required="true"
             value={time}
             onValueChange={(value) => {
               onChange({ time: value });
@@ -820,6 +860,7 @@ function TravelLeg({
         <Field
           id={`${idPrefix}-mode`}
           label="Moda"
+          required
         >
           <Select
             items={Object.fromEntries(TRANSPORT_MODES.map((entry) => [entry, entry]))}
@@ -831,6 +872,7 @@ function TravelLeg({
             <SelectTrigger
               id={`${idPrefix}-mode`}
               aria-label={`Moda ${heading}`}
+              aria-required="true"
             >
               <SelectValue placeholder="Pilih moda" />
             </SelectTrigger>
