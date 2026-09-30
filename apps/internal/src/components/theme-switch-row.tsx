@@ -69,7 +69,9 @@ function ThemeSwitchRow() {
   );
 }
 
-const ROW = "flex items-center gap-2.5 px-4 py-3 text-sm";
+// `whitespace-nowrap`: the row is laid out while the sidebar is still widening from the rail
+// (#359), and "Mode Gelap" must be clipped by the aside then, never broken onto a second line.
+const ROW = "flex items-center gap-2.5 px-4 py-3 text-sm whitespace-nowrap";
 const ICON = "size-4 text-muted-foreground";
 
 export { ThemeSwitchRow };

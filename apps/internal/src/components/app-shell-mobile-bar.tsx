@@ -53,8 +53,8 @@ function AppShellMobileBar({ children }: { children: React.ReactNode }) {
       {/* Toggle and hamburger grouped on the right, mirroring the public header
           (`site-shell.tsx`, where `<ThemeToggle/>` sits beside `<SiteNav/>`). The theme
           control is reachable from the top bar so a phone user need not open the drawer to
-          change it (#127); on desktop it is the sidebar footer's Mode Gelap row instead, and the
-          drawer shows no theme control. */}
+          change it (#127); on desktop it is the sidebar footer's Mode Gelap row instead (or, on the
+          collapsed rail, its theme button — #359), and the drawer shows no theme control. */}
       <div className="ml-auto flex items-center gap-2">
         <ThemeToggle />
 
