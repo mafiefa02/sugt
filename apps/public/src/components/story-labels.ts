@@ -1,7 +1,7 @@
 import type { StoryKind, Stream } from "@sugt/domain";
 
 /**
- * **How a Story's kind reads on screen, in one place.**
+ * **How a Story's kind and Stream read on screen, in one place.**
  *
  * The domain terms are English (`field`, `final_project`) and the site is Indonesian
  * (`CONTEXT.md` § Language), so this is the translation at the edge — typed against `StoryKind` so a

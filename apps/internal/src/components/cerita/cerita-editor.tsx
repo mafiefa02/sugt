@@ -13,7 +13,7 @@ import {
 import { STORY_KIND_LABELS, streamLabel } from "-/components/cerita/story-labels";
 import type { RevalidationReport } from "-/lib/revalidate-public";
 import type { PublishResult } from "@sugt/db/queries";
-import { STORY_KINDS, type StoryKind, type Stream } from "@sugt/domain";
+import { STORY_KINDS, STREAMS, type StoryKind, type Stream } from "@sugt/domain";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
 import { LinkButton } from "@sugt/ui/components/link-button";
@@ -198,11 +198,7 @@ export function CeritaEditor({
         <Pills
           label="Stream"
           value={stream}
-          options={[
-            { value: "STEM" as const, label: "STEM" },
-            { value: "Research" as const, label: "Research" },
-            { value: null, label: streamLabel(null) },
-          ]}
+          options={[...STREAMS, null].map((value) => ({ value, label: streamLabel(value) }))}
           onSelect={edit(setStream)}
           hint='"STEM & Research" berarti Cerita ini tentang kedua Stream.'
         />
