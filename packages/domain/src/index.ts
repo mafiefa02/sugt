@@ -581,3 +581,13 @@ export const MAX_PREPARATION_CHECKLIST_ITEMS = 20;
 export const MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN = 10;
 export const MAX_TEACHING_TEAM_PER_PERJADIN = 20;
 export const MAX_EXTRA_STAFF_PER_GROUP = 10;
+
+/**
+ * **Receipts per transaction: at least one, at most this many, in total** ([ADR-0039](../../../docs/adr/0039-every-transaction-is-recorded-with-its-evidence.md)).
+ * A product rule, not a guard on an array: it counts the receipts recorded with the line plus every
+ * later upload from its row. Held by the application, in the two writes that add evidence
+ * (`recordTransaction`, `attachTransactionEvidence`) — no CHECK, because the shared database may
+ * already hold lines with none or with more, and those are grandfathered.
+ * The floor of one needs no constant of its own.
+ */
+export const MAX_RECEIPTS_PER_TRANSACTION = 5;
