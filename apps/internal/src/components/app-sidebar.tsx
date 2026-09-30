@@ -47,7 +47,7 @@ function AppSidebarNav({
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium whitespace-nowrap text-sidebar-foreground",
+                  "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium whitespace-nowrap text-sidebar-foreground group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0",
                   active
                     ? "bg-sidebar-primary text-sidebar-primary-foreground"
                     : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",

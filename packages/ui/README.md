@@ -195,4 +195,5 @@ two states in #126. `next-themes` sets `.dark` on `<html>` from the stored choic
 not a `@sugt/ui` primitive, for the reason in the table: this package ships the token block and
 the `dark` variant and stops there, and the app owns the element the class goes on. The internal
 app's desktop sidebar uses a Mode Gelap row instead (`theme-switch-row.tsx`, #358) — an app
-component built on the `switch` primitive — and keeps `theme-toggle.tsx` for the phone top bar.
+component built on the `switch` primitive — and keeps `theme-toggle.tsx` for the phone top bar and
+the collapsed rail (#359).

@@ -1,6 +1,6 @@
 "use client";
 
-import { AppBrand } from "-/components/app-brand";
+import { AppBrand, Logomark } from "-/components/app-brand";
 import { sidebarStateCookie, type SidebarState } from "-/components/sidebar-state";
 import { themeToggleLabel } from "-/components/theme-cycle";
 import { ThemeToggle } from "-/components/theme-toggle";
@@ -13,12 +13,17 @@ import {
   TooltipTrigger,
 } from "@sugt/ui/components/tooltip";
 import { cn } from "@sugt/ui/lib/utils";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import { useTheme } from "next-themes";
-import Image from "next/image";
-import { cloneElement, createContext, useContext, useState, type ReactElement } from "react";
-
-import logomark from "../../public/logomark-sekolah-garuda.png";
+import {
+  cloneElement,
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 
 /**
  * **The desktop sidebar's collapse (#359): 288px expanded, or a 64px icon rail.**
@@ -91,28 +96,44 @@ function useSidebarCollapse() {
 /**
  * The sidebar's header. Expanded, it is the brand (linking home) with a **Tutup sidebar** button on
  * the right. Collapsed, it is the logomark alone — no longer a home link but the **Buka sidebar**
- * button, which turns into the panel icon on hover and on keyboard focus. In the drawer there is no
- * toggle, so it is the brand alone.
+ * button, which turns into the same panel icon on hover and on keyboard focus. In the drawer there is
+ * no toggle, so it is the brand alone.
+ *
+ * The two states render different buttons, so toggling unmounts the one that was pressed. Focus is
+ * handed to its counterpart afterwards, so a keyboard user stays on the control rather than being
+ * dropped to `<body>`.
  */
 function SidebarHeader() {
   const { collapsed, toggle } = useSidebarCollapse();
+  const button = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    button.current?.focus();
+  }, [collapsed]);
+
+  function toggleKeepingFocus() {
+    refocus.current = true;
+    toggle?.();
+  }
 
   if (collapsed && toggle) {
     return (
       <div className="flex h-16 shrink-0 items-center justify-center border-b border-sidebar-border">
         <button
+          ref={button}
           type="button"
           aria-label="Buka sidebar"
-          onClick={toggle}
+          onClick={toggleKeepingFocus}
           className="group/expand relative grid size-9 place-items-center rounded-md outline-none hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          <Image
-            src={logomark}
+          <Logomark
             alt=""
-            className="size-7 group-hover/expand:opacity-0 group-focus-visible/expand:opacity-0"
-            priority
+            className="group-hover/expand:opacity-0 group-focus-visible/expand:opacity-0"
           />
-          <PanelLeftOpen className="absolute size-4 opacity-0 group-hover/expand:opacity-100 group-focus-visible/expand:opacity-100" />
+          <PanelLeft className="absolute size-4 opacity-0 group-hover/expand:opacity-100 group-focus-visible/expand:opacity-100" />
         </button>
       </div>
     );
@@ -123,13 +144,14 @@ function SidebarHeader() {
       <AppBrand />
       {toggle ? (
         <Button
+          ref={button}
           variant="ghost"
           size="icon-sm"
           aria-label="Tutup sidebar"
           className="ml-auto shrink-0"
-          onClick={toggle}
+          onClick={toggleKeepingFocus}
         >
-          <PanelLeftClose />
+          <PanelLeft />
         </Button>
       ) : null}
     </div>
@@ -141,9 +163,10 @@ function SidebarHeader() {
  * is collapsed**. Expanded — and in the drawer — it is just `render` holding `children`, since the
  * labels are on screen and a tooltip repeating them would be noise.
  *
- * `render` must be created on the client. An element a server component passes down arrives as a
- * lazy reference, which `cloneElement` cannot clone — the reason `RailFooter` is a client component
- * rather than markup in `SidebarBody`.
+ * `render` must be created on the client. An element a server component passes down may arrive as a
+ * lazy reference (outlined, or a client component whose chunk is still loading), which
+ * `cloneElement` cannot clone — it crashed the expanded server render once, and is the reason
+ * `RailFooter` is a client component rather than markup in `SidebarBody`.
  */
 function RailTooltip({
   label,
@@ -180,8 +203,10 @@ function RailThemeToggle() {
 /**
  * The collapsed rail's footer, stacked: the theme button, a border, the avatar, and sign-out beneath
  * it — each tooltipped, so sign-out stays reachable without expanding (#119, #122). `SidebarBody`
- * shows it only inside a collapsed aside. The avatar is focusable so its name is reachable by
- * keyboard as well as by hover.
+ * shows it only inside a collapsed aside. The avatar is focusable — a tab stop that does nothing
+ * else — because #359 asks for its tooltip (the Person's name, which the rail no longer prints) on
+ * keyboard focus as well as hover; `role="img"` with `aria-label` gives a screen reader the same
+ * name.
  */
 function RailFooter({
   personName,

@@ -11,7 +11,8 @@ import { useState } from "react";
  * with the mounted handler; this is the button.
  *
  * An icon button, labelled "Keluar" for a screen reader, at the right end of the sidebar's
- * profile row (#358), where a text button crowded the name beside it.
+ * profile row (#358), where a text button crowded the name beside it — and on the collapsed rail,
+ * beneath the avatar (#359).
  */
 export function SignOutButton() {
   const router = useRouter();
