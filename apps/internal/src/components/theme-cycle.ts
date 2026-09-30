@@ -8,6 +8,9 @@
  * Both take `next-themes`' `theme` string, `"light" | "dark"` once mounted but `undefined` for
  * the first paint — an unknown value folds to `light`, which also absorbs a stale persisted
  * `"system"` from before #126 in a single tap.
+ *
+ * The phone top bar's button uses those two. The desktop sidebar's **Mode Gelap** switch (#358)
+ * uses `isDarkTheme` for whether it is on, with the same fold.
  */
 type ThemeSetting = "light" | "dark";
 
@@ -32,5 +35,15 @@ function themeToggleLabel(current: string | undefined): string {
   return LABEL[current as ThemeSetting] ?? LABEL.light;
 }
 
-export { nextTheme, themeToggleLabel };
+/**
+ * Whether the sidebar's **Mode Gelap** switch is on (#358): Dark and nothing else. An unknown,
+ * stale or pre-mount value reads as off, the same fold `nextTheme` makes to Light. The switch sets
+ * the theme it is flipped to — `checked ? "dark" : "light"` — rather than rotating, so the value it
+ * shows and the value a flip writes cannot disagree.
+ */
+function isDarkTheme(current: string | undefined): boolean {
+  return current === "dark";
+}
+
+export { isDarkTheme, nextTheme, themeToggleLabel };
 export type { ThemeSetting };
