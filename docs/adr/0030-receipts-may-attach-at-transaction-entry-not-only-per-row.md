@@ -1,5 +1,10 @@
 # Receipts may attach at transaction entry, not only per row
 
+> **Partially superseded by [ADR-0039](./0039-every-transaction-is-recorded-with-its-evidence.md).**
+> Upload at entry is no longer optional: a transaction is recorded with one to five receipts or not at
+> all. The files are uploaded **before** the line is written, not after, and the evidence rule is now
+> held at entry rather than only at filing. The entry-time control and the row's own upload stand.
+
 Amends [ADR-0007](0007-the-tool-generates-the-acquittal.md).
 
 The "Catat transaksi" entry form now carries an optional "Unggah bukti" control, so a PIC can attach

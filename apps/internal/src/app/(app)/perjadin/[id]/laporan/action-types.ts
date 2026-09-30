@@ -1,17 +1,15 @@
-import type { AcquittalEvidence, AcquittalTransaction } from "@sugt/db/queries";
+import type {
+  AcquittalEvidence,
+  AcquittalTransaction,
+  NewTransaction,
+  RecordTransactionResult,
+} from "@sugt/db/queries";
 
 /**
  * The shapes the Perjadin Report's Server Actions pass to and from the client. They live here
  * rather than in `actions.ts` because that file is `"use server"`: every one of its exports is a
  * callable Server Action, and a type is not one.
  */
-
-/**
- * How many receipts one upload batch may stage and mint URLs for. Shared by the client (which caps
- * a file selection) and the mint action (which caps the array it hands out), so the two cannot
- * drift — a guard on the array size, not a product rule.
- */
-export const MAX_RECEIPT_BATCH = 10;
 
 /** One receipt the browser has PUT to Storage, waiting to be recorded as a `transaction_evidence` row. */
 export type ReceiptToFinalize = {
@@ -20,19 +18,40 @@ export type ReceiptToFinalize = {
 };
 
 /**
+ * What the Catat transaksi dialog sends once every staged receipt has landed: the line's fields,
+ * and the object keys its receipts were PUT to. The action reads each one's facts back from Storage
+ * and hands the line and its evidence to `recordTransaction` together (ADR-0039).
+ */
+export type TransactionToRecord = Omit<NewTransaction, "evidence"> & {
+  receipts: ReceiptToFinalize[];
+};
+
+/**
+ * What `recordTransactionAction` did. The query's own outcomes, plus the one only the action can
+ * see: `failed` of the named receipts are not in Storage, so **nothing was recorded** — a line is
+ * written with all its evidence or not at all.
+ */
+export type RecordTransactionActionResult =
+  | RecordTransactionResult
+  | { outcome: "receipts-not-landed"; failed: number };
+
+/**
  * What `finalizeReceiptsAction` recorded.
  *
  * `failed` is the count whose bytes never landed — a real partial-success state, since the browser
  * uploads several files independently and one PUT can fail while the rest succeed. The successes
  * are still attached; the failures are reported, not discarded silently.
  *
- * The two refusals are the query layer's own, passed through rather than swallowed. Both are stale
- * screens and both are reachable, so both come back as values by the rule the query layer settled.
+ * The refusals are the query layer's own, passed through rather than swallowed. The two stale
+ * screens are reachable, and so is a batch that would take the line past five receipts (ADR-0039)
+ * — a second tab, or a line grandfathered with more — so all come back as values by the rule the
+ * query layer settled.
  */
 export type FinalizeReceiptsResult =
   | { outcome: "attached"; attached: number; failed: number }
   | { outcome: "no-such-transaction" }
-  | { outcome: "no-such-perjadin" };
+  | { outcome: "no-such-perjadin" }
+  | { outcome: "too-many-receipts"; limit: number; existing: number };
 
 /**
  * One receipt as the screen renders it: the row, minus the object key, plus a short-lived signed

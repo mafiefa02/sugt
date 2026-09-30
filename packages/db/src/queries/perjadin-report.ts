@@ -1,10 +1,11 @@
 import {
+  MAX_RECEIPTS_PER_TRANSACTION,
   REPORT_DEADLINE_DAYS_AFTER_RETURN,
   sumAdvanceDrawdownIdr,
   type TransactionCategory,
   type TransactionParticipantType,
 } from "@sugt/domain";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { person } from "../schema/people";
@@ -136,7 +137,8 @@ export type PerjadinAcquittal = {
  * and `finalizeReceiptsAction` (`perjadin/[id]/laporan/actions.ts`) had no Staff guard of their own —
  * this read's `requireStaff` was the whole of theirs. Opening the read would have opened those writes
  * (a receipt-upload credential, a service-role Storage read) to a Pimpinan, so each now calls
- * `requireStaff` explicitly, ahead of this read. Every other money-write query (`recordTransaction`,
+ * `requireStaff` explicitly, ahead of this read. `recordTransactionAction` does the same since
+ * ADR-0039, because it reads receipts back from Storage before it records the line. Every other money-write query (`recordTransaction`,
  * `attachTransactionEvidence`, `filePerjadinReport`) keeps its own `requireStaff`.
  *
  * Returns `null` when there is no such Perjadin. That is a genuinely reachable state — a
@@ -282,7 +284,10 @@ async function pimpinanOf(perjadinId: string): Promise<string[]> {
   return rows.map((row) => row.name);
 }
 
-/** What the acquittal form collects for one line item. */
+/**
+ * What the acquittal form collects for one line item — its receipts included. A line is recorded
+ * with its evidence or not at all (ADR-0039).
+ */
 export type NewTransaction = {
   perjadinId: string;
   spentOn: string;
@@ -291,6 +296,8 @@ export type NewTransaction = {
   category: TransactionCategory;
   /** Which cohort the spend served — `Siswa` or `GTK-MS`. Required, like `category`. */
   participantType: TransactionParticipantType;
+  /** The receipts already in Storage, one to `MAX_RECEIPTS_PER_TRANSACTION`. */
+  evidence: NewEvidence[];
 };
 
 export type RecordTransactionResult =
@@ -298,12 +305,23 @@ export type RecordTransactionResult =
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" }
   /** A zero or negative line item. `transaction_amount_check` refuses it too. */
-  | { outcome: "amount-not-positive" };
+  | { outcome: "amount-not-positive" }
+  /** No receipt came with the line. */
+  | { outcome: "evidence-missing" }
+  /** More receipts than one line may carry. */
+  | { outcome: "too-many-receipts"; limit: number; count: number };
 
 /**
- * Record one line item against the Advance.
+ * Record one line item against the Advance, **with its receipts, in one transaction** (ADR-0039).
  *
- * Every refusal here is something a PIC can type honestly, so each comes back as a value and
+ * This is the one write path that holds "every transaction has one to five pieces of evidence" —
+ * no CHECK does, because the shared database may already hold lines with none or more than five,
+ * and those are grandfathered. So the count is refused here, as a value, before anything is
+ * written; the dialog's disabled button is only a convenience. The line and its evidence rows
+ * commit together, so a receipt the database refuses (an object already attached elsewhere) takes
+ * the line down with it rather than leaving it unevidenced.
+ *
+ * Every refusal here is something a PIC can do honestly, so each comes back as a value and
  * earns a field-level message rather than an error page. `NotStaffError` is the opposite
  * case and still throws.
  */
@@ -314,6 +332,14 @@ export async function recordTransaction(
   requireStaff(caller);
 
   if (input.amountIdr <= 0) return { outcome: "amount-not-positive" };
+  if (input.evidence.length === 0) return { outcome: "evidence-missing" };
+  if (input.evidence.length > MAX_RECEIPTS_PER_TRANSACTION) {
+    return {
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+      count: input.evidence.length,
+    };
+  }
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
@@ -335,6 +361,16 @@ export async function recordTransaction(
       })
       .returning({ id: transaction.id });
 
+    await tx.insert(transactionEvidence).values(
+      input.evidence.map((file) => ({
+        transactionId: line!.id,
+        storagePath: file.storagePath,
+        contentType: file.contentType,
+        byteSize: file.byteSize,
+        uploadedByPersonId: caller.id,
+      })),
+    );
+
     return { outcome: "recorded", transactionId: line!.id };
   });
 }
@@ -353,7 +389,12 @@ export type NewEvidence = {
 export type AttachEvidenceResult =
   | { outcome: "attached"; count: number }
   /** The id names no transaction on this Perjadin — a stale screen, which is reachable. */
-  | { outcome: "no-such-transaction" };
+  | { outcome: "no-such-transaction" }
+  /**
+   * The batch would take the line past `MAX_RECEIPTS_PER_TRANSACTION`. None of it is attached;
+   * `existing` is what the line already carries.
+   */
+  | { outcome: "too-many-receipts"; limit: number; existing: number };
 
 /**
  * Attach receipts to one line item. Bulk or single — the same insert.
@@ -361,6 +402,12 @@ export type AttachEvidenceResult =
  * The transaction is named **with its Perjadin**, so a caller cannot hang a receipt off a
  * line item belonging to a different trip. A Server Action is a public endpoint, so the pair
  * is checked here rather than assumed from whatever screen sent it.
+ *
+ * **Five per line, in total** (ADR-0039): what the line already carries plus this batch. The
+ * parent `transaction` row is locked `for update` before its receipts are counted, so two uploads
+ * racing on one line serialise — the second counts the first's rows once it commits — and cannot
+ * both pass the count. A line already over five from before the rule is grandfathered: it keeps
+ * what it has and gains nothing.
  */
 export async function attachTransactionEvidence(
   caller: Person,
@@ -374,10 +421,20 @@ export async function attachTransactionEvidence(
     const [line] = await tx
       .select({ id: transaction.id })
       .from(transaction)
-      .where(and(eq(transaction.id, transactionId), eq(transaction.perjadinId, perjadinId)));
+      .where(and(eq(transaction.id, transactionId), eq(transaction.perjadinId, perjadinId)))
+      .for("update");
     if (!line) return { outcome: "no-such-transaction" };
 
     if (evidence.length === 0) return { outcome: "attached", count: 0 };
+
+    const [held] = await tx
+      .select({ existing: count() })
+      .from(transactionEvidence)
+      .where(eq(transactionEvidence.transactionId, transactionId));
+    const existing = held?.existing ?? 0;
+    if (existing + evidence.length > MAX_RECEIPTS_PER_TRANSACTION) {
+      return { outcome: "too-many-receipts", limit: MAX_RECEIPTS_PER_TRANSACTION, existing };
+    }
 
     await tx.insert(transactionEvidence).values(
       evidence.map((file) => ({
@@ -407,10 +464,11 @@ export type FilePerjadinReportResult =
 /**
  * File the Report.
  *
- * **"Every transaction has at least one piece of evidence" is checked here and nowhere
- * else** — a cross-row count no CHECK can express, and one that must not run when a
- * transaction is entered: `product.md` is explicit that a receipt may be attached later, and
- * a PIC logging a taxi fare on the pavement has not photographed the receipt yet.
+ * **"Every transaction has at least one piece of evidence" is checked here as a backstop.** Since
+ * ADR-0039 `recordTransaction` refuses a line without a receipt, so no line written through the app
+ * lacks one — but the shared database may already hold lines from before that rule, and no
+ * migration touched them. Those are what this cross-row count, which no CHECK can express, still
+ * catches: a PIC fixes one through its row's "Unggah bukti", then files.
  *
  * A Perjadin with no transactions at all files cleanly. A trip that spent nothing is a real
  * trip, and the vacuous truth is the right answer rather than an edge case to refuse.

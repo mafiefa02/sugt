@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { db, schema } from "@sugt/db";
 import {
   attachTransactionEvidence,
@@ -5,8 +7,13 @@ import {
   isNotStaffError,
   perjadinAcquittal,
   recordTransaction,
+  type NewEvidence,
 } from "@sugt/db/queries";
-import { REPORT_DEADLINE_DAYS_AFTER_RETURN, TRANSACTION_CATEGORIES } from "@sugt/domain";
+import {
+  MAX_RECEIPTS_PER_TRANSACTION,
+  REPORT_DEADLINE_DAYS_AFTER_RETURN,
+  TRANSACTION_CATEGORIES,
+} from "@sugt/domain";
 import type { Role } from "@sugt/domain";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -24,8 +31,9 @@ import {
  * **The Perjadin Report** — the acquittal of one trip.
  *
  * The invariants under test are the ones no column holds: the reconciliation is derived
- * rather than typed, the evidence rule is checked when the Report is filed rather than when
- * a transaction is entered, and every entry point refuses a non-Staff caller.
+ * rather than typed, a transaction is recorded with 1–5 receipts and never gains a sixth
+ * (ADR-0039), filing still refuses a grandfathered line with none, and every entry point refuses a
+ * non-Staff caller.
  *
  * `staff-only.test.ts` covers the choke point itself at the sign-in seam. This file drives
  * the same guard on the four surfaces #30 added, and asserts on rows.
@@ -69,6 +77,18 @@ function shiftDate(date: string, days: number): string {
  */
 function jakartaToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
+}
+
+/**
+ * `count` receipts as Storage would describe them once landed. Each has its own opaque key, since
+ * `transaction_evidence.storage_path` is unique.
+ */
+function receipts(count: number): NewEvidence[] {
+  return Array.from({ length: count }, () => ({
+    storagePath: randomUUID(),
+    contentType: "image/jpeg",
+    byteSize: 120_000,
+  }));
 }
 
 /**
@@ -291,6 +311,7 @@ describe("the category", () => {
         amountIdr: 10_000,
         category,
         participantType: "Siswa",
+        evidence: receipts(1),
       });
       expect(result.outcome).toBe("recorded");
     }
@@ -360,6 +381,7 @@ describe("recording a line item", () => {
       amountIdr: 50_000,
       category: "Transport Lokal Dalam Provinsi",
       participantType: "Siswa",
+      evidence: receipts(1),
     }).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);
@@ -377,6 +399,7 @@ describe("recording a line item", () => {
       amountIdr: 600_000,
       category: "Honorarium Narasumber",
       participantType: "GTK-MS",
+      evidence: receipts(1),
     });
 
     expect(result.outcome).toBe("recorded");
@@ -397,6 +420,7 @@ describe("recording a line item", () => {
         amountIdr: 50_000,
         category: "Transport Lokal Dalam Provinsi",
         participantType: "Siswa",
+        evidence: receipts(1),
       }),
     ).resolves.toEqual({ outcome: "no-such-perjadin" });
 
@@ -408,8 +432,92 @@ describe("recording a line item", () => {
         amountIdr: 0,
         category: "Transport Lokal Dalam Provinsi",
         participantType: "Siswa",
+        evidence: receipts(1),
       }),
     ).resolves.toEqual({ outcome: "amount-not-positive" });
+  });
+});
+
+describe("recording a line item with its receipts (ADR-0039)", () => {
+  beforeEach(resetDatabase);
+
+  /** One line item's fields, with `count` receipts. */
+  function aLine(perjadinId: string, count: number) {
+    return {
+      perjadinId,
+      spentOn: "2026-09-02",
+      description: "Taksi bandara",
+      amountIdr: 150_000,
+      category: "Transport Bandara/Stasiun" as const,
+      participantType: "Siswa" as const,
+      evidence: receipts(count),
+    };
+  }
+
+  async function rows() {
+    return {
+      lines: await db.select().from(schema.transaction),
+      evidence: await db.select().from(schema.transactionEvidence),
+    };
+  }
+
+  it("refuses a line with no receipt, and writes nothing", async () => {
+    const { staff, trip } = await aTrip();
+
+    await expect(recordTransaction(staff, aLine(trip.id, 0))).resolves.toEqual({
+      outcome: "evidence-missing",
+    });
+    await expect(rows()).resolves.toEqual({ lines: [], evidence: [] });
+  });
+
+  it.each([1, MAX_RECEIPTS_PER_TRANSACTION])(
+    "records a line with %i receipt(s), and the line and its evidence together",
+    async (count) => {
+      const { staff, trip } = await aTrip();
+      const input = aLine(trip.id, count);
+
+      const result = await recordTransaction(staff, input);
+
+      expect(result.outcome).toBe("recorded");
+      const { lines, evidence } = await rows();
+      expect(lines).toHaveLength(1);
+      expect(lines[0]?.id).toBe((result as { transactionId: string }).transactionId);
+      expect(evidence.map((row) => row.storagePath).sort()).toEqual(
+        input.evidence.map((file) => file.storagePath).sort(),
+      );
+      expect(evidence.every((row) => row.transactionId === lines[0]?.id)).toBe(true);
+      expect(evidence.every((row) => row.uploadedByPersonId === staff.id)).toBe(true);
+    },
+  );
+
+  it("refuses a line with more than five receipts, and writes nothing", async () => {
+    const { staff, trip } = await aTrip();
+
+    await expect(
+      recordTransaction(staff, aLine(trip.id, MAX_RECEIPTS_PER_TRANSACTION + 1)),
+    ).resolves.toEqual({
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+      count: MAX_RECEIPTS_PER_TRANSACTION + 1,
+    });
+    await expect(rows()).resolves.toEqual({ lines: [], evidence: [] });
+  });
+
+  it("writes no line when one of its receipts is refused by the database", async () => {
+    // One transaction for both: a receipt already attached elsewhere trips the unique key, and the
+    // line inserted a moment earlier in the same write must not survive it.
+    const { staff, trip } = await aTrip();
+    const first = aLine(trip.id, 1);
+    await recordTransaction(staff, first);
+    const input = aLine(trip.id, 2);
+    input.evidence[1] = { ...input.evidence[1]!, storagePath: first.evidence[0]!.storagePath };
+
+    const refusal = await refusedBy(recordTransaction(staff, input));
+
+    expect(refusal).toBe("transaction_evidence_storage_path_unique");
+    const { lines, evidence } = await rows();
+    expect(lines).toHaveLength(1);
+    expect(evidence).toHaveLength(1);
   });
 });
 
@@ -496,33 +604,129 @@ describe("attaching evidence", () => {
 
     expect(refusal).toBe("transaction_evidence_storage_path_unique");
   });
+
+  /** A line item already carrying `count` receipts. */
+  async function aLineWith(count: number) {
+    const { staff, trip } = await aTrip();
+    const line = await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 50_000,
+      createdByPersonId: staff.id,
+    });
+    for (let index = 0; index < count; index += 1) {
+      await addTransactionEvidence({ transactionId: line.id, uploadedByPersonId: staff.id });
+    }
+    return { staff, trip, line };
+  }
+
+  async function evidenceOn(transactionId: string) {
+    return db
+      .select()
+      .from(schema.transactionEvidence)
+      .where(eq(schema.transactionEvidence.transactionId, transactionId));
+  }
+
+  it("refuses a sixth receipt on a line that has five", async () => {
+    const { staff, trip, line } = await aLineWith(MAX_RECEIPTS_PER_TRANSACTION);
+
+    await expect(attachTransactionEvidence(staff, trip.id, line.id, receipts(1))).resolves.toEqual({
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+      existing: MAX_RECEIPTS_PER_TRANSACTION,
+    });
+    await expect(evidenceOn(line.id)).resolves.toHaveLength(MAX_RECEIPTS_PER_TRANSACTION);
+  });
+
+  it("refuses a batch that would take a line from three to six, attaching none of it", async () => {
+    const { staff, trip, line } = await aLineWith(3);
+
+    await expect(attachTransactionEvidence(staff, trip.id, line.id, receipts(3))).resolves.toEqual({
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+      existing: 3,
+    });
+    await expect(evidenceOn(line.id)).resolves.toHaveLength(3);
+  });
+
+  it("attaches a batch that takes a line from three to exactly five", async () => {
+    const { staff, trip, line } = await aLineWith(3);
+
+    await expect(attachTransactionEvidence(staff, trip.id, line.id, receipts(2))).resolves.toEqual({
+      outcome: "attached",
+      count: 2,
+    });
+    await expect(evidenceOn(line.id)).resolves.toHaveLength(5);
+  });
+
+  it("makes a batch wait for a concurrent one on the same line, then counts its receipts", async () => {
+    /**
+     * Two uploads racing on one line: each alone fits (0 + 3 ≤ 5), both together would not. The
+     * first is held open mid-write — its parent row locked, its three rows inserted, not yet
+     * committed — the state a real concurrent `attachTransactionEvidence` passes through. The second
+     * must wait on the parent row, then count the first's three and refuse. Without the lock it
+     * would count zero committed rows and insert, leaving six.
+     */
+    const { staff, trip, line } = await aLineWith(0);
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let signalHeld = () => {};
+    const held = new Promise<void>((resolve) => {
+      signalHeld = resolve;
+    });
+
+    const first = db.transaction(async (tx) => {
+      await tx
+        .select({ id: schema.transaction.id })
+        .from(schema.transaction)
+        .where(eq(schema.transaction.id, line.id))
+        .for("update");
+      await tx.insert(schema.transactionEvidence).values(
+        receipts(3).map((file) => ({
+          ...file,
+          transactionId: line.id,
+          uploadedByPersonId: staff.id,
+        })),
+      );
+      signalHeld();
+      await released;
+    });
+    await held;
+
+    const second = attachTransactionEvidence(staff, trip.id, line.id, receipts(3));
+    // Long enough for the second to reach the row it has to wait on before the first commits.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    release();
+    await first;
+
+    await expect(second).resolves.toEqual({
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+      existing: 3,
+    });
+    await expect(evidenceOn(line.id)).resolves.toHaveLength(3);
+  });
 });
 
 describe("filing the Report", () => {
   beforeEach(resetDatabase);
 
-  it("checks the evidence rule when the Report is filed, not when a transaction is entered", async () => {
+  it("still refuses a grandfathered line item with no receipt", async () => {
     /**
-     * A receipt may be attached later — `product.md` is explicit — so entering a line item
-     * with nothing against it must succeed, and filing with it must not.
+     * `recordTransaction` no longer writes a line without a receipt (ADR-0039), but the shared
+     * database may already hold one from before — no migration touched them. The fixture inserts
+     * such a row directly, and the filing check is what still catches it.
      */
     const { staff, trip } = await aTrip();
-
-    const recorded = await recordTransaction(staff, {
+    const line = await addTransaction({
       perjadinId: trip.id,
-      spentOn: "2026-09-02",
-      description: "Taksi bandara",
       amountIdr: 150_000,
-      category: "Transport Bandara/Stasiun",
-      participantType: "Siswa",
+      createdByPersonId: staff.id,
     });
-    expect(recorded.outcome).toBe("recorded");
 
     const refused = await filePerjadinReport(staff, trip.id);
-    expect(refused).toEqual({
-      outcome: "evidence-missing",
-      transactionIds: [(recorded as { transactionId: string }).transactionId],
-    });
+    expect(refused).toEqual({ outcome: "evidence-missing", transactionIds: [line.id] });
 
     const [row] = await db
       .select({ filedAt: schema.perjadin.reportFiledAt })

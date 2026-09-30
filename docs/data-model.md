@@ -1472,8 +1472,12 @@ and the like) and it stays out until a real form asks for it.
 running remainder the acquittal screen shows, and it is a query. Only the fact that money was
 returned is a stored event.
 
-Evidence is many-per-transaction. `storage_path` is the object key in the private bucket, and
-`unique` on it means an upload cannot be attached twice.
+Evidence is **one to five per transaction** (ADR-0039). The application holds that range, not
+the database: `recordTransaction` writes a line and its evidence together and refuses zero or
+more than five, and `attachTransactionEvidence` refuses a batch that would take a line past five,
+counting under a lock on the parent row. There is no CHECK, because the shared database may
+already hold lines with none or more, and those are grandfathered. `storage_path` is the object
+key in the private bucket, and `unique` on it means an upload cannot be attached twice.
 
 ---
 
@@ -1617,6 +1621,13 @@ beside eight illustrated ones reads as broken rather than as a choice. It gates 
 nothing else. It is also not a precedent — a field a form insists on before it will submit is a
 different thing, and the next rule that wants to withhold an action until some **other** record
 is complete has to make its own case rather than cite this one.
+
+Recording a transaction now requires its receipts
+([ADR-0039](./adr/0039-every-transaction-is-recorded-with-its-evidence.md)), and **that is the
+other kind of rule: a field a form insists on before it will submit**. The receipts are part of
+the line being written, not a separate record the action waits on. Filing gains no new
+condition: `filePerjadinReport`'s evidence check is unchanged, and now only ever fires on a line
+recorded before the rule.
 
 The two buckets stay exactly as split below. A Story's photographs are public by intent, which
 is the whole difference from a receipt.
@@ -1848,9 +1859,10 @@ still on the concerns list — but it is held by the application alone: the Sess
 cancellation while a Session is `arranged` and never after, and offers no way back from
 `delivered` at all.
 
-**"Every transaction has at least one piece of evidence."** Also a cross-row count. Required
-when the Report is filed, not when the transaction is entered — `product.md` is explicit that
-a receipt can be attached later.
+**"Every transaction has at least one piece of evidence."** Also a cross-row count. Held at
+entry since [ADR-0039](./adr/0039-every-transaction-is-recorded-with-its-evidence.md), in the one
+write path: `recordTransaction` records a line with one to five receipts or refuses it. Filing
+still checks it, as the backstop for lines entered before that rule, which no migration touched.
 
 **The four-offline-six-online cap.** Deliberately unenforced. Ten is the denominator for
 progress, not a limit on what may be recorded, and a cancelled Session counts for nothing

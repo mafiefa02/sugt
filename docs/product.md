@@ -268,8 +268,14 @@ above narrows it.
 ### The acquittal — the most important screen
 
 The PIC accounts for the whole Group. They enter each transaction that consumed the
-Advance, attach its evidence, and export a filled template of the acquittal paperwork.
+Advance together with its evidence, and export a filled template of the acquittal paperwork.
 Whatever is left is returned to the Treasurer.
+
+**A transaction is entered with its receipts: one to five, image or PDF** (ADR-0039). The
+"Catat transaksi" dialog uploads them all before it records the line. If any fails to upload,
+nothing is recorded, and the form keeps what was typed and picked so the PIC can try again. More
+receipts can be added later from the line's own "Unggah bukti", up to five in total. A line
+entered before this rule may have none; it is marked on the screen and fixed the same way.
 
 **Each transaction carries a category**, from a closed list of eleven plus _Lainnya_ —
 _Tiket Pesawat/Kereta PP_, _Uang Harian_, _Honorarium Narasumber_, _Akomodasi_,
@@ -291,8 +297,8 @@ the real form, which is the one thing this screen exists to stop; see the amendm
 [ADR-0007](./adr/0007-the-tool-generates-the-acquittal.md) for why that means the bet is
 not yet placed.
 
-Transactions can be entered **as they happen or after returning** — whichever suits.
-Both are first-class paths. There is no offline support; capture needs connectivity, and
+Transactions can be entered **as they happen or after returning** — whichever suits,
+with the receipt in hand either way. Both are first-class paths. There is no offline support; capture needs connectivity, and
 where it fails the PIC enters it later, losing convenience but never data. Offline is
 worth adding eventually, not worth blocking on.
 

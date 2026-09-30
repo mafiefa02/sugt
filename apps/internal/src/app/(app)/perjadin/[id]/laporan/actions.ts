@@ -11,15 +11,15 @@ import {
   requireStaff,
   type FilePerjadinReportResult,
   type NewEvidence,
-  type NewTransaction,
-  type RecordTransactionResult,
 } from "@sugt/db/queries";
+import { MAX_RECEIPTS_PER_TRANSACTION } from "@sugt/domain";
 import { revalidatePath } from "next/cache";
 
-import {
-  MAX_RECEIPT_BATCH,
-  type FinalizeReceiptsResult,
-  type ReceiptToFinalize,
+import type {
+  FinalizeReceiptsResult,
+  ReceiptToFinalize,
+  RecordTransactionActionResult,
+  TransactionToRecord,
 } from "./action-types";
 
 /**
@@ -34,19 +34,62 @@ import {
  * path, since a layout does not run before a Server Action. Every refusal comes back as a value.
  */
 
-/** Record one line item against the Advance. */
+/**
+ * Record one line item against the Advance, **with the receipts the dialog has already uploaded**
+ * (ADR-0039).
+ *
+ * The browser PUTs every staged file first and calls this only once all of them landed. Each is
+ * then read back from Storage — the server never saw the bytes — and if **any** read-back fails,
+ * nothing is recorded: a line is written with all its evidence or not at all, so a partial success
+ * is refused rather than recorded short. The objects that did land stay in the bucket unreferenced,
+ * the way ADR-0018 already leaves orphans; the keys are opaque and the bucket private.
+ *
+ * **The Staff check and the Perjadin read run before Storage is touched**, for the reason
+ * `finalizeReceiptsAction` gives below: the read-back uses the service-role key. A batch over
+ * `MAX_RECEIPTS_PER_TRANSACTION` is refused before the read-back too, so a caller cannot make this
+ * read back an unbounded list; `recordTransaction` refuses the count again, and that is the rule's
+ * real home — this early return only saves the Storage calls.
+ */
 export async function recordTransactionAction(
-  input: NewTransaction,
-): Promise<RecordTransactionResult> {
+  input: TransactionToRecord,
+): Promise<RecordTransactionActionResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => recordTransaction(person, input));
+  const acquittal = await staffSurface(() => {
+    requireStaff(person);
+    return perjadinAcquittal(person, input.perjadinId);
+  });
+  if (!acquittal) return { outcome: "no-such-perjadin" };
+
+  const { receipts, ...line } = input;
+  if (receipts.length > MAX_RECEIPTS_PER_TRANSACTION) {
+    return {
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+      count: receipts.length,
+    };
+  }
+
+  const facts = await Promise.all(
+    receipts.map(async (item): Promise<NewEvidence | null> => {
+      const read = await readReceiptFacts(item.path);
+      if (!read) return null;
+      return { storagePath: item.path, contentType: read.contentType, byteSize: read.byteSize };
+    }),
+  );
+  const evidence = facts.filter((file): file is NewEvidence => file !== null);
+  if (evidence.length < receipts.length) {
+    return { outcome: "receipts-not-landed", failed: receipts.length - evidence.length };
+  }
+
+  const result = await staffSurface(() => recordTransaction(person, { ...line, evidence }));
   if (result.outcome === "recorded") revalidatePath(`/perjadin/${input.perjadinId}/laporan`);
   return result;
 }
 
 /**
- * Mint upload URLs for `count` receipts.
+ * Mint upload URLs for `count` receipts — never more than one line may carry
+ * (`MAX_RECEIPTS_PER_TRANSACTION`), whichever path is asking.
  *
  * **Gated on Staff and on the Perjadin existing**, by an explicit `requireStaff` ahead of a read,
  * both before any URL is minted: an upload URL is a write credential for the private `receipts`
@@ -70,17 +113,19 @@ export async function mintReceiptUploadsAction(
   });
   if (!acquittal) throw new Error(`No Perjadin ${perjadinId} to attach receipts to.`);
 
-  const wanted = Math.min(Math.max(0, Math.trunc(count)), MAX_RECEIPT_BATCH);
+  const wanted = Math.min(Math.max(0, Math.trunc(count)), MAX_RECEIPTS_PER_TRANSACTION);
   return Promise.all(Array.from({ length: wanted }, () => mintReceiptUpload()));
 }
 
 /**
- * Record the receipts whose bytes have landed.
+ * Record the receipts whose bytes have landed, against a line that already exists — its row's own
+ * "Unggah bukti".
  *
  * For each, the real content type and size are read back from Storage — the server never saw the
  * bytes — and one whose read-back fails is a PUT that never landed: it is dropped and counted, not
- * written with guessed columns. Partial success is a real state and is reported rather than
- * swallowed.
+ * written with guessed columns. Partial success is a real state here and is reported rather than
+ * swallowed: the line already stands, so a receipt that did land is worth keeping. (Recording a new
+ * line is the opposite — `recordTransactionAction` refuses on any miss.)
  *
  * **The Staff check runs before Storage is touched, and that order is load-bearing.** The read-back
  * uses the service-role key, which bypasses every policy on a private bucket, so doing it first
@@ -120,14 +165,14 @@ export async function finalizeReceiptsAction(
 
   if (ready.length === 0) return { outcome: "attached", attached: 0, failed };
 
-  // The write's own refusal is returned rather than discarded. `no-such-transaction` is a stale
-  // screen and therefore reachable, and swallowing it would tell the PIC that receipts attached
-  // when none did — the worst answer available on a screen whose point is that evidence is
-  // attached to the line it belongs to.
+  // The write's own refusals are returned rather than discarded. `no-such-transaction` is a stale
+  // screen and `too-many-receipts` a line that would pass five; both are reachable, and swallowing
+  // either would tell the PIC that receipts attached when none did — the worst answer available on
+  // a screen whose point is that evidence is attached to the line it belongs to.
   const result = await staffSurface(() =>
     attachTransactionEvidence(person, perjadinId, transactionId, ready),
   );
-  if (result.outcome === "no-such-transaction") return result;
+  if (result.outcome !== "attached") return result;
 
   revalidatePath(`/perjadin/${perjadinId}/laporan`);
   return { outcome: "attached", attached: result.count, failed };
@@ -136,9 +181,9 @@ export async function finalizeReceiptsAction(
 /**
  * File the Report.
  *
- * The evidence rule — every transaction carries at least one receipt — is checked inside
- * `filePerjadinReport` and nowhere else, because a receipt may be attached later and checking it
- * when a transaction is entered would refuse a PIC logging a fare on the pavement.
+ * The evidence rule — every transaction carries at least one receipt — is held at entry since
+ * ADR-0039, by `recordTransaction`. `filePerjadinReport` still checks it, as the backstop for lines
+ * recorded before that rule, which no migration touched.
  */
 export async function filePerjadinReportAction(
   perjadinId: string,

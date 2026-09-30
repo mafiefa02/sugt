@@ -1,8 +1,9 @@
 "use client";
 
-import {
-  MAX_RECEIPT_BATCH,
-  type ViewableTransaction,
+import type {
+  ReceiptToFinalize,
+  RecordTransactionActionResult,
+  ViewableTransaction,
 } from "-/app/(app)/perjadin/[id]/laporan/action-types";
 import {
   finalizeReceiptsAction,
@@ -16,9 +17,11 @@ import {
   type ParticipantFilter,
   type SortDirection,
 } from "-/components/laporan-perjadin/acquittal-transactions-sort";
+import { RequiredLegend, RequiredMark } from "-/components/required-mark";
 import {
   formatIdr,
   formatRupiah,
+  MAX_RECEIPTS_PER_TRANSACTION,
   TRANSACTION_CATEGORIES,
   TRANSACTION_PARTICIPANT_TYPES,
   type TransactionCategory,
@@ -49,25 +52,21 @@ import {
 import { type ReactElement, useId, useMemo, useRef, useState, useTransition } from "react";
 
 /**
- * **The line items, and the two things a PIC does to them**: enter one, and attach the receipts
- * that evidence it.
+ * **The line items, and the two things a PIC does to them**: enter one with its receipts, and add
+ * receipts to one already entered.
  *
- * Receipts attach by two paths, both first-class. The row carries an "Unggah bukti" for evidence
- * that arrives after the line is logged — a fare photographed on the pavement, uploaded that
- * evening. The entry form carries the same control for evidence already in hand at the moment of
- * entry, so a PIC working through a folder of receipts after returning records the line and its
- * proof in one step. ADR-0007 rests on both post-trip and on-the-spot entry being equally easy;
- * ADR-0030 records that attaching at entry time is now a first-class path alongside the row one —
- * it serves that folder-of-receipts case — without weakening the row path, which stays exactly as
- * it was.
+ * **A line is entered with its evidence or not at all** (ADR-0039, superseding ADR-0030's optional
+ * upload). The entry form stages one to five files; Catat uploads every one of them **first**, and
+ * only once all have landed records the line and its evidence in one write. The "log a fare now,
+ * attach the receipt later" path is gone on purpose: a spend is not recorded until its receipt is in
+ * hand. The row keeps its own "Unggah bukti" for more receipts on a line that has one — up to five in
+ * total — and for a line from before the rule that has none.
  *
- * The order is forced by the schema: a receipt's row FKs a `transaction` that does not exist until
- * the line is inserted, so the entry form *stages* its files and uploads them only after the record
- * lands. `Receipts` (the row path) already has a `transactionId`, so it uploads straight away.
+ * `Receipts` (the row path) already has a `transactionId`, so it attaches as it uploads.
  *
- * **Nothing here checks the evidence rule.** "Every transaction has at least one piece of evidence"
- * is checked when the Report is filed and nowhere else — a row with no receipt is an ordinary state
- * on this screen, marked but never refused.
+ * The five-receipt ceiling is held by the server (`recordTransaction`, `attachTransactionEvidence`);
+ * the disabled buttons here only keep the form from offering the mistake. A row with no receipt can
+ * still appear — a grandfathered line — and is marked, and the filing check still refuses it.
  */
 function AcquittalTransactions({
   perjadinId,
@@ -276,64 +275,55 @@ function ControlSelect<T extends string>({
  * photograph taken on a phone is not bound by the platform's function body limit. Each landed
  * object is then recorded by a second call, which reads its real content type and size back from
  * Storage rather than believing what this component said about them.
+ *
+ * A line holds at most `MAX_RECEIPTS_PER_TRANSACTION` in total, so a pick is cut to the slots left
+ * and the button is disabled once there are none. There is no receipt deletion, so a mistaken
+ * upload uses a slot.
  */
 function Receipts({ perjadinId, line }: { perjadinId: string; line: ViewableTransaction }) {
   const [note, setNote] = useState<string | null>(null);
   const [uploading, startUploading] = useTransition();
   const picker = useRef<HTMLInputElement>(null);
+  // Negative for a line grandfathered with more than five; it gains nothing either way.
+  const slotsLeft = MAX_RECEIPTS_PER_TRANSACTION - line.evidence.length;
 
   function upload(files: File[]) {
     startUploading(async () => {
       setNote(null);
-      const batch = files.slice(0, MAX_RECEIPT_BATCH);
-
-      // The mint throws when the trip is gone, which is a page left open while somebody
-      // deleted it in another tab. Caught here rather than left to become an unhandled
-      // rejection: the component already knows how to say "muat ulang halaman".
-      let targets;
-      try {
-        targets = await mintReceiptUploadsAction(perjadinId, batch.length);
-      } catch {
-        setNote(STALE_PAGE);
-        return;
+      const batch = files.slice(0, Math.max(0, slotsLeft));
+      const notes: string[] = [];
+      if (batch.length < files.length) {
+        notes.push(`${files.length - batch.length} berkas tidak diunggah: ${CAP_NOTE}`);
       }
 
-      const landed: { path: string }[] = [];
-      let failed = 0;
-      await Promise.all(
-        batch.map(async (file, index) => {
-          const target = targets[index];
-          if (!target) {
-            failed += 1;
-            return;
-          }
-          try {
-            const response = await fetch(target.signedUrl, {
-              method: "PUT",
-              headers: { "content-type": file.type || "application/octet-stream" },
-              body: file,
-            });
-            if (!response.ok) throw new Error(`PUT ${response.status}`);
-            landed.push({ path: target.path });
-          } catch {
-            failed += 1;
-          }
-        }),
-      );
-
-      if (landed.length > 0) {
-        const result = await finalizeReceiptsAction(perjadinId, line.id, landed);
-        // The write's refusals are answered rather than counted as upload failures. Both
-        // mean the page is stale, and neither means a file did not reach Storage.
-        if (result.outcome !== "attached") {
+      if (batch.length > 0) {
+        const sent = await uploadReceipts(perjadinId, batch);
+        if (sent === null) {
           setNote(STALE_PAGE);
           return;
         }
-        failed += result.failed;
+        let failed = sent.failed;
+
+        if (sent.landed.length > 0) {
+          const result = await finalizeReceiptsAction(perjadinId, line.id, sent.landed);
+          // The write's refusals are answered rather than counted as upload failures: none of
+          // them means a file did not reach Storage.
+          if (result.outcome === "too-many-receipts") {
+            setNote(CAP_NOTE);
+            return;
+          }
+          if (result.outcome !== "attached") {
+            setNote(STALE_PAGE);
+            return;
+          }
+          failed += result.failed;
+        }
+        // Partial success is real — several files upload independently and one can fail while
+        // the rest land — so it is reported rather than swallowed.
+        if (failed > 0) notes.push(`${failed} berkas gagal diunggah.`);
       }
-      // Partial success is real — several files upload independently and one can fail while
-      // the rest land — so it is reported rather than swallowed.
-      if (failed > 0) setNote(`${failed} berkas gagal diunggah.`);
+
+      if (notes.length > 0) setNote(notes.join(" "));
     });
   }
 
@@ -383,7 +373,7 @@ function Receipts({ perjadinId, line }: { perjadinId: string; line: ViewableTran
       <Button
         variant="outline"
         size="sm"
-        disabled={uploading}
+        disabled={uploading || slotsLeft <= 0}
         onClick={() => picker.current?.click()}
       >
         {uploading ? "Mengunggah…" : "Unggah bukti"}
@@ -411,12 +401,10 @@ function RecordTransaction({
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<TransactionCategory | "">("");
   const [participantType, setParticipantType] = useState<TransactionParticipantType | "">("");
-  // Files chosen but not yet uploaded — the entry form has no `transactionId` to attach them to
-  // until its own insert lands, so they wait here until `submit` has one.
+  // Files chosen but not yet uploaded — one to five, all PUT by `submit` before the line is
+  // recorded. A refusal leaves them staged, so a retry needs no re-pick.
   const [staged, setStaged] = useState<File[]>([]);
   const [refusal, setRefusal] = useState<string | null>(null);
-  // Distinct from `refusal`: the transaction was recorded and it is the receipts that did not land.
-  const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const picker = useRef<HTMLInputElement>(null);
   const fields = useId();
@@ -426,7 +414,9 @@ function RecordTransaction({
     description.trim() !== "" &&
     amount !== "" &&
     category !== "" &&
-    participantType !== "";
+    participantType !== "" &&
+    staged.length >= 1 &&
+    staged.length <= MAX_RECEIPTS_PER_TRANSACTION;
 
   function reset() {
     setSpentOn("");
@@ -437,10 +427,26 @@ function RecordTransaction({
     setStaged([]);
   }
 
+  /**
+   * Upload every staged receipt, then record the line with them — all or nothing (ADR-0039). A
+   * failed PUT records nothing and keeps every value and every staged file, so "Catat" again retries
+   * the whole of it against fresh upload URLs. The objects that did land are left unreferenced in
+   * the private bucket, which ADR-0039 accepts rather than cleaning up.
+   */
   function submit() {
     startSaving(async () => {
       setRefusal(null);
-      setUploadNote(null);
+
+      const upload = await uploadReceipts(perjadinId, staged);
+      if (upload === null) {
+        setRefusal(STALE_PAGE);
+        return;
+      }
+      if (upload.failed > 0) {
+        setRefusal(retryNote(upload.failed));
+        return;
+      }
+
       const result = await recordTransactionAction({
         perjadinId,
         spentOn,
@@ -451,27 +457,13 @@ function RecordTransaction({
         amountIdr: Math.trunc(Number(amount)),
         category: category as TransactionCategory,
         participantType: participantType as TransactionParticipantType,
+        receipts: upload.landed,
       });
 
-      // The insert failed, so nothing is uploaded — staged files stay staged, and there is no
-      // orphan object in Storage or evidence row against a line that was never written.
+      // Nothing was written, so the form keeps everything for another try.
       if (result.outcome !== "recorded") {
-        setRefusal(REFUSALS[result.outcome]);
+        setRefusal(refusalFor(result));
         return;
-      }
-
-      // The line is in. Only now, and only if any were staged, do the receipts — recording with
-      // none is unchanged. Errors past this point are not refusals: the transaction stands.
-      if (staged.length > 0) {
-        const note = await attachStagedReceipts(perjadinId, result.transactionId, staged);
-        if (note !== null) {
-          // Said out loud rather than swallowed: the line is recorded (the page behind will show
-          // it) but its proof did not attach. The form is cleared so a second "Catat" cannot log
-          // the same line again; the row's own "Unggah bukti" is where the receipts go from here.
-          setUploadNote(note);
-          reset();
-          return;
-        }
       }
 
       setOpen(false);
@@ -484,12 +476,9 @@ function RecordTransaction({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        // Clear stale alerts when the form is reopened, so a prior refusal or upload note does not
-        // greet the next entry.
-        if (next) {
-          setRefusal(null);
-          setUploadNote(null);
-        }
+        // Clear a stale alert when the form is reopened, so a prior refusal does not greet the
+        // next entry.
+        if (next) setRefusal(null);
       }}
     >
       <DialogTrigger
@@ -508,8 +497,9 @@ function RecordTransaction({
         <DialogHeader>
           <DialogTitle>Catat transaksi</DialogTitle>
           <DialogDescription>
-            Satu pengeluaran terhadap Uang Perjalanan. Bukti bisa dilampirkan menyusul.
+            Satu pengeluaran terhadap Uang Perjalanan, beserta buktinya.
           </DialogDescription>
+          <RequiredLegend />
         </DialogHeader>
 
         {refusal !== null && (
@@ -519,20 +509,18 @@ function RecordTransaction({
           </Alert>
         )}
 
-        {uploadNote !== null && (
-          <Alert variant="destructive">
-            <AlertTitle>Transaksi tercatat, bukti belum terlampir.</AlertTitle>
-            <AlertDescription>
-              {uploadNote} Muat ulang halaman, lalu lampirkan lewat baris transaksinya.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <div className="grid gap-3.5">
           <div className="grid gap-1.5">
-            <Label htmlFor={`${fields}-spent-on`}>Tanggal</Label>
+            <Label
+              htmlFor={`${fields}-spent-on`}
+              className="gap-1"
+            >
+              Tanggal Transaksi
+              <RequiredMark />
+            </Label>
             <Input
               id={`${fields}-spent-on`}
+              aria-required="true"
               type="date"
               value={spentOn}
               onChange={(event) => {
@@ -542,9 +530,16 @@ function RecordTransaction({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor={`${fields}-description`}>Keterangan</Label>
+            <Label
+              htmlFor={`${fields}-description`}
+              className="gap-1"
+            >
+              Keterangan
+              <RequiredMark />
+            </Label>
             <Input
               id={`${fields}-description`}
+              aria-required="true"
               value={description}
               onChange={(event) => {
                 setDescription(event.target.value);
@@ -553,7 +548,13 @@ function RecordTransaction({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor={`${fields}-amount`}>Jumlah (Rp)</Label>
+            <Label
+              htmlFor={`${fields}-amount`}
+              className="gap-1"
+            >
+              Jumlah (Rp)
+              <RequiredMark />
+            </Label>
             {/*
               A masked text input, not `type="number"`: it groups the thousands as they type so a
               large amount's magnitude is legible at the point of entry — the same pattern the plan
@@ -563,6 +564,7 @@ function RecordTransaction({
             */}
             <Input
               id={`${fields}-amount`}
+              aria-required="true"
               type="text"
               inputMode="numeric"
               value={amount === "" ? "" : formatIdr(Number(amount))}
@@ -574,7 +576,13 @@ function RecordTransaction({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor={`${fields}-category`}>Kategori</Label>
+            <Label
+              htmlFor={`${fields}-category`}
+              className="gap-1"
+            >
+              Kategori
+              <RequiredMark />
+            </Label>
             {/*
               The twelve come from `@sugt/domain`, which is the same list `transaction_category_check`
               pins in the database. There is no "other" beyond `Lainnya`, which is in the list.
@@ -585,7 +593,10 @@ function RecordTransaction({
                 setCategory(value as TransactionCategory);
               }}
             >
-              <SelectTrigger id={`${fields}-category`}>
+              <SelectTrigger
+                id={`${fields}-category`}
+                aria-required="true"
+              >
                 <SelectValue placeholder="Pilih kategori" />
               </SelectTrigger>
               <SelectContent>
@@ -602,7 +613,13 @@ function RecordTransaction({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor={`${fields}-participant-type`}>Tipe Peserta</Label>
+            <Label
+              htmlFor={`${fields}-participant-type`}
+              className="gap-1"
+            >
+              Tipe Peserta
+              <RequiredMark />
+            </Label>
             {/*
               An axis orthogonal to Kategori — which cohort the spend served. The two values come
               from `@sugt/domain`, the same list `transaction_participant_type_check` pins in the
@@ -615,7 +632,10 @@ function RecordTransaction({
                 setParticipantType(value as TransactionParticipantType);
               }}
             >
-              <SelectTrigger id={`${fields}-participant-type`}>
+              <SelectTrigger
+                id={`${fields}-participant-type`}
+                aria-required="true"
+              >
                 <SelectValue placeholder="Pilih tipe peserta" />
               </SelectTrigger>
               <SelectContent>
@@ -632,12 +652,19 @@ function RecordTransaction({
           </div>
 
           <div className="grid gap-1.5">
-            <Label>Bukti (opsional)</Label>
+            <Label className="gap-1">
+              Bukti
+              <RequiredMark />
+            </Label>
+            <p className="-mt-0.5 text-xs text-muted-foreground">
+              1–{MAX_RECEIPTS_PER_TRANSACTION} berkas, gambar atau PDF.
+            </p>
             {/*
-              Optional and staged, not uploaded on pick: `submit` inserts the transaction first and
-              only then pushes these against the id it gets back (a receipt row FKs a transaction
-              that does not exist yet). Same picker as the row's `Receipts` — image or PDF, many at
-              once, capped at `MAX_RECEIPT_BATCH`.
+              Required and staged, not uploaded on pick: `submit` PUTs them all before it records the
+              line, and records nothing unless every one landed. Same picker as the row's `Receipts`
+              — image or PDF, many at once, capped at `MAX_RECEIPTS_PER_TRANSACTION`. The control is
+              a button, which `aria-required` does not apply to; Catat staying disabled until a file
+              is staged is what enforces it here.
             */}
             <input
               ref={picker}
@@ -649,14 +676,16 @@ function RecordTransaction({
                 const chosen = Array.from(event.target.files ?? []);
                 event.target.value = "";
                 if (chosen.length > 0)
-                  setStaged((current) => [...current, ...chosen].slice(0, MAX_RECEIPT_BATCH));
+                  setStaged((current) =>
+                    [...current, ...chosen].slice(0, MAX_RECEIPTS_PER_TRANSACTION),
+                  );
               }}
             />
             <Button
               type="button"
               variant="outline"
               size="sm"
-              disabled={saving || staged.length >= MAX_RECEIPT_BATCH}
+              disabled={saving || staged.length >= MAX_RECEIPTS_PER_TRANSACTION}
               onClick={() => picker.current?.click()}
             >
               Unggah bukti
@@ -709,35 +738,29 @@ function RecordTransaction({
 }
 
 /**
- * Push the entry form's staged receipts to Storage and record them against a line item that has
- * just been inserted.
+ * Mint an upload URL per file and PUT each file's bytes straight to Storage — the step both paths
+ * share. Returns the object keys that landed and how many did not, or `null` when the mint refused
+ * because the trip is gone (a page left open while somebody deleted it in another tab), caught here
+ * rather than left to become an unhandled rejection.
  *
- * The steps are `Receipts`' exactly — mint → PUT straight to Storage → finalize — but run after the
- * transaction exists rather than against a row that already had one, which is the only order the
- * evidence FK allows. Returns a note to show when something did not land, or `null` when every file
- * did. The transaction is already recorded by the time this runs, so a failure here is a receipt
- * problem, never a lost line item.
+ * It records nothing: the row path hands `landed` to `finalizeReceiptsAction`, the entry form to
+ * `recordTransactionAction`, each with its own answer to a partial failure.
  */
-async function attachStagedReceipts(
+async function uploadReceipts(
   perjadinId: string,
-  transactionId: string,
   files: File[],
-): Promise<string | null> {
-  const batch = files.slice(0, MAX_RECEIPT_BATCH);
-
-  // The mint throws when the trip is gone — a page left open while somebody deleted it in another
-  // tab — and is caught here for the same reason `Receipts` catches it.
+): Promise<{ landed: ReceiptToFinalize[]; failed: number } | null> {
   let targets;
   try {
-    targets = await mintReceiptUploadsAction(perjadinId, batch.length);
+    targets = await mintReceiptUploadsAction(perjadinId, files.length);
   } catch {
-    return STALE_PAGE;
+    return null;
   }
 
-  const landed: { path: string }[] = [];
+  const landed: ReceiptToFinalize[] = [];
   let failed = 0;
   await Promise.all(
-    batch.map(async (file, index) => {
+    files.map(async (file, index) => {
       const target = targets[index];
       if (!target) {
         failed += 1;
@@ -756,35 +779,44 @@ async function attachStagedReceipts(
       }
     }),
   );
-
-  if (landed.length > 0) {
-    const result = await finalizeReceiptsAction(perjadinId, transactionId, landed);
-    // A refused write means the same as a stale mint: what is on screen is no longer stored.
-    if (result.outcome !== "attached") return STALE_PAGE;
-    failed += result.failed;
-  }
-  // Partial success is real — files upload independently and one can fail while the rest land — so
-  // it is reported rather than swallowed.
-  if (failed > 0) return `${failed} berkas gagal diunggah.`;
-  return null;
+  return { landed, failed };
 }
 
 /**
- * What a page that has gone stale under the reader says. Reached from three places — a mint
- * against a deleted trip, a write that finds no such trip, and one that finds no such line item
- * — because all three mean the same thing to a PIC: what is on screen is no longer what is
- * stored, and no field they could edit will fix it.
+ * What a page that has gone stale under the reader says. Reached from four places — a mint
+ * against a deleted trip, a record that finds no such trip, and a row upload that finds no such
+ * trip or line item — because all of them mean the same thing to a PIC: what is on screen is no
+ * longer what is stored, and no field they could edit will fix it.
  */
 const STALE_PAGE = "Halaman ini sudah tidak sesuai. Muat ulang untuk melihat keadaannya.";
 
+/** Why a row's upload stopped short: the line is at its five-receipt ceiling. */
+const CAP_NOTE = `Maksimal ${MAX_RECEIPTS_PER_TRANSACTION} bukti per transaksi.`;
+
+/** Receipts that did not land — nothing is recorded, and "Catat" again retries all of them. */
+function retryNote(failed: number) {
+  return `${failed} berkas gagal diunggah — coba lagi.`;
+}
+
 /**
- * What each refusal says. `no-such-perjadin` is the only one the form cannot have predicted —
- * somebody deleted the trip while this page was open — so it says to reload rather than which
- * field to fix.
+ * What each refusal of a new line says. `no-such-perjadin` is the only one the form cannot have
+ * predicted — somebody deleted the trip while this page was open — so it says to reload rather
+ * than which field to fix. The two receipt-count refusals are ones the form's own guard already
+ * rules out; they are answered anyway, since the server is what holds the rule.
  */
-const REFUSALS = {
-  "amount-not-positive": "Jumlah harus lebih besar dari nol.",
-  "no-such-perjadin": STALE_PAGE,
-} as const;
+function refusalFor(result: Exclude<RecordTransactionActionResult, { outcome: "recorded" }>) {
+  switch (result.outcome) {
+    case "amount-not-positive":
+      return "Jumlah harus lebih besar dari nol.";
+    case "no-such-perjadin":
+      return STALE_PAGE;
+    case "evidence-missing":
+      return "Lampirkan setidaknya satu bukti.";
+    case "too-many-receipts":
+      return CAP_NOTE;
+    case "receipts-not-landed":
+      return retryNote(result.failed);
+  }
+}
 
 export { AcquittalTransactions, RecordTransaction };
