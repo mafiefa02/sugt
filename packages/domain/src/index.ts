@@ -98,9 +98,9 @@ const MINUTES_PER_DAY = 24 * 60;
 
 /**
  * Read a Postgres `time` value — `"09:00"` or `"09:00:00"` — as minutes since midnight.
- * Seconds are dropped: a Session's start time is a wall-clock hour and minute.
+ * Seconds are dropped: a Session's start and end times are wall-clock hours and minutes.
  */
-function startTimeToMinutes(time: string): number {
+function wallClockToMinutes(time: string): number {
   const match = /^(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(time);
   const hours = match ? Number(match[1]) : Number.NaN;
   const minutes = match ? Number(match[2]) : Number.NaN;
@@ -119,11 +119,20 @@ function minutesToHhMm(minutes: number): string {
 }
 
 /**
+ * A Postgres `time` value as a bare wall-clock `"HH:MM"`, seconds dropped and no zone — for a place
+ * that already names the zone once, such as a column header, where repeating it in every cell would
+ * only be noise.
+ */
+export function formatWallClockTime(time: string): string {
+  return minutesToHhMm(wallClockToMinutes(time));
+}
+
+/**
  * A Session's start time in its own Time Zone: `"09:00 WIT"`. The `time` is a Postgres
  * `time` value local to the School, and the zone is the School's Province's.
  */
 export function formatSessionStartTime(time: string, zone: TimeZone): string {
-  return `${minutesToHhMm(startTimeToMinutes(time))} ${zone}`;
+  return `${formatWallClockTime(time)} ${zone}`;
 }
 
 /**
@@ -138,7 +147,7 @@ export function formatSessionStartTimeWithWib(time: string, zone: TimeZone): str
   const local = formatSessionStartTime(time, zone);
   if (zone === "WIB") return local;
   const wibMinutes =
-    startTimeToMinutes(time) - (TIME_ZONE_OFFSET_HOURS[zone] - TIME_ZONE_OFFSET_HOURS.WIB) * 60;
+    wallClockToMinutes(time) - (TIME_ZONE_OFFSET_HOURS[zone] - TIME_ZONE_OFFSET_HOURS.WIB) * 60;
   return `${local} · ${minutesToHhMm(wibMinutes)} WIB`;
 }
 
@@ -168,10 +177,11 @@ export function formatIdr(n: number): string {
 /**
  * The one way money is displayed: `Rp` immediately followed by the grouped digits, with no
  * space — `formatRupiah(15000000000) === "Rp15.000.000.000"`. The `Rp` prefix lives here and
- * nowhere else, so no display site carries its own literal `"Rp "`.
+ * nowhere else, so no display site carries its own literal `"Rp "`. A negative amount — an
+ * overspent travel float (ADR-0029) — carries its sign before the prefix: `"-Rp50.000"`.
  */
 export function formatRupiah(n: number): string {
-  return `Rp${formatIdr(n)}`;
+  return n < 0 ? `-Rp${formatIdr(-n)}` : `Rp${formatIdr(n)}`;
 }
 
 /**
@@ -571,3 +581,13 @@ export const MAX_PREPARATION_CHECKLIST_ITEMS = 20;
 export const MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN = 10;
 export const MAX_TEACHING_TEAM_PER_PERJADIN = 20;
 export const MAX_EXTRA_STAFF_PER_GROUP = 10;
+
+/**
+ * **Receipts per transaction: at least one, at most this many, in total** ([ADR-0039](../../../docs/adr/0039-every-transaction-is-recorded-with-its-evidence.md)).
+ * A product rule, not a guard on an array: it counts the receipts recorded with the line plus every
+ * later upload from its row. Held by the application, in the two writes that add evidence
+ * (`recordTransaction`, `attachTransactionEvidence`) — no CHECK, because the shared database may
+ * already hold lines with none or with more, and those are grandfathered.
+ * The floor of one needs no constant of its own.
+ */
+export const MAX_RECEIPTS_PER_TRANSACTION = 5;

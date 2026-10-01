@@ -6,11 +6,14 @@ import { markSessionDelivered, type MarkDeliveredResult } from "@sugt/db/queries
 import { revalidatePath } from "next/cache";
 
 /**
- * **Tandai terlaksana, from the Beranda.** The Staff dashboard's own "Perjalanan Dinas Anda" card
- * marks a trip's offline Session delivered without opening `/sesi/[id]`. The write is the same
+ * **Tandai, from Pendamping.** Each Session on a "Perjalanan Dinas Anda" trip timeline (`/pendamping`,
+ * #349) marks that offline Session delivered without opening `/sesi/[id]`. The write is the same
  * status-only mutation that page runs — `markSessionDelivered`, whose `for update` lock and rule
- * live in the query function (convention 5) — but the page that must re-read differs: the Session's
- * own action revalidates `/sesi/[id]`, so it cannot be reused here. This one revalidates `/`.
+ * live in the query function (convention 5) — but the pages that must re-read differ: the Session's
+ * own action revalidates `/sesi/[id]`, so it cannot be reused here. This one revalidates `/`, the
+ * Dashboard whose delivery counts the mark changes. `/pendamping` needs no path of its own: a Server
+ * Action that revalidates any path also re-renders the route it was called from, so the card's
+ * Tandai goes and its node turns done without a reload — verified in a browser for #349.
  *
  * `staffSurface` is here for the same reason it is on the Session action: a non-Staff caller
  * reaching this is a bug or an attack, so it reads as a 403 rather than a crash. The `not-arranged`

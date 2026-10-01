@@ -207,6 +207,12 @@ times and the two Pengajar — are editable from its detail page, and a Session 
 reason, remains for offline Sessions, and only while one is still arranged — a Session that was
 delivered and then went wrong is a correction, not a cancellation.)
 
+**The Sesi daring list is a table** ([#344](https://github.com/sugt-itb/sugt-itb-26/issues/344)),
+built from the same pieces as the Perjadin list: Sekolah, Tanggal, Jam Mulai (WIB), Jam Selesai
+(WIB) — "—" when none was recorded — and Status. Only Tanggal sorts, newest first; same-day Sessions
+follow their start time the same way. The header stays in view, a row opens its Session, and the
+search box above narrows it by School.
+
 ### Perjadin
 
 Created inside the tool, because the Group rule is enforced at creation: **one PIC, and
@@ -247,15 +253,29 @@ pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid 
 no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Every trip has
 the same six fixed boxes — SK Perjalanan, the two tickets, lodging, local transport and one
 "confirmed with the Staff" — plus one per Teaching Team member of the Group. Any Staff member may
-tick any box; the boxes flip optimistically. On the Perjadin list each trip shows a
-`Persiapan: x/N` pill that greys at zero, ambers part-way and greens when everything is done — the
-one place the checklist's state leaves the trip's own screen.
+tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
+screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
+the Persiapan column of the Perjadin list, and on the trip cards of the Staff home strip. For Staff
+the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
+
+**The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):
+Perjadin, Sekolah (Schools with a Session that was not cancelled), Keberangkatan, Kepulangan, PIC,
+Persiapan and Terlaksana — delivered over not-cancelled Sessions, as an `x/N` badge in the same three
+tones, `0/0` grey. It opens newest Keberangkatan first; every column sorts, a new column descending
+first. The header stays in view while the list scrolls, a row opens its trip, and the search box
+above narrows it.
 
 ### The acquittal — the most important screen
 
 The PIC accounts for the whole Group. They enter each transaction that consumed the
-Advance, attach its evidence, and export a filled template of the acquittal paperwork.
+Advance together with its evidence, and export a filled template of the acquittal paperwork.
 Whatever is left is returned to the Treasurer.
+
+**A transaction is entered with its receipts: one to five, image or PDF** (ADR-0039). The
+"Catat transaksi" dialog uploads them all before it records the line. If any fails to upload,
+nothing is recorded, and the form keeps what was typed and picked so the PIC can try again. More
+receipts can be added later from the line's own "Unggah bukti", up to five in total. A line
+entered before this rule may have none; it is marked on the screen and fixed the same way.
 
 **Each transaction carries a category**, from a closed list of eleven plus _Lainnya_ —
 _Tiket Pesawat/Kereta PP_, _Uang Harian_, _Honorarium Narasumber_, _Akomodasi_,
@@ -277,10 +297,10 @@ the real form, which is the one thing this screen exists to stop; see the amendm
 [ADR-0007](./adr/0007-the-tool-generates-the-acquittal.md) for why that means the bet is
 not yet placed.
 
-Transactions can be entered **as they happen or after returning** — whichever suits.
-Both are first-class paths. There is no offline support; capture needs connectivity, and
-where it fails the PIC enters it later, losing convenience but never data. Offline is
-worth adding eventually, not worth blocking on.
+Transactions can be entered **as they happen or after returning** — whichever suits,
+with the receipt in hand either way. Both are first-class paths. There is no offline
+support; capture needs connectivity, and where it fails the PIC enters it later, losing
+convenience but never data. Offline is worth adding eventually, not worth blocking on.
 
 **The Report is due two days after the Group gets back**, and the screen shows days
 remaining. Nothing enters that date — it follows from the Perjadin's end date, so it

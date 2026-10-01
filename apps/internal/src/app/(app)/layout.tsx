@@ -1,8 +1,9 @@
 import { AppShell } from "-/components/app-shell";
+import { parseSidebarState, SIDEBAR_STATE_COOKIE } from "-/components/sidebar-state";
 import { SignOutButton } from "-/components/sign-out-button";
-import { ThemeToggle } from "-/components/theme-toggle";
 import { getPerson } from "-/lib/person";
 import { canViewDashboard, hasGrant } from "@sugt/db/queries";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 /**
@@ -38,25 +39,24 @@ export default async function SignedInLayout({
   const person = await getPerson();
   if (!person) redirect("/masuk");
 
+  // Read here so the server renders the desktop sidebar at its stored width: no flash of the
+  // expanded width on a collapsed reload (#359). No cookie, or an unknown value, is expanded.
+  const sidebarState = parseSidebarState((await cookies()).get(SIDEBAR_STATE_COOKIE)?.value);
+
   return (
     <AppShell
       role={person.role}
       personName={person.fullName}
       canEditMonitoring={hasGrant(person, "Editor")}
       canViewDashboard={canViewDashboard(person)}
+      sidebarState={sidebarState}
       footerAction={
-        /* Sign-out sits in the shell's footer — the one `SidebarBody` the desktop sidebar and
-           the mobile drawer both render (#122), so it is reachable in both. The theme toggle is
-           beside it on **desktop only** (`hidden md:flex`): on a phone it would repeat the toggle
-           now in the top bar (`app-shell-mobile-bar.tsx`, #127), so the footer copy is hidden
-           below `md`. Exactly one toggle shows per breakpoint — top bar on mobile, footer on
-           desktop. */
-        <div className="flex items-center gap-1">
-          <div className="hidden md:flex">
-            <ThemeToggle />
-          </div>
-          <SignOutButton />
-        </div>
+        /* Sign-out ends the profile row of the shell's footer — the one `SidebarBody` the desktop
+           sidebar and the mobile drawer both render (#122), so it is reachable in both, and on the
+           collapsed rail it sits under the avatar (#359). The theme control is not here: on
+           desktop it is the shell's own Mode Gelap row (or the rail's theme button), and on a
+           phone the top bar's toggle (#127) — one per breakpoint (#358). */
+        <SignOutButton />
       }
     >
       {children}

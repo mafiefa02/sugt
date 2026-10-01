@@ -16,9 +16,12 @@ import Link from "next/link";
 function DashboardStaff({
   dashboard,
   upcoming,
+  today,
 }: {
   dashboard: StaffDashboard;
   upcoming: MyUpcomingPerjadin[];
+  /** WIB `YYYY-MM-DD`, computed on the server — the trip timeline's legs are done before it. */
+  today: string;
 }) {
   return (
     <div className="flex min-h-full flex-col gap-8 p-7">
@@ -31,7 +34,10 @@ function DashboardStaff({
       {/* The caller's own upcoming trips, near the top — their working list comes before the
           Programme-wide counts. A client island (its dialogs and paging are client-side); this
           server component stays a server component around it. Absent entirely when they have none. */}
-      <MyPerjadinSection trips={upcoming} />
+      <MyPerjadinSection
+        trips={upcoming}
+        today={today}
+      />
 
       <section>
         <h2 className="font-heading text-sm font-medium">Program secara keseluruhan</h2>

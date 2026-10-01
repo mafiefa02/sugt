@@ -1,5 +1,6 @@
 "use client";
 
+import { STORY_KIND_LABELS, streamLabel } from "-/components/cerita/story-labels";
 import type { CeritaEntry } from "@sugt/db/queries";
 import { Badge } from "@sugt/ui/components/badge";
 import { Input } from "@sugt/ui/components/input";
@@ -136,10 +137,8 @@ function EntryCard({ entry }: { entry: CeritaCard }) {
         <p className="truncate text-sm font-medium">{entry.title || "Tanpa judul"}</p>
         <p className="truncate text-xs text-muted-foreground">{entry.schoolName}</p>
         <div className="flex flex-wrap gap-1">
-          <Badge variant="secondary">
-            {entry.kind === "field" ? "Cerita lapangan" : "Final Project"}
-          </Badge>
-          <Badge variant="outline">{entry.stream ?? "Keduanya"}</Badge>
+          <Badge variant="secondary">{STORY_KIND_LABELS[entry.kind]}</Badge>
+          <Badge variant="outline">{streamLabel(entry.stream)}</Badge>
         </div>
       </div>
     </Link>

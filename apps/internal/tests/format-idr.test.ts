@@ -31,4 +31,10 @@ describe("formatRupiah", () => {
     expect(formatRupiah(100000)).toBe("Rp100.000");
     expect(formatRupiah(7000)).toBe("Rp7.000");
   });
+
+  // An overspent travel float is a real negative remainder (ADR-0029); its sign reads before the
+  // prefix, not between `Rp` and the digits (#348).
+  it("puts a negative amount's sign before Rp", () => {
+    expect(formatRupiah(-50000)).toBe("-Rp50.000");
+  });
 });

@@ -17,9 +17,9 @@ export const metadata: Metadata = { title: "Sesi Daring" };
  * delivery data, open to everyone signed in (ADR-0004). Recording one stays Staff-only, on
  * `/sesi-daring/baru` (#318), and its create action is the only affordance here.
  *
- * The start time is rendered with its School's Time Zone the same way every other surface shows it
- * ([#72](https://github.com/mafiefa02/sugt/issues/72)); the zone comes from the School's Province,
- * never stated separately.
+ * The table lives in the `"use client"` `OnlineSessionDirectoryList`, which filters (#333) and sorts
+ * (#344) the payload in the browser. An online Session is always WIB (#283), so its times are shown
+ * as bare `HH:MM` under "Jam Mulai (WIB)" and "Jam Selesai (WIB)" headers rather than per cell.
  */
 export default async function Page() {
   const person = await requirePerson();

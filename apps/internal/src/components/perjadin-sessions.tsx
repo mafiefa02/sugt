@@ -13,7 +13,7 @@ import type {
   EligibleSchool,
   PerjadinSession,
 } from "@sugt/db/queries";
-import { formatSessionStartTimeWithWib, STREAMS, type Stream, timeZoneSuffix } from "@sugt/domain";
+import { formatSessionStartTimeWithWib, timeZoneSuffix } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -42,10 +42,11 @@ type TripTeacher = { id: string; name: string };
 
 /**
  * A Perjadin's offline Sessions, and — for Staff — the per-Session controls: add one, edit an
- * arranged one's School, date, time, Stream and "Diajar oleh", and cancel one (which is how a Session
- * is removed, kept visible as an attempt). Every rule the plan form checks — inside the trip's window,
- * at a School of its Sub-Cluster, no two *different* Schools sharing a moment, the ten-per-School
- * ceiling — is re-checked by the write against the trip's other Sessions.
+ * arranged one's School, date, time and "Diajar oleh", and cancel one (which is how a Session is
+ * removed, kept visible as an attempt). Every rule the plan form checks — inside the trip's window, at
+ * a School of its Sub-Cluster, no two *different* Schools sharing a moment, the ten-per-School
+ * ceiling — is re-checked by the write against the trip's other Sessions; one Session per School per
+ * moment (ADR-0038) is left to the database index, whose refusal comes back as `duplicate-session`.
  *
  * The list is shown to everyone (a Session carries no money); the controls appear only for Staff.
  */
@@ -113,9 +114,6 @@ function PerjadinSessions({
               >
                 {session.schoolName}
               </Link>
-              {session.stream !== null && (
-                <span className="text-muted-foreground">· {session.stream}</span>
-              )}
               {session.taughtBy.length > 0 && (
                 <span className="text-muted-foreground">
                   · {session.taughtBy.map((teacher) => teacher.name).join(", ")}
@@ -156,8 +154,8 @@ function PerjadinSessions({
 
 /**
  * Add or edit one Session. With `session` it edits that one (its fields seed the form); without, it
- * adds a new one. The same five fields either way — School, date, time, Stream, "Diajar oleh" — and
- * the same write shape, so one dialog serves both.
+ * adds a new one. The same four fields either way — School, date, time, "Diajar oleh" — and the same
+ * write shape, so one dialog serves both. No Stream: a Session teaches both (ADR-0038).
  */
 function SessionDialog({
   perjadinId,
@@ -180,7 +178,6 @@ function SessionDialog({
   const [schoolId, setSchoolId] = useState(session?.schoolId ?? "");
   const [date, setDate] = useState(session?.heldOn ?? "");
   const [time, setTime] = useState(session ? session.startsAt.slice(0, 5) : "");
-  const [stream, setStream] = useState<Stream | "">(session?.stream ?? "");
   const [taughtBy, setTaughtBy] = useState<string[]>(
     () => session?.taughtBy.map((teacher) => teacher.id) ?? [],
   );
@@ -189,7 +186,7 @@ function SessionDialog({
   const idPrefix = useId();
 
   const teacherOptions = teachers.map((teacher) => ({ value: teacher.id, label: teacher.name }));
-  const incomplete = schoolId === "" || date === "" || time === "" || stream === "";
+  const incomplete = schoolId === "" || date === "" || time === "";
 
   // The picked School's Time Zone, for the Jam Mulai label. In add mode it appears and flips as the
   // School is chosen (#165); in edit mode the seeded School's zone matches `session.timeZone`, and
@@ -204,7 +201,6 @@ function SessionDialog({
         schoolId,
         heldOn: date,
         startsAt: time,
-        stream: stream as Stream,
         taughtByTeacherIds: taughtBy,
       };
       const result = session
@@ -228,9 +224,7 @@ function SessionDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{session ? "Ubah Sesi" : "Tambah Sesi"}</DialogTitle>
-          <DialogDescription>
-            Sekolah, tanggal, jam, Aliran dan siapa yang mengajar.
-          </DialogDescription>
+          <DialogDescription>Sekolah, tanggal, jam dan siapa yang mengajar.</DialogDescription>
         </DialogHeader>
 
         {refusal !== null && (
@@ -297,35 +291,6 @@ function SessionDialog({
                 }}
               />
             </div>
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor={`${idPrefix}-stream`}>Aliran</Label>
-            <Select
-              items={Object.fromEntries(STREAMS.map((entry) => [entry, entry]))}
-              value={stream === "" ? null : stream}
-              onValueChange={(value) => {
-                setStream((value as Stream | null) ?? "");
-                setRefusal(null);
-              }}
-            >
-              <SelectTrigger
-                id={`${idPrefix}-stream`}
-                aria-label="Aliran"
-              >
-                <SelectValue placeholder="Pilih Aliran" />
-              </SelectTrigger>
-              <SelectContent>
-                {STREAMS.map((entry) => (
-                  <SelectItem
-                    key={entry}
-                    value={entry}
-                  >
-                    {entry}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="grid gap-1.5">
@@ -464,7 +429,7 @@ function sessionRefusalMessage(
     case "no-such-perjadin":
       return "Perjadin ini sudah tidak ada. Muat ulang halaman.";
     case "duplicate-session":
-      return "Sesi yang persis sama (Sekolah, tanggal, jam dan Aliran) sudah ada.";
+      return "Sesi yang persis sama (Sekolah, tanggal dan jam) sudah ada.";
     case "school-outside-sub-cluster":
       return "Sekolah itu bukan bagian dari Kelompok Sekolah Perjadin ini.";
     case "session-outside-perjadin":

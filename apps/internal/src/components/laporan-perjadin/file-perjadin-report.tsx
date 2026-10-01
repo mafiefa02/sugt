@@ -12,10 +12,11 @@ import { useState, useTransition } from "react";
  * Perjadin Report is the acquittal and the tool holds several other things a reader would
  * otherwise call a report.
  *
- * This is the one moment "every transaction has at least one piece of evidence" is checked. It is
- * a cross-row count no constraint can express, and it must not run when a transaction is entered:
- * a receipt may be attached later, and a PIC logging a fare on the pavement has not photographed
- * it yet.
+ * "Every transaction has at least one piece of evidence" is checked here as a backstop. Since
+ * ADR-0039 a line is recorded with its receipts or not at all, so a line entered through the app
+ * always has one; what this still catches is a line from before that rule, which no migration
+ * touched. The refusal counts those lines — the list below marks each — and each is fixed through
+ * its own "Unggah bukti".
  *
  * **Nothing else is gated**, the deadline included. DITSAMA sets that deadline for itself, and the
  * tool is never stricter than the process it serves — invented friction has the same escape route

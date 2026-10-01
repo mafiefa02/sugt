@@ -59,8 +59,6 @@ export type PerjadinSession = {
   /** The School's Province's Time Zone, for rendering `startsAt`. */
   timeZone: TimeZone;
   status: SessionStatus;
-  /** The Stream this Session teaches — STEM or Research (ADR-0019). Never null on an offline row. */
-  stream: Stream | null;
   /** The trip's teacher names who staffed this Session's parallel rooms, for editing "Diajar oleh". */
   taughtBy: { id: string; name: string }[];
 };
@@ -203,7 +201,6 @@ export async function perjadinDetail(
         startsAt: session.startsAt,
         timeZone: province.timeZone,
         status: session.status,
-        stream: session.stream,
       })
       .from(session)
       .innerJoin(school, eq(school.id, session.schoolId))

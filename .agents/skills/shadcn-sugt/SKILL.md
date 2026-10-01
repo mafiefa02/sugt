@@ -73,3 +73,9 @@ Imports from inside an app:
    reach (ADR-0010, and the ADR-0001 boundary behind it).
 3. **Run `pnpm fmt`.** oxfmt sorts Tailwind classes against the shared stylesheet;
    generated files arrive unsorted.
+4. **Rewrite `import { cn } from "cn"`.** The registry now writes that import into a
+   generated primitive, and adds a `cn` npm package to `@sugt/ui`'s `dependencies`
+   (seen on `add switch` with CLI 4.16.1 and 4.21.0, #358; `add button` does the same).
+   Point the import at `@sugt/ui/lib/utils`, as every sibling does, drop the `cn`
+   dependency from `packages/ui/package.json`, and `pnpm install`. The stray package
+   type-checks and resolves, so nothing fails to tell you.

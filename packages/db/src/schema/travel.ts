@@ -318,9 +318,10 @@ export const perjadinPreparationItem = pgTable(
 );
 
 /**
- * Many per transaction. `storagePath` is the object key in the private `receipts` bucket,
- * and it is **opaque** — a bare UUID naming no Perjadin, no transaction and no person.
- * A signed URL carries its object path inside the JWT it is signed with, so a structured
+ * One to five per transaction (ADR-0039), held by the application rather than here — lines from
+ * before that rule may hold none or more. `storagePath` is the object key in the private
+ * `receipts` bucket, and it is **opaque** — a bare UUID naming no Perjadin, no transaction and no
+ * person. A signed URL carries its object path inside the JWT it is signed with, so a structured
  * key would put the trip's identifiers into every link the screen renders.
  *
  * `unique` on it means one uploaded object can be attached exactly once.
