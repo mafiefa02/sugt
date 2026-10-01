@@ -1,4 +1,6 @@
+import { db, schema } from "@sugt/db";
 import { onlineSessionDirectory } from "@sugt/db/queries";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -87,6 +89,19 @@ describe("onlineSessionDirectory", () => {
     ]);
   });
 
+  /** The table's Jam Selesai column (#344) — `ends_at` is a nullable `time`, so a null must come through. */
+  it("carries each row's end time, and null where none was recorded", async () => {
+    const pic = await staff();
+    const { a, b } = await twoSchools();
+    await addSession({ schoolId: a.id, heldOn: "2026-09-10", startsAt: "09:00", endsAt: "10:30" });
+    const older = await addSession({ schoolId: b.id, heldOn: "2026-09-09", startsAt: "09:00" });
+    await db.update(schema.session).set({ endsAt: null }).where(eq(schema.session.id, older.id));
+
+    const rows = await onlineSessionDirectory(pic);
+
+    expect(rows.map((row) => row.endsAt)).toEqual(["10:30:00", null]);
+  });
+
   it("carries the School and the status on each row (no PIC, no Peserta; #284, #318)", async () => {
     const pic = await staff();
     const school = await oneSchool();
@@ -100,33 +115,10 @@ describe("onlineSessionDirectory", () => {
     const [row] = await onlineSessionDirectory(pic);
 
     expect(row?.schoolName).toBe("SMAN 1 Bandung");
-    expect(row?.schoolSlug).toBe("sman-1-bandung");
     expect(row?.status).toBe("delivered");
     // No PIC on an online row any more (#284), and no Peserta (#318).
     expect(row).not.toHaveProperty("picFullName");
     expect(row).not.toHaveProperty("participantType");
-  });
-
-  /**
-   * Online Sessions are always WIB (#283), not derived from the School's Province — so a School in a
-   * WIT Province still reports WIB. A hardcoded-anywhere `WIB` passes the WIB-Province test above by
-   * accident; this one proves the row does not read `province.time_zone`.
-   */
-  it("reports WIB even for a School in a non-WIB Province", async () => {
-    const pic = await staff();
-    await addProvince("PA", "Papua", "WIT");
-    const papua = await addCluster({ slug: "cluster-papua", name: "Cluster Papua" });
-    const school = await addSchool({
-      slug: "sman-jayapura",
-      name: "SMAN Jayapura",
-      clusterId: papua.id,
-      provinceCode: "PA",
-    });
-    await addSession({ schoolId: school.id, heldOn: "2026-09-10" });
-
-    const [row] = await onlineSessionDirectory(pic);
-
-    expect(row?.timeZone).toBe("WIB");
   });
 
   it("lists every status, including cancelled — this is the calendar, not a count", async () => {

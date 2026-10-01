@@ -1,5 +1,10 @@
 # Offline Sessions carry a Stream and a School gets many per trip
 
+> **Partially superseded by [ADR-0038](./0038-offline-sessions-carry-no-stream-and-parallel-rooms-are-one-session.md).**
+> Offline Sessions no longer carry a Stream, and two live Sessions at the same School and the same
+> moment are **no longer** allowed — parallel rooms are one Session. The many-Sessions-per-School half
+> below still stands.
+
 An offline **Session** now carries an **Aliran (Stream)** — STEM or Research — and a School may have
 **several** offline Sessions on one Perjadin, each single-Stream, on its own date and start time. The
 distinction between STEM and Research is no longer a property of who teaches; it is a property of the

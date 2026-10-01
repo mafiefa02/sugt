@@ -1,4 +1,4 @@
-import type { SessionMode, SessionStatus, Stream } from "@sugt/domain";
+import type { SessionMode, SessionStatus } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -60,14 +60,11 @@ export const session = pgTable(
     // guarantee rather than this module's hope. `$type<>()` comes before `.default()` so
     // that the default is checked against the set too.
     mode: text("mode").$type<SessionMode>().notNull(),
-    // An **offline** Session carries one Stream — STEM or Research (ADR-0019); an **online** Session
-    // no longer does (#284, superseding ADR-0022). Online delivery is run by a third-party LMS and is
-    // no longer split by Stream, so `stream` is left null for online rows and required only for
-    // offline. Still `text().$type<>()` rather than NOT NULL in the column type because the value set
-    // and the presence rule are both CHECKs — `session_stream_check` pins the two allowed values and
-    // `session_offline_stream_not_null` pins that an offline row carries one. `mode`/`perjadin_id`
-    // tell you the mode; `stream` never did.
-    stream: text("stream").$type<Stream>(),
+    // **No Stream (#342, ADR-0038).** An online Session lost its Stream in #284 (ADR-0034), and an
+    // offline Session lost its in #342: the material taught in a Session is not specific to the STEM
+    // or the Research stream but a combination of both, so a Session has no Stream to record. Stream
+    // survives as a Programme concept — on `group_member`, `assessment_completion` and `story` — just
+    // not on a Session.
     heldOn: date("held_on").notNull(),
     // A wall-clock start time local to the School, in the School's Time Zone. NOT NULL
     // immediately — no Session exists in any live database, so there is nothing to
@@ -105,17 +102,6 @@ export const session = pgTable(
   (t) => [
     check("session_mode_check", sql`${t.mode} in ('offline', 'online')`),
     check("session_status_check", sql`${t.status} in ('arranged', 'delivered', 'cancelled')`),
-    check("session_stream_check", sql`${t.stream} in ('STEM', 'Research')`),
-    // Stream is required for **offline only** now (#284, superseding ADR-0022's unconditional rule):
-    // online delivery is no longer split by Stream, so an online row leaves `stream` null. Written as
-    // an implication rather than an equivalence — `mode <> 'offline' or stream is not null` — so it
-    // says "an offline Session has a Stream" without also claiming an online one has none for any
-    // reason but convention (nothing reads an online Stream). `session_stream_check` still pins the
-    // value set for the rows that do carry one.
-    check(
-      "session_offline_stream_not_null",
-      sql`${t.mode} <> 'offline' or ${t.stream} is not null`,
-    ),
     // The sharpest rule in the delivery half, and an equivalence in both directions:
     // an offline Session has a Perjadin and an online Session has none. It is also what ties an
     // offline Session to a PIC now the online PIC columns are gone (#284): the PIC of a Session is
@@ -157,24 +143,27 @@ export const session = pgTable(
     uniqueIndex("session_one_online_per_school_per_day")
       .on(t.schoolId, t.heldOn)
       .where(ONLINE_SESSION_STILL_STANDS),
-    // Many offline Sessions per School per trip are now the point, not a collision (ADR-0019):
-    // a School's participants are too many for one room, so a period splits into parallel rooms
-    // — same School, same date, same start time, same Stream — each staffed by different
-    // teachers. So the only thing forbidden here is an *exact* duplicate: two live offline
-    // Sessions identical in Stream as well as School, date and time. Parallel rooms differ by
-    // nothing the row records, so this index does not separate them; that count is an
-    // app-level cap (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule.
+    // **One live offline Session per School per moment on a trip (#342, ADR-0038, reversing
+    // ADR-0019's "two at the same School and the same moment are allowed").** A School's participants
+    // are still too many for one room, so a period still splits into parallel rooms — but those rooms
+    // are now recorded as **one** Session whose Teaching Team lists everyone who taught. With Stream
+    // gone from the row, two Sessions at one School, date and start time would differ by nothing the
+    // row records, so the index keys on exactly those and forbids the pair. A School may still hold
+    // many Sessions on a trip at *different* moments; that count is an app-level cap
+    // (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule.
     //
     // The old `session_one_school_at_a_time_per_perjadin` — one that forbade two Sessions at
-    // one moment across the *whole* trip — is dropped: "two DIFFERENT Schools cannot share a
-    // date and time" survives as a rule but is not expressible as a plain unique index (it
-    // must ignore same-School rows), so it moves to the application (see T2) and to
+    // one moment across the *whole* trip — was dropped by ADR-0019, because it also forbade the
+    // same-School pair ADR-0019 allowed. ADR-0038 forbids that pair again, so the two rules together
+    // now amount to one live offline Session per trip per moment, which that trip-wide index could
+    // hold once more. #342 specified this narrower per-School key instead, so "two DIFFERENT Schools
+    // cannot share a date and time" stays the application's (see T2) and is listed in
     // `data-model.md`'s "what the database does not hold". Partial in the same way as the
-    // online index: cancelled rows accumulate and must not collide with their replacements,
-    // and online Sessions are untouched because their `perjadin_id` is null — which alone keeps
-    // them distinct here, so ADR-0022 giving them a Stream does not draw them into this index.
+    // online index: cancelled rows accumulate and must not collide with their replacements —
+    // a cancelled Session never blocks its slot — and online Sessions are untouched because their
+    // `perjadin_id` is null, which alone keeps them distinct here.
     uniqueIndex("session_no_duplicate_offline_per_school_per_perjadin")
-      .on(t.perjadinId, t.schoolId, t.heldOn, t.startsAt, t.stream)
+      .on(t.perjadinId, t.schoolId, t.heldOn, t.startsAt)
       .where(sql`status <> 'cancelled'`),
     // The two partial-unique indexes above both carry a `WHERE` predicate, so the planner cannot use
     // either for a general equality lookup — a `perjadin_id =` or `school_id =` filter that must also
@@ -202,9 +191,9 @@ export const session = pgTable(
 
 /**
  * "Diajar oleh" — which of a Perjadin's trip-scoped teacher names taught one offline
- * Session, in parallel (ADR-0019, ADR-0020). A set, not one-per-Stream: the Session already
- * carries its Stream, and several `perjadin_teacher` names may have staffed its parallel
- * rooms, so this is a plain many-to-many with no Stream and no Person.
+ * Session, in parallel (ADR-0019, ADR-0020). A set, not one-per-Stream: a Session carries no
+ * Stream (ADR-0038), and several `perjadin_teacher` names may have staffed its parallel rooms —
+ * which are one Session now — so this is a plain many-to-many with no Stream and no Person.
  *
  * Both sides cascade on delete — a link is meaningless once either the Session or the
  * teacher name is gone. It is the offline analogue of an online Session's Pengajar, which since #318

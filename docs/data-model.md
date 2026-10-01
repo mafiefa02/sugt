@@ -385,7 +385,6 @@ create table session (
   school_id         uuid not null references school (id),
   perjadin_id       uuid references perjadin (id),
   mode              text not null check (mode in ('offline', 'online')),
-  stream            text check (stream in ('STEM', 'Research')),
   held_on           date not null,
   starts_at         time not null,
   ends_at           time,
@@ -398,7 +397,6 @@ create table session (
   created_at        timestamptz not null default now(),
 
   check ((mode = 'offline') = (perjadin_id is not null)),
-  check (mode <> 'offline' or stream is not null),
   check ((status = 'cancelled') = (cancelled_reason is not null)),
   check (mode <> 'online'
          or (pengajar_siswa_name is not null and pengajar_gtk_ms_name is not null)),
@@ -410,22 +408,19 @@ create unique index session_one_online_per_school_per_day
   where perjadin_id is null and status <> 'cancelled';
 
 create unique index session_no_duplicate_offline_per_school_per_perjadin
-  on session (perjadin_id, school_id, held_on, starts_at, stream)
+  on session (perjadin_id, school_id, held_on, starts_at)
   where status <> 'cancelled';
 ```
 
-**`stream` carries the STEM/Research division of an _offline_ Session**
-([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md)).
-The split used to be a property of who taught — the two `session_teacher` rows, one per Stream —
-but an offline Session now teaches _one_ Stream, so the Stream moved onto the Session itself.
-ADR-0022 briefly made online Sessions single-Stream too, but
-[ADR-0034](./adr/0034-online-sessions-are-no-longer-single-stream.md) **superseded that**: online
-delivery is run by a third-party LMS and is no longer split by Stream, so an **online** Session
-leaves `stream` null. The presence CHECK is therefore the implication
-`mode <> 'offline' or stream is not null` (`session_offline_stream_not_null`) — an offline Session
-carries a Stream, an online one need not — replacing ADR-0022's unconditional `stream is not null`.
-`session_stream_check` still pins the value set for the rows that do carry one. `mode`/`perjadin_id`
-tell you the mode; `stream` never did.
+**No Session carries a Stream.** The STEM/Research split used to be a property of who taught — the
+two `session_teacher` rows, one per Stream — then ADR-0019 moved it onto the offline Session as a
+`stream` column, and ADR-0022 briefly did the same online.
+[ADR-0034](./adr/0034-online-sessions-are-no-longer-single-stream.md) took it off online Sessions,
+and [ADR-0038](./adr/0038-offline-sessions-carry-no-stream-and-parallel-rooms-are-one-session.md) took
+it off offline ones: the material taught in a Session is a combination of both Streams, not one, so
+there is nothing to record. Migration `0032` drops `stream` with `session_stream_check` and
+`session_offline_stream_not_null`, discarding the values. Stream survives where it does describe
+something — `group_member`, `assessment_completion`, `story` — just not on `session`.
 
 **The online index keys on `(school_id, held_on)`**
 ([ADR-0034](./adr/0034-online-sessions-are-no-longer-single-stream.md), superseding ADR-0022). Online
@@ -437,19 +432,27 @@ It dropped `stream` from the key when Stream was dropped from online delivery. I
 collide with their replacements.
 
 **Two offline-Session indexes were dropped, and this one replaces them
-([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md)).**
+([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
+narrowed by [ADR-0038](./adr/0038-offline-sessions-carry-no-stream-and-parallel-rooms-are-one-session.md)).**
 `session_one_per_school_per_perjadin` — "one Session per School on the trip" — is gone, because a
-School now has _several_ offline Sessions per Perjadin, each single-Stream, on its own date and
-time. `session_one_school_at_a_time_per_perjadin`, on `(perjadin_id, held_on, starts_at)`, forbade
-_any_ two Sessions sharing a moment on one trip; but parallel rooms at one School run at the same
-moment on purpose, so it was too strict and had to go. What survives at the database is only the
-rejection of an _exact_ duplicate — the same School, date, time **and** Stream — while parallel
-Streams, or split rooms in the same Stream, are allowed. The count of Sessions per School is an
-app cap (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule. The rule that **two
-_different_ Schools cannot share a date and time** on one trip — the Group is one travelling party
-— cannot be a plain unique index, because it must ignore same-School rows; it moves to the
-application (enforced when a trip is planned) and is listed in
-[what the database does not hold](#what-the-database-does-not-hold).
+School now has _several_ offline Sessions per Perjadin, each on its own date and time.
+`session_one_school_at_a_time_per_perjadin`, on `(perjadin_id, held_on, starts_at)`, forbade _any_
+two Sessions sharing a moment on one trip, same School included, and had to go. What the database
+holds is **one live offline Session per School per date and start time on a trip**: parallel rooms
+are recorded as one Session whose Teaching Team lists everyone who taught, so two live rows at the
+same School and moment are refused. ADR-0019 had allowed that pair when the key also carried
+`stream` (a STEM and a Research room at one hour); ADR-0038 dropped `stream` and reversed it.
+Migration `0032` narrows the index only after checking for live pairs it would refuse, and **aborts
+listing them** rather than merging or cancelling a real Session itself. Partial on
+`status <> 'cancelled'`, so a cancelled Session never blocks its slot. The count of Sessions per
+School is an app cap (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule. The rule that
+**two _different_ Schools cannot share a date and time** on one trip — the Group is one travelling
+party — stays the application's (enforced when a trip is planned, and when a Session is added or
+edited) and is listed in [what the database does not hold](#what-the-database-does-not-hold). Under
+ADR-0019 it could not be a plain unique index, because same-School pairs had to pass. Since
+ADR-0038 they no longer do, so the two rules together are one live offline Session per trip per
+moment, and the trip-wide `(perjadin_id, held_on, starts_at)` index could hold both. #342 kept the
+per-School key it specified; restoring the trip-wide index would be its own change.
 
 **There is no `sub_cluster_id` on a Session, and the reason is worth stating because the column
 is an obvious thing to reach for.** The rule it would enforce — every School a Perjadin teaches
@@ -589,9 +592,9 @@ cohort-named columns on the Session, edited through the Session's own field dial
 `/sesi-daring/[id]`, and a mis-recorded online Session is **hard-deleted** (`deleteOnlineSession`)
 rather than corrected name by name or cancelled — the correction path that replaced the old
 post-delivery "Perbaiki pengajar" flow and, for born-`delivered` rows, cancellation. An **offline**
-Session's mark-delivered was already status only (#140): it carries its Stream, its teachers are trip-scoped
+Session's mark-delivered was already status only (#140): its teachers are trip-scoped
 `session_teaching_team` names edited on the Perjadin, and it writes no per-Stream Person (ADR-0019,
-ADR-0020). Consequences left **deferred** and not modelled here — see the open question in
+ADR-0020) — nor carries a Stream at all since ADR-0038. Consequences left **deferred** and not modelled here — see the open question in
 `CONTEXT.md`: **Class Records** for a name-taught Session (their filer would be a name, not a Person
 who can sign in, on both sides now) and the **offline progress metric** (the fixed
 `delivered / TOTAL_SESSIONS_PER_SCHOOL` no longer holds for the offline half, whose Session count per
@@ -631,8 +634,8 @@ create table session_teaching_team (
 ```
 
 "Diajar oleh" — the _set_ of a Perjadin's trip-scoped teacher names who staffed one offline
-Session's parallel rooms. A plain many-to-many with no Stream (the Session already carries it) and
-no Person. Both sides cascade: a link means nothing once either the Session or the teacher name is
+Session's parallel rooms — one Session, not one per room (ADR-0038). A plain many-to-many with no
+Stream (no Session carries one) and no Person. Both sides cascade: a link means nothing once either the Session or the teacher name is
 gone. It is the offline analogue of an online Session's two `pengajar_*` columns, and touches no
 `person` row, which is the whole point of the name-based model ([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)).
 
@@ -1324,7 +1327,7 @@ sign in; modelling them as People needed an email and implied they could authent
 records, none of which is true. It is a table of its own, not a column on `perjadin`, because names
 are added, renamed and removed one at a time (T3), and each row has an `id` so
 `session_teaching_team` can link the ones who taught a given offline Session. It carries **no
-Stream and no Person FK** — a name is not a Person and a Stream lives on the Session now. `on delete
+Stream and no Person FK** — a name is not a Person, and no Session carries a Stream (ADR-0038). `on delete
 cascade`: the names are the trip's and outlive nothing.
 
 **`perjadin_pimpinan` records a Pimpinan on a Perjadin — record-only.** A leader of DITSAMA ITB who
@@ -1378,7 +1381,7 @@ upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than d
 is a single box** — "confirmed with the Pendamping" (the on-Perjadin label for the DITSAMA role,
 [#141](https://github.com/mafiefa02/sugt/issues/141)), not one row per member; the stored key stays
 `staff`. `N` is therefore the
-constant **7**, and the Perjadin list's `Persiapan: x/N` pill counts the ticks whose key is one of
+constant **7**, and the Perjadin list's Persiapan `x/N` pill counts the ticks whose key is one of
 the seven fixed items.
 
 ---
@@ -1469,8 +1472,12 @@ and the like) and it stays out until a real form asks for it.
 running remainder the acquittal screen shows, and it is a query. Only the fact that money was
 returned is a stored event.
 
-Evidence is many-per-transaction. `storage_path` is the object key in the private bucket, and
-`unique` on it means an upload cannot be attached twice.
+Evidence is **one to five per transaction** (ADR-0039). The application holds that range, not
+the database: `recordTransaction` writes a line and its evidence together and refuses zero or
+more than five, and `attachTransactionEvidence` refuses a batch that would take a line past five,
+counting under a lock on the parent row. There is no CHECK, because the shared database may
+already hold lines with none or more, and those are grandfathered. `storage_path` is the object
+key in the private bucket, and `unique` on it means an upload cannot be attached twice.
 
 ---
 
@@ -1615,6 +1622,13 @@ nothing else. It is also not a precedent — a field a form insists on before it
 different thing, and the next rule that wants to withhold an action until some **other** record
 is complete has to make its own case rather than cite this one.
 
+Recording a transaction now requires its receipts
+([ADR-0039](./adr/0039-every-transaction-is-recorded-with-its-evidence.md)), and **that is the
+other kind of rule: a field a form insists on before it will submit**. The receipts are part of
+the line being written, not a separate record the action waits on. Filing gains no new
+condition: `filePerjadinReport`'s evidence check is unchanged, and now only ever fires on a line
+recorded before the rule.
+
 The two buckets stay exactly as split below. A Story's photographs are public by intent, which
 is the whole difference from a receipt.
 
@@ -1754,12 +1768,15 @@ the hand-ticked "Pengajar sudah lengkap" box, not a constraint.
 
 **"Two _different_ Schools cannot share a date and time on one Perjadin."** The Group is one
 travelling party and cannot be in two places at once. This used to be the
-`session_one_school_at_a_time_per_perjadin` index, but ADR-0019 dropped it — parallel Sessions at
-one School run at the same moment on purpose, and a plain unique index cannot forbid two _different_
-Schools while allowing two rows at the _same_ School. So it is now the application's, checked when a
-trip is planned (`planPerjadin` groups the planned Sessions by `(date, time)` and refuses any slot
-holding more than one distinct School, naming the pair). The database still rejects an _exact_
-duplicate — same School, date, time and Stream — through `session_no_duplicate_offline_per_school_per_perjadin`.
+`session_one_school_at_a_time_per_perjadin` index, but ADR-0019 dropped it because it also forbade
+two Sessions at the _same_ School and moment, which ADR-0019 allowed. ADR-0038 forbids those again —
+through its own per-School index, not by restoring the trip-wide one (see the Delivery section) — so
+the different-Schools rule is still the application's, checked when a trip is planned (`planPerjadin` groups
+the planned Sessions by `(date, time)` and refuses any slot holding more than one distinct School,
+naming the pair) and when a Session is added or edited on the trip. The database does reject two
+live Sessions at the _same_ School, date and time — one Session per School per moment (ADR-0038) —
+through `session_no_duplicate_offline_per_school_per_perjadin`; `planPerjadin` checks that too, from
+the same grouping, so the form gets a `duplicate-session` value rather than a raw violation.
 
 **Three app caps on the new Perjadin model.** None is a DB constraint, all live in the application in
 the same spirit as the Group rules: **ten** offline Sessions per School per Perjadin
@@ -1770,9 +1787,8 @@ extra Staff beyond the PIC on a Group (`MAX_EXTRA_STAFF_PER_GROUP`). All three c
 
 **"Both Streams were taught."** **Gone** ([#153](https://github.com/mafiefa02/sugt/issues/153), and
 ADR-0022). It was an online-only rule, checked at delivery against the two `session_teacher` rows —
-but an online Session is single-Stream now (ADR-0022) and carries one `stream` like an offline one,
-and `session_teacher` is dropped, so there is no both-Streams expectation left to hold on either
-side. Marking delivered is status-only for both modes.
+but no Session carries a Stream now (ADR-0034 online, ADR-0038 offline), and `session_teacher` is
+dropped, so there is no both-Streams expectation left to hold on either side. Marking delivered is status-only for both modes.
 
 **That an arranged offline Session falls inside its Perjadin.** `session.held_on` and
 `perjadin.starts_on`/`ends_on` are unrelated columns as far as the database is concerned. The
@@ -1843,9 +1859,10 @@ still on the concerns list — but it is held by the application alone: the Sess
 cancellation while a Session is `arranged` and never after, and offers no way back from
 `delivered` at all.
 
-**"Every transaction has at least one piece of evidence."** Also a cross-row count. Required
-when the Report is filed, not when the transaction is entered — `product.md` is explicit that
-a receipt can be attached later.
+**"Every transaction has at least one piece of evidence."** Also a cross-row count. Held at
+entry since [ADR-0039](./adr/0039-every-transaction-is-recorded-with-its-evidence.md), in the one
+write path: `recordTransaction` records a line with one to five receipts or refuses it. Filing
+still checks it, as the backstop for lines entered before that rule, which no migration touched.
 
 **The four-offline-six-online cap.** Deliberately unenforced. Ten is the denominator for
 progress, not a limit on what may be recorded, and a cancelled Session counts for nothing

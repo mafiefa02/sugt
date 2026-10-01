@@ -8,9 +8,9 @@ import { useEffect, useState } from "react";
 
 /**
  * One icon button that toggles Light ⇄ Dark (the rotation and its `aria-label` live in
- * `theme-cycle`, which is where they are tested). The internal app owns this control rather
- * than `@sugt/ui`: the theme control is an app component, not a primitive
- * (`packages/ui/README.md`), and no `dropdown-menu`/`switch` primitive is added.
+ * `theme-cycle`, which is where they are tested) — the **phone top bar's** theme control (#127),
+ * and the collapsed desktop rail's (#359). The expanded desktop sidebar's is `ThemeSwitchRow` (#358). The internal app owns both rather than
+ * `@sugt/ui`: a theme control is an app component, not a primitive (`packages/ui/README.md`).
  *
  * **Hydration-safe.** `next-themes` cannot know the stored theme until it has read
  * `localStorage`, which only happens after mount, so the first server/client paint must

@@ -23,7 +23,7 @@ const FOOTER_COLUMNS = [
   {
     heading: "Cerita",
     links: [
-      { href: "/cerita", label: "Lapangan" },
+      { href: "/cerita", label: "Cerita" },
       { href: "/final-project", label: "Final Project" },
       { href: "/pencarian", label: "Pencarian" },
     ],
