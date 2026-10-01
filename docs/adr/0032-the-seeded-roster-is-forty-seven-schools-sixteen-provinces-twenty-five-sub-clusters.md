@@ -10,10 +10,13 @@ more importantly, what deliberately did **not**.
 - **Five new Schools**, all Taruna Nusantara campuses: Kampus Pagaralam (Mitigasi
   Bencana), Kampus Cimahi (Smart City), Kampus Malang (Ketahanan Pangan), Kampus IKN and
   Kampus Lawongan (Waste Management). The existing Magelang campus was renamed to
-  "SMA Taruna Nusantara Kampus Magelang" (its slug is unchanged). _Later:_ two of these
-  names were misspellings in the source workbook and were corrected — Kampus Lawongan →
-  Kampus **Langowan**, Kampus Pagaralam → Kampus **Pagar Alam** — with their slugs
-  unchanged ([#364](https://github.com/sugt-itb/sugt-itb-26/issues/364)).
+  "SMA Taruna Nusantara Kampus Magelang" (its slug is unchanged).
+
+  > **Amended.** Two of these names were misspellings in the source workbook and were
+  > later corrected — Kampus Lawongan → Kampus **Langowan**, Kampus Pagaralam → Kampus
+  > **Pagar Alam** — with their slugs unchanged
+  > ([#364](https://github.com/sugt-itb/sugt-itb-26/issues/364)).
+
 - **A sixteenth Province** — `SW`, Sulawesi Utara (WITA) — reached by Kampus Lawongan in
   Kabupaten Minahasa.
 - **Twenty-five Sub-Clusters**, split **4 / 7 / 7 / 7** across the four Clusters (was
