@@ -141,7 +141,7 @@ from (values
   ('sma-fatih-bilingual-school',              'SMA Fatih Bilingual School',                    'mitigasi-bencana', 'AC', 'Kota Banda Aceh', 'kelompok-01'),
   ('sma-teuku-nyak-arif-fatih',               'SMA Teuku Nyak Arif Fatih Bilingual School',    'mitigasi-bencana', 'AC', 'Kota Banda Aceh', 'kelompok-01'),
   ('smas-unggul-del',                         'SMAS Unggul Del',                               'mitigasi-bencana', 'SU', 'Kab. Toba Samosir', 'kelompok-02'),
-  ('sma-taruna-nusantara-kampus-pagaralam',   'SMA Taruna Nusantara Kampus Pagaralam',         'mitigasi-bencana', 'SS', 'Kota Pagar Alam', 'kelompok-03'),
+  ('sma-taruna-nusantara-kampus-pagaralam',   'SMA Taruna Nusantara Kampus Pagar Alam',        'mitigasi-bencana', 'SS', 'Kota Pagar Alam', 'kelompok-03'),
   ('sma-it-harapan-mulia',                    'SMA IT Harapan Mulia',                          'mitigasi-bencana', 'SS', 'Kota Palembang', 'kelompok-04'),
   ('man-insan-cendekia-oki',                  'MAN Insan Cendekia OKI',                        'mitigasi-bencana', 'SS', 'Kab. Ogan Komering Ilir', 'kelompok-04'),
 
@@ -184,7 +184,7 @@ from (values
   ('sma-nasional-kps',                        'SMA Nasional KPS',                              'waste-management', 'KI', 'Kota Balikpapan', 'kelompok-19'),
   ('sma-taruna-nusantara-kampus-ikn',         'SMA Taruna Nusantara Kampus IKN',               'waste-management', 'KI', 'Kota Penajam Paser Utara', 'kelompok-19'),
   ('sman-banua-kalsel',                       'SMAN Banua Kalsel',                             'waste-management', 'KS', 'Kabupaten Banjar', 'kelompok-20'),
-  ('sma-taruna-nusantara-kampus-lawongan',    'SMA Taruna Nusantara Kampus Lawongan',          'waste-management', 'SW', 'Kabupaten Minahasa', 'kelompok-21'),
+  ('sma-taruna-nusantara-kampus-lawongan',    'SMA Taruna Nusantara Kampus Langowan',          'waste-management', 'SW', 'Kabupaten Minahasa', 'kelompok-21'),
   ('smas-golden-gate',                        'SMAS Golden Gate',                              'waste-management', 'SN', 'Kota Makassar', 'kelompok-22'),
   ('sman-5-parepare',                         'SMAN 5 Parepare',                              'waste-management', 'SN', 'Kota Parepare', 'kelompok-22'),
   ('man-insan-cendekia-gorontalo',            'MAN Insan Cendekia Gorontalo',                  'waste-management', 'GO', 'Kabupaten Bone Bolango', 'kelompok-23'),
