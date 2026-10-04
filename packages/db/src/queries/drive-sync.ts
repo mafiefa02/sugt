@@ -1,5 +1,16 @@
 import type { TransactionCategory } from "@sugt/domain";
-import { and, asc, eq, isNotNull, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  isNotNull,
+  isNull,
+  notExists,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 
 import { db } from "../client";
 import { perjadin, transaction, transactionEvidence } from "../schema/travel";
@@ -161,7 +172,7 @@ export async function markTransactionSynced(
     );
   const [marked] = await db
     .update(transaction)
-    .set({ driveSyncedAt: sql`now()` })
+    .set({ driveSyncedAt: sql`now()`, driveSyncFailedAt: null })
     .where(and(eq(transaction.id, transactionId), notExists(unhandled)))
     .returning({ id: transaction.id });
   if (marked) return true;
@@ -171,4 +182,74 @@ export async function markTransactionSynced(
     .from(transaction)
     .where(eq(transaction.id, transactionId));
   return line?.syncedAt != null;
+}
+
+/**
+ * A reconcile could not finish this line — a trashed or missing folder, or Drive failing. Recorded so
+ * the sweep moves on to other lines first next time (`unsyncedTransactions`); a line that synced
+ * meanwhile is left alone.
+ */
+export async function markTransactionSyncFailed(
+  caller: Person,
+  transactionId: string,
+): Promise<void> {
+  requireStaff(caller);
+
+  await db
+    .update(transaction)
+    .set({ driveSyncFailedAt: sql`now()` })
+    .where(and(eq(transaction.id, transactionId), isNull(transaction.driveSyncedAt)));
+}
+
+/** One line the sweep will reconcile, with what Periksa koneksi says about it if it fails. */
+export type UnsyncedTransaction = { id: string; spentOn: string; description: string };
+
+/**
+ * **What the sweep owes**: every unsynced transaction — `drive_synced_at is null` and at least one
+ * Drive-backed receipt; a legacy or zero-receipt line never is — at most `limit` of them, and how many
+ * there are in all. Periksa koneksi and a reconnect reconcile these in turn (#375), bounded so one
+ * press fits a Vercel function's time limit.
+ *
+ * **Oldest first, among lines that have not failed**; then lines that have, the longest-failed first.
+ * Without that second key a few lines that fail every time — a folder trashed by hand, which is
+ * never recreated — would fill every bounded press and the lines behind them would never be reached.
+ */
+export async function unsyncedTransactions(
+  caller: Person,
+  limit: number,
+): Promise<{ total: number; lines: UnsyncedTransaction[] }> {
+  requireStaff(caller);
+
+  const unsynced = and(
+    isNull(transaction.driveSyncedAt),
+    exists(
+      db
+        .select({ id: transactionEvidence.id })
+        .from(transactionEvidence)
+        .where(
+          and(
+            eq(transactionEvidence.transactionId, transaction.id),
+            isNotNull(transactionEvidence.driveFileId),
+          ),
+        ),
+    ),
+  );
+  const [lines, [counted]] = await Promise.all([
+    db
+      .select({
+        id: transaction.id,
+        spentOn: transaction.spentOn,
+        description: transaction.description,
+      })
+      .from(transaction)
+      .where(unsynced)
+      .orderBy(
+        sql`${transaction.driveSyncFailedAt} asc nulls first`,
+        asc(transaction.createdAt),
+        asc(transaction.id),
+      )
+      .limit(limit),
+    db.select({ total: count() }).from(transaction).where(unsynced),
+  ]);
+  return { total: counted?.total ?? 0, lines };
 }

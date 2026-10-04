@@ -595,7 +595,28 @@ account was picked, the Drive permission was unticked, or Google sent no long-li
 says so in its own words and stores nothing. A first connect creates the app's folders in the
 company Drive. A reconnect reuses them. If it finds the main folder or `_staging` in the Drive trash
 or gone, the card shows Folder bermasalah; it does not recreate them. There is no disconnect
-button.
+button. A successful reconnect also finishes what was recorded while the connection was down, as
+Periksa koneksi does below.
+
+**Periksa koneksi**, on the Terhubung card, checks the connection and reports each step:
+
+- whether Google still accepts the token — if not, the card turns to Terputus;
+- whether the main folder, `_staging`, Bukti Transaksi and Pelaksanaan Offline are still there, in
+  the Drive trash, or gone;
+- whether a "anyone with the link" share reaches the main folder or `_staging`. That happens when
+  someone moves the main folder into a shared company folder. It is warned about prominently: "Folder
+  utama dapat dibuka siapa saja yang punya link — pindahkan keluar dari folder yang dibagikan."
+- a **sweep** of the transactions whose receipts are not yet in place in Drive, oldest first, up to
+  25 per press: "{n} transaksi disinkronkan, {m} masih menunggu", with the reason for any that could
+  not be finished, such as a folder in the Drive trash, which is never recreated.
+
+**A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
+connected, broken, or its folders unresolved — the states in which nobody can upload a receipt.
+
+**On the acquittal**, a line whose receipts are recorded but not yet in place in Drive shows a small
+"belum tersinkron" mark. Its tooltip reads "Bukti belum tersinkron ke Google Drive — Administrator
+dapat menyelesaikannya lewat Periksa koneksi." A line from before Drive, or with no receipt, never
+shows it.
 
 ---
 

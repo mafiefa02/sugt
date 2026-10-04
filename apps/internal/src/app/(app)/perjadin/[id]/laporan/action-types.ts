@@ -117,8 +117,16 @@ export type ViewableEvidence = Omit<
   url: string | null;
 };
 
-/** One line item as the screen renders it, with its Drive folder as a link when it has one. */
-export type ViewableTransaction = Omit<AcquittalTransaction, "evidence" | "driveFolderId"> & {
+/**
+ * One line item as the screen renders it, with its Drive folder as a link when it has one, and
+ * `unsynced` when a Drive receipt on it is still waiting to be put in place (ADR-0040) — never for a
+ * legacy or zero-receipt line.
+ */
+export type ViewableTransaction = Omit<
+  AcquittalTransaction,
+  "evidence" | "driveFolderId" | "driveSyncedAt"
+> & {
   evidence: ViewableEvidence[];
   folderUrl: string | null;
+  unsynced: boolean;
 };

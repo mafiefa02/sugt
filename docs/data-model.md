@@ -1410,7 +1410,8 @@ create table transaction (
   created_by_person_id  uuid not null references person (id),
   created_at            timestamptz not null default now(),
   drive_folder_id       text,
-  drive_synced_at       timestamptz
+  drive_synced_at       timestamptz,
+  drive_sync_failed_at  timestamptz
 );
 
 create table transaction_evidence (
@@ -1509,6 +1510,12 @@ unsynced. A reconcile that fails after the commit leaves the line recorded and u
 files wait in private `_staging` until the next reconcile finishes it. A reconcile marks a line
 synced only for the receipts it read. If a newer receipt was committed while it ran, the mark does
 not land, so that receipt stays owed rather than stranded under a line that claims to be done.
+
+**`drive_sync_failed_at` keeps the sweep moving.** It records when a reconcile last failed to finish
+the line, for example because its folder is in the Drive trash, which is never recreated, and it is
+cleared when the line syncs. Periksa koneksi's sweep is bounded per press. It takes lines that have
+never failed first, oldest first, then the longest-failed, so lines that fail every time cannot fill
+every press while the lines behind them wait for good.
 
 **The two receipt writes run in opposite orders, on purpose.** Catat transaksi builds the line's
 folder in private `_staging`, moves the files into it, and only then commits. A line's own "Unggah

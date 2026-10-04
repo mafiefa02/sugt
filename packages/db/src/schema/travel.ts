@@ -279,6 +279,10 @@ export const transaction = pgTable(
     // folder shared. Null while that is still owed. "Unsynced" is null **and** at least one
     // Drive-backed receipt — a legacy or zero-receipt line is never unsynced.
     driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
+    // When a reconcile last failed to finish this line (#375). The sweep takes lines never failed
+    // first, then the longest-failed, so a line that fails every time — its folder trashed by hand —
+    // cannot hold the bounded sweep on itself forever. Cleared when the line syncs.
+    driveSyncFailedAt: timestamp("drive_sync_failed_at", { withTimezone: true }),
   },
   (t) => [
     check("transaction_amount_check", sql`${t.amountIdr} > 0`),

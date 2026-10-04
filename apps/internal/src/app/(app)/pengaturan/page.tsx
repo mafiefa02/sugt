@@ -19,8 +19,15 @@ import type { Metadata } from "next";
 import { forbidden } from "next/navigation";
 
 import { connectDriveAction } from "./actions";
+import { PeriksaKoneksi } from "./periksa-koneksi";
 
 export const metadata: Metadata = { title: "Pengaturan" };
+
+/**
+ * Periksa koneksi's Server Action runs under this page's segment config, and its sweep can reconcile
+ * up to 25 transactions; it stops starting new ones after `SWEEP_BUDGET_MS`, inside this limit.
+ */
+export const maxDuration = 60;
 
 /**
  * **Pengaturan** (#372) — Administrator only. Today it holds one card: the company Google Drive that
@@ -167,8 +174,9 @@ function DriveCard({
           <dd>{connection.lastUsedAt ? formatWib(connection.lastUsedAt) : "—"}</dd>
         </dl>
       </CardContent>
-      {/* Periksa koneksi joins Hubungkan ulang here (#375). */}
-      <CardFooter className="gap-2">{connectButton("Hubungkan ulang")}</CardFooter>
+      <CardFooter>
+        <PeriksaKoneksi>{connectButton("Hubungkan ulang")}</PeriksaKoneksi>
+      </CardFooter>
     </Card>
   );
 }

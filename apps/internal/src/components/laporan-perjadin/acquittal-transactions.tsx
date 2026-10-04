@@ -63,6 +63,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@sugt/ui/components/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@sugt/ui/components/tooltip";
+import { CloudOff } from "lucide-react";
 import { type ReactElement, useId, useMemo, useRef, useState, useTransition } from "react";
 
 /**
@@ -221,6 +223,7 @@ function TransactionCard({
           <span className="text-muted-foreground">·</span>
           <span className="text-muted-foreground">{line.category}</span>
           <Badge variant="secondary">{line.participantType}</Badge>
+          {line.unsynced && <UnsyncedMarker />}
           <div className="ml-auto flex items-center gap-4">
             <span className="tabular-nums">{formatRupiah(line.amountIdr)}</span>
             <Receipts
@@ -232,6 +235,40 @@ function TransactionCard({
         </div>
       </CardHeader>
     </Card>
+  );
+}
+
+/** What the "belum tersinkron" marker says, in full, on hover or focus. */
+const UNSYNCED_TOOLTIP =
+  "Bukti belum tersinkron ke Google Drive — Administrator dapat menyelesaikannya lewat Periksa koneksi.";
+
+/**
+ * **A quiet mark on a line whose Drive receipts are not yet in place** (ADR-0040, #375): recorded,
+ * but the reconcile has not finished moving them into the line's folder. Small and muted — nothing is
+ * wrong with the line, and nothing is asked of whoever reads it; an Administrator's Periksa koneksi
+ * finishes it. The sentence is in the tooltip for a pointer, and spoken in full from an `sr-only`
+ * span for a screen reader. The trigger is a real button, so the tooltip opens on keyboard focus.
+ */
+function UnsyncedMarker() {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+          />
+        }
+      >
+        <CloudOff
+          aria-hidden
+          className="size-3.5"
+        />
+        <span aria-hidden>belum tersinkron</span>
+        <span className="sr-only">{UNSYNCED_TOOLTIP}</span>
+      </TooltipTrigger>
+      <TooltipContent>{UNSYNCED_TOOLTIP}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -961,4 +998,4 @@ function refusalFor(result: Exclude<RecordTransactionActionResult, { outcome: "r
   }
 }
 
-export { AcquittalTransactions, RecordTransaction };
+export { AcquittalTransactions, RecordTransaction, UNSYNCED_TOOLTIP };

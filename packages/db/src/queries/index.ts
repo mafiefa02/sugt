@@ -311,10 +311,13 @@ export {
 export {
   claimPerjadinDriveFolder,
   claimTransactionDriveFolder,
+  markTransactionSyncFailed,
   markTransactionSynced,
   reconcileTarget,
+  unsyncedTransactions,
   type ReconcileEvidence,
   type ReconcileTarget,
+  type UnsyncedTransaction,
 } from "./drive-sync";
 export {
   canViewDashboard,

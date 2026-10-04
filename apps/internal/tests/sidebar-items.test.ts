@@ -16,6 +16,7 @@ function hrefsFor(role: Role, grants: Grant[]) {
     canEditMonitoring: hasGrant(person, "Editor"),
     canViewDashboard: canViewDashboard(person),
     canAdminister: hasGrant(person, "Administrator"),
+    driveNeedsAttention: false,
   }).map((item) => item.href);
 }
 
@@ -87,5 +88,30 @@ describe("sidebarItems", () => {
       "/kelompok-sekolah",
       "/orang",
     ]);
+  });
+
+  it("badges Pengaturan, and nothing else, while Drive needs an Administrator", () => {
+    const admin: Person = {
+      id: "p",
+      fullName: "P",
+      email: "p@example.com",
+      role: "Staff",
+      grants: ["Administrator"],
+    };
+    const items = (driveNeedsAttention: boolean) =>
+      sidebarItems({
+        role: "Staff",
+        canEditMonitoring: true,
+        canViewDashboard: true,
+        canAdminister: hasGrant(admin, "Administrator"),
+        driveNeedsAttention,
+      });
+
+    expect(
+      items(true)
+        .filter((item) => item.badge)
+        .map((item) => item.href),
+    ).toEqual(["/pengaturan"]);
+    expect(items(false).some((item) => item.badge)).toBe(false);
   });
 });

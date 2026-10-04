@@ -8,6 +8,9 @@ import { requireEnv } from "-/lib/env";
 import { resolvePerson } from "-/lib/person";
 import { NextResponse, type NextRequest } from "next/server";
 
+/** A reconnect sweeps unsynced transactions before it returns; `SWEEP_BUDGET_MS` keeps it inside this. */
+export const maxDuration = 60;
+
 /**
  * **Where Google sends an Administrator back** after Hubungkan Google Drive (#372). The seven checks
  * and the storing are `completeDriveConnection`; this only carries the request in and the answer out.

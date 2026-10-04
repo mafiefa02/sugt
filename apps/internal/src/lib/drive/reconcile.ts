@@ -1,6 +1,7 @@
 import {
   claimPerjadinDriveFolder,
   claimTransactionDriveFolder,
+  markTransactionSyncFailed,
   markTransactionSynced,
   reconcileTarget,
   type Person,
@@ -42,16 +43,35 @@ import {
  * touches nothing" is held.
  */
 
+/** Why a line is still owed after a reconcile. */
+export type UnsyncedReason =
+  | "folder-trashed"
+  | "folder-missing"
+  | "drive-failed"
+  /** A receipt committed while this ran is still owed; its own run, or the next sweep, does it. */
+  | "newer-receipts";
+
 export type ReconcileResult =
   | { outcome: "synced" }
-  | {
-      outcome: "unsynced";
-      /** `newer-receipts`: a receipt committed while this ran is still owed; its own run does it. */
-      reason: "folder-trashed" | "folder-missing" | "drive-failed" | "newer-receipts";
-    }
+  | { outcome: "unsynced"; reason: UnsyncedReason }
   | { outcome: "no-such-transaction" };
 
 export async function reconcileTransaction(
+  person: Person,
+  drive: DriveClient,
+  folders: ReadyFolders,
+  transactionId: string,
+): Promise<ReconcileResult> {
+  const result = await reconcileOnce(person, drive, folders, transactionId);
+  // A failure is remembered so the sweep tries other lines first next time (#375). `newer-receipts`
+  // is not one: the line is fine, and the newer receipt's own run is under way.
+  if (result.outcome === "unsynced" && result.reason !== "newer-receipts") {
+    await markTransactionSyncFailed(person, transactionId);
+  }
+  return result;
+}
+
+async function reconcileOnce(
   person: Person,
   drive: DriveClient,
   folders: ReadyFolders,
