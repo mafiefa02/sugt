@@ -1,4 +1,5 @@
 import { MyPerjadinSection } from "-/components/my-perjadin-section";
+import type { ReceiptUploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
 import type { MyUpcomingPerjadin, StaffDashboard } from "@sugt/db/queries";
 import { formatRupiah } from "@sugt/domain";
@@ -17,11 +18,14 @@ function DashboardStaff({
   dashboard,
   upcoming,
   today,
+  uploadGate,
 }: {
   dashboard: StaffDashboard;
   upcoming: MyUpcomingPerjadin[];
   /** WIB `YYYY-MM-DD`, computed on the server — the trip timeline's legs are done before it. */
   today: string;
+  /** Whether receipts can go to Drive right now — Catat Transaksi is closed with the reason if not. */
+  uploadGate: ReceiptUploadGate;
 }) {
   return (
     <div className="flex min-h-full flex-col gap-8 p-7">
@@ -37,6 +41,7 @@ function DashboardStaff({
       <MyPerjadinSection
         trips={upcoming}
         today={today}
+        uploadGate={uploadGate}
       />
 
       <section>

@@ -208,6 +208,8 @@ export interface DriveClient {
       appProperties?: Record<string, string>;
     },
   ): Promise<void>;
+  /** Move to the Drive trash — the loser of a folder compare-and-set throws its folder away. */
+  trashFile(id: string): Promise<void>;
   /** Bytes `start` to `end` inclusive, for sniffing a file's type from its first bytes. */
   readRange(id: string, start: number, end: number): Promise<Uint8Array>;
   createPermission(id: string, permission: { type: "anyone"; role: "reader" }): Promise<void>;
@@ -231,9 +233,41 @@ export class DriveRequestError extends Error {
 
   constructor(
     readonly operation: string,
+    /** The HTTP status, or 0 when the request never got an answer — the network, a timeout. */
     readonly status: number,
   ) {
-    super(`Google Drive ${operation} failed with HTTP ${status}.`);
+    super(
+      status === 0
+        ? `Google Drive ${operation} got no answer.`
+        : `Google Drive ${operation} failed with HTTP ${status}.`,
+    );
+  }
+}
+
+/**
+ * Did a Drive call fail? Every one this client makes fails as a `DriveRequestError` — a non-2xx, or
+ * status 0 for no answer at all — so that is the whole test. Those are Google's to answer for and
+ * become "not synced yet"; anything else, a database refusal included, is a bug and is left to throw.
+ */
+export function isDriveFailure(error: unknown): error is DriveRequestError {
+  return error instanceof DriveRequestError;
+}
+
+/** A 2xx body Drive sent, parsed; one that is not JSON is Drive failing too, not a bug here. */
+async function readJson<T>(operation: string, response: Response): Promise<T> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new DriveRequestError(operation, response.status);
+  }
+}
+
+/** `fetch`, with a request that got no answer turned into a `DriveRequestError` of status 0. */
+async function send(operation: string, url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new DriveRequestError(operation, 0);
   }
 }
 
@@ -244,7 +278,7 @@ export function openDrive(accessToken: string): DriveClient {
   const authorization = { authorization: `Bearer ${accessToken}` };
 
   async function call(operation: string, url: string, init: RequestInit = {}): Promise<Response> {
-    const response = await fetch(url, {
+    const response = await send(operation, url, {
       ...init,
       headers: { ...authorization, ...(init.headers as Record<string, string> | undefined) },
     });
@@ -264,7 +298,7 @@ export function openDrive(accessToken: string): DriveClient {
           ...(appProperties ? { appProperties } : {}),
         }),
       });
-      return (await response.json()) as { id: string };
+      return readJson<{ id: string }>("files.create", response);
     },
 
     async createFile({ name, parentId, mimeType, content }) {
@@ -282,17 +316,18 @@ export function openDrive(accessToken: string): DriveClient {
           body,
         },
       );
-      return (await response.json()) as { id: string };
+      return readJson<{ id: string }>("files.create", response);
     },
 
     async getFile(id) {
-      const response = await fetch(
+      const response = await send(
+        "files.get",
         `${DRIVE_API}/files/${encodeURIComponent(id)}?fields=${FILE_FIELDS}`,
         { headers: authorization },
       );
       if (response.status === 404) return null;
       if (!response.ok) throw new DriveRequestError("files.get", response.status);
-      const file = (await response.json()) as {
+      const file = await readJson<{
         id: string;
         name: string;
         mimeType: string;
@@ -300,7 +335,7 @@ export function openDrive(accessToken: string): DriveClient {
         trashed?: boolean;
         size?: string;
         appProperties?: Record<string, string>;
-      };
+      }>("files.get", response);
       return {
         id: file.id,
         name: file.name,
@@ -323,6 +358,14 @@ export function openDrive(accessToken: string): DriveClient {
           ...(name ? { name } : {}),
           ...(appProperties ? { appProperties } : {}),
         }),
+      });
+    },
+
+    async trashFile(id) {
+      await call("files.update(trash)", `${DRIVE_API}/files/${encodeURIComponent(id)}?fields=id`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trashed: true }),
       });
     },
 
@@ -352,14 +395,14 @@ export function openDrive(accessToken: string): DriveClient {
         "permissions.list",
         `${DRIVE_API}/files/${encodeURIComponent(id)}/permissions?fields=permissions(id,type,role,permissionDetails)`,
       );
-      const body = (await response.json()) as {
+      const body = await readJson<{
         permissions?: {
           id: string;
           type: string;
           role: string;
           permissionDetails?: { inherited?: boolean }[];
         }[];
-      };
+      }>("permissions.list", response);
       return (body.permissions ?? []).map((permission) => ({
         id: permission.id,
         type: permission.type,

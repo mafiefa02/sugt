@@ -591,3 +591,11 @@ export const MAX_EXTRA_STAFF_PER_GROUP = 10;
  * The floor of one needs no constant of its own.
  */
 export const MAX_RECEIPTS_PER_TRANSACTION = 5;
+
+/**
+ * **The largest one receipt file may be: 20 MB** ([ADR-0040](../../../docs/adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)).
+ * A product rule beside the count above, read by the browser — which refuses a bigger file after
+ * compressing it — and by the server, which declares it to Drive when opening the upload session and
+ * checks it again on the file Drive holds.
+ */
+export const MAX_RECEIPT_BYTES = 20 * 1024 * 1024;

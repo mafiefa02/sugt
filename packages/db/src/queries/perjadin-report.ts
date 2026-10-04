@@ -31,13 +31,14 @@ import { requireStaff } from "./staff-only";
  */
 
 /**
- * One uploaded receipt. `storagePath` is an opaque key in the private `receipts` bucket —
- * the app mints a signed URL for it after checking the caller is Staff, so the path travels
- * to the browser but never resolves without that step.
+ * One uploaded receipt, in exactly one of two places (ADR-0040): `driveFileId` in the company
+ * Google Drive, or — for a receipt from before Drive — `storagePath`, an opaque key in the private
+ * Supabase `receipts` bucket that the page signs a short-lived URL for.
  */
 export type AcquittalEvidence = {
   id: string;
-  storagePath: string;
+  storagePath: string | null;
+  driveFileId: string | null;
   contentType: string;
   byteSize: number;
   uploadedAt: Date;
@@ -56,6 +57,8 @@ export type AcquittalTransaction = {
   amountIdr: number;
   category: TransactionCategory;
   participantType: TransactionParticipantType;
+  /** The line's Drive folder, link-shared once synced. Null on a line with no Drive receipt yet. */
+  driveFolderId: string | null;
   evidence: AcquittalEvidence[];
 };
 
@@ -231,6 +234,7 @@ async function transactionsOf(perjadinId: string): Promise<AcquittalTransaction[
       amountIdr: transaction.amountIdr,
       category: transaction.category,
       participantType: transaction.participantType,
+      driveFolderId: transaction.driveFolderId,
     })
     .from(transaction)
     .where(eq(transaction.perjadinId, perjadinId))
@@ -243,6 +247,7 @@ async function transactionsOf(perjadinId: string): Promise<AcquittalTransaction[
       id: transactionEvidence.id,
       transactionId: transactionEvidence.transactionId,
       storagePath: transactionEvidence.storagePath,
+      driveFileId: transactionEvidence.driveFileId,
       contentType: transactionEvidence.contentType,
       byteSize: transactionEvidence.byteSize,
       uploadedAt: transactionEvidence.uploadedAt,
@@ -297,8 +302,15 @@ export type NewTransaction = {
   category: TransactionCategory;
   /** Which cohort the spend served — `Siswa` or `GTK-MS`. Required, like `category`. */
   participantType: TransactionParticipantType;
-  /** The receipts already in Storage, one to `MAX_RECEIPTS_PER_TRANSACTION`. */
+  /** The receipts already uploaded, one to `MAX_RECEIPTS_PER_TRANSACTION`. */
   evidence: NewEvidence[];
+  /**
+   * The id to give the line, when the caller needed it before the insert — Catat transaksi names
+   * the line's Drive folder and files after it (ADR-0040). Generated here when absent.
+   */
+  transactionId?: string;
+  /** The line's Drive folder, already built in `_staging` (ADR-0040). */
+  driveFolderId?: string;
 };
 
 export type RecordTransactionResult =
@@ -352,6 +364,8 @@ export async function recordTransaction(
     const [line] = await tx
       .insert(transaction)
       .values({
+        ...(input.transactionId ? { id: input.transactionId } : {}),
+        driveFolderId: input.driveFolderId ?? null,
         perjadinId: input.perjadinId,
         spentOn: input.spentOn,
         description: input.description,
@@ -364,8 +378,10 @@ export async function recordTransaction(
 
     await tx.insert(transactionEvidence).values(
       input.evidence.map((file) => ({
+        ...(file.id ? { id: file.id } : {}),
         transactionId: line!.id,
-        storagePath: file.storagePath,
+        storagePath: file.storagePath ?? null,
+        driveFileId: file.driveFileId ?? null,
         contentType: file.contentType,
         byteSize: file.byteSize,
         uploadedByPersonId: caller.id,
@@ -377,15 +393,21 @@ export async function recordTransaction(
 }
 
 /**
- * A receipt whose bytes have already landed in the `receipts` bucket. The content type and
- * size are read back from Storage by the app rather than taken from the browser, which never
- * had to tell the truth about either.
+ * A receipt whose bytes have already landed — in the company Google Drive (`driveFileId`, ADR-0040)
+ * or, on the row's own "Unggah bukti" until #374, in the Supabase `receipts` bucket
+ * (`storagePath`). Exactly one, which `transaction_evidence_one_store_check` holds too. The content
+ * type and size are read back by the app — sniffed from the first bytes, for Drive — rather than
+ * taken from the browser, which never had to tell the truth about either.
  */
 export type NewEvidence = {
-  storagePath: string;
+  /** The row's id, when the caller needed it first — a Drive file is named after it. */
+  id?: string;
   contentType: string;
   byteSize: number;
-};
+} & (
+  | { driveFileId: string; storagePath?: undefined }
+  | { storagePath: string; driveFileId?: undefined }
+);
 
 export type AttachEvidenceResult =
   | { outcome: "attached"; count: number }
@@ -439,8 +461,10 @@ export async function attachTransactionEvidence(
 
     await tx.insert(transactionEvidence).values(
       evidence.map((file) => ({
+        ...(file.id ? { id: file.id } : {}),
         transactionId,
-        storagePath: file.storagePath,
+        storagePath: file.storagePath ?? null,
+        driveFileId: file.driveFileId ?? null,
         contentType: file.contentType,
         byteSize: file.byteSize,
         uploadedByPersonId: caller.id,

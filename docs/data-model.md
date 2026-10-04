@@ -1174,6 +1174,7 @@ create table perjadin (
   returned_to_treasurer_idr   bigint,
   returned_at                 timestamptz,
   report_filed_at             timestamptz,
+  drive_folder_id             text,
   created_at                  timestamptz not null default now(),
 
   check (ends_on >= starts_on),
@@ -1407,17 +1408,23 @@ create table transaction (
                           'Alat dan Bahan Research Project', 'Seminar kit', 'Lainnya')),
   participant_type      text not null check (participant_type in ('Siswa', 'GTK-MS')),
   created_by_person_id  uuid not null references person (id),
-  created_at            timestamptz not null default now()
+  created_at            timestamptz not null default now(),
+  drive_folder_id       text,
+  drive_synced_at       timestamptz
 );
 
 create table transaction_evidence (
   id                    uuid primary key default gen_random_uuid(),
   transaction_id        uuid not null references transaction (id) on delete cascade,
-  storage_path          text not null unique,
+  storage_path          text unique,
+  drive_file_id         text unique,
   content_type          text not null,
   byte_size             bigint not null,
   uploaded_by_person_id uuid not null references person (id),
-  uploaded_at           timestamptz not null default now()
+  uploaded_at           timestamptz not null default now(),
+  check ((storage_path is null) <> (drive_file_id is null)),
+  check (drive_file_id is null
+         or content_type in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp'))
 );
 ```
 
@@ -1476,8 +1483,30 @@ Evidence is **one to five per transaction** (ADR-0039). The application holds th
 the database: `recordTransaction` writes a line and its evidence together and refuses zero or
 more than five, and `attachTransactionEvidence` refuses a batch that would take a line past five,
 counting under a lock on the parent row. There is no CHECK, because the shared database may
-already hold lines with none or more, and those are grandfathered. `storage_path` is the object
-key in the private bucket, and `unique` on it means an upload cannot be attached twice.
+already hold lines with none or more, and those are grandfathered.
+
+**A receipt lives in exactly one place, and the database holds that** (ADR-0040). Receipts are
+moving to the company's Google Drive. `drive_file_id` is the file's Drive id, for every receipt
+Catat transaksi records. `storage_path` is a legacy object key in the private Supabase bucket. It
+covers receipts from before Drive, and the row's own "Unggah bukti" until #374 moves it too. One
+CHECK makes exactly one of the two set; another pins a Drive receipt's `content_type` to the four
+types the server sniffs from its first bytes. `unique` on each means a file cannot be attached
+twice. Both are ids or keys, never paths, so a folder renamed or moved by hand in Drive breaks
+nothing.
+
+**`drive_folder_id` on `transaction` and on `perjadin` name the line's and the trip's Drive
+folders**, and `transaction.drive_synced_at` records when the reconcile last finished the line.
+It finishes a line by putting its folder inside the Perjadin's, naming and moving its files there,
+and sharing the folder "anyone with the link". Catat transaksi builds the line's folder privately
+in `_staging` before it commits, so the folder id is written with the line. The Perjadin's folder
+is claimed by **compare-and-set** (`… where drive_folder_id is null`) the first time a line on it
+is reconciled. No row lock is ever held across a call to Google; a caller that lost the race
+trashes its own folder and uses the winner's.
+
+**"Unsynced" means `drive_synced_at is null` and at least one evidence row with a
+`drive_file_id`.** It is derived, not stored. A legacy line, or a line with no receipt, is never
+unsynced. A reconcile that fails after the commit leaves the line recorded and unsynced, and its
+files wait in private `_staging` until the next reconcile finishes it.
 
 ---
 
@@ -1633,6 +1662,13 @@ The two buckets stay exactly as split below. A Story's photographs are public by
 is the whole difference from a receipt.
 
 ## Object storage
+
+**Receipts are moving out of Supabase Storage to the company's Google Drive**
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Catat
+transaksi uploads to Drive. The `receipts` bucket now takes new objects only from a line's own
+"Unggah bukti", until #374 moves that too. After that it holds legacy receipts alone, until they
+are migrated and the bucket is deleted (#377, #379). The Drive side is the connection below and
+the `drive_*` columns in [Money](#money).
 
 Two buckets, and the split is doing real work:
 
@@ -2010,8 +2046,9 @@ exists at all.
 ### What deleting a Perjadin does
 
 `group_member` cascades. `transaction` cascades, and `transaction_evidence` cascades from
-that — so deleting a Perjadin destroys its acquittal, objects in the `receipts` bucket
-included, and nothing warns you. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
+that — so deleting a Perjadin destroys its acquittal rows, and nothing warns you. The files are
+not removed: neither the legacy objects in the `receipts` bucket nor the Perjadin's folder in the
+company Google Drive (ADR-0040), which outlive their rows. No path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
 trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive nothing — and
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
 links go with the names.

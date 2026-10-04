@@ -622,6 +622,33 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
 }
 
 /**
+ * A company Google Drive connection (ADR-0040), connected and with every fixed folder id set — so the
+ * receipt controls' gate is open. The ids name nothing in any Drive; a test that reaches Drive builds
+ * its own tree in the fake and writes those ids instead. The token columns hold placeholders, so
+ * anything that tries to refresh this one finds it will not decrypt.
+ */
+export async function addDriveConnection(fixture: {
+  connectedByPersonId: string;
+  status?: "connected" | "broken";
+}) {
+  const broken = fixture.status === "broken";
+  await db.insert(schema.driveConnection).values({
+    accountEmail: "bukti@perusahaan.test",
+    refreshTokenCiphertext: "placeholder",
+    refreshTokenIv: "placeholder",
+    refreshTokenTag: "placeholder",
+    rootFolderId: "fixture-root",
+    stagingFolderId: "fixture-staging",
+    buktiTransaksiFolderId: "fixture-bukti",
+    pelaksanaanOfflineFolderId: "fixture-offline",
+    readmeFileId: "fixture-readme",
+    status: fixture.status ?? "connected",
+    brokenAt: broken ? new Date() : null,
+    connectedByPersonId: fixture.connectedByPersonId,
+  });
+}
+
+/**
  * Each test starts from a known set of rows and leaves none behind.
  *
  * The list names the tables a fixture writes directly. Several of them are already
