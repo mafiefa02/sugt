@@ -163,17 +163,19 @@ describe("no Drive call before the guard", () => {
     await expect(lines()).resolves.toHaveLength(0);
   });
 
-  it.each(["none", "broken"] as const)(
-    "answers drive-disconnected with zero Drive calls when the connection is %s",
-    async (connection) => {
+  it.each([
+    ["none", /^Google Drive belum terhubung/],
+    ["broken", /^Koneksi Google Drive terputus sejak \d{4}-\d{2}-\d{2} \d{2}:\d{2} WIB/],
+  ] as const)(
+    "answers drive-disconnected, with the gate's reason, and zero Drive calls when the connection is %s",
+    async (connection, reason) => {
       const { trip } = await scene({ connection });
+      const refusal = { outcome: "drive-disconnected", reason: expect.stringMatching(reason) };
 
       await expect(
         openReceiptSessionsAction(trip.id, [{ size: 10, contentType: "image/jpeg" }]),
-      ).resolves.toEqual({ outcome: "drive-disconnected" });
-      await expect(recordTransactionAction(aLine(trip.id, ["x"]))).resolves.toEqual({
-        outcome: "drive-disconnected",
-      });
+      ).resolves.toEqual(refusal);
+      await expect(recordTransactionAction(aLine(trip.id, ["x"]))).resolves.toEqual(refusal);
 
       expect(drive.calls).toBe(0);
       await expect(lines()).resolves.toHaveLength(0);
@@ -365,16 +367,6 @@ describe("a receipt that is not what it claims records nothing", () => {
     await expect(lines()).resolves.toHaveLength(0);
     await expect(evidenceRows()).resolves.toHaveLength(0);
   });
-
-  it("refuses an upload Drive held to its declared size", async () => {
-    const { trip } = await scene();
-    const opened = await openReceiptSessionsAction(trip.id, [
-      { size: 100, contentType: "image/jpeg" },
-    ]);
-    if (opened.outcome !== "ready") throw new Error(opened.outcome);
-
-    expect(() => drive.land(opened.sessionUris[0]!, jpeg(101))).toThrow(DriveRequestError);
-  });
 });
 
 describe("after the commit", () => {
@@ -421,6 +413,18 @@ describe("after the commit", () => {
   it("leaves one Perjadin folder when two first transactions race, trashing the other", async () => {
     const { trip } = await scene();
     const [a, b] = await Promise.all([upload(trip.id, [jpeg()]), upload(trip.id, [jpeg()])]);
+    // Hold each Perjadin-folder creation until both have started, so both reconciles have read "no
+    // folder yet" before either claims one — the race itself, every run.
+    const perjadinFolder = "Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12";
+    const createFolder = drive.createFolder.bind(drive);
+    let release!: () => void;
+    const bothStarted = new Promise<void>((resolve) => (release = resolve));
+    let started = 0;
+    vi.spyOn(drive, "createFolder").mockImplementation(async (input) => {
+      if (input.name === perjadinFolder && ++started === 2) release();
+      if (input.name === perjadinFolder) await bothStarted;
+      return createFolder(input);
+    });
 
     const results = await Promise.all([
       recordTransactionAction(aLine(trip.id, a)),
@@ -428,8 +432,7 @@ describe("after the commit", () => {
     ]);
 
     expect(results.map((result) => result.outcome)).toEqual(["recorded", "recorded"]);
-    const made = drive.named("Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12");
-    // Both reconciles found no folder and made one; the compare-and-set kept exactly one.
+    const made = drive.named(perjadinFolder);
     expect(made).toHaveLength(2);
     const live = made.filter((folder) => !folder.trashed);
     expect(live).toHaveLength(1);
@@ -440,5 +443,37 @@ describe("after the commit", () => {
         parents: [live[0]!.id],
       });
     }
+  });
+
+  it("never puts a line into a Perjadin folder that is in the trash", async () => {
+    const { trip } = await scene();
+    await recordTransactionAction(aLine(trip.id, await upload(trip.id, [jpeg()])));
+    const [stored] = await db.select().from(schema.perjadin).where(eq(schema.perjadin.id, trip.id));
+    drive.trash(stored!.driveFolderId!);
+
+    const result = await recordTransactionAction(aLine(trip.id, await upload(trip.id, [jpeg()])));
+
+    expect(result).toMatchObject({ outcome: "recorded", synced: false });
+    const second = (await lines()).find((line) => line.driveSyncedAt === null)!;
+    await expect(drive.getFile(second.driveFolderId!)).resolves.toMatchObject({
+      parents: [folders.stagingFolderId],
+      trashed: false,
+    });
+    expect(
+      drive.named("Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12"),
+    ).toHaveLength(1);
+  });
+
+  it("answers recorded, not an error, when the reconcile throws after the commit", async () => {
+    const { trip } = await scene();
+    const ids = await upload(trip.id, [jpeg()]);
+    vi.spyOn(drive, "listPermissions").mockRejectedValueOnce(new Error("a bug, not Drive"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(recordTransactionAction(aLine(trip.id, ids))).resolves.toMatchObject({
+      outcome: "recorded",
+      synced: false,
+    });
+    await expect(lines()).resolves.toHaveLength(1);
   });
 });

@@ -7,6 +7,8 @@ import {
   sniffReceiptType,
   transactionFolderName,
 } from "-/lib/drive/receipt-files";
+import { prepareReceipt } from "-/lib/drive/receipt-upload";
+import { MAX_RECEIPT_BYTES } from "@sugt/domain";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -124,5 +126,32 @@ describe("the acquittal's receipt links and gate", () => {
       ["Catat transaksi", true],
       ["Unggah bukti", true],
     ]);
+  });
+});
+
+describe("prepareReceipt, for what needs no canvas", () => {
+  // Re-encoding an image needs `createImageBitmap` and a canvas, which Node has not; those run only
+  // in a browser. A PDF and the two refusals do not reach them.
+  it("sends a PDF as it is", async () => {
+    const file = new File([new Uint8Array(10)], "nota.pdf", { type: "application/pdf" });
+
+    await expect(prepareReceipt(file)).resolves.toEqual({
+      blob: file,
+      contentType: "application/pdf",
+    });
+  });
+
+  it("refuses a type outside the four before any work", async () => {
+    const file = new File([new Uint8Array(10)], "IMG_0001.heic", { type: "image/heic" });
+
+    await expect(prepareReceipt(file)).resolves.toBe("unsupported-type");
+  });
+
+  it("refuses a PDF over the cap", async () => {
+    const file = new File([new Uint8Array(MAX_RECEIPT_BYTES + 1)], "besar.pdf", {
+      type: "application/pdf",
+    });
+
+    await expect(prepareReceipt(file)).resolves.toBe("too-large");
   });
 });

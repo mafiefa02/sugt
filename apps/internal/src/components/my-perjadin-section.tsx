@@ -226,6 +226,10 @@ function TripCard({
                 Edit
               </LinkButton>
             </div>
+            {/* Said as text, not only as the disabled button's title: a title never shows on touch. */}
+            {!uploadGate.open && (
+              <p className="-mt-2 text-xs text-muted-foreground">{uploadGate.reason}</p>
+            )}
 
             <TripTimeline nodes={tripTimeline(trip, today)} />
           </div>

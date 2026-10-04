@@ -32,9 +32,13 @@ import {
  *    is public before it is named and in place. Only transaction folders are ever shared.
  * 5. `drive_synced_at` is set.
  *
- * **A trashed or missing folder is never recreated**: the line stays unsynced and the answer says
- * why. Any failure from Drive does the same — the database already holds the line, so a failed
- * reconcile costs only the sync, which the next run finishes.
+ * **A trashed or missing folder — the Perjadin's or the line's — is never recreated**: the line stays
+ * unsynced and the answer says why. Any failure from Drive does the same — the database already
+ * holds the line, so a failed reconcile costs only the sync, which the next run finishes.
+ *
+ * **It assumes a usable connection**: its `drive` and `folders` are what `driveAccessToken` answers
+ * with `ok`, and only then. A caller holding neither cannot call it — that is how "not connected
+ * touches nothing" is held.
  */
 
 export type ReconcileResult =
@@ -63,6 +67,11 @@ export async function reconcileTransaction(
       perjadinFolderId = await claimPerjadinDriveFolder(person, target.perjadinId, made.id);
       if (perjadinFolderId !== made.id) await drive.trashFile(made.id);
     }
+    // An existing Perjadin folder is checked like the transaction's below: nothing is put into a
+    // folder that is in the trash or gone, and neither is recreated.
+    const perjadinFolder = await drive.getFile(perjadinFolderId);
+    if (!perjadinFolder) return { outcome: "unsynced", reason: "folder-missing" };
+    if (perjadinFolder.trashed) return { outcome: "unsynced", reason: "folder-trashed" };
 
     // 2. The transaction folder.
     let transactionFolderId = target.driveFolderId;

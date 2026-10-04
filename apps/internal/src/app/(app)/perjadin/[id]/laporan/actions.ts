@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 
 import { driveAccessToken } from "-/lib/drive/access-token";
-import { isDriveFailure, openDrive } from "-/lib/drive/google";
+import { type DriveClient, isDriveFailure, openDrive } from "-/lib/drive/google";
 import {
   evidenceFileName,
   isReceiptContentType,
@@ -15,6 +15,7 @@ import {
 } from "-/lib/drive/receipt-files";
 import { reconcileTransaction } from "-/lib/drive/reconcile";
 import { receiptUploadGate } from "-/lib/drive/upload-gate";
+import { DRIVE_FOLDERS_UNRESOLVED, DRIVE_NOT_CONNECTED } from "-/lib/drive/upload-messages";
 import { requireEnv } from "-/lib/env";
 import { requirePerson, type Person } from "-/lib/person";
 import { mintReceiptUpload, readReceiptFacts } from "-/lib/receipt-media";
@@ -33,6 +34,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import type {
+  DriveRefusal,
   FinalizeReceiptsResult,
   MintReceiptUploadsResult,
   OpenReceiptSessionsResult,
@@ -95,6 +97,21 @@ async function readBack(
 }
 
 /**
+ * Why `driveAccessToken` said no, as the action answers it: with the gate's own sentence for the two
+ * states the page also closes on, so the dialog says exactly what a fresh page would have.
+ */
+async function driveRefusal(
+  person: Person,
+  outcome: Exclude<Awaited<ReturnType<typeof driveAccessToken>>["outcome"], "ok">,
+): Promise<DriveRefusal> {
+  if (outcome === "drive-unreachable") return { outcome };
+  const gate = await receiptUploadGate(person);
+  const fallback =
+    outcome === "drive-disconnected" ? DRIVE_NOT_CONNECTED : DRIVE_FOLDERS_UNRESOLVED;
+  return { outcome, reason: gate.open ? fallback : gate.reason };
+}
+
+/**
  * Open a Drive resumable upload session per file the Catat transaksi dialog is about to send
  * (ADR-0040). The browser `PUT`s each file's bytes straight to its session, so no receipt passes
  * through Vercel and its 4.5 MB request limit never applies.
@@ -120,26 +137,26 @@ export async function openReceiptSessionsAction(
       count: files.length,
     };
   }
-  if (files.some((file) => !isReceiptContentType(file.contentType))) {
-    return { outcome: "unsupported-type" };
-  }
+  const typed = files.flatMap((file) =>
+    isReceiptContentType(file.contentType) ? [{ ...file, contentType: file.contentType }] : [],
+  );
+  if (typed.length !== files.length) return { outcome: "unsupported-type" };
   if (files.some((file) => !(file.size > 0) || file.size > MAX_RECEIPT_BYTES)) {
     return { outcome: "too-large", limit: MAX_RECEIPT_BYTES };
   }
 
   const access = await driveAccessToken(person);
-  if (access.outcome !== "ok") return { outcome: access.outcome };
+  if (access.outcome !== "ok") return driveRefusal(person, access.outcome);
 
   const origin = (await headers()).get("origin") ?? requireEnv("BETTER_AUTH_URL");
   const drive = openDrive(access.accessToken);
   try {
     const sessions = await Promise.all(
-      files.map((file) => {
-        const contentType = file.contentType as ReceiptContentType;
+      typed.map((file) => {
         return drive.openResumableSession({
-          name: `${randomUUID()}.${receiptExtension(contentType)}`,
+          name: `${randomUUID()}.${receiptExtension(file.contentType)}`,
           parentId: access.folders.stagingFolderId,
-          mimeType: contentType,
+          mimeType: file.contentType,
           size: file.size,
           origin,
           appProperties: { sugtPerjadinId: perjadinId },
@@ -163,7 +180,7 @@ type VerifiedReceipt = { driveFileId: string; contentType: ReceiptContentType; b
  * three images. The type is the sniff's and the size is Drive's.
  */
 async function verifyReceipt(
-  drive: ReturnType<typeof openDrive>,
+  drive: DriveClient,
   stagingFolderId: string,
   perjadinId: string,
   driveFileId: string,
@@ -221,7 +238,7 @@ export async function recordTransactionAction(
   if (!(line.amountIdr > 0)) return { outcome: "amount-not-positive" };
 
   const access = await driveAccessToken(person);
-  if (access.outcome !== "ok") return { outcome: access.outcome };
+  if (access.outcome !== "ok") return driveRefusal(person, access.outcome);
   const drive = openDrive(access.accessToken);
   const staging = access.folders.stagingFolderId;
 
@@ -275,9 +292,17 @@ export async function recordTransactionAction(
   );
   if (result.outcome !== "recorded") return result;
 
-  const reconciled = await reconcileTransaction(person, drive, access.folders, transactionId);
+  // The line is written. Whatever the reconcile does now — a Drive failure it answers, or a throw it
+  // does not — the answer is `recorded`: an error here would invite a retry that records it twice.
+  const synced = await reconcileTransaction(person, drive, access.folders, transactionId).then(
+    (reconciled) => reconciled.outcome === "synced",
+    (error: unknown) => {
+      console.error(`Reconcile of transaction ${transactionId} threw after its commit.`, error);
+      return false;
+    },
+  );
   revalidatePath(`/perjadin/${input.perjadinId}/laporan`);
-  return { outcome: "recorded", transactionId, synced: reconciled.outcome === "synced" };
+  return { outcome: "recorded", transactionId, synced };
 }
 
 /**

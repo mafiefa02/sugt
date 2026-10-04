@@ -24,10 +24,13 @@ export type ReceiptToFinalize = {
  */
 export type ReceiptToOpen = { size: number; contentType: string };
 
-/** Why receipts cannot go to Drive right now. Each is a returned value with its own sentence. */
+/**
+ * Why receipts cannot go to Drive right now. The first two carry the same sentence the page's gate
+ * shows — the date a connection broke included — so a stale page's dialog says what the fresh one
+ * would have.
+ */
 export type DriveRefusal =
-  | { outcome: "drive-disconnected" }
-  | { outcome: "drive-folders-unresolved" }
+  | { outcome: "drive-disconnected" | "drive-folders-unresolved"; reason: string }
   | { outcome: "drive-unreachable" };
 
 /** What `openReceiptSessionsAction` did: a session URI per file, in order, or why none. */

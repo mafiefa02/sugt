@@ -58,10 +58,10 @@ export async function reconcileTarget(
     .where(eq(transaction.id, transactionId));
   if (!line) return null;
 
-  const evidence = await db
+  const rows = await db
     .select({
       id: transactionEvidence.id,
-      driveFileId: sql<string>`${transactionEvidence.driveFileId}`,
+      driveFileId: transactionEvidence.driveFileId,
       contentType: transactionEvidence.contentType,
     })
     .from(transactionEvidence)
@@ -72,6 +72,10 @@ export async function reconcileTarget(
       ),
     )
     .orderBy(asc(transactionEvidence.uploadedAt), asc(transactionEvidence.id));
+  // Legacy receipts in the Supabase bucket are not the reconcile's; the filter above dropped them.
+  const evidence = rows.flatMap((row) =>
+    row.driveFileId ? [{ ...row, driveFileId: row.driveFileId }] : [],
+  );
 
   return { ...line, evidence };
 }

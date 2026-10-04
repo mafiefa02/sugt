@@ -17,8 +17,10 @@ export const RECEIPT_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
 
 export const UNSUPPORTED_RECEIPT = "Format tidak didukung — gunakan JPG, PNG, WebP atau PDF.";
 
-/** The cap, as the person reads it. */
-export const RECEIPT_TOO_LARGE = `Berkas lebih dari ${MAX_RECEIPT_BYTES / (1024 * 1024)} MB — perkecil lalu coba lagi.`;
+/** The cap in whole megabytes, as the person reads it. */
+export const MAX_RECEIPT_MEGABYTES = MAX_RECEIPT_BYTES / (1024 * 1024);
+
+export const RECEIPT_TOO_LARGE = `Berkas lebih dari ${MAX_RECEIPT_MEGABYTES} MB — perkecil lalu coba lagi.`;
 
 /** The longest edge an image keeps, and its JPEG quality: legible as a receipt, small on the wire. */
 const MAX_EDGE = 2400;

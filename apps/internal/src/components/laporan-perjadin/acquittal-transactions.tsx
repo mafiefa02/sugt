@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  DriveRefusal,
   OpenReceiptSessionsResult,
   ReceiptToFinalize,
   RecordTransactionActionResult,
@@ -22,6 +23,7 @@ import {
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
 import {
   isAcceptedReceipt,
+  MAX_RECEIPT_MEGABYTES,
   prepareReceipt,
   putToDriveSession,
   RECEIPT_ACCEPT,
@@ -30,10 +32,10 @@ import {
   type PreparedReceipt,
 } from "-/lib/drive/receipt-upload";
 import type { ReceiptUploadGate } from "-/lib/drive/upload-gate";
+import { DRIVE_UNREACHABLE } from "-/lib/drive/upload-messages";
 import {
   formatIdr,
   formatRupiah,
-  MAX_RECEIPT_BYTES,
   MAX_RECEIPTS_PER_TRANSACTION,
   TRANSACTION_CATEGORIES,
   TRANSACTION_PARTICIPANT_TYPES,
@@ -764,7 +766,7 @@ function RecordTransaction({
             </Label>
             <p className="-mt-0.5 text-xs text-muted-foreground">
               1–{MAX_RECEIPTS_PER_TRANSACTION} berkas JPG, PNG, WebP atau PDF, masing-masing paling
-              besar {MAX_RECEIPT_BYTES / (1024 * 1024)} MB. Foto diperkecil sebelum diunggah.
+              besar {MAX_RECEIPT_MEGABYTES} MB. Foto diperkecil sebelum diunggah.
             </p>
             {/*
               Required and staged, not uploaded on pick: `submit` PUTs them all before it records the
@@ -921,18 +923,9 @@ function retryNote(failed: number) {
 const UNSYNCED_NOTE =
   "Bukti belum tersinkron ke Google Drive. Sinkronisasi akan diselesaikan kemudian; tidak ada yang perlu diulang.";
 
-/** Why Drive cannot take an upload right now — the three states the gate also closes on. */
-function driveRefusalFor(
-  outcome: "drive-disconnected" | "drive-folders-unresolved" | "drive-unreachable",
-) {
-  switch (outcome) {
-    case "drive-disconnected":
-      return "Google Drive belum terhubung atau terputus — minta Administrator menghubungkannya di Pengaturan.";
-    case "drive-folders-unresolved":
-      return "Folder Google Drive bermasalah — minta Administrator memeriksanya di Pengaturan.";
-    case "drive-unreachable":
-      return "Google Drive tidak dapat dihubungi — coba lagi.";
-  }
+/** Why Drive cannot take an upload right now: the gate's own sentence, or "try again". */
+function driveRefusalFor(result: DriveRefusal) {
+  return "reason" in result ? result.reason : DRIVE_UNREACHABLE;
 }
 
 /** What each refusal to open upload sessions says. Nothing has been uploaded yet. */
@@ -949,7 +942,7 @@ function sessionRefusalFor(result: Exclude<OpenReceiptSessionsResult, { outcome:
     case "unsupported-type":
       return UNSUPPORTED_RECEIPT;
     default:
-      return driveRefusalFor(result.outcome);
+      return driveRefusalFor(result);
   }
 }
 
@@ -974,7 +967,7 @@ function refusalFor(result: Exclude<RecordTransactionActionResult, { outcome: "r
     case "unsupported-type":
       return UNSUPPORTED_RECEIPT;
     default:
-      return driveRefusalFor(result.outcome);
+      return driveRefusalFor(result);
   }
 }
 
