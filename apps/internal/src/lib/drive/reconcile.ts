@@ -9,7 +9,7 @@ import {
 } from "@sugt/db/queries";
 
 import type { ReadyFolders } from "./fixed-folders";
-import { type DriveClient, type DriveFile, isDriveFailure } from "./google";
+import { type DriveClient, type DriveFile, isDriveFailure, isLinkShared } from "./google";
 import {
   evidenceFileName,
   isReceiptContentType,
@@ -176,11 +176,7 @@ async function reconcileOnce(
     );
 
     // 4. Share, last.
-    const permissions = await drive.listPermissions(transactionFolderId);
-    const shared = permissions.some(
-      (permission) =>
-        !permission.inherited && permission.type === "anyone" && permission.role === "reader",
-    );
+    const shared = isLinkShared(await drive.listPermissions(transactionFolderId));
     if (!shared) {
       await drive.createPermission(transactionFolderId, { type: "anyone", role: "reader" });
     }

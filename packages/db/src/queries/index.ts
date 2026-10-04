@@ -309,6 +309,13 @@ export {
   type DriveUploadState,
 } from "./drive-connection";
 export {
+  legacyReceipts,
+  moveReceiptToDrive,
+  receiptMigrationState,
+  type LegacyReceipt,
+  type ReceiptMigrationState,
+} from "./receipt-migration";
+export {
   claimPerjadinDriveFolder,
   claimTransactionDriveFolder,
   markTransactionSyncFailed,
