@@ -277,6 +277,27 @@ nothing is recorded, and the form keeps what was typed and picked so the PIC can
 receipts can be added later from the line's own "Unggah bukti", up to five in total. A line
 entered before this rule may have none; it is marked on the screen and fixed the same way.
 
+**Receipts open in Google Drive** (ADR-0040). The dialog uploads to the company Google Drive, and
+the app no longer shows a receipt itself.
+
+- Each line shows **Bukti 1…n**, links that open each receipt in Drive in a new tab.
+- A line also shows **Buka folder**, a link to its own Drive folder that anyone holding it can
+  view — the link the external audit will use.
+- Receipts recorded before the move still open through the app's own short-lived links.
+
+What the dialog takes:
+
+- JPG, PNG, WebP or PDF; anything else is refused before it uploads. An iPhone photo arrives as a
+  JPG.
+- At most 20 MB per file.
+- Every photo is shrunk before it uploads — longest side 2400 px — which also strips its location
+  and camera data, since the link is public.
+
+**While Drive is not connected, or its connection has broken**, "Catat transaksi" and every
+"Unggah bukti" are disabled, and the screen says why and that an Administrator fixes it on
+Pengaturan. If Drive stops answering after a line is recorded, the line still stands; the dialog
+says its receipts are not yet in place in Drive, and that is finished later.
+
 **Each transaction carries a category**, from a closed list of eleven plus _Lainnya_ —
 _Tiket Pesawat/Kereta PP_, _Uang Harian_, _Honorarium Narasumber_, _Akomodasi_,
 _Transport Bandara/Stasiun_, _Transport Lokal Dalam Provinsi_, _Konsumsi_, _Modul_, _ATK_,

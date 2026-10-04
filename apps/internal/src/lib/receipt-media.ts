@@ -6,6 +6,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 /**
  * **Receipts in Supabase Storage — the server half of the upload, and the whole of the read.**
  *
+ * **Legacy since ADR-0040.** Catat transaksi uploads to the company Google Drive (`lib/drive/`). What
+ * still comes here is the row's own Unggah bukti until #374 moves it, and the signed links for
+ * receipts recorded before Drive, until they are migrated and this file goes (#377, #379).
+ *
  * The same pattern as `story-media.ts`, against the **private** `receipts` bucket instead of
  * the public one. The bytes never pass through this app: the browser PUTs a photographed
  * receipt straight to Storage through a signed upload URL minted here with the service-role

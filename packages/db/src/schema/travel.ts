@@ -95,6 +95,10 @@ export const perjadin = pgTable(
     returnedToTreasurerIdr: bigint("returned_to_treasurer_idr", { mode: "number" }),
     returnedAt: timestamp("returned_at", { withTimezone: true }),
     reportFiledAt: timestamp("report_filed_at", { withTimezone: true }),
+    // The Perjadin's folder in the company Google Drive (ADR-0040), set by compare-and-set the
+    // first time a transaction on it is reconciled — never under a row lock held across a call
+    // to Google. Null until then. An id, never a path, so a rename or move by hand breaks nothing.
+    driveFolderId: text("drive_folder_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -268,6 +272,13 @@ export const transaction = pgTable(
       .notNull()
       .references(() => person.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // The line's own Drive folder, shared "anyone with the link" once reconciled (ADR-0040). Null on
+    // a line recorded before Drive, until a receipt is first added to it there.
+    driveFolderId: text("drive_folder_id"),
+    // When the reconcile last finished this line: folder in place, files named and inside it,
+    // folder shared. Null while that is still owed. "Unsynced" is null **and** at least one
+    // Drive-backed receipt — a legacy or zero-receipt line is never unsynced.
+    driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
   },
   (t) => [
     check("transaction_amount_check", sql`${t.amountIdr} > 0`),
@@ -319,12 +330,18 @@ export const perjadinPreparationItem = pgTable(
 
 /**
  * One to five per transaction (ADR-0039), held by the application rather than here — lines from
- * before that rule may hold none or more. `storagePath` is the object key in the private
- * `receipts` bucket, and it is **opaque** — a bare UUID naming no Perjadin, no transaction and no
- * person. A signed URL carries its object path inside the JWT it is signed with, so a structured
- * key would put the trip's identifiers into every link the screen renders.
+ * before that rule may hold none or more.
  *
- * `unique` on it means one uploaded object can be attached exactly once.
+ * **A receipt lives in exactly one of two places** while receipts move to Google Drive (ADR-0040),
+ * and `transaction_evidence_one_store_check` holds it:
+ * - `driveFileId` — the file's id in the company Drive, for every receipt recorded since. Its
+ *   `content_type` is one of the four types the server sniffed from the first bytes, which
+ *   `transaction_evidence_drive_content_type_check` pins.
+ * - `storagePath` — a legacy object key in the private Supabase `receipts` bucket, **opaque** (a
+ *   bare UUID naming nothing, since a signed URL carries its path inside its JWT). These are
+ *   migrated to Drive and the column dropped later (#377, #379).
+ *
+ * `unique` on each means one uploaded file can be attached exactly once.
  */
 export const transactionEvidence = pgTable(
   "transaction_evidence",
@@ -333,7 +350,8 @@ export const transactionEvidence = pgTable(
     transactionId: uuid("transaction_id")
       .notNull()
       .references(() => transaction.id, { onDelete: "cascade" }),
-    storagePath: text("storage_path").notNull().unique(),
+    storagePath: text("storage_path").unique(),
+    driveFileId: text("drive_file_id").unique(),
     contentType: text("content_type").notNull(),
     byteSize: bigint("byte_size", { mode: "number" }).notNull(),
     uploadedByPersonId: uuid("uploaded_by_person_id")
@@ -344,5 +362,15 @@ export const transactionEvidence = pgTable(
   // Evidence is fetched per transaction on the Laporan (`perjadin-report.ts`), and the FK is not
   // auto-indexed. `storage_path`'s unique index does not help — it keys the object path, not the FK
   // (#270).
-  (t) => [index("transaction_evidence_transaction_id_idx").on(t.transactionId)],
+  (t) => [
+    index("transaction_evidence_transaction_id_idx").on(t.transactionId),
+    check(
+      "transaction_evidence_one_store_check",
+      sql`(${t.storagePath} is null) <> (${t.driveFileId} is null)`,
+    ),
+    check(
+      "transaction_evidence_drive_content_type_check",
+      sql`${t.driveFileId} is null or ${t.contentType} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`,
+    ),
+  ],
 );

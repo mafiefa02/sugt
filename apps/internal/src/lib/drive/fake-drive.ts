@@ -14,6 +14,7 @@ import {
  * - **Trashing a folder trashes what is inside it**, so `getFile` on a child reports `trashed`.
  * - **Permissions are inherited**: `listPermissions` on an item includes every permission on a folder
  *   above it, marked `inherited` — what Periksa koneksi's safety check reads.
+ * - **Uploads declare their size**: `land` — the browser's `PUT` — refuses bytes of another length.
  *
  * Later tickets extend it rather than mocking Drive ad hoc. `calls` counts every operation, so a
  * test can assert that a refused write reached Drive **zero** times.
@@ -31,6 +32,7 @@ type Session = {
   parentId: string;
   mimeType: string;
   size: number;
+  origin: string;
   appProperties: Record<string, string>;
 };
 
@@ -93,6 +95,11 @@ export class FakeDrive implements DriveClient {
     if (input.appProperties) file.appProperties = { ...file.appProperties, ...input.appProperties };
   }
 
+  async trashFile(id: string) {
+    this.calls += 1;
+    this.require("files.update(trash)", id).explicitlyTrashed = true;
+  }
+
   async readRange(id: string, start: number, end: number) {
     this.calls += 1;
     return this.require("files.get(media)", id).content.slice(start, end + 1);
@@ -131,12 +138,33 @@ export class FakeDrive implements DriveClient {
       parentId: input.parentId,
       mimeType: input.mimeType,
       size: input.size,
+      origin: input.origin,
       appProperties: input.appProperties ?? {},
     });
     return { sessionUri };
   }
 
   // ── Test helpers: what a browser, or a person in the Drive UI, does. Not part of DriveClient. ──
+
+  /**
+   * The browser's `PUT` to a session. Drive refuses bytes of any other length than was declared,
+   * creating nothing — the size enforcement #370 observed.
+   */
+  land(sessionUri: string, bytes: Uint8Array): { id: string } {
+    const session = this.sessions.get(sessionUri);
+    if (!session) throw new Error(`No upload session ${sessionUri}`);
+    if (bytes.length !== session.size) throw new DriveRequestError("upload", 400);
+    this.sessions.delete(sessionUri);
+    return {
+      id: this.store({
+        name: session.name,
+        mimeType: session.mimeType,
+        parents: [session.parentId],
+        appProperties: session.appProperties,
+        content: bytes,
+      }),
+    };
+  }
 
   /** Move to the Drive trash, as a person would. Children follow. */
   trash(id: string) {

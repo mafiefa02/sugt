@@ -208,6 +208,8 @@ export interface DriveClient {
       appProperties?: Record<string, string>;
     },
   ): Promise<void>;
+  /** Move to the Drive trash — the loser of a folder compare-and-set throws its folder away. */
+  trashFile(id: string): Promise<void>;
   /** Bytes `start` to `end` inclusive, for sniffing a file's type from its first bytes. */
   readRange(id: string, start: number, end: number): Promise<Uint8Array>;
   createPermission(id: string, permission: { type: "anyone"; role: "reader" }): Promise<void>;
@@ -235,6 +237,15 @@ export class DriveRequestError extends Error {
   ) {
     super(`Google Drive ${operation} failed with HTTP ${status}.`);
   }
+}
+
+/**
+ * Did a Drive call fail — a non-2xx (`DriveRequestError`), or the network under `fetch` (a
+ * `TypeError`)? Those are Google's to answer for and become "not synced yet"; anything else, a
+ * database refusal included, is a bug and is left to throw.
+ */
+export function isDriveFailure(error: unknown): boolean {
+  return error instanceof DriveRequestError || error instanceof TypeError;
 }
 
 const FILE_FIELDS = "id,name,mimeType,parents,trashed,size,appProperties";
@@ -323,6 +334,14 @@ export function openDrive(accessToken: string): DriveClient {
           ...(name ? { name } : {}),
           ...(appProperties ? { appProperties } : {}),
         }),
+      });
+    },
+
+    async trashFile(id) {
+      await call("files.update(trash)", `${DRIVE_API}/files/${encodeURIComponent(id)}?fields=id`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trashed: true }),
       });
     },
 

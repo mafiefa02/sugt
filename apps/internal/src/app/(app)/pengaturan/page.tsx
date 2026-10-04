@@ -1,6 +1,8 @@
 import { driveConnectMessage, parseDriveConnectOutcome } from "-/lib/drive/connect";
 import { readyFolders } from "-/lib/drive/fixed-folders";
+import { driveFolderUrl } from "-/lib/drive/receipt-files";
 import { requireEnv } from "-/lib/env";
+import { formatWib } from "-/lib/format-wib";
 import { requirePerson } from "-/lib/person";
 import { driveConnectionCard, hasGrant, type DriveConnectionCard } from "@sugt/db/queries";
 import { Alert, AlertDescription } from "@sugt/ui/components/alert";
@@ -61,16 +63,6 @@ export default async function Page({ searchParams }: PageProps<"/pengaturan">) {
   );
 }
 
-/** `2026-10-05 09:30 WIB` — the ISO form every date in the internal app reads in. */
-function formatWhen(when: Date): string {
-  const formatted = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Asia/Jakarta",
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(when);
-  return `${formatted} WIB`;
-}
-
 /**
  * The Google Drive card, in one of four states:
  * - **Belum terhubung** — no row.
@@ -118,7 +110,7 @@ function DriveCard({
           <CardTitle>Google Drive</CardTitle>
           <CardDescription className="text-destructive">
             {/* `drive_connection_broken_at_check` guarantees a broken row has `broken_at`. */}
-            Terputus sejak {formatWhen(connection.brokenAt!)}
+            Terputus sejak {formatWib(connection.brokenAt!)}
           </CardDescription>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
@@ -159,7 +151,7 @@ function DriveCard({
           <dt className="text-muted-foreground">Folder utama</dt>
           <dd>
             <a
-              href={`https://drive.google.com/drive/folders/${folders.rootFolderId}`}
+              href={driveFolderUrl(folders.rootFolderId)}
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-4"
@@ -169,10 +161,10 @@ function DriveCard({
           </dd>
           <dt className="text-muted-foreground">Dihubungkan oleh</dt>
           <dd>
-            {connection.connectedByName}, {formatWhen(connection.connectedAt)}
+            {connection.connectedByName}, {formatWib(connection.connectedAt)}
           </dd>
           <dt className="text-muted-foreground">Terakhir dipakai</dt>
-          <dd>{connection.lastUsedAt ? formatWhen(connection.lastUsedAt) : "—"}</dd>
+          <dd>{connection.lastUsedAt ? formatWib(connection.lastUsedAt) : "—"}</dd>
         </dl>
       </CardContent>
       {/* Periksa koneksi joins Hubungkan ulang here (#375). */}

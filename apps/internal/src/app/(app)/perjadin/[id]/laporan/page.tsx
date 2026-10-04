@@ -1,5 +1,7 @@
 import { AcquittalTransactions } from "-/components/laporan-perjadin/acquittal-transactions";
 import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-report";
+import { driveFileUrl, driveFolderUrl } from "-/lib/drive/receipt-files";
+import { receiptUploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
 import { signedReceiptUrl } from "-/lib/receipt-media";
@@ -57,7 +59,10 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
   const acquittal = await perjadinAcquittal(person, id);
   if (!acquittal) notFound();
 
-  const transactions = await Promise.all(acquittal.transactions.map(viewable));
+  const [transactions, uploadGate] = await Promise.all([
+    Promise.all(acquittal.transactions.map(viewable)),
+    receiptUploadGate(person),
+  ]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -149,30 +154,36 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
       <AcquittalTransactions
         perjadinId={id}
         transactions={transactions}
+        uploadGate={uploadGate}
       />
     </div>
   );
 }
 
 /**
- * One line item with a link per receipt.
+ * One line item with a link per receipt, and to its Drive folder when it has one.
  *
- * The `receipts` bucket is private, so a receipt renders only through a signed URL, and signing is
- * a network call per object. It happens here — for any signed-in reader, since `perjadinAcquittal`
- * is an open money read now (ADR-0026, #180) — so this page never decides anything about access on
- * its own; reading is open and every write is refused in its own Server Action. A `null` URL is an
- * object whose bytes are gone, which renders as a missing file rather than a broken page.
+ * **A Drive receipt** (ADR-0040) is a plain link to Drive, built from its id; the app renders nothing
+ * of the file itself. **A legacy receipt** in the private `receipts` bucket renders only through a
+ * signed URL, and signing is a network call per object; a `null` URL is an object whose bytes are
+ * gone, which renders as a missing file rather than a broken page. Both happen here for any
+ * signed-in reader, since `perjadinAcquittal` is an open money read (ADR-0026, #180).
  */
 async function viewable(line: AcquittalTransaction): Promise<ViewableTransaction> {
+  const { driveFolderId, ...rest } = line;
   const evidence = await Promise.all(
     line.evidence.map(async (file) => ({
       id: file.id,
       contentType: file.contentType,
       byteSize: file.byteSize,
-      url: await signedReceiptUrl(file.storagePath),
+      url: file.driveFileId
+        ? driveFileUrl(file.driveFileId)
+        : file.storagePath
+          ? await signedReceiptUrl(file.storagePath)
+          : null,
     })),
   );
-  return { ...line, evidence };
+  return { ...rest, evidence, folderUrl: driveFolderId ? driveFolderUrl(driveFolderId) : null };
 }
 
 /**

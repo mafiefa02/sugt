@@ -1,0 +1,134 @@
+import {
+  claimPerjadinDriveFolder,
+  claimTransactionDriveFolder,
+  markTransactionSynced,
+  reconcileTarget,
+  type Person,
+} from "@sugt/db/queries";
+
+import type { ReadyFolders } from "./fixed-folders";
+import { type DriveClient, isDriveFailure } from "./google";
+import {
+  evidenceFileName,
+  isReceiptContentType,
+  perjadinFolderName,
+  transactionFolderName,
+} from "./receipt-files";
+
+/**
+ * **The reconcile** (ADR-0040, #373): put one recorded transaction in its place in the company
+ * Drive, and say when it is done. Idempotent — run it again and it does only what is still owed —
+ * and tracked by `transaction.drive_synced_at`. It runs inline after Catat transaksi and (#374) after
+ * Unggah bukti, and is what Periksa koneksi's sweep and a reconnect re-run (#375).
+ *
+ * In order:
+ * 1. **The Perjadin folder.** Created under `Pelaksanaan Offline` if the Perjadin has none, private,
+ *    and claimed by compare-and-set; a caller that lost trashes its own and uses the winner's.
+ * 2. **The transaction folder.** Created straight in the Perjadin folder if the line has none (a line
+ *    from before Drive), by the same compare-and-set. One still in `_staging` — where Catat builds
+ *    it — moves into the Perjadin folder. **One a person has moved elsewhere stays there.**
+ * 3. **Each receipt still in `_staging`** is renamed and moved into the transaction folder.
+ * 4. **The transaction folder is shared** — anyone, reader — if it is not already. Last, so nothing
+ *    is public before it is named and in place. Only transaction folders are ever shared.
+ * 5. `drive_synced_at` is set.
+ *
+ * **A trashed or missing folder is never recreated**: the line stays unsynced and the answer says
+ * why. Any failure from Drive does the same — the database already holds the line, so a failed
+ * reconcile costs only the sync, which the next run finishes.
+ */
+
+export type ReconcileResult =
+  | { outcome: "synced" }
+  | { outcome: "unsynced"; reason: "folder-trashed" | "folder-missing" | "drive-failed" }
+  | { outcome: "no-such-transaction" };
+
+export async function reconcileTransaction(
+  person: Person,
+  drive: DriveClient,
+  folders: ReadyFolders,
+  transactionId: string,
+): Promise<ReconcileResult> {
+  const target = await reconcileTarget(person, transactionId);
+  if (!target) return { outcome: "no-such-transaction" };
+
+  try {
+    // 1. The Perjadin folder.
+    let perjadinFolderId = target.perjadinDriveFolderId;
+    if (!perjadinFolderId) {
+      const made = await drive.createFolder({
+        name: perjadinFolderName(target.destination, target.startsOn),
+        parentId: folders.pelaksanaanOfflineFolderId,
+        appProperties: { sugtPerjadinId: target.perjadinId },
+      });
+      perjadinFolderId = await claimPerjadinDriveFolder(person, target.perjadinId, made.id);
+      if (perjadinFolderId !== made.id) await drive.trashFile(made.id);
+    }
+
+    // 2. The transaction folder.
+    let transactionFolderId = target.driveFolderId;
+    if (!transactionFolderId) {
+      const made = await drive.createFolder({
+        name: transactionFolderName(target.spentOn, target.category, target.transactionId),
+        parentId: perjadinFolderId,
+        appProperties: {
+          sugtPerjadinId: target.perjadinId,
+          sugtTransactionId: target.transactionId,
+        },
+      });
+      transactionFolderId = await claimTransactionDriveFolder(
+        person,
+        target.transactionId,
+        made.id,
+      );
+      if (transactionFolderId !== made.id) await drive.trashFile(made.id);
+    }
+
+    const folder = await drive.getFile(transactionFolderId);
+    if (!folder) return { outcome: "unsynced", reason: "folder-missing" };
+    if (folder.trashed) return { outcome: "unsynced", reason: "folder-trashed" };
+    if (folder.parents.includes(folders.stagingFolderId)) {
+      await drive.updateFile(transactionFolderId, {
+        addParent: perjadinFolderId,
+        removeParent: folders.stagingFolderId,
+      });
+    }
+
+    // 3. Receipts still in `_staging`.
+    await Promise.all(
+      target.evidence.map(async (receipt) => {
+        const file = await drive.getFile(receipt.driveFileId);
+        if (!file || !file.parents.includes(folders.stagingFolderId)) return;
+        if (!isReceiptContentType(receipt.contentType)) return;
+        await drive.updateFile(receipt.driveFileId, {
+          name: evidenceFileName(
+            target.spentOn,
+            target.category,
+            target.transactionId,
+            receipt.id,
+            receipt.contentType,
+          ),
+          addParent: transactionFolderId,
+          removeParent: folders.stagingFolderId,
+          appProperties: { sugtTransactionId: target.transactionId },
+        });
+      }),
+    );
+
+    // 4. Share, last.
+    const permissions = await drive.listPermissions(transactionFolderId);
+    const shared = permissions.some(
+      (permission) =>
+        !permission.inherited && permission.type === "anyone" && permission.role === "reader",
+    );
+    if (!shared) {
+      await drive.createPermission(transactionFolderId, { type: "anyone", role: "reader" });
+    }
+  } catch (error) {
+    if (isDriveFailure(error)) return { outcome: "unsynced", reason: "drive-failed" };
+    throw error;
+  }
+
+  // 5.
+  await markTransactionSynced(person, target.transactionId);
+  return { outcome: "synced" };
+}

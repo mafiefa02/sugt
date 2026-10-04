@@ -7,6 +7,7 @@ import { SessionMarkDeliveredDialog } from "-/components/perjadin-mark-delivered
 import { PerjadinPreparationDialog } from "-/components/perjadin-preparation";
 import { progressTone } from "-/components/progress-tone";
 import { spentPercent, tripTimeline, type TimelineNode } from "-/components/trip-timeline";
+import type { ReceiptUploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
 import type { MyUpcomingPerjadin } from "@sugt/db/queries";
 import { formatRupiah, formatSessionStartTimeWithWib } from "@sugt/domain";
@@ -42,7 +43,15 @@ import { useState } from "react";
  * The whole section — heading included — is absent when the caller is on no upcoming trip, rather
  * than a heading over an empty list: there is nothing to say, so nothing is shown.
  */
-function MyPerjadinSection({ trips, today }: { trips: MyUpcomingPerjadin[]; today: string }) {
+function MyPerjadinSection({
+  trips,
+  today,
+  uploadGate,
+}: {
+  trips: MyUpcomingPerjadin[];
+  today: string;
+  uploadGate: ReceiptUploadGate;
+}) {
   // Reveal three at a time from the client, never a refetch — the full list is already in hand, and
   // the button only widens the slice. Hidden once everything is shown.
   const [shown, setShown] = useState(3);
@@ -66,6 +75,7 @@ function MyPerjadinSection({ trips, today }: { trips: MyUpcomingPerjadin[]; toda
             key={trip.id}
             trip={trip}
             today={today}
+            uploadGate={uploadGate}
           />
         ))}
       </Accordion>
@@ -99,7 +109,15 @@ function MyPerjadinSection({ trips, today }: { trips: MyUpcomingPerjadin[]; toda
  * its own click and opens the checklist without toggling. The chevron is decorative and outside the
  * trigger, rotated from the item's `data-open`.
  */
-function TripCard({ trip, today }: { trip: MyUpcomingPerjadin; today: string }) {
+function TripCard({
+  trip,
+  today,
+  uploadGate,
+}: {
+  trip: MyUpcomingPerjadin;
+  today: string;
+  uploadGate: ReceiptUploadGate;
+}) {
   // The pill's `x/N` is read straight off the checklist the card also hands the dialog — one payload
   // for both, so the pill and the boxes can never disagree. `N` is always seven (amendment to ADR-0018).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
@@ -177,6 +195,7 @@ function TripCard({ trip, today }: { trip: MyUpcomingPerjadin; today: string }) 
             <div className="flex flex-wrap gap-2">
               <RecordTransaction
                 perjadinId={trip.id}
+                uploadGate={uploadGate}
                 trigger={
                   <Button
                     variant="secondary"

@@ -304,7 +304,17 @@ export {
   type DriveCredentials,
   type DriveFolderIds,
   type EncryptedRefreshToken,
+  driveUploadState,
+  type DriveUploadState,
 } from "./drive-connection";
+export {
+  claimPerjadinDriveFolder,
+  claimTransactionDriveFolder,
+  markTransactionSynced,
+  reconcileTarget,
+  type ReconcileEvidence,
+  type ReconcileTarget,
+} from "./drive-sync";
 export {
   canViewDashboard,
   hasGrant,

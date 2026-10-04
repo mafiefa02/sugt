@@ -87,6 +87,34 @@ export async function driveConnectionCard(caller: Person): Promise<DriveConnecti
   return row ?? null;
 }
 
+/** Whether uploads can go to Drive right now — what the receipt controls are disabled on. */
+export type DriveUploadState = DriveFolderIds & {
+  status: DriveConnectionStatus;
+  brokenAt: Date | null;
+  folderProblem: DriveFolderProblem | null;
+};
+
+/**
+ * The connection's state, for any signed-in Person: the acquittal is an open money read (ADR-0026),
+ * and its receipt controls render disabled with the reason when uploads cannot go through. It
+ * carries no token and nothing an Administrator alone may see. `null` is "Belum terhubung".
+ */
+export async function driveUploadState(_caller: Person): Promise<DriveUploadState | null> {
+  const [row] = await db
+    .select({
+      status: driveConnection.status,
+      brokenAt: driveConnection.brokenAt,
+      folderProblem: driveConnection.folderProblem,
+      rootFolderId: driveConnection.rootFolderId,
+      stagingFolderId: driveConnection.stagingFolderId,
+      buktiTransaksiFolderId: driveConnection.buktiTransaksiFolderId,
+      pelaksanaanOfflineFolderId: driveConnection.pelaksanaanOfflineFolderId,
+      readmeFileId: driveConnection.readmeFileId,
+    })
+    .from(driveConnection);
+  return row ?? null;
+}
+
 /** What a token refresh needs: the stored ciphertext, whether it is still trusted, and the tree. */
 export type DriveCredentials = DriveFolderIds & {
   status: DriveConnectionStatus;
