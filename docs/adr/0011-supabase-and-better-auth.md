@@ -1,10 +1,10 @@
 # Supabase for Postgres and storage, Better Auth for sign-in, and no Supabase client in the public app
 
-> **Receipts move out of Supabase Storage ([ADR-0040](./0040-transaction-evidence-is-stored-in-the-company-google-drive.md)).**
-> They go to the company's Google Drive, link-readable per transaction. The Consequence below about
-> receipts in a private bucket behind signed URLs holds only for legacy receipts, until they are
-> migrated and the `receipts` bucket is deleted. Supabase still holds the database and the
-> `public-media` bucket.
+> **Partially superseded by [ADR-0040](./0040-transaction-evidence-is-stored-in-the-company-google-drive.md).**
+> Receipts move out of Supabase Storage to the company's Google Drive, link-readable per
+> transaction. The Consequence below about receipts in a private bucket behind signed URLs holds only
+> for legacy receipts, until they are migrated and the `receipts` bucket is deleted. Supabase still
+> holds the database and the `public-media` bucket.
 
 [ADR-0005](./0005-postgres-for-the-invariants-not-the-scale.md) left the vendor open. It is
 Supabase Pro, for the managed Postgres and the object storage, with both apps on Vercel. Sign-in

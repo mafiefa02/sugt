@@ -7,8 +7,8 @@ stores the Drive ids of that folder and of each file in it. The internal app **s
 receipts itself**: a receipt is a link that opens Drive in a new tab.
 
 This **supersedes the storage half of [ADR-0039](./0039-every-transaction-is-recorded-with-its-evidence.md)**
-— the Supabase upload URLs, the read-back from Storage, and the "the bucket is private, so orphans
-are harmless" argument — and the storage-layer points of
+— the Supabase upload URLs, the read-back from Storage, and its argument that orphans are harmless
+because the bucket is private — and the storage-layer points of
 [ADR-0030](./0030-receipts-may-attach-at-transaction-entry-not-only-per-row.md). The rest of
 ADR-0039 stands: one to five receipts per transaction, all or nothing, and the row lock on
 "Unggah bukti". It **widens [ADR-0026](./0026-money-is-open-to-read-and-staff-only-to-write.md)**
@@ -75,8 +75,8 @@ My Drive/
   company may one day move the root by hand under one of its own folders, and if that folder is
   link-shared, everything inside the root becomes link-readable with it. `_staging` holds files
   nobody has checked yet, so it sits where that move cannot reach it. The Perjadin folders are
-  inside the root and would be exposed by such a move; "Periksa koneksi" checks for an inherited
-  `anyone` permission on the root and on `_staging` and warns if it finds one.
+  inside the root and would be exposed by such a move; "Periksa koneksi" checks for any `anyone`
+  permission, inherited or direct, on the root and on `_staging`, and warns if it finds one.
 - **The database stores Drive ids, never paths.** Links are built from ids
   (`https://drive.google.com/file/d/{id}/view`, `https://drive.google.com/drive/folders/{id}`), so a
   folder renamed or moved by hand breaks nothing.
@@ -88,8 +88,10 @@ My Drive/
   not the travelling party. `txn8` and `ev8` are the first 8 hex characters of the transaction and
   evidence uuids. The extension comes from the **verified** type. Every file and folder the app makes
   carries `appProperties`: `sugtPerjadinId`, and `sugtTransactionId` once it is known.
-- **Names are app-owned.** The app computes them from the database and re-asserts them when it next
-  touches the folder. The README asks people not to rename.
+- **Names are app-owned.** The app computes them from the database. Transaction folders and files
+  are named once, as they leave `_staging`, and never renamed: a transaction cannot be edited. The
+  reconcile re-asserts the Perjadin folder's name, which follows a corrected start date. The README
+  asks people not to rename.
 - **Moving the root by hand is allowed**, and recommended over Google Picker for putting it where
   the company files things. The new parent must be **owned by the company account**: a folder owned
   by anyone else would put the evidence under an account the company does not control.
@@ -184,8 +186,8 @@ something nobody needs to know sooner.
 **Expand, migrate, contract, then delete the bucket.**
 
 1. **Expand.** Evidence rows gain a nullable `drive_file_id` beside a now-nullable `storage_path`,
-   with a CHECK that exactly one is set. New receipts go to Drive; legacy rows keep rendering
-   through their signed URLs.
+   with a CHECK that exactly one is set. Catat transaksi moves to Drive first, then the row's
+   "Unggah bukti"; legacy rows keep rendering through their signed URLs.
 2. **Migrate** the legacy receipts with a **local, resumable script**. A Vercel function would time
    out on the backlog, and the script needs the service-role key and the token key together. It
    re-encodes legacy photos the way the browser does, because they are about to become link-public.
@@ -204,8 +206,8 @@ There is **one storage backend at the end, never two.**
 - **Orphans now live in private `_staging`.** A record refused after its files landed leaves them in
   `_staging`, unreferenced by any row. That replaces ADR-0039's argument that the private bucket made
   orphans harmless: `_staging` is private and outside the root, so an orphan there is just as
-  unreadable, and no cleanup is built for it
-  ([ADR-0018](./0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md)).
+  unreadable. No cleanup is built for it, as none is for the orphaned ticks of
+  [ADR-0018](./0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md).
 - **A new external runtime dependency.** Recording a transaction now needs Google Drive to be up and
   connected, as [ADR-0033](./0033-kalender-schedule-is-a-link-shared-google-sheet.md) accepted for
   the calendar. A failure after the commit costs only the sync, never the line.

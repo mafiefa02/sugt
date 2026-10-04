@@ -2,8 +2,8 @@
 
 > **Partially superseded by [ADR-0040](./0040-transaction-evidence-is-stored-in-the-company-google-drive.md).**
 > Receipts are stored in the company's Google Drive, not the Supabase `receipts` bucket. The upload
-> URLs minted against Storage, the read-back from Storage, and the "the bucket is private, so orphan
-> objects are harmless" argument no longer describe the system: files land in a private Drive
+> URLs minted against Storage, the read-back from Storage, and the argument that orphan objects are
+> harmless because the bucket is private no longer describe the system: files land in a private Drive
 > `_staging` folder and are verified from their first bytes there. The one-to-five rule,
 > all-or-nothing and the row lock on "Unggah bukti" stand.
 
