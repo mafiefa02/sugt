@@ -677,7 +677,8 @@ export async function resetDatabase() {
       public."transaction_evidence",
       public."assessment_completion",
       public."preparation_card",
-      public."preparation_checklist_item"
+      public."preparation_checklist_item",
+      public."drive_connection"
     restart identity cascade
   `);
 }

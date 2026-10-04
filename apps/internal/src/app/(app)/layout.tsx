@@ -49,6 +49,7 @@ export default async function SignedInLayout({
       personName={person.fullName}
       canEditMonitoring={hasGrant(person, "Editor")}
       canViewDashboard={canViewDashboard(person)}
+      canAdminister={hasGrant(person, "Administrator")}
       sidebarState={sidebarState}
       footerAction={
         /* Sign-out ends the profile row of the shell's footer — the one `SidebarBody` the desktop

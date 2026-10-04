@@ -11,6 +11,7 @@ import {
   Newspaper,
   Plane,
   School,
+  Settings,
   Users,
 } from "lucide-react";
 import type { Route } from "next";
@@ -24,6 +25,8 @@ export type NavItem = {
   editorOnly?: boolean;
   /** Shown only to a Person who may read the Dashboard (`canViewDashboard`). Absent means "no gate". */
   dashboardView?: boolean;
+  /** Shown only to an Administrator. Absent means "no gate". */
+  administratorOnly?: boolean;
 };
 
 /**
@@ -62,6 +65,9 @@ export type NavItem = {
  * page redirects a grant-less Staff to `/pendamping`, so — same rule again — the link is hidden for
  * exactly the callers it would bounce. The shell computes `canViewDashboard` once (the one predicate
  * the page guard shares) and passes the boolean down.
+ *
+ * `administratorOnly` is a fourth (#372): **Pengaturan** is shown only to an Administrator, because
+ * its page `forbidden()`s everyone else — the same "worse than no link" rule once more.
  */
 const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Gauge, staffOnly: false, dashboardView: true },
@@ -75,6 +81,13 @@ const NAV: NavItem[] = [
   { href: "/sekolah", label: "Direktori Sekolah", icon: School, staffOnly: false },
   { href: "/kelompok-sekolah", label: "Kelompok Sekolah", icon: Boxes, staffOnly: false },
   { href: "/orang", label: "Orang", icon: Users, staffOnly: false },
+  {
+    href: "/pengaturan",
+    label: "Pengaturan",
+    icon: Settings,
+    staffOnly: true,
+    administratorOnly: true,
+  },
 ];
 
 /**
@@ -86,16 +99,19 @@ export function sidebarItems({
   role,
   canEditMonitoring,
   canViewDashboard,
+  canAdminister,
 }: {
   role: Role;
   canEditMonitoring: boolean;
   canViewDashboard: boolean;
+  canAdminister: boolean;
 }): NavItem[] {
   const visible = NAV.filter(
     (item) =>
       (!item.staffOnly || role === "Staff") &&
       (!item.editorOnly || canEditMonitoring) &&
-      (!item.dashboardView || canViewDashboard),
+      (!item.dashboardView || canViewDashboard) &&
+      (!item.administratorOnly || canAdminister),
   );
   if (canViewDashboard) return visible;
   const isPendamping = (item: NavItem) => item.href === "/pendamping";

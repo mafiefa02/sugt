@@ -292,6 +292,18 @@ export {
 } from "./session-records";
 export { assignGrant, personGrants, revokeGrant, type SetGrantResult } from "./grants";
 export {
+  driveConnectionCard,
+  driveCredentials,
+  markDriveConnectionBroken,
+  recordDriveFolders,
+  saveDriveConnection,
+  touchDriveConnection,
+  type DriveConnectionCard,
+  type DriveCredentials,
+  type DriveFolderIds,
+  type EncryptedRefreshToken,
+} from "./drive-connection";
+export {
   canViewDashboard,
   hasGrant,
   isNotGrantedError,
