@@ -33,6 +33,11 @@
  * it. As with the set columns, `$type<>()` comes before `.default()` so the default is checked
  * against it too.
  *
+ * **`drive.ts` declares its own two sets** — `DriveConnectionStatus` and `DriveFolderProblem` —
+ * beside the table rather than in `@sugt/domain`. They describe the Drive connection, which is
+ * infrastructure and not a term in `CONTEXT.md`, so AGENTS.md rule 3 keeps them out of the domain
+ * package. `@sugt/db/queries` re-exports both for the app.
+ *
  * **The import is `import type`, and value imports stay out of these files.** Building a
  * `check()` out of `SESSION_MODES` would compose a different constraint string from the
  * literal one the snapshot holds, and drizzle-kit would emit DDL to reconcile the two.

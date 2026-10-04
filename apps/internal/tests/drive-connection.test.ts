@@ -12,11 +12,11 @@ import {
   ROOT_FOLDER_NAME,
   STAGING_FOLDER_NAME,
 } from "-/lib/drive/fixed-folders";
-import { DRIVE_FILE_SCOPE, openDrive } from "-/lib/drive/google";
+import { DRIVE_FILE_SCOPE, DriveRequestError, openDrive } from "-/lib/drive/google";
 import { decryptRefreshToken } from "-/lib/drive/token-crypto";
 import { requirePerson, resolvePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
-import type { Person } from "@sugt/db/queries";
+import { markDriveConnectionBroken, touchDriveConnection, type Person } from "@sugt/db/queries";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -115,6 +115,7 @@ beforeEach(async () => {
   await resetDatabase();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.stubEnv("__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS", "1");
   drive = new FakeDrive();
   vi.mocked(openDrive).mockReturnValue(drive);
@@ -185,6 +186,7 @@ describe("only an Administrator reaches the connection", () => {
 describe("the callback's checks, in order", () => {
   it.each([
     ["access-denied", { error: "access_denied" }, goodExchange()],
+    ["exchange-failed", { error: "server_error" }, goodExchange()],
     ["state-mismatch", { state: "forged" }, goodExchange()],
     ["exchange-failed", {}, { status: 400, body: { error: "invalid_grant" } }],
     ["wrong-account", {}, goodExchange({ id_token: idToken("someone@gmail.com") })],
@@ -209,6 +211,15 @@ describe("the callback's checks, in order", () => {
 
     expect(seen.exchanges).toBe(0);
     await expect(rows()).resolves.toHaveLength(0);
+  });
+
+  it("checks the state before the caller, so a forged state never reaches the role check", async () => {
+    const { admin, staff } = await people();
+    const seen = stubTokenEndpoint({ exchange: goodExchange() });
+
+    await expect(callback(staff, { state: "forged" })).resolves.toBe("state-mismatch");
+    await expect(callback(admin, { state: "forged" })).resolves.toBe("state-mismatch");
+    expect(seen.exchanges).toBe(0);
   });
 
   it("refuses a missing state cookie", async () => {
@@ -265,6 +276,8 @@ describe("a successful connect", () => {
       brokenAt: null,
       connectedByPersonId: admin.id,
       folderProblem: null,
+      // Connecting is not a use; only a successful refresh sets it.
+      lastUsedAt: null,
     });
     expect(JSON.stringify(row)).not.toContain("refresh-token-plaintext");
     expect(
@@ -338,6 +351,49 @@ describe("a successful connect", () => {
     ).toBe("second-refresh-token");
   });
 
+  it("recreates a missing Bukti Transaksi, and Pelaksanaan Offline inside the new one", async () => {
+    const { admin } = await people();
+    stubTokenEndpoint({ exchange: goodExchange() });
+    await callback(admin, {});
+    const [first] = await rows();
+    drive.remove(first!.buktiTransaksiFolderId!);
+
+    await expect(callback(admin, {})).resolves.toBe("connected");
+
+    const [second] = await rows();
+    expect(second!.buktiTransaksiFolderId).not.toBe(first!.buktiTransaksiFolderId);
+    expect(second!.pelaksanaanOfflineFolderId).not.toBe(first!.pelaksanaanOfflineFolderId);
+    await expect(drive.getFile(second!.pelaksanaanOfflineFolderId!)).resolves.toMatchObject({
+      parents: [second!.buktiTransaksiFolderId],
+      trashed: false,
+    });
+  });
+
+  it("records what it made when Drive fails partway, and a reconnect finishes without a second root", async () => {
+    const { admin, staff } = await people();
+    stubTokenEndpoint({ exchange: goodExchange() });
+    const createFolder = drive.createFolder.bind(drive);
+    vi.spyOn(drive, "createFolder")
+      .mockImplementationOnce(createFolder)
+      .mockRejectedValueOnce(new DriveRequestError("files.create", 503));
+
+    await expect(callback(admin, {})).resolves.toBe("folders-unfinished");
+
+    const [first] = await rows();
+    expect(first).toMatchObject({ status: "connected", folderProblem: "folders-unfinished" });
+    expect(first!.rootFolderId).not.toBeNull();
+    expect(first!.stagingFolderId).toBeNull();
+    await expect(driveAccessToken(staff)).resolves.toEqual({
+      outcome: "drive-folders-unresolved",
+    });
+
+    await expect(callback(admin, {})).resolves.toBe("connected");
+    expect(drive.named(ROOT_FOLDER_NAME)).toHaveLength(1);
+    await expect(rows()).resolves.toMatchObject([
+      { rootFolderId: first!.rootFolderId, folderProblem: null },
+    ]);
+  });
+
   it("reports a trashed root without recreating it, and keeps the token", async () => {
     const { admin } = await people();
     stubTokenEndpoint({ exchange: goodExchange() });
@@ -402,7 +458,6 @@ describe("driveAccessToken", () => {
 
   it("refreshes the stored token for any Staff member and records the use", async () => {
     const staff = await connected();
-    await db.update(schema.driveConnection).set({ lastUsedAt: null });
     const seen = stubTokenEndpoint({ refresh: { body: { access_token: "fresh-access" } } });
 
     await expect(driveAccessToken(staff)).resolves.toMatchObject({
@@ -414,7 +469,7 @@ describe("driveAccessToken", () => {
     expect(row!.lastUsedAt).not.toBeNull();
   });
 
-  it("marks the connection broken on invalid_grant", async () => {
+  it("marks the connection broken on invalid_grant, keeping the first failure's time", async () => {
     const staff = await connected();
     stubTokenEndpoint({ refresh: { status: 400, body: { error: "invalid_grant" } } });
 
@@ -423,12 +478,43 @@ describe("driveAccessToken", () => {
     const [row] = await rows();
     expect(row!.status).toBe("broken");
     expect(row!.brokenAt).toBeInstanceOf(Date);
+
+    // A second refusal finds it already broken; so does a direct second mark.
+    await expect(driveAccessToken(staff)).resolves.toEqual({ outcome: "drive-disconnected" });
+    await markDriveConnectionBroken(staff);
+    await expect(rows()).resolves.toMatchObject([{ brokenAt: row!.brokenAt }]);
   });
 
-  it("marks the connection broken when the token will not decrypt", async () => {
+  it("does not record a use on a broken row", async () => {
+    const staff = await connected();
+    await markDriveConnectionBroken(staff);
+
+    await touchDriveConnection(staff);
+
+    await expect(rows()).resolves.toMatchObject([{ status: "broken", lastUsedAt: null }]);
+  });
+
+  it("answers drive-folders-unresolved, asking Google nothing, while _staging is in the trash", async () => {
+    const { admin, staff } = await people();
+    stubTokenEndpoint({ exchange: goodExchange() });
+    await callback(admin, {});
+    drive.trash((await rows())[0]!.stagingFolderId!);
+    await callback(admin, {});
+    const seen = stubTokenEndpoint({});
+
+    await expect(driveAccessToken(staff)).resolves.toEqual({
+      outcome: "drive-folders-unresolved",
+    });
+    expect(seen.refreshes).toHaveLength(0);
+  });
+
+  it.each([
+    ["a different key", Buffer.alloc(32, 7).toString("base64")],
+    ["a key of the wrong length", Buffer.alloc(3, 7).toString("base64")],
+  ])("marks the connection broken when the token will not decrypt under %s", async (_, key) => {
     const staff = await connected();
     const seen = stubTokenEndpoint({});
-    vi.stubEnv("DRIVE_TOKEN_KEY", Buffer.alloc(32, 7).toString("base64"));
+    vi.stubEnv("DRIVE_TOKEN_KEY", key);
 
     await expect(driveAccessToken(staff)).resolves.toEqual({ outcome: "drive-disconnected" });
 
@@ -525,6 +611,20 @@ describe("the Pengaturan card", () => {
     const text = await pageText(admin);
 
     expect(text).toContain("Folder utama ada di Sampah Google Drive");
+    expect(text).not.toContain("Terhubung");
+  });
+
+  it("does not claim Terhubung while the tree is unfinished", async () => {
+    const { admin } = await people();
+    stubTokenEndpoint({ exchange: goodExchange() });
+    vi.spyOn(drive, "createFolder").mockRejectedValueOnce(
+      new DriveRequestError("files.create", 503),
+    );
+    await callback(admin, {});
+
+    const text = await pageText(admin);
+
+    expect(text).toContain("Google Drive gagal saat menyiapkan folder");
     expect(text).not.toContain("Terhubung");
   });
 

@@ -1,5 +1,5 @@
 {
-  "id": "b187a441-3e91-421a-a718-41ed3b2cbd24",
+  "id": "c12c15f5-db3e-4581-959d-0de06bc5cc33",
   "prevId": "f25ffa23-6564-4f56-9da2-c95a6bf69e2a",
   "version": "7",
   "dialect": "postgresql",
@@ -3072,7 +3072,7 @@
         },
         "drive_connection_folder_problem_check": {
           "name": "drive_connection_folder_problem_check",
-          "value": "\"drive_connection\".\"folder_problem\" in ('root-trashed', 'root-missing', 'staging-trashed', 'staging-missing')"
+          "value": "\"drive_connection\".\"folder_problem\" in ('root-trashed', 'root-missing', 'staging-trashed', 'staging-missing', 'folders-unfinished')"
         }
       },
       "isRLSEnabled": false

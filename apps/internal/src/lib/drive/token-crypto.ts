@@ -14,9 +14,15 @@ import type { EncryptedRefreshToken } from "@sugt/db/queries";
  */
 
 const ALGORITHM = "aes-256-gcm";
+/** Pinned, so a tag cut short is refused rather than checked against fewer bytes. */
+const AUTH_TAG_LENGTH = 16;
 
-function driveTokenKey(): Buffer {
-  const key = Buffer.from(requireEnv("DRIVE_TOKEN_KEY"), "base64");
+/**
+ * The key, decoded. **Unset** is a deploy mistake and throws through `requireEnv`; **the wrong length**
+ * throws here, which encrypting surfaces and decrypting turns into "will not decrypt".
+ */
+function decodeKey(base64: string): Buffer {
+  const key = Buffer.from(base64, "base64");
   if (key.length !== 32) {
     throw new Error(
       `DRIVE_TOKEN_KEY must be 32 bytes, base64-encoded (\`openssl rand -base64 32\`); it decodes to ${key.length}.`,
@@ -27,7 +33,8 @@ function driveTokenKey(): Buffer {
 
 export function encryptRefreshToken(refreshToken: string): EncryptedRefreshToken {
   const iv = randomBytes(12);
-  const cipher = createCipheriv(ALGORITHM, driveTokenKey(), iv);
+  const key = decodeKey(requireEnv("DRIVE_TOKEN_KEY"));
+  const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   const ciphertext = Buffer.concat([cipher.update(refreshToken, "utf8"), cipher.final()]);
   return {
     ciphertext: ciphertext.toString("base64"),
@@ -36,11 +43,17 @@ export function encryptRefreshToken(refreshToken: string): EncryptedRefreshToken
   };
 }
 
-/** The plaintext token, or `null` when it will not decrypt under the current key. */
+/**
+ * The plaintext token, or `null` when it will not decrypt under the current key — a different key,
+ * a key of the wrong length, or a tampered row alike. The caller marks the connection broken.
+ */
 export function decryptRefreshToken(encrypted: EncryptedRefreshToken): string | null {
-  const key = driveTokenKey();
+  const base64Key = requireEnv("DRIVE_TOKEN_KEY");
   try {
-    const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(encrypted.iv, "base64"));
+    const iv = Buffer.from(encrypted.iv, "base64");
+    const decipher = createDecipheriv(ALGORITHM, decodeKey(base64Key), iv, {
+      authTagLength: AUTH_TAG_LENGTH,
+    });
     decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"));
     return Buffer.concat([
       decipher.update(Buffer.from(encrypted.ciphertext, "base64")),

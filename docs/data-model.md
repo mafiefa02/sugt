@@ -1694,7 +1694,8 @@ create table drive_connection (
   readme_file_id                 text,
   folder_problem                 text check (folder_problem in
                                    ('root-trashed', 'root-missing',
-                                    'staging-trashed', 'staging-missing')),
+                                    'staging-trashed', 'staging-missing',
+                                    'folders-unfinished')),
   status                         text not null check (status in ('connected', 'broken')),
   broken_at                      timestamptz,
   last_used_at                   timestamptz,
@@ -1716,9 +1717,11 @@ will not decrypt. It also checks that the account connected is `GOOGLE_DRIVE_ACC
 
 **Drive ids, never paths.** The five ids name the fixed tree ADR-0040 draws: the root, `_staging`
 (a sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` and the README.
-They are nullable because the row is written before the folders are ensured. `folder_problem` is
-set when a reconnect finds the root or `_staging` trashed or gone. Those two are never quietly
-recreated, so the token stays stored while the card does not say Terhubung.
+They are nullable because the row is written before the folders are ensured, in a second write,
+since no transaction is held open across a call to Google. `folder_problem` is set when a reconnect
+finds the root or `_staging` trashed or gone, or when Drive failed partway through. The root and
+`_staging` are never quietly recreated, so the token stays stored while the card does not say
+Terhubung. Uploads and the card read one rule: usable means no `folder_problem` and every id set.
 
 **Who reaches it.** The card's read and the connect writes need the Administrator Grant. The
 credential read, and the two writes a token refresh makes (`last_used_at`, broken), need Staff,

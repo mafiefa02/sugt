@@ -18,7 +18,7 @@ CREATE TABLE "drive_connection" (
 	CONSTRAINT "drive_connection_singleton_check" CHECK ("drive_connection"."singleton"),
 	CONSTRAINT "drive_connection_status_check" CHECK ("drive_connection"."status" in ('connected', 'broken')),
 	CONSTRAINT "drive_connection_broken_at_check" CHECK (("drive_connection"."status" = 'broken') = ("drive_connection"."broken_at" is not null)),
-	CONSTRAINT "drive_connection_folder_problem_check" CHECK ("drive_connection"."folder_problem" in ('root-trashed', 'root-missing', 'staging-trashed', 'staging-missing'))
+	CONSTRAINT "drive_connection_folder_problem_check" CHECK ("drive_connection"."folder_problem" in ('root-trashed', 'root-missing', 'staging-trashed', 'staging-missing', 'folders-unfinished'))
 );
 --> statement-breakpoint
 ALTER TABLE "drive_connection" ADD CONSTRAINT "drive_connection_connected_by_person_id_person_id_fk" FOREIGN KEY ("connected_by_person_id") REFERENCES "public"."person"("id") ON DELETE no action ON UPDATE no action;

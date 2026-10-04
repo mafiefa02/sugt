@@ -1,4 +1,5 @@
 import { driveConnectMessage, parseDriveConnectOutcome } from "-/lib/drive/connect";
+import { readyFolders } from "-/lib/drive/fixed-folders";
 import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { driveConnectionCard, hasGrant, type DriveConnectionCard } from "@sugt/db/queries";
@@ -74,8 +75,9 @@ function formatWhen(when: Date): string {
  * The Google Drive card, in one of four states:
  * - **Belum terhubung** — no row.
  * - **Terputus sejak …** — the stored token stopped working; uploads wait for a reconnect.
- * - **Folder bermasalah** — the token works, but the root or `_staging` is trashed or gone, so the
- *   card does not claim Terhubung until a reconnect finds them again.
+ * - **Folder bermasalah** — the token works, but the root or `_staging` is trashed or gone, or the
+ *   last connect did not finish the tree, so the card does not claim Terhubung until a reconnect
+ *   settles it (`readyFolders`, the same predicate uploads read).
  * - **Terhubung** — the account, its root folder, who connected it and when, and when it was last used.
  *
  * There is no disconnect button, by design: nothing would be gained by a state with no token.
@@ -115,6 +117,7 @@ function DriveCard({
         <CardHeader>
           <CardTitle>Google Drive</CardTitle>
           <CardDescription className="text-destructive">
+            {/* `drive_connection_broken_at_check` guarantees a broken row has `broken_at`. */}
             Terputus sejak {formatWhen(connection.brokenAt!)}
           </CardDescription>
         </CardHeader>
@@ -127,7 +130,8 @@ function DriveCard({
     );
   }
 
-  if (connection.folderProblem) {
+  const folders = readyFolders(connection);
+  if (!folders) {
     return (
       <Card>
         <CardHeader>
@@ -135,7 +139,7 @@ function DriveCard({
           <CardDescription className="text-destructive">Folder bermasalah</CardDescription>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          {driveConnectMessage(connection.folderProblem, accountEmail)}
+          {driveConnectMessage(connection.folderProblem ?? "folders-unfinished", accountEmail)}
         </CardContent>
         <CardFooter>{connectButton("Hubungkan ulang")}</CardFooter>
       </Card>
@@ -155,7 +159,7 @@ function DriveCard({
           <dt className="text-muted-foreground">Folder utama</dt>
           <dd>
             <a
-              href={`https://drive.google.com/drive/folders/${connection.rootFolderId}`}
+              href={`https://drive.google.com/drive/folders/${folders.rootFolderId}`}
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-4"

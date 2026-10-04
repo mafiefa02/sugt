@@ -556,20 +556,23 @@ Pimpinan included, gets the 403. It holds one card for now: the company Google D
 transaction evidence is moving to
 ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)).
 
-The card is in one of three states:
+The card is in one of four states:
 
 - **Belum terhubung** — a short explanation and **Hubungkan Google Drive**.
 - **Terhubung** — the account, a link that opens the root folder in Drive, who connected it and
   when, when it was last used, and **Hubungkan ulang**.
 - **Terputus sejak {tanggal}** — Google stopped accepting the stored token. Receipts cannot be
   uploaded until an Administrator presses **Hubungkan ulang**.
+- **Folder bermasalah** — the token works, but the main folder or `_staging` is in the Drive trash
+  or gone, or Drive failed while the folders were being set up. It says which, and offers
+  **Hubungkan ulang**.
 
 **Connecting** goes to Google's consent screen for the company account and back. If the wrong
 account was picked, the Drive permission was unticked, or Google sent no long-lived token, the card
 says so in its own words and stores nothing. A first connect creates the app's folders in the
 company Drive. A reconnect reuses them. If it finds the main folder or `_staging` in the Drive trash
-or gone, it says which instead of saying Terhubung; it does not recreate them. There is no
-disconnect button.
+or gone, the card shows Folder bermasalah; it does not recreate them. There is no disconnect
+button.
 
 ---
 

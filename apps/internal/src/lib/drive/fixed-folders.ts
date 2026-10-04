@@ -1,5 +1,4 @@
-import type { DriveFolderIds } from "@sugt/db/queries";
-import type { DriveFolderProblem } from "@sugt/db/schema";
+import type { DriveFolderIds, DriveFolderProblem } from "@sugt/db/queries";
 
 import type { DriveClient } from "./google";
 
@@ -22,6 +21,10 @@ import type { DriveClient } from "./google";
  * finds untrashed, and recreates a missing subfolder or README. **A trashed or missing root or
  * `_staging` is reported, never recreated**: a fresh root would orphan every Perjadin folder under
  * the old one, and the Administrator can restore it from the trash and reconnect.
+ *
+ * **It never throws.** If Drive fails partway — a 5xx, the network — it stops and answers what it had
+ * made by then with `folders-unfinished`, so those ids are still recorded and the next reconnect
+ * reuses them rather than making a second root.
  */
 
 export const ROOT_FOLDER_NAME = "SUGT 2026 Internal App Object Storage";
@@ -33,6 +36,43 @@ export const README_TEXT =
   "Dikelola aplikasi SUGT — jangan hapus, jangan ganti nama, jangan bagikan folder ini.";
 
 export type EnsuredFolders = DriveFolderIds & { folderProblem: DriveFolderProblem | null };
+
+/** The fixed tree, every id settled — what an upload, and the Terhubung card, need. */
+export type ReadyFolders = { [K in keyof DriveFolderIds]: string };
+
+/**
+ * **Is the fixed tree usable?** Only when the last connect reported no problem **and** every id is
+ * set. The second half matters: a connect writes the token before it ensures the folders, so a row
+ * can briefly — or, if that second write never landed, for good — hold a working token and no tree.
+ * The one predicate behind both the card's Terhubung and `driveAccessToken`.
+ */
+export function readyFolders(connection: EnsuredFolders): ReadyFolders | null {
+  const { folderProblem, ...ids } = connection;
+  if (folderProblem) return null;
+  const {
+    rootFolderId,
+    stagingFolderId,
+    buktiTransaksiFolderId,
+    pelaksanaanOfflineFolderId,
+    readmeFileId,
+  } = ids;
+  if (
+    !rootFolderId ||
+    !stagingFolderId ||
+    !buktiTransaksiFolderId ||
+    !pelaksanaanOfflineFolderId ||
+    !readmeFileId
+  ) {
+    return null;
+  }
+  return {
+    rootFolderId,
+    stagingFolderId,
+    buktiTransaksiFolderId,
+    pelaksanaanOfflineFolderId,
+    readmeFileId,
+  };
+}
 
 /** Is the stored id still a live item? `missing` and `trashed` are the two ways it is not. */
 async function probe(
@@ -50,6 +90,20 @@ export async function ensureFixedFolders(
   stored: DriveFolderIds,
 ): Promise<EnsuredFolders> {
   const folders: DriveFolderIds = { ...stored };
+  try {
+    const folderProblem = await ensureInto(drive, stored, folders);
+    return { ...folders, folderProblem };
+  } catch {
+    return { ...folders, folderProblem: "folders-unfinished" };
+  }
+}
+
+/** The work itself, filling `folders` in place as each id is settled. Answers the problem, if any. */
+async function ensureInto(
+  drive: DriveClient,
+  stored: DriveFolderIds,
+  folders: DriveFolderIds,
+): Promise<DriveFolderProblem | null> {
   let folderProblem: DriveFolderProblem | null = null;
 
   const root = await probe(drive, stored.rootFolderId);
@@ -67,7 +121,7 @@ export async function ensureFixedFolders(
   }
 
   // Everything else lives under the root; with the root unresolved there is nowhere to put it.
-  if (root !== "ok" && root !== "absent") return { ...folders, folderProblem };
+  if (root !== "ok" && root !== "absent") return folderProblem;
   const rootId = folders.rootFolderId!;
 
   if ((await probe(drive, stored.buktiTransaksiFolderId)) !== "ok") {
@@ -96,5 +150,5 @@ export async function ensureFixedFolders(
     ).id;
   }
 
-  return { ...folders, folderProblem };
+  return folderProblem;
 }

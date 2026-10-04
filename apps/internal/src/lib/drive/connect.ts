@@ -1,12 +1,12 @@
 import { requireEnv } from "-/lib/env";
 import {
   driveCredentials,
+  driveFolderIds,
   hasGrant,
   recordDriveFolders,
   saveDriveConnection,
   type Person,
 } from "@sugt/db/queries";
-import type { DriveFolderProblem } from "@sugt/db/schema";
 
 import { ensureFixedFolders } from "./fixed-folders";
 import { DRIVE_FILE_SCOPE, exchangeDriveCode, openDrive } from "./google";
@@ -21,23 +21,34 @@ import { encryptRefreshToken } from "./token-crypto";
 /** The httpOnly cookie carrying the connect action's `state` to the callback, for ten minutes. */
 export const DRIVE_STATE_COOKIE = "sugt-drive-oauth-state";
 
-/** Why a callback stopped — one per check, in the order they run — or that it connected. */
-export type DriveConnectOutcome =
-  | "access-denied"
-  | "state-mismatch"
-  | "not-administrator"
-  | "exchange-failed"
-  | "wrong-account"
-  | "scope-missing"
-  | "no-refresh-token"
-  | "connected"
-  | DriveFolderProblem;
+/**
+ * Why a callback stopped — one per check, in the order they run — or that it connected, or which
+ * folder problem it found. One list, so the type and the URL parser cannot drift apart.
+ */
+const DRIVE_CONNECT_OUTCOMES = [
+  "access-denied",
+  "state-mismatch",
+  "not-administrator",
+  "exchange-failed",
+  "wrong-account",
+  "scope-missing",
+  "no-refresh-token",
+  "connected",
+  "root-trashed",
+  "root-missing",
+  "staging-trashed",
+  "staging-missing",
+  "folders-unfinished",
+] as const;
+
+export type DriveConnectOutcome = (typeof DRIVE_CONNECT_OUTCOMES)[number];
 
 /**
  * Run the callback's checks **in order, stopping at the first failure**, and store nothing until
  * all seven pass:
  *
- * 1. Google reported no error (the Administrator did not cancel).
+ * 1. Google reported no error. `access_denied` is the Administrator cancelling; any other error is
+ *    Google refusing, and reads as check 4's failure.
  * 2. `state` matches the cookie the connect action set.
  * 3. The caller still holds Administrator — re-checked here, since minutes passed at Google.
  * 4. The code exchanges for tokens.
@@ -56,7 +67,9 @@ export async function completeDriveConnection(input: {
 }): Promise<DriveConnectOutcome> {
   const { params, stateCookie, person } = input;
 
-  if (params.has("error")) return "access-denied";
+  const error = params.get("error");
+  if (error === "access_denied") return "access-denied";
+  if (error !== null) return "exchange-failed";
 
   const state = params.get("state");
   if (!state || !stateCookie || state !== stateCookie) return "state-mismatch";
@@ -79,14 +92,9 @@ export async function completeDriveConnection(input: {
     refreshToken: encryptRefreshToken(exchange.refreshToken),
   });
 
-  const stored = await driveCredentials(person);
-  const ensured = await ensureFixedFolders(openDrive(exchange.accessToken), {
-    rootFolderId: stored?.rootFolderId ?? null,
-    stagingFolderId: stored?.stagingFolderId ?? null,
-    buktiTransaksiFolderId: stored?.buktiTransaksiFolderId ?? null,
-    pelaksanaanOfflineFolderId: stored?.pelaksanaanOfflineFolderId ?? null,
-    readmeFileId: stored?.readmeFileId ?? null,
-  });
+  // The row was just written, so it is there; its ids are whatever the last connect settled.
+  const stored = (await driveCredentials(person))!;
+  const ensured = await ensureFixedFolders(openDrive(exchange.accessToken), driveFolderIds(stored));
   await recordDriveFolders(person, ensured);
 
   return ensured.folderProblem ?? "connected";
@@ -122,23 +130,12 @@ export function driveConnectMessage(outcome: DriveConnectOutcome, accountEmail: 
       return "Folder _staging ada di Sampah Google Drive — pulihkan lalu Hubungkan ulang.";
     case "staging-missing":
       return "Folder _staging tidak ditemukan di Google Drive.";
+    case "folders-unfinished":
+      return "Google Drive gagal saat menyiapkan folder — coba Hubungkan ulang.";
   }
 }
 
-const OUTCOMES = new Set<string>([
-  "access-denied",
-  "state-mismatch",
-  "not-administrator",
-  "exchange-failed",
-  "wrong-account",
-  "scope-missing",
-  "no-refresh-token",
-  "connected",
-  "root-trashed",
-  "root-missing",
-  "staging-trashed",
-  "staging-missing",
-] satisfies DriveConnectOutcome[]);
+const OUTCOMES = new Set<string>(DRIVE_CONNECT_OUTCOMES);
 
 /** Read an outcome back off `/pengaturan?drive=…`; anything else is ignored. */
 export function parseDriveConnectOutcome(value: unknown): DriveConnectOutcome | null {

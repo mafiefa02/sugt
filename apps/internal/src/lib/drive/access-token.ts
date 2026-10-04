@@ -2,17 +2,22 @@ import {
   driveCredentials,
   markDriveConnectionBroken,
   touchDriveConnection,
-  type DriveFolderIds,
   type Person,
 } from "@sugt/db/queries";
 
+import { readyFolders, type ReadyFolders } from "./fixed-folders";
 import { refreshDriveAccessToken } from "./google";
 import { decryptRefreshToken } from "./token-crypto";
 
 export type DriveAccess =
-  | { outcome: "ok"; accessToken: string; folders: DriveFolderIds }
+  | { outcome: "ok"; accessToken: string; folders: ReadyFolders }
   /** No connection, or a broken one. Catat transaksi and Unggah bukti show the reason. */
   | { outcome: "drive-disconnected" }
+  /**
+   * The token is stored but the fixed tree is not usable — the root or `_staging` is trashed or
+   * gone, or the last connect did not finish. An Administrator fixes it on `/pengaturan`.
+   */
+  | { outcome: "drive-folders-unresolved" }
   /** Google could not be reached. The token may be fine; nothing is marked. */
   | { outcome: "drive-unreachable" };
 
@@ -23,11 +28,15 @@ export type DriveAccess =
  *
  * The first `invalid_grant`, or a token that will not decrypt, **marks the connection broken** and
  * answers `drive-disconnected` — a returned outcome, never a thrown 500. A broken connection stays
- * broken until an Administrator reconnects; nothing here retries it.
+ * broken until an Administrator reconnects; nothing here retries it. A tree that is not usable
+ * answers before Google is asked anything, so no upload is ever pointed at a trashed `_staging`.
  */
 export async function driveAccessToken(person: Person): Promise<DriveAccess> {
   const credentials = await driveCredentials(person);
   if (!credentials || credentials.status === "broken") return { outcome: "drive-disconnected" };
+
+  const folders = readyFolders(credentials);
+  if (!folders) return { outcome: "drive-folders-unresolved" };
 
   const refreshToken = decryptRefreshToken(credentials.refreshToken);
   if (refreshToken === null) {
@@ -43,15 +52,5 @@ export async function driveAccessToken(person: Person): Promise<DriveAccess> {
   }
 
   await touchDriveConnection(person);
-  return {
-    outcome: "ok",
-    accessToken: refreshed.accessToken,
-    folders: {
-      rootFolderId: credentials.rootFolderId,
-      stagingFolderId: credentials.stagingFolderId,
-      buktiTransaksiFolderId: credentials.buktiTransaksiFolderId,
-      pelaksanaanOfflineFolderId: credentials.pelaksanaanOfflineFolderId,
-      readmeFileId: credentials.readmeFileId,
-    },
-  };
+  return { outcome: "ok", accessToken: refreshed.accessToken, folders };
 }

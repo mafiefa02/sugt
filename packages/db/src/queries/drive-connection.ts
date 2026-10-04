@@ -22,6 +22,11 @@ import { requireGrant, requireStaff } from "./staff-only";
  *
  * This module stores and reads ciphertext only. Encrypting, decrypting and talking to Google are
  * `@sugt/internal`'s, which holds `DRIVE_TOKEN_KEY`; nothing here could decrypt a token if it tried.
+ *
+ * **One connect is two writes, on purpose** — `saveDriveConnection`, then `recordDriveFolders` —
+ * because Drive calls run between them, and no transaction is held open across an HTTP call to
+ * Google (ADR-0040). The first write alone leaves a row whose folder ids are not yet settled, which
+ * every reader treats as not usable until the second lands.
  */
 
 /** The Drive ids of the fixed tree. Each is null until a connect has created or found it. */
@@ -32,6 +37,17 @@ export type DriveFolderIds = {
   pelaksanaanOfflineFolderId: string | null;
   readmeFileId: string | null;
 };
+
+/** Exactly the five ids off a wider row — so a row's other columns never ride along into a write. */
+export function driveFolderIds(source: DriveFolderIds): DriveFolderIds {
+  return {
+    rootFolderId: source.rootFolderId,
+    stagingFolderId: source.stagingFolderId,
+    buktiTransaksiFolderId: source.buktiTransaksiFolderId,
+    pelaksanaanOfflineFolderId: source.pelaksanaanOfflineFolderId,
+    readmeFileId: source.readmeFileId,
+  };
+}
 
 /** The refresh token as stored: AES-256-GCM ciphertext, IV and tag, each base64. */
 export type EncryptedRefreshToken = { ciphertext: string; iv: string; tag: string };
@@ -92,11 +108,7 @@ export async function driveCredentials(caller: Person): Promise<DriveCredentials
       iv: row.refreshTokenIv,
       tag: row.refreshTokenTag,
     },
-    rootFolderId: row.rootFolderId,
-    stagingFolderId: row.stagingFolderId,
-    buktiTransaksiFolderId: row.buktiTransaksiFolderId,
-    pelaksanaanOfflineFolderId: row.pelaksanaanOfflineFolderId,
-    readmeFileId: row.readmeFileId,
+    ...driveFolderIds(row),
   };
 }
 
@@ -104,7 +116,8 @@ export async function driveCredentials(caller: Person): Promise<DriveCredentials
  * Store a fresh connection: the first one, or a reconnect **overwriting** the old token. The old
  * token is never revoked at Google — the #370 spike found reconnecting leaves it valid, and revoking
  * can end the whole grant, the new token included. The folder ids are kept; `recordDriveFolders`
- * settles them next. A reconnect clears `broken_at`.
+ * settles them next. A reconnect clears `broken_at`. `last_used_at` is left alone: it records the
+ * last successful refresh, and connecting is not a use.
  */
 export async function saveDriveConnection(
   caller: Person,
@@ -119,7 +132,6 @@ export async function saveDriveConnection(
     refreshTokenTag: input.refreshToken.tag,
     status: "connected" as const,
     brokenAt: null,
-    lastUsedAt: sql`now()`,
     connectedByPersonId: caller.id,
     connectedAt: sql`now()`,
   };
@@ -136,7 +148,9 @@ export async function recordDriveFolders(
 ): Promise<void> {
   requireGrant(caller, "Administrator");
 
-  await db.update(driveConnection).set(folders);
+  await db
+    .update(driveConnection)
+    .set({ ...driveFolderIds(folders), folderProblem: folders.folderProblem });
 }
 
 /**

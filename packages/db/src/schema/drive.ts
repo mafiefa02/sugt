@@ -8,14 +8,16 @@ export type DriveConnectionStatus = "connected" | "broken";
 
 /**
  * Why a stored connection is not reported **Terhubung** although its token works: the root or
- * `_staging` an earlier connect created is in the Drive trash, or gone. Neither is quietly
- * recreated — a new root would orphan every Perjadin folder under the old one (ADR-0040).
+ * `_staging` an earlier connect created is in the Drive trash, or gone — neither is quietly
+ * recreated, since a new root would orphan every Perjadin folder under the old one (ADR-0040) — or
+ * Drive failed partway through the last connect, so the fixed tree was not finished.
  */
 export type DriveFolderProblem =
   | "root-trashed"
   | "root-missing"
   | "staging-trashed"
-  | "staging-missing";
+  | "staging-missing"
+  | "folders-unfinished";
 
 /**
  * **The company Google Drive connection** (ADR-0040, #372). One row or none, and the database holds
@@ -60,7 +62,7 @@ export const driveConnection = pgTable(
     ),
     check(
       "drive_connection_folder_problem_check",
-      sql`${t.folderProblem} in ('root-trashed', 'root-missing', 'staging-trashed', 'staging-missing')`,
+      sql`${t.folderProblem} in ('root-trashed', 'root-missing', 'staging-trashed', 'staging-missing', 'folders-unfinished')`,
     ),
   ],
 );
