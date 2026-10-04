@@ -1932,8 +1932,9 @@ places:
    **A correction that moves `starts_on` also renames the trip's Drive folder**, which is named
    `{destination} · {starts_on}` ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
    #376). The rename runs after the commit and is best effort: a failed rename never fails or rolls
-   back the correction. The next reconcile on that Perjadin sets the name back to what the database
-   says, because folder names are app-owned.
+   back the correction. The next reconcile that touches that Perjadin sets the name back to what the
+   database says, because folder names are app-owned. That is a Catat transaksi or Unggah bukti on
+   it, or a sweep reaching one of its unsynced lines. Until then the folder keeps the old date.
 
 So an arranged offline Session can no longer be born outside its trip, nor moved outside it, nor
 stranded when the trip's range is resized — path 3 refuses the resize rather than moving Sessions.

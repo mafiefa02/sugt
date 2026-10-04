@@ -58,7 +58,9 @@ function logistics(departureDate: string, returnDate: string): PerjadinLogistics
  * A Staff PIC and a trip `Kelompok 3: Garut` from the 12th to the 16th — with Drive connected and the
  * trip's folder made, unless told otherwise.
  */
-async function scene(options: { connected?: boolean; folder?: boolean } = {}) {
+async function scene(
+  options: { connected?: boolean; folder?: boolean; status?: "connected" | "broken" } = {},
+) {
   const pic = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
   const trip = await addPerjadin({
     advanceIdr: 5_000_000,
@@ -67,7 +69,7 @@ async function scene(options: { connected?: boolean; folder?: boolean } = {}) {
     startsOn: "2026-10-12",
     endsOn: "2026-10-16",
   });
-  if (options.connected ?? true) folders = await connectDrive(drive, pic.id);
+  if (options.connected ?? true) folders = await connectDrive(drive, pic.id, options.status);
   let folderId: string | null = null;
   if (options.folder ?? true) {
     folderId = (
@@ -95,6 +97,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   drive = new FakeDrive();
+  folders = undefined as unknown as ReadyFolders;
   vi.mocked(openDrive).mockReturnValue(drive);
   vi.stubGlobal("fetch", async () => {
     tokenCalls += 1;
@@ -129,6 +132,7 @@ describe("a start-date correction", () => {
   it.each([
     ["no Drive folder yet", { folder: false }],
     ["no connection", { connected: false, folder: true }],
+    ["a broken connection", { status: "broken", folder: true }],
   ] as const)("does nothing with %s, and the correction still succeeds", async (_, options) => {
     const { trip } = await scene(options);
 
@@ -139,6 +143,17 @@ describe("a start-date correction", () => {
     expect(drive.calls).toBe(0);
     expect(tokenCalls).toBe(0);
     await expect(startsOnOf(trip.id)).resolves.toBe("2026-10-13");
+  });
+
+  it("renames while connected even when the fixed folders are unresolved", async () => {
+    const { trip, folderId } = await scene();
+    await db.update(schema.driveConnection).set({ folderProblem: "root-trashed" });
+
+    await updatePerjadinLogisticsAction(trip.id, logistics("2026-10-13", "2026-10-16"));
+
+    await expect(drive.getFile(folderId!)).resolves.toMatchObject({
+      name: "Kelompok 3 · Garut · 2026-10-13",
+    });
   });
 
   it("keeps the correction when the rename fails", async () => {
@@ -201,6 +216,39 @@ describe("the reconcile", () => {
     });
 
     await expect(drive.getFile(folderId!)).resolves.toMatchObject({
+      name: "Kelompok 3 · Garut · 2026-10-13",
+    });
+  });
+
+  it("does not undo a correction committed while it ran", async () => {
+    const { pic, trip, folderId } = await scene();
+    const line = await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 10_000,
+      createdByPersonId: pic.id,
+    });
+    const [fileId] = await upload(drive, trip.id, [jpeg()]);
+    await db.insert(schema.transactionEvidence).values({
+      transactionId: line.id,
+      driveFileId: fileId!,
+      contentType: "image/jpeg",
+      byteSize: 4096,
+      uploadedByPersonId: pic.id,
+    });
+    // The reconcile has read the trip (12th); the start date is corrected to the 13th, and renamed,
+    // just as it fetches the folder.
+    const getFile = drive.getFile.bind(drive);
+    vi.spyOn(drive, "getFile").mockImplementation(async (id) => {
+      if (id === folderId) {
+        vi.mocked(drive.getFile).mockImplementation(getFile);
+        await updatePerjadinLogisticsAction(trip.id, logistics("2026-10-13", "2026-10-16"));
+      }
+      return getFile(id);
+    });
+
+    await reconcileTransaction(pic, drive, folders, line.id);
+
+    await expect(getFile(folderId!)).resolves.toMatchObject({
       name: "Kelompok 3 · Garut · 2026-10-13",
     });
   });

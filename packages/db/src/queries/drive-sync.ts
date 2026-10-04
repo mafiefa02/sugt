@@ -30,14 +30,17 @@ import { requireStaff } from "./staff-only";
  * a caller that lost reads back the winner's id and trashes the folder it made.
  */
 
-/** A Perjadin's Drive folder and the two facts it is named from. `null` when there is no such trip. */
+/** A Perjadin's Drive folder and the two facts it is named from. */
 export type PerjadinDriveFolder = {
   driveFolderId: string | null;
   destination: string;
   startsOn: string;
 };
 
-/** What renaming a Perjadin's Drive folder after a start-date correction reads (#376). */
+/**
+ * What renaming a Perjadin's Drive folder reads (#376) — after a start-date correction, and again in
+ * the reconcile, fresh, just before it re-asserts the name. `null` when there is no such trip.
+ */
 export async function perjadinDriveFolder(
   caller: Person,
   perjadinId: string,

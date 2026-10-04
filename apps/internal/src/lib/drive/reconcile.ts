@@ -3,12 +3,13 @@ import {
   claimTransactionDriveFolder,
   markTransactionSyncFailed,
   markTransactionSynced,
+  perjadinDriveFolder,
   reconcileTarget,
   type Person,
 } from "@sugt/db/queries";
 
 import type { ReadyFolders } from "./fixed-folders";
-import { type DriveClient, isDriveFailure } from "./google";
+import { type DriveClient, type DriveFile, isDriveFailure } from "./google";
 import {
   evidenceFileName,
   isReceiptContentType,
@@ -45,6 +46,30 @@ import {
  */
 
 /** Why a line is still owed after a reconcile. */
+/**
+ * Names are app-owned: a stale Perjadin folder name — a start date corrected while its rename failed,
+ * or a rename by hand — is set back to what the database says (#376).
+ *
+ * **The name is read fresh, right before the rename**, not taken from what this reconcile read at its
+ * start: a correction committed meanwhile has already renamed the folder to its new date, and
+ * comparing against the older one would undo it. A failed rename is logged and left — it is
+ * cosmetic, and it must not hold up the receipts this reconcile is putting in place.
+ */
+async function reassertPerjadinFolderName(
+  person: Person,
+  drive: DriveClient,
+  perjadinId: string,
+  folder: DriveFile,
+): Promise<void> {
+  const trip = await perjadinDriveFolder(person, perjadinId);
+  if (!trip) return;
+  const name = perjadinFolderName(trip.destination, trip.startsOn);
+  if (folder.name === name) return;
+  await drive.updateFile(folder.id, { name }).catch((error: unknown) => {
+    console.error(`Re-asserting the name of Perjadin ${perjadinId}'s Drive folder failed.`, error);
+  });
+}
+
 export type UnsyncedReason =
   | "folder-trashed"
   | "folder-missing"
@@ -98,12 +123,7 @@ async function reconcileOnce(
     const perjadinFolder = await drive.getFile(perjadinFolderId);
     if (!perjadinFolder) return { outcome: "unsynced", reason: "folder-missing" };
     if (perjadinFolder.trashed) return { outcome: "unsynced", reason: "folder-trashed" };
-    // Names are app-owned: a stale one — a start date corrected while the rename failed, or a
-    // rename by hand — is set back to what the database says (#376).
-    const expectedName = perjadinFolderName(target.destination, target.startsOn);
-    if (perjadinFolder.name !== expectedName) {
-      await drive.updateFile(perjadinFolderId, { name: expectedName });
-    }
+    await reassertPerjadinFolderName(person, drive, target.perjadinId, perjadinFolder);
 
     // 2. The transaction folder.
     let transactionFolderId = target.driveFolderId;

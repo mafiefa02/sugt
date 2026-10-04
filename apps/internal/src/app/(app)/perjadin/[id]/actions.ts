@@ -219,8 +219,8 @@ export async function issuePerjadinFeedbackTokenAction(
  * `would-strand` and nothing moves.
  *
  * **A correction that moves `starts_on` renames the trip's Drive folder** (#376), after the commit and
- * best effort: a failed rename never fails the correction, and the next reconcile repairs it. Every
- * refusal above comes back before anything reaches Drive.
+ * best effort: a failed rename never fails the correction, and the next reconcile on that trip
+ * repairs it. Every refusal above comes back before anything reaches Drive.
  */
 export async function updatePerjadinLogisticsAction(
   perjadinId: string,
