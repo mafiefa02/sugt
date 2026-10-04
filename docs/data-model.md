@@ -1686,7 +1686,13 @@ is the whole difference from a receipt.
 ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Catat
 transaksi and a line's own "Unggah bukti" both upload to Drive, and nothing writes to the
 `receipts` bucket any more. It holds legacy receipts alone, until they are migrated and the bucket
-is deleted (#377, #379). The Drive side is the connection below and
+is deleted (#377, #379).
+
+**Migrating the legacy receipts** is a local, resumable script:
+`pnpm --filter @sugt/internal drive:migrate-receipts --as <administrator email>`
+(`apps/internal/scripts/drive-migrate-receipts.ts`). Run `--dry-run` first. Then run it for real;
+it writes `receipt-migration-report.csv`, the old key beside each new Drive id. Then run `--verify`.
+`--replace <evidenceId>=<file>` supplies a converted file for one the script could not take. The Drive side is the connection below and
 the `drive_*` columns in [Money](#money).
 
 Two buckets, and the split is doing real work:

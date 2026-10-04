@@ -197,6 +197,18 @@ export interface DriveClient {
     mimeType: string;
     content: string;
   }): Promise<{ id: string }>;
+  /**
+   * A binary file uploaded from this process in one request — the legacy-receipt migration, which
+   * runs locally and so is bound by no request-size limit (#377). Receipts from the app go through
+   * `openResumableSession` instead, straight from the browser.
+   */
+  uploadFile(input: {
+    name: string;
+    parentId: string;
+    mimeType: string;
+    bytes: Uint8Array;
+    appProperties?: Record<string, string>;
+  }): Promise<{ id: string }>;
   getFile(id: string): Promise<DriveFile | null>;
   /** Rename, move, or add `appProperties`. */
   updateFile(
@@ -317,6 +329,32 @@ export function openDrive(accessToken: string): DriveClient {
         },
       );
       return readJson<{ id: string }>("files.create", response);
+    },
+
+    async uploadFile({ name, parentId, mimeType, bytes, appProperties }) {
+      const boundary = `sugt-${crypto.randomUUID()}`;
+      const metadata = JSON.stringify({
+        name,
+        mimeType,
+        parents: [parentId],
+        ...(appProperties ? { appProperties } : {}),
+      });
+      const body = new Blob([
+        `--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`,
+        `--${boundary}\r\ncontent-type: ${mimeType}\r\n\r\n`,
+        bytes as Uint8Array<ArrayBuffer>,
+        `\r\n--${boundary}--`,
+      ]);
+      const response = await call(
+        "files.create(upload)",
+        `${DRIVE_UPLOAD_API}/files?uploadType=multipart&fields=id`,
+        {
+          method: "POST",
+          headers: { "content-type": `multipart/related; boundary=${boundary}` },
+          body,
+        },
+      );
+      return readJson<{ id: string }>("files.create(upload)", response);
     },
 
     async getFile(id) {
