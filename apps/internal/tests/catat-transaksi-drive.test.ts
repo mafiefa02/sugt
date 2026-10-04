@@ -3,10 +3,9 @@ import {
   recordTransactionAction,
 } from "-/app/(app)/perjadin/[id]/laporan/actions";
 import { FakeDrive } from "-/lib/drive/fake-drive";
-import { ensureFixedFolders, readyFolders, type ReadyFolders } from "-/lib/drive/fixed-folders";
+import type { ReadyFolders } from "-/lib/drive/fixed-folders";
 import { DriveRequestError, FOLDER_MIME_TYPE, openDrive } from "-/lib/drive/google";
 import { reconcileTransaction } from "-/lib/drive/reconcile";
-import { encryptRefreshToken } from "-/lib/drive/token-crypto";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
@@ -14,6 +13,15 @@ import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_TRANSACTION } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  connectDrive,
+  digestOf,
+  FORBIDDEN,
+  jpeg,
+  pdf,
+  stubTokenEndpoint,
+  upload as uploadTo,
+} from "./support/drive";
 import { addPerjadin, addPerson, resetDatabase } from "./support/fixtures";
 
 /**
@@ -36,38 +44,6 @@ vi.mock("next/headers", () => ({
   headers: vi.fn(async () => new Headers({ origin: "https://preview-42.sugt.test" })),
 }));
 
-const FORBIDDEN = "NEXT_HTTP_ERROR_FALLBACK;403";
-const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
-
-async function digestOf(call: Promise<unknown>) {
-  const thrown = await call.then(
-    () => null,
-    (error: unknown) => error,
-  );
-  return (thrown as { digest?: string } | null)?.digest;
-}
-
-/** Google's token endpoint, answering every refresh with an access token. */
-function stubTokenEndpoint() {
-  vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
-    const url = input instanceof Request ? input.url : String(input);
-    if (url !== TOKEN_ENDPOINT) throw new Error(`Unexpected outbound request: ${url}`);
-    return Response.json({ access_token: "access" });
-  });
-}
-
-/** Bytes that sniff as a JPEG, `size` long. */
-function jpeg(size = 4096) {
-  const bytes = new Uint8Array(size);
-  bytes.set([0xff, 0xd8, 0xff, 0xe0]);
-  return bytes;
-}
-const pdf = (size = 2048) => {
-  const bytes = new Uint8Array(size);
-  bytes.set(new TextEncoder().encode("%PDF-1.7"));
-  return bytes;
-};
-
 let drive: FakeDrive;
 let folders: ReadyFolders;
 
@@ -88,41 +64,15 @@ async function scene(options: { connection?: "connected" | "broken" | "none" } =
   });
 
   const connection = options.connection ?? "connected";
-  if (connection !== "none") {
-    const ensured = await ensureFixedFolders(drive, {
-      rootFolderId: null,
-      stagingFolderId: null,
-      buktiTransaksiFolderId: null,
-      pelaksanaanOfflineFolderId: null,
-      readmeFileId: null,
-    });
-    folders = readyFolders(ensured)!;
-    const token = encryptRefreshToken("refresh");
-    await db.insert(schema.driveConnection).values({
-      accountEmail: "bukti@perusahaan.test",
-      refreshTokenCiphertext: token.ciphertext,
-      refreshTokenIv: token.iv,
-      refreshTokenTag: token.tag,
-      ...folders,
-      status: connection,
-      brokenAt: connection === "broken" ? new Date() : null,
-      connectedByPersonId: staff.id,
-    });
-  }
+  if (connection !== "none") folders = await connectDrive(drive, staff.id, connection);
   drive.calls = 0;
   vi.mocked(requirePerson).mockResolvedValue(staff);
   return { staff, pimpinan, trip };
 }
 
 /** The dialog's upload: open a session per file, then the browser's `PUT` to each. */
-async function upload(perjadinId: string, files: Uint8Array[], contentType = "image/jpeg") {
-  const opened = await openReceiptSessionsAction(
-    perjadinId,
-    files.map((bytes) => ({ size: bytes.length, contentType })),
-  );
-  if (opened.outcome !== "ready") throw new Error(`Sessions refused: ${opened.outcome}`);
-  return opened.sessionUris.map((uri, index) => drive.land(uri, files[index]!).id);
-}
+const upload = (perjadinId: string, files: Uint8Array[], contentType?: string) =>
+  uploadTo(drive, perjadinId, files, { contentType });
 
 function aLine(perjadinId: string, driveFileIds: string[]) {
   return {

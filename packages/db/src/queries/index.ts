@@ -250,6 +250,7 @@ export {
 } from "./perjadin-planning";
 export {
   attachTransactionEvidence,
+  receiptsOnLine,
   filePerjadinReport,
   perjadinAcquittal,
   recordTransaction,

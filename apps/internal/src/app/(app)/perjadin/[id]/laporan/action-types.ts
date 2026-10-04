@@ -11,14 +11,14 @@ import type {
  * callable Server Action, and a type is not one.
  */
 
-/** One receipt the browser has PUT to Storage, waiting to be recorded as a `transaction_evidence` row. */
-export type ReceiptToFinalize = {
-  /** The opaque object key returned when its upload URL was minted. */
-  path: string;
-};
+/**
+ * One receipt the browser has `PUT` to its Drive session, waiting to be verified and recorded as a
+ * `transaction_evidence` row (ADR-0040): the id Drive answered the upload with.
+ */
+export type UploadedReceipt = { driveFileId: string };
 
 /**
- * One file the Catat transaksi dialog is about to upload to Drive (ADR-0040): its size and type
+ * One file a receipt control is about to upload to Drive (ADR-0040): its size and type
  * **after** the browser compressed it. The server opens a session that declares exactly this size,
  * so Drive refuses anything longer, and re-checks both on the file Drive ends up holding.
  */
@@ -37,6 +37,8 @@ export type DriveRefusal =
 export type OpenReceiptSessionsResult =
   | { outcome: "ready"; sessionUris: string[] }
   | { outcome: "no-such-perjadin" }
+  /** The row's upload named a line that is not on this Perjadin — a stale screen. */
+  | { outcome: "no-such-transaction" }
   | { outcome: "evidence-missing" }
   | { outcome: "too-many-receipts"; limit: number; count: number }
   | { outcome: "too-large"; limit: number }
@@ -52,7 +54,7 @@ export type TransactionToRecord = Omit<
   NewTransaction,
   "evidence" | "transactionId" | "driveFolderId"
 > & {
-  receipts: { driveFileId: string }[];
+  receipts: UploadedReceipt[];
 };
 
 /**
@@ -71,20 +73,15 @@ export type RecordTransactionActionResult =
   | { outcome: "unsupported-type" }
   | DriveRefusal;
 
-/** The row's own Unggah bukti, refused because receipts cannot be uploaded right now (ADR-0040). */
-export type UploadsClosed = { outcome: "uploads-closed"; reason: string };
-
-/** What `mintReceiptUploadsAction` answers: an upload target per file, or why there are none. */
-export type MintReceiptUploadsResult =
-  | { outcome: "minted"; targets: { path: string; signedUrl: string }[] }
-  | UploadsClosed;
-
 /**
- * What `finalizeReceiptsAction` recorded.
+ * What `finalizeReceiptsAction` recorded — the row's own Unggah bukti (ADR-0040, #374).
  *
- * `failed` is the count whose bytes never landed — a real partial-success state, since the browser
- * uploads several files independently and one PUT can fail while the rest succeed. The successes
- * are still attached; the failures are reported, not discarded silently.
+ * `failed` counts the files that did not pass the check in Drive — not this Perjadin's, not in
+ * `_staging`, trashed, over the cap, or no PDF or image by their first bytes. **Partial success is
+ * real here**: the line already stands, so a receipt that checks out is worth keeping, and the
+ * failures are reported, not swallowed. (Recording a new line is the opposite: any failure refuses
+ * it.) `synced` is false when the receipts are recorded but the reconcile could not yet move them
+ * into the line's folder — never an error.
  *
  * The refusals are the query layer's own, passed through rather than swallowed. The two stale
  * screens are reachable, and so is a batch that would take the line past five receipts (ADR-0039)
@@ -92,12 +89,12 @@ export type MintReceiptUploadsResult =
  * query layer settled.
  */
 export type FinalizeReceiptsResult =
-  | { outcome: "attached"; attached: number; failed: number }
+  | { outcome: "attached"; attached: number; failed: number; synced: boolean }
   | { outcome: "no-such-transaction" }
   | { outcome: "no-such-perjadin" }
   /** The batch would take the line past `limit` receipts, or is larger than one line may carry. */
   | { outcome: "too-many-receipts"; limit: number }
-  | UploadsClosed;
+  | DriveRefusal;
 
 /**
  * One receipt as the screen renders it: the row, minus where it is stored, plus the link that opens

@@ -1487,8 +1487,8 @@ already hold lines with none or more, and those are grandfathered.
 
 **A receipt lives in exactly one place, and the database holds that** (ADR-0040). Receipts are
 moving to the company's Google Drive. `drive_file_id` is the file's Drive id, for every receipt
-Catat transaksi records. `storage_path` is a legacy object key in the private Supabase bucket. It
-covers receipts from before Drive, and the row's own "Unggah bukti" until #374 moves it too. One
+recorded since — by Catat transaksi or by a line's own "Unggah bukti". `storage_path` is a legacy
+object key in the private Supabase bucket, for receipts from before Drive. One
 CHECK makes exactly one of the two set; another pins a Drive receipt's `content_type` to the four
 types the server sniffs from its first bytes. `unique` on each means a file cannot be attached
 twice. Both are ids or keys, never paths, so a folder renamed or moved by hand in Drive breaks
@@ -1507,6 +1507,16 @@ trashes its own folder and uses the winner's.
 `drive_file_id`.** It is derived, not stored. A legacy line, or a line with no receipt, is never
 unsynced. A reconcile that fails after the commit leaves the line recorded and unsynced, and its
 files wait in private `_staging` until the next reconcile finishes it.
+
+**The two receipt writes run in opposite orders, on purpose.** Catat transaksi builds the line's
+folder in private `_staging`, moves the files into it, and only then commits. A line's own "Unggah
+bukti" (`attachTransactionEvidence`) **commits first**. It locks the line, counts, writes the
+evidence rows and sets `drive_synced_at` back to null, all in one transaction. Only then does the
+reconcile move the new files out of `_staging` into the line's folder. The difference is the
+folder: a new line's folder is private until it is shared last, but an existing line's folder is
+usually **already public**. A file moved in before the count was settled could become a sixth
+receipt anyone can open that no row records. So the count and the rows come first, under the lock,
+and the files follow.
 
 ---
 
@@ -1665,9 +1675,9 @@ is the whole difference from a receipt.
 
 **Receipts are moving out of Supabase Storage to the company's Google Drive**
 ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Catat
-transaksi uploads to Drive. The `receipts` bucket now takes new objects only from a line's own
-"Unggah bukti", until #374 moves that too. After that it holds legacy receipts alone, until they
-are migrated and the bucket is deleted (#377, #379). The Drive side is the connection below and
+transaksi and a line's own "Unggah bukti" both upload to Drive, and nothing writes to the
+`receipts` bucket any more. It holds legacy receipts alone, until they are migrated and the bucket
+is deleted (#377, #379). The Drive side is the connection below and
 the `drive_*` columns in [Money](#money).
 
 Two buckets, and the split is doing real work:
