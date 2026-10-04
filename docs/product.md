@@ -277,15 +277,17 @@ nothing is recorded, and the form keeps what was typed and picked so the PIC can
 receipts can be added later from the line's own "Unggah bukti", up to five in total. A line
 entered before this rule may have none; it is marked on the screen and fixed the same way.
 
-**Receipts open in Google Drive** (ADR-0040). The dialog uploads to the company Google Drive, and
-the app no longer shows a receipt itself.
+**Receipts open in Google Drive** (ADR-0040). The dialog, and each line's own "Unggah bukti", upload
+to the company Google Drive, and the app no longer shows a receipt itself. "Unggah bukti" adds to a
+line already recorded, up to five receipts in total. A file that is not a real receipt is reported
+as failed, and the rest are kept.
 
 - Each line shows **Bukti 1…n**, links that open each receipt in Drive in a new tab.
 - A line also shows **Buka folder**, a link to its own Drive folder that anyone holding it can
   view — the link the external audit will use.
 - Receipts recorded before the move still open through the app's own short-lived links.
 
-What the dialog takes:
+What both controls take:
 
 - JPG, PNG, WebP or PDF; anything else is refused before it uploads. An iPhone photo arrives as a
   JPG.

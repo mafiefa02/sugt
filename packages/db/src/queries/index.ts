@@ -252,6 +252,7 @@ export {
   attachTransactionEvidence,
   filePerjadinReport,
   perjadinAcquittal,
+  receiptsOnLine,
   recordTransaction,
   type AcquittalEvidence,
   type AcquittalTransaction,

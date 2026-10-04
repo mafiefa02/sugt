@@ -136,14 +136,12 @@ export type PerjadinAcquittal = {
  * **read (any signed-in Person) vs write (Staff)**, so this read no longer opens with the choke
  * point — a Pimpinan reads all money. There is no `requireStaff` here any more.
  *
- * **Two write actions used to lean on this read's guard, and now do not.** `mintReceiptUploadsAction`
- * and `finalizeReceiptsAction` (`perjadin/[id]/laporan/actions.ts`) had no Staff guard of their own —
- * this read's `requireStaff` was the whole of theirs. Opening the read would have opened those writes
- * (a receipt-upload credential, a service-role Storage read) to a Pimpinan, so each now calls
- * `requireStaff` explicitly, ahead of this read. `recordTransactionAction` does the same since
- * ADR-0039, because it reads receipts back from Storage before it records the line. Every other
- * money-write query (`recordTransaction`, `attachTransactionEvidence`, `filePerjadinReport`) keeps
- * its own `requireStaff`.
+ * **The receipt writes do not lean on this read's guard.** Every action in
+ * `perjadin/[id]/laporan/actions.ts` that reaches Drive — opening upload sessions, recording a line,
+ * attaching receipts — calls `requireStaff` explicitly, ahead of this read, because Google is reached
+ * before any write query runs (ADR-0040; the same reason the Supabase-era mint and read-back gave,
+ * #180). Every money-write query (`recordTransaction`, `attachTransactionEvidence`,
+ * `filePerjadinReport`) keeps its own `requireStaff`.
  *
  * Returns `null` when there is no such Perjadin. That is a genuinely reachable state — a
  * stale link to a deleted Perjadin.
@@ -393,9 +391,11 @@ export async function recordTransaction(
 }
 
 /**
- * A receipt whose bytes have already landed — in the company Google Drive (`driveFileId`, ADR-0040)
- * or, on the row's own "Unggah bukti" until #374, in the Supabase `receipts` bucket
- * (`storagePath`). Exactly one, which `transaction_evidence_one_store_check` holds too. The content
+ * A receipt whose bytes have already landed in the company Google Drive (`driveFileId`, ADR-0040).
+ * Every receipt the app writes is one of these. The `storagePath` arm describes a legacy row in the
+ * Supabase `receipts` bucket; nothing in the app writes one any more, and it stays only so tests can
+ * stand up the legacy rows the acquittal still renders, until #379 drops the column. Exactly one of
+ * the two, which `transaction_evidence_one_store_check` holds too. The content
  * type and size are read back by the app — sniffed from the first bytes, for Drive — rather than
  * taken from the browser, which never had to tell the truth about either.
  */
@@ -431,6 +431,10 @@ export type AttachEvidenceResult =
  * racing on one line serialise — the second counts the first's rows once it commits — and cannot
  * both pass the count. A line already over five from before the rule is grandfathered: it keeps
  * what it has and gains nothing.
+ *
+ * **A Drive receipt makes the line unsynced** (ADR-0040): `drive_synced_at` goes back to null in
+ * the same write, so the reconcile that follows — or the next sweep, if that one fails — knows a
+ * file is still waiting in `_staging` to be named and moved into the line's folder.
  */
 export async function attachTransactionEvidence(
   caller: Person,
@@ -470,9 +474,42 @@ export async function attachTransactionEvidence(
         uploadedByPersonId: caller.id,
       })),
     );
+    if (evidence.some((file) => file.driveFileId)) {
+      await tx
+        .update(transaction)
+        .set({ driveSyncedAt: null })
+        .where(eq(transaction.id, transactionId));
+    }
 
     return { outcome: "attached", count: evidence.length };
   });
+}
+
+/**
+ * How many receipts a line on this Perjadin already carries — `null` when there is no such line on
+ * it. In one round trip.
+ *
+ * **Exported though no screen renders it**, the one exception to this layer's third convention: it
+ * is the guard the row's Unggah bukti runs **before any Drive call** (ADR-0040), so a line on another
+ * trip, or one with no slot left, is refused without Google being asked anything — and that guard has
+ * to live in the action, ahead of Drive, not inside the write that follows it.
+ * `attachTransactionEvidence` counts again under its lock; this read is the early answer, not the
+ * rule.
+ */
+export async function receiptsOnLine(
+  caller: Person,
+  perjadinId: string,
+  transactionId: string,
+): Promise<number | null> {
+  requireStaff(caller);
+
+  const [line] = await db
+    .select({ held: count(transactionEvidence.id) })
+    .from(transaction)
+    .leftJoin(transactionEvidence, eq(transactionEvidence.transactionId, transaction.id))
+    .where(and(eq(transaction.id, transactionId), eq(transaction.perjadinId, perjadinId)))
+    .groupBy(transaction.id);
+  return line ? line.held : null;
 }
 
 export type FilePerjadinReportResult =

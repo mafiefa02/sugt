@@ -30,7 +30,8 @@ import {
  * 3. **Each receipt still in `_staging`** is renamed and moved into the transaction folder.
  * 4. **The transaction folder is shared** — anyone, reader — if it is not already. Last, so nothing
  *    is public before it is named and in place. Only transaction folders are ever shared.
- * 5. `drive_synced_at` is set.
+ * 5. `drive_synced_at` is set — **only if** no Drive receipt on the line arrived after step 3 read
+ *    them (`markTransactionSynced`).
  *
  * **A trashed or missing folder — the Perjadin's or the line's — is never recreated**: the line stays
  * unsynced and the answer says why. Any failure from Drive does the same — the database already
@@ -43,7 +44,11 @@ import {
 
 export type ReconcileResult =
   | { outcome: "synced" }
-  | { outcome: "unsynced"; reason: "folder-trashed" | "folder-missing" | "drive-failed" }
+  | {
+      outcome: "unsynced";
+      /** `newer-receipts`: a receipt committed while this ran is still owed; its own run does it. */
+      reason: "folder-trashed" | "folder-missing" | "drive-failed" | "newer-receipts";
+    }
   | { outcome: "no-such-transaction" };
 
 export async function reconcileTransaction(
@@ -137,7 +142,11 @@ export async function reconcileTransaction(
     throw error;
   }
 
-  // 5.
-  await markTransactionSynced(person, target.transactionId);
-  return { outcome: "synced" };
+  // 5. Only for the receipts handled here — a newer one, committed meanwhile, keeps the line owed.
+  const synced = await markTransactionSynced(
+    person,
+    target.transactionId,
+    target.evidence.map((receipt) => receipt.id),
+  );
+  return synced ? { outcome: "synced" } : { outcome: "unsynced", reason: "newer-receipts" };
 }

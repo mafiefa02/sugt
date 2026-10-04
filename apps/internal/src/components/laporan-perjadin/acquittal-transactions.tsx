@@ -3,13 +3,12 @@
 import type {
   DriveRefusal,
   OpenReceiptSessionsResult,
-  ReceiptToFinalize,
   RecordTransactionActionResult,
+  UploadedReceipt,
   ViewableTransaction,
 } from "-/app/(app)/perjadin/[id]/laporan/action-types";
 import {
   finalizeReceiptsAction,
-  mintReceiptUploadsAction,
   openReceiptSessionsAction,
   recordTransactionAction,
 } from "-/app/(app)/perjadin/[id]/laporan/actions";
@@ -313,10 +312,10 @@ function ControlSelect<T extends string>({
  * since ADR-0040, through a signed URL for one from before — and a line with a Drive folder adds
  * **Buka folder**, the link anyone can open once the folder is shared.
  *
- * The upload still goes to Supabase Storage until #374 moves it to Drive: the bytes go straight from
- * the browser through a signed URL the server mints, so a phone photograph is not bound by the
- * platform's function body limit, and a second call reads each landed object's real type and size
- * back. It is closed whenever Drive is, so the two receipt controls follow one rule.
+ * The upload goes to Drive the same way Catat transaksi's does (ADR-0040): each file prepared in the
+ * browser, a session opened per file, the bytes `PUT` straight to Drive. Then `finalizeReceiptsAction`
+ * checks each file in Drive and records the ones that pass — **partial success is real here**, since
+ * the line already stands — and moves them into the line's folder.
  *
  * A line holds at most `MAX_RECEIPTS_PER_TRANSACTION` in total, so a pick is cut to the slots left
  * and the button is disabled once there are none. There is no receipt deletion, so a mistaken
@@ -347,38 +346,42 @@ function Receipts({
       }
 
       if (batch.length > 0) {
-        const sent = await uploadReceipts(perjadinId, batch);
-        if (sent === null) {
-          setNote(STALE_PAGE);
-          return;
-        }
-        if ("closed" in sent) {
-          setNote(sent.closed);
-          return;
-        }
-        let failed = sent.failed;
+        const { prepared, unsupported, tooLarge } = await prepareAll(batch);
+        if (unsupported > 0) notes.push(`${unsupported} berkas: ${UNSUPPORTED_RECEIPT}`);
+        if (tooLarge > 0) notes.push(`${tooLarge} berkas: ${RECEIPT_TOO_LARGE}`);
 
-        if (sent.landed.length > 0) {
-          const result = await finalizeReceiptsAction(perjadinId, line.id, sent.landed);
-          // The write's refusals are answered rather than counted as upload failures: none of
-          // them means a file did not reach Storage.
-          if (result.outcome === "too-many-receipts") {
-            setNote(CAP_NOTE);
+        if (prepared.length > 0) {
+          const sent = await uploadToDrive(perjadinId, prepared, line.id);
+          if ("refusal" in sent) {
+            setNote([...notes, sent.refusal].join(" "));
             return;
           }
-          if (result.outcome === "uploads-closed") {
-            setNote(result.reason);
-            return;
+          let failed = sent.failed;
+
+          if (sent.landed.length > 0) {
+            const result = await finalizeReceiptsAction(perjadinId, line.id, sent.landed);
+            // The write's refusals are answered rather than counted as upload failures: none of
+            // them means a file did not reach Drive.
+            // A refusal is said after anything already noted about the batch, not instead of it.
+            if (result.outcome === "too-many-receipts") {
+              setNote([...notes, CAP_NOTE].join(" "));
+              return;
+            }
+            if (result.outcome === "no-such-perjadin" || result.outcome === "no-such-transaction") {
+              setNote([...notes, STALE_PAGE].join(" "));
+              return;
+            }
+            if (result.outcome !== "attached") {
+              setNote([...notes, driveRefusalFor(result)].join(" "));
+              return;
+            }
+            failed += result.failed;
+            if (!result.synced && result.attached > 0) notes.push(UNSYNCED_NOTE);
           }
-          if (result.outcome !== "attached") {
-            setNote(STALE_PAGE);
-            return;
-          }
-          failed += result.failed;
+          // Partial success is real — several files upload independently and one can fail while
+          // the rest land — so it is reported rather than swallowed.
+          if (failed > 0) notes.push(`${failed} berkas gagal diunggah.`);
         }
-        // Partial success is real — several files upload independently and one can fail while
-        // the rest land — so it is reported rather than swallowed.
-        if (failed > 0) notes.push(`${failed} berkas gagal diunggah.`);
       }
 
       if (notes.length > 0) setNote(notes.join(" "));
@@ -429,7 +432,7 @@ function Receipts({
       <input
         ref={picker}
         type="file"
-        accept="image/*,application/pdf"
+        accept={RECEIPT_ACCEPT}
         multiple
         className="hidden"
         onChange={(event) => {
@@ -518,28 +521,18 @@ function RecordTransaction({
       setRefusal(null);
       setUnsynced(false);
 
-      const prepared: PreparedReceipt[] = [];
-      for (const file of staged) {
-        const ready = await prepareReceipt(file);
-        if (ready === "unsupported-type") return setRefusal(UNSUPPORTED_RECEIPT);
-        if (ready === "too-large") return setRefusal(RECEIPT_TOO_LARGE);
-        prepared.push(ready);
-      }
+      // A new line is all or nothing: any file that cannot be sent refuses the whole of it.
+      const { prepared, unsupported, tooLarge } = await prepareAll(staged);
+      if (unsupported > 0) return setRefusal(UNSUPPORTED_RECEIPT);
+      if (tooLarge > 0) return setRefusal(RECEIPT_TOO_LARGE);
 
-      const sessions = await openReceiptSessionsAction(
-        perjadinId,
-        prepared.map((file) => ({ size: file.blob.size, contentType: file.contentType })),
-      );
-      if (sessions.outcome !== "ready") {
-        setRefusal(sessionRefusalFor(sessions));
+      const sent = await uploadToDrive(perjadinId, prepared);
+      if ("refusal" in sent) {
+        setRefusal(sent.refusal);
         return;
       }
-      const landed = await Promise.all(
-        prepared.map((file, index) => putToDriveSession(sessions.sessionUris[index]!, file.blob)),
-      );
-      const failed = landed.filter((id) => id === null).length;
-      if (failed > 0) {
-        setRefusal(retryNote(failed));
+      if (sent.failed > 0) {
+        setRefusal(retryNote(sent.failed));
         return;
       }
 
@@ -553,7 +546,7 @@ function RecordTransaction({
         amountIdr: Math.trunc(Number(amount)),
         category: category as TransactionCategory,
         participantType: participantType as TransactionParticipantType,
-        receipts: landed.map((driveFileId) => ({ driveFileId: driveFileId! })),
+        receipts: sent.landed,
       });
 
       // Nothing was written, so the form keeps everything for another try.
@@ -857,57 +850,53 @@ function RecordTransaction({
 }
 
 /**
- * Mint an upload URL per file and PUT each file's bytes straight to Supabase Storage — the row's
- * Unggah bukti, until #374 moves it to Drive. Returns the object keys that landed and how many did
- * not; `{ closed }` when uploads are shut because Drive is (ADR-0040); or `null` when the mint
- * refused because the trip is gone (a page left open while somebody deleted it in another tab),
- * caught here rather than left to become an unhandled rejection.
- *
- * It records nothing: `finalizeReceiptsAction` does, with its own answer to a partial failure.
+ * Get each picked file into shape for Drive (`prepareReceipt`): images re-encoded, EXIF stripped, the
+ * cap applied. What could not be prepared is counted by reason; each caller decides what that means.
  */
-async function uploadReceipts(
-  perjadinId: string,
+async function prepareAll(
   files: File[],
-): Promise<{ landed: ReceiptToFinalize[]; failed: number } | { closed: string } | null> {
-  let minted;
-  try {
-    minted = await mintReceiptUploadsAction(perjadinId, files.length);
-  } catch {
-    return null;
-  }
-  if (minted.outcome === "uploads-closed") return { closed: minted.reason };
-  const targets = minted.targets;
-
-  const landed: ReceiptToFinalize[] = [];
-  let failed = 0;
-  await Promise.all(
-    files.map(async (file, index) => {
-      const target = targets[index];
-      if (!target) {
-        failed += 1;
-        return;
-      }
-      try {
-        const response = await fetch(target.signedUrl, {
-          method: "PUT",
-          headers: { "content-type": file.type || "application/octet-stream" },
-          body: file,
-        });
-        if (!response.ok) throw new Error(`PUT ${response.status}`);
-        landed.push({ path: target.path });
-      } catch {
-        failed += 1;
-      }
-    }),
-  );
-  return { landed, failed };
+): Promise<{ prepared: PreparedReceipt[]; unsupported: number; tooLarge: number }> {
+  const results = await Promise.all(files.map(prepareReceipt));
+  return {
+    prepared: results.filter((result): result is PreparedReceipt => typeof result === "object"),
+    unsupported: results.filter((result) => result === "unsupported-type").length,
+    tooLarge: results.filter((result) => result === "too-large").length,
+  };
 }
 
 /**
- * What a page that has gone stale under the reader says. Reached from several places — a mint or a
- * session against a deleted trip, a record that finds no such trip, and a row upload that finds no
- * such trip or line item — because all of them mean the same thing to a PIC: what is on screen is
- * no longer what is stored, and no field they could edit will fix it.
+ * Send prepared receipts to Drive — the step both receipt controls share (ADR-0040). The server
+ * opens a session per file (for `transactionId`'s line when it is a row's upload, which also checks
+ * the line has a slot for each), then each file's bytes go straight to its session. Answers the Drive
+ * ids that landed and how many did not, or the sentence for why no session opened.
+ *
+ * It records nothing: the entry form hands `landed` to `recordTransactionAction`, the row to
+ * `finalizeReceiptsAction`, each with its own answer to a partial failure.
+ */
+async function uploadToDrive(
+  perjadinId: string,
+  prepared: PreparedReceipt[],
+  transactionId?: string,
+): Promise<{ landed: UploadedReceipt[]; failed: number } | { refusal: string }> {
+  const sessions = await openReceiptSessionsAction(
+    perjadinId,
+    prepared.map((file) => ({ size: file.blob.size, contentType: file.contentType })),
+    transactionId,
+  );
+  if (sessions.outcome !== "ready") return { refusal: sessionRefusalFor(sessions) };
+
+  const ids = await Promise.all(
+    prepared.map((file, index) => putToDriveSession(sessions.sessionUris[index]!, file.blob)),
+  );
+  const landed = ids.flatMap((driveFileId) => (driveFileId ? [{ driveFileId }] : []));
+  return { landed, failed: ids.length - landed.length };
+}
+
+/**
+ * What a page that has gone stale under the reader says. Reached from several places — upload
+ * sessions against a deleted trip or line, a record that finds no such trip, and a row upload that
+ * finds no such trip or line item — because all of them mean the same thing to a PIC: what is on
+ * screen is no longer what is stored, and no field they could edit will fix it.
  */
 const STALE_PAGE = "Halaman ini sudah tidak sesuai. Muat ulang untuk melihat keadaannya.";
 
@@ -932,6 +921,7 @@ function driveRefusalFor(result: DriveRefusal) {
 function sessionRefusalFor(result: Exclude<OpenReceiptSessionsResult, { outcome: "ready" }>) {
   switch (result.outcome) {
     case "no-such-perjadin":
+    case "no-such-transaction":
       return STALE_PAGE;
     case "evidence-missing":
       return "Lampirkan setidaknya satu bukti.";
