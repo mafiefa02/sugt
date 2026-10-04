@@ -391,9 +391,11 @@ export async function recordTransaction(
 }
 
 /**
- * A receipt whose bytes have already landed — in the company Google Drive (`driveFileId`, ADR-0040)
- * or, on the row's own "Unggah bukti" until #374, in the Supabase `receipts` bucket
- * (`storagePath`). Exactly one, which `transaction_evidence_one_store_check` holds too. The content
+ * A receipt whose bytes have already landed in the company Google Drive (`driveFileId`, ADR-0040).
+ * Every receipt the app writes is one of these. The `storagePath` arm describes a legacy row in the
+ * Supabase `receipts` bucket; nothing in the app writes one any more, and it stays only so tests can
+ * stand up the legacy rows the acquittal still renders, until #379 drops the column. Exactly one of
+ * the two, which `transaction_evidence_one_store_check` holds too. The content
  * type and size are read back by the app — sniffed from the first bytes, for Drive — rather than
  * taken from the browser, which never had to tell the truth about either.
  */
@@ -485,9 +487,14 @@ export async function attachTransactionEvidence(
 
 /**
  * How many receipts a line on this Perjadin already carries — `null` when there is no such line on
- * it. The row's Unggah bukti reads it before any Drive call, so a line on another trip, or one with
- * no slot left, is refused without Google being asked anything. `attachTransactionEvidence` counts
- * again under its lock; this read is the early answer, not the rule.
+ * it. In one round trip.
+ *
+ * **Exported though no screen renders it**, the one exception to this layer's third convention: it
+ * is the guard the row's Unggah bukti runs **before any Drive call** (ADR-0040), so a line on another
+ * trip, or one with no slot left, is refused without Google being asked anything — and that guard has
+ * to live in the action, ahead of Drive, not inside the write that follows it.
+ * `attachTransactionEvidence` counts again under its lock; this read is the early answer, not the
+ * rule.
  */
 export async function receiptsOnLine(
   caller: Person,
@@ -497,16 +504,12 @@ export async function receiptsOnLine(
   requireStaff(caller);
 
   const [line] = await db
-    .select({ id: transaction.id })
+    .select({ held: count(transactionEvidence.id) })
     .from(transaction)
-    .where(and(eq(transaction.id, transactionId), eq(transaction.perjadinId, perjadinId)));
-  if (!line) return null;
-
-  const [held] = await db
-    .select({ existing: count() })
-    .from(transactionEvidence)
-    .where(eq(transactionEvidence.transactionId, transactionId));
-  return held?.existing ?? 0;
+    .leftJoin(transactionEvidence, eq(transactionEvidence.transactionId, transaction.id))
+    .where(and(eq(transaction.id, transactionId), eq(transaction.perjadinId, perjadinId)))
+    .groupBy(transaction.id);
+  return line ? line.held : null;
 }
 
 export type FilePerjadinReportResult =

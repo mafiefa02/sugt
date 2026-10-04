@@ -1506,7 +1506,9 @@ trashes its own folder and uses the winner's.
 **"Unsynced" means `drive_synced_at is null` and at least one evidence row with a
 `drive_file_id`.** It is derived, not stored. A legacy line, or a line with no receipt, is never
 unsynced. A reconcile that fails after the commit leaves the line recorded and unsynced, and its
-files wait in private `_staging` until the next reconcile finishes it.
+files wait in private `_staging` until the next reconcile finishes it. A reconcile marks a line
+synced only for the receipts it read. If a newer receipt was committed while it ran, the mark does
+not land, so that receipt stays owed rather than stranded under a line that claims to be done.
 
 **The two receipt writes run in opposite orders, on purpose.** Catat transaksi builds the line's
 folder in private `_staging`, moves the files into it, and only then commits. A line's own "Unggah

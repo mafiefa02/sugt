@@ -1,5 +1,5 @@
 import type { TransactionCategory } from "@sugt/domain";
-import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, notExists, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { perjadin, transaction, transactionEvidence } from "../schema/travel";
@@ -128,12 +128,47 @@ export async function claimTransactionDriveFolder(
   return winner!.id!;
 }
 
-/** The reconcile finished this line: folder in place, files named and inside it, folder shared. */
-export async function markTransactionSynced(caller: Person, transactionId: string): Promise<void> {
+/**
+ * The reconcile finished this line: folder in place, files named and inside it, folder shared.
+ * Answers whether the line now reads as synced.
+ *
+ * **Only for the receipts it actually handled.** A line gains receipts after it exists (Unggah
+ * bukti), so a reconcile that read the line a moment ago can finish after a newer receipt was
+ * committed — and reset the line to unsynced — while that receipt's own reconcile failed. Marking the
+ * line synced then would strand the new file in `_staging` under a line that claims to be done, and
+ * the sweep only visits unsynced lines. So the mark is a compare-and-set: it lands only when no
+ * Drive receipt on the line is outside `handledEvidenceIds`. If it does not land, the line is synced
+ * only if some later reconcile already finished it.
+ */
+export async function markTransactionSynced(
+  caller: Person,
+  transactionId: string,
+  handledEvidenceIds: string[],
+): Promise<boolean> {
   requireStaff(caller);
 
-  await db
+  const unhandled = db
+    .select({ id: transactionEvidence.id })
+    .from(transactionEvidence)
+    .where(
+      and(
+        eq(transactionEvidence.transactionId, transactionId),
+        isNotNull(transactionEvidence.driveFileId),
+        handledEvidenceIds.length > 0
+          ? notInArray(transactionEvidence.id, handledEvidenceIds)
+          : undefined,
+      ),
+    );
+  const [marked] = await db
     .update(transaction)
     .set({ driveSyncedAt: sql`now()` })
+    .where(and(eq(transaction.id, transactionId), notExists(unhandled)))
+    .returning({ id: transaction.id });
+  if (marked) return true;
+
+  const [line] = await db
+    .select({ syncedAt: transaction.driveSyncedAt })
+    .from(transaction)
     .where(eq(transaction.id, transactionId));
+  return line?.syncedAt != null;
 }

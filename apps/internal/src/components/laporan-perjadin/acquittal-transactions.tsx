@@ -362,16 +362,17 @@ function Receipts({
             const result = await finalizeReceiptsAction(perjadinId, line.id, sent.landed);
             // The write's refusals are answered rather than counted as upload failures: none of
             // them means a file did not reach Drive.
+            // A refusal is said after anything already noted about the batch, not instead of it.
             if (result.outcome === "too-many-receipts") {
-              setNote(CAP_NOTE);
+              setNote([...notes, CAP_NOTE].join(" "));
               return;
             }
             if (result.outcome === "no-such-perjadin" || result.outcome === "no-such-transaction") {
-              setNote(STALE_PAGE);
+              setNote([...notes, STALE_PAGE].join(" "));
               return;
             }
             if (result.outcome !== "attached") {
-              setNote(driveRefusalFor(result));
+              setNote([...notes, driveRefusalFor(result)].join(" "));
               return;
             }
             failed += result.failed;
@@ -892,10 +893,10 @@ async function uploadToDrive(
 }
 
 /**
- * What a page that has gone stale under the reader says. Reached from several places — a mint or a
- * session against a deleted trip, a record that finds no such trip, and a row upload that finds no
- * such trip or line item — because all of them mean the same thing to a PIC: what is on screen is
- * no longer what is stored, and no field they could edit will fix it.
+ * What a page that has gone stale under the reader says. Reached from several places — upload
+ * sessions against a deleted trip or line, a record that finds no such trip, and a row upload that
+ * finds no such trip or line item — because all of them mean the same thing to a PIC: what is on
+ * screen is no longer what is stored, and no field they could edit will fix it.
  */
 const STALE_PAGE = "Halaman ini sudah tidak sesuai. Muat ulang untuk melihat keadaannya.";
 

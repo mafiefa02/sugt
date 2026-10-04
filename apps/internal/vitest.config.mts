@@ -36,8 +36,8 @@ export default defineConfig({
        * reach what is behind it: a static render of a client component stubs `next/navigation`'s
        * router, which needs a mounted app router; the Server Actions' tests stub the signed-in
        * session (`-/lib/person`), `next/cache`, and `next/headers` (cookies, the request's
-       * `Origin`); and Google Drive itself is the in-memory
-       * `FakeDrive` swapped in for `openDrive`. The database behind all of them stays real.
+       * `Origin`); and Google Drive itself is the in-memory `FakeDrive` swapped in for
+       * `openDrive`. The database behind all of them stays real.
        */
       BETTER_AUTH_SECRET: "test-secret-not-used-outside-vitest",
       BETTER_AUTH_URL: "http://localhost:3001",

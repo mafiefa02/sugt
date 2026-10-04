@@ -193,6 +193,10 @@ describe("five receipts per line, in total", () => {
     await expect(
       openReceiptSessionsAction(trip.id, [{ size: 10, contentType: "image/jpeg" }], line.id),
     ).resolves.toMatchObject({ outcome: "too-many-receipts" });
+    await expect(finalizeReceiptsAction(trip.id, line.id, asReceipts(["a"]))).resolves.toEqual({
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+    });
     expect(drive.calls).toBe(0);
   });
 
@@ -272,6 +276,40 @@ describe("after the commit", () => {
     expect((await drive.getFile(id!))!.parents).toEqual([after.driveFolderId]);
   });
 
+  it("keeps the line owed when an older reconcile finishes after a newer receipt", async () => {
+    const { staff, trip, line } = await scene();
+    await finalizeReceiptsAction(
+      trip.id,
+      line.id,
+      asReceipts(await upload(trip.id, [jpeg()], line.id)),
+    );
+    // Reconcile A — another tab, or the sweep — reads the line, then stops just before it shares.
+    let reachedShare!: () => void;
+    const atShare = new Promise<void>((resolve) => (reachedShare = resolve));
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const listPermissions = drive.listPermissions.bind(drive);
+    vi.spyOn(drive, "listPermissions").mockImplementationOnce(async (id) => {
+      reachedShare();
+      await held;
+      return listPermissions(id);
+    });
+    const older = reconcileTransaction(staff, drive, folders, line.id);
+    await atShare;
+
+    // Meanwhile B adds a receipt; it commits, and its own reconcile fails before moving the file.
+    const [newer] = await upload(trip.id, [jpeg()], line.id);
+    vi.spyOn(drive, "updateFile").mockRejectedValue(new DriveRequestError("files.update", 503));
+    await expect(
+      finalizeReceiptsAction(trip.id, line.id, asReceipts([newer!])),
+    ).resolves.toMatchObject({ outcome: "attached", synced: false });
+    release();
+
+    await expect(older).resolves.toEqual({ outcome: "unsynced", reason: "newer-receipts" });
+    expect((await lineRow(line.id)).driveSyncedAt).toBeNull();
+    expect((await drive.getFile(newer!))!.parents).toEqual([folders.stagingFolderId]);
+  });
+
   it("makes a synced line unsynced again until its new receipt is in place", async () => {
     const { trip, line } = await scene();
     await finalizeReceiptsAction(
@@ -293,6 +331,16 @@ describe("after the commit", () => {
 });
 
 describe("a file that does not check out", () => {
+  it("counts a file named twice in one batch once, and the repeat as failed", async () => {
+    const { trip, line } = await scene();
+    const [id] = await upload(trip.id, [jpeg()], line.id);
+
+    await expect(finalizeReceiptsAction(trip.id, line.id, asReceipts([id!, id!]))).resolves.toEqual(
+      { outcome: "attached", attached: 1, failed: 1, synced: true },
+    );
+    await expect(evidenceOf(line.id)).resolves.toHaveLength(1);
+  });
+
   it("is reported as failed and not attached, while the rest attach", async () => {
     const { staff, trip, line } = await scene();
     const other = await addPerjadin({ advanceIdr: 1_000_000, picPersonId: staff.id });

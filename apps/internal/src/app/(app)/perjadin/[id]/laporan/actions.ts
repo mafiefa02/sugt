@@ -99,10 +99,12 @@ async function driveRefusal(
  *
  * **Every check runs before Google is asked anything**: Staff and the Perjadin (`staffOnTrip`), the
  * count — for a row, that the line is on this Perjadin and has a slot for each file — each file's
- * type and size, and only then the connection. No more sessions open than the line has slots. Each session opens in `_staging`,
- * named `{uuid}.{ext}`, carrying `sugtPerjadinId`, declaring the file's exact size — Drive refuses a
- * longer body — and the uploading page's `Origin`, without which the browser cannot read the file id
- * back (#370). The origin is the request's own, since every preview has its own URL.
+ * type and size, and only then the connection. No more sessions open than the line has slots.
+ *
+ * Each session opens in `_staging`, named `{uuid}.{ext}`, carrying `sugtPerjadinId`, declaring the
+ * file's exact size — Drive refuses a longer body — and the uploading page's `Origin`, without which
+ * the browser cannot read the file id back (#370). The origin is the request's own, since every
+ * preview has its own URL.
  */
 export async function openReceiptSessionsAction(
   perjadinId: string,
