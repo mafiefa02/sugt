@@ -1129,7 +1129,7 @@ describe("extra Staff and travel logistics", () => {
       returnZone: "WIT",
     });
 
-    expect(result).toEqual({ outcome: "updated" });
+    expect(result).toMatchObject({ outcome: "updated" });
     const log = await logisticsOf(planned.perjadinId);
     expect(log?.departureAt).toBe("2026-09-01 06:00:00");
     expect(log?.departureZone).toBe("WIB");

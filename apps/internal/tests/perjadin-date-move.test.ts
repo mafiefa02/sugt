@@ -146,7 +146,7 @@ describe("Editing a leg date resizes the range", () => {
       logistics("2026-09-01", "2026-09-08"),
     );
 
-    expect(result).toEqual({ outcome: "updated" });
+    expect(result).toMatchObject({ outcome: "updated" });
     // The range followed the return date; no separate field was touched.
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-08" });
   });
@@ -220,7 +220,7 @@ describe("Editing a leg date resizes the range", () => {
       logistics("2026-09-01", "2026-09-05"),
     );
 
-    expect(result).toEqual({ outcome: "updated" });
+    expect(result).toMatchObject({ outcome: "updated" });
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-05" });
     // The two out-of-window Sessions are left exactly where they were.
     expect(await heldOnOf(deliveredSession.id)).toBe("2026-09-09");
@@ -248,7 +248,7 @@ describe("Editing a leg date resizes the range", () => {
       logistics("2026-09-02", "2026-09-02"),
     );
 
-    expect(result).toEqual({ outcome: "updated" });
+    expect(result).toMatchObject({ outcome: "updated" });
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-02", endsOn: "2026-09-02" });
   });
 

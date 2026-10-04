@@ -30,6 +30,31 @@ import { requireStaff } from "./staff-only";
  * a caller that lost reads back the winner's id and trashes the folder it made.
  */
 
+/** A Perjadin's Drive folder and the two facts it is named from. `null` when there is no such trip. */
+export type PerjadinDriveFolder = {
+  driveFolderId: string | null;
+  destination: string;
+  startsOn: string;
+};
+
+/** What renaming a Perjadin's Drive folder after a start-date correction reads (#376). */
+export async function perjadinDriveFolder(
+  caller: Person,
+  perjadinId: string,
+): Promise<PerjadinDriveFolder | null> {
+  requireStaff(caller);
+
+  const [trip] = await db
+    .select({
+      driveFolderId: perjadin.driveFolderId,
+      destination: perjadin.destination,
+      startsOn: perjadin.startsOn,
+    })
+    .from(perjadin)
+    .where(eq(perjadin.id, perjadinId));
+  return trip ?? null;
+}
+
 /** One Drive-backed receipt on the line, as the reconcile names and moves it. */
 export type ReconcileEvidence = { id: string; driveFileId: string; contentType: string };
 

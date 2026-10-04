@@ -1,5 +1,6 @@
 "use server";
 
+import { renamePerjadinFolder } from "-/lib/drive/rename-perjadin-folder";
 import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
@@ -216,6 +217,10 @@ export async function issuePerjadinFeedbackTokenAction(
  * The range is the leg dates now (ADR-0021), so this write resizes `starts_on`/`ends_on` too. It
  * clamps rather than shifting: an edit that would strand an arranged Session comes back as
  * `would-strand` and nothing moves.
+ *
+ * **A correction that moves `starts_on` renames the trip's Drive folder** (#376), after the commit and
+ * best effort: a failed rename never fails the correction, and the next reconcile repairs it. Every
+ * refusal above comes back before anything reaches Drive.
  */
 export async function updatePerjadinLogisticsAction(
   perjadinId: string,
@@ -224,7 +229,10 @@ export async function updatePerjadinLogisticsAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => updatePerjadinLogistics(person, perjadinId, input));
-  if (result.outcome === "updated") revalidatePath(`/perjadin/${perjadinId}`);
+  if (result.outcome === "updated") {
+    if (result.startsOnMoved) await renamePerjadinFolder(person, perjadinId);
+    revalidatePath(`/perjadin/${perjadinId}`);
+  }
   return result;
 }
 

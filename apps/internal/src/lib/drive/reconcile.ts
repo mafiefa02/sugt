@@ -24,7 +24,8 @@ import {
  *
  * In order:
  * 1. **The Perjadin folder.** Created under `Pelaksanaan Offline` if the Perjadin has none, private,
- *    and claimed by compare-and-set; a caller that lost trashes its own and uses the winner's.
+ *    and claimed by compare-and-set; a caller that lost trashes its own and uses the winner's. An
+ *    existing one whose name is stale — its start date corrected since — is renamed back (#376).
  * 2. **The transaction folder.** Created straight in the Perjadin folder if the line has none (a line
  *    from before Drive), by the same compare-and-set. One still in `_staging` — where Catat builds
  *    it — moves into the Perjadin folder. **One a person has moved elsewhere stays there.**
@@ -97,6 +98,12 @@ async function reconcileOnce(
     const perjadinFolder = await drive.getFile(perjadinFolderId);
     if (!perjadinFolder) return { outcome: "unsynced", reason: "folder-missing" };
     if (perjadinFolder.trashed) return { outcome: "unsynced", reason: "folder-trashed" };
+    // Names are app-owned: a stale one — a start date corrected while the rename failed, or a
+    // rename by hand — is set back to what the database says (#376).
+    const expectedName = perjadinFolderName(target.destination, target.startsOn);
+    if (perjadinFolder.name !== expectedName) {
+      await drive.updateFile(perjadinFolderId, { name: expectedName });
+    }
 
     // 2. The transaction folder.
     let transactionFolderId = target.driveFolderId;
