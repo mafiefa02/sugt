@@ -59,6 +59,8 @@ export type AcquittalTransaction = {
   participantType: TransactionParticipantType;
   /** The line's Drive folder, link-shared once synced. Null on a line with no Drive receipt yet. */
   driveFolderId: string | null;
+  /** When the reconcile last finished the line; null while a Drive receipt is still owed. */
+  driveSyncedAt: Date | null;
   evidence: AcquittalEvidence[];
 };
 
@@ -233,6 +235,7 @@ async function transactionsOf(perjadinId: string): Promise<AcquittalTransaction[
       category: transaction.category,
       participantType: transaction.participantType,
       driveFolderId: transaction.driveFolderId,
+      driveSyncedAt: transaction.driveSyncedAt,
     })
     .from(transaction)
     .where(eq(transaction.perjadinId, perjadinId))

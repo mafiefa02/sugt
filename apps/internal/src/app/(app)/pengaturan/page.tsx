@@ -19,6 +19,7 @@ import type { Metadata } from "next";
 import { forbidden } from "next/navigation";
 
 import { connectDriveAction } from "./actions";
+import { PeriksaKoneksi } from "./periksa-koneksi";
 
 export const metadata: Metadata = { title: "Pengaturan" };
 
@@ -167,8 +168,9 @@ function DriveCard({
           <dd>{connection.lastUsedAt ? formatWib(connection.lastUsedAt) : "—"}</dd>
         </dl>
       </CardContent>
-      {/* Periksa koneksi joins Hubungkan ulang here (#375). */}
-      <CardFooter className="gap-2">{connectButton("Hubungkan ulang")}</CardFooter>
+      <CardFooter>
+        <PeriksaKoneksi>{connectButton("Hubungkan ulang")}</PeriksaKoneksi>
+      </CardFooter>
     </Card>
   );
 }

@@ -55,6 +55,7 @@ describe("the acquittal CSV", () => {
             category: "Konsumsi",
             participantType: "Siswa",
             driveFolderId: null,
+            driveSyncedAt: null,
             evidence: [],
           },
           {
@@ -65,6 +66,7 @@ describe("the acquittal CSV", () => {
             category: "Uang Harian",
             participantType: "GTK-MS",
             driveFolderId: null,
+            driveSyncedAt: null,
             evidence: [],
           },
         ],

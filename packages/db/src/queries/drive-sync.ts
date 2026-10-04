@@ -1,5 +1,16 @@
 import type { TransactionCategory } from "@sugt/domain";
-import { and, asc, eq, isNotNull, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  isNotNull,
+  isNull,
+  notExists,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 
 import { db } from "../client";
 import { perjadin, transaction, transactionEvidence } from "../schema/travel";
@@ -171,4 +182,49 @@ export async function markTransactionSynced(
     .from(transaction)
     .where(eq(transaction.id, transactionId));
   return line?.syncedAt != null;
+}
+
+/** One line the sweep will reconcile, with what Periksa koneksi says about it if it fails. */
+export type UnsyncedTransaction = { id: string; spentOn: string; description: string };
+
+/**
+ * **What the sweep owes**: every unsynced transaction — `drive_synced_at is null` and at least one
+ * Drive-backed receipt; a legacy or zero-receipt line never is — oldest first, at most `limit` of
+ * them, and how many there are in all. Periksa koneksi and a reconnect reconcile these in turn
+ * (#375), bounded so one press fits a Vercel function's time limit.
+ */
+export async function unsyncedTransactions(
+  caller: Person,
+  limit: number,
+): Promise<{ total: number; lines: UnsyncedTransaction[] }> {
+  requireStaff(caller);
+
+  const unsynced = and(
+    isNull(transaction.driveSyncedAt),
+    exists(
+      db
+        .select({ id: transactionEvidence.id })
+        .from(transactionEvidence)
+        .where(
+          and(
+            eq(transactionEvidence.transactionId, transaction.id),
+            isNotNull(transactionEvidence.driveFileId),
+          ),
+        ),
+    ),
+  );
+  const [lines, [counted]] = await Promise.all([
+    db
+      .select({
+        id: transaction.id,
+        spentOn: transaction.spentOn,
+        description: transaction.description,
+      })
+      .from(transaction)
+      .where(unsynced)
+      .orderBy(asc(transaction.createdAt), asc(transaction.id))
+      .limit(limit),
+    db.select({ total: count() }).from(transaction).where(unsynced),
+  ]);
+  return { total: counted?.total ?? 0, lines };
 }

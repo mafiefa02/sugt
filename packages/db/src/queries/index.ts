@@ -313,8 +313,10 @@ export {
   claimTransactionDriveFolder,
   markTransactionSynced,
   reconcileTarget,
+  unsyncedTransactions,
   type ReconcileEvidence,
   type ReconcileTarget,
+  type UnsyncedTransaction,
 } from "./drive-sync";
 export {
   canViewDashboard,

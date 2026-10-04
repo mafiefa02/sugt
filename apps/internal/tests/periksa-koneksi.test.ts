@@ -1,0 +1,343 @@
+import { checkDriveConnectionAction } from "-/app/(app)/pengaturan/actions";
+import LaporanPage from "-/app/(app)/perjadin/[id]/laporan/page";
+import { UNSYNCED_TOOLTIP } from "-/components/laporan-perjadin/acquittal-transactions";
+import { SWEEP_LIMIT, sweepUnsynced } from "-/lib/drive/check";
+import { describeDriveCheck, exposureWarning } from "-/lib/drive/check-report";
+import { completeDriveConnection } from "-/lib/drive/connect";
+import { FakeDrive, MY_DRIVE } from "-/lib/drive/fake-drive";
+import type { ReadyFolders } from "-/lib/drive/fixed-folders";
+import { DRIVE_FILE_SCOPE, openDrive } from "-/lib/drive/google";
+import { requirePerson } from "-/lib/person";
+import { db, schema } from "@sugt/db";
+import type { Person } from "@sugt/db/queries";
+import { eq } from "drizzle-orm";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { connectDrive, digestOf, FORBIDDEN, jpeg, upload } from "./support/drive";
+import {
+  addGrant,
+  addPerjadin,
+  addPerson,
+  addTransaction,
+  addTransactionEvidence,
+  resetDatabase,
+} from "./support/fixtures";
+
+/**
+ * **Periksa koneksi, the sweep, the badge and the marker** (#375, ADR-0040) — against the real
+ * database and the in-memory `FakeDrive`, faked as in `catat-transaksi-drive.test.ts`. Legacy
+ * receipts' signed links are stubbed too: they would call Supabase, which no test reaches.
+ */
+
+vi.mock("-/lib/person", () => ({ requirePerson: vi.fn() }));
+vi.mock("-/lib/drive/google", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("-/lib/drive/google")>()),
+  openDrive: vi.fn(),
+}));
+vi.mock("-/lib/receipt-media", () => ({
+  signedReceiptUrl: vi.fn(async () => "https://storage.test/legacy"),
+}));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => new Headers({ origin: "https://preview-42.sugt.test" })),
+}));
+
+const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+
+/** Google's token endpoint: refreshes answer `refresh`, an authorization-code exchange `exchange`. */
+function stubTokenEndpoint(
+  replies: {
+    refresh?: { status?: number; body: object };
+    exchange?: object;
+  } = {},
+) {
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url !== TOKEN_ENDPOINT) throw new Error(`Unexpected outbound request: ${url}`);
+    const grant = new URLSearchParams(String(init?.body)).get("grant_type");
+    if (grant === "authorization_code") return Response.json(replies.exchange);
+    const refresh = replies.refresh ?? { body: { access_token: "access" } };
+    return Response.json(refresh.body, { status: refresh.status ?? 200 });
+  });
+}
+
+let drive: FakeDrive;
+let folders: ReadyFolders;
+
+async function scene() {
+  const admin = await addPerson({ fullName: "Admin", email: "admin@itb.ac.id", role: "Staff" });
+  await addGrant(admin.id, "Administrator");
+  const staff = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
+  const pimpinan = await addPerson({ fullName: "Pim", email: "pim@itb.ac.id", role: "Pimpinan" });
+  const trip = await addPerjadin({
+    advanceIdr: 5_000_000,
+    picPersonId: staff.id,
+    destination: "Kelompok 3: Garut",
+    startsOn: "2026-10-12",
+    endsOn: "2026-10-14",
+  });
+  folders = await connectDrive(drive, admin.id);
+  const adminPerson = { ...admin, grants: ["Administrator"] } as Person;
+  vi.mocked(requirePerson).mockResolvedValue(adminPerson);
+  return { admin: adminPerson, staff, pimpinan, trip };
+}
+
+/**
+ * A line whose Drive receipt is recorded but not yet put in place: the file waits in `_staging` and
+ * the line has no folder — what a failed reconcile, or a broken connection, leaves behind.
+ */
+async function anUnsyncedLine(perjadinId: string, createdByPersonId: string, description: string) {
+  const line = await addTransaction({
+    perjadinId,
+    amountIdr: 10_000,
+    description,
+    createdByPersonId,
+  });
+  const [fileId] = await upload(drive, perjadinId, [jpeg()]);
+  await db.insert(schema.transactionEvidence).values({
+    transactionId: line.id,
+    driveFileId: fileId!,
+    contentType: "image/jpeg",
+    byteSize: 4096,
+    uploadedByPersonId: createdByPersonId,
+  });
+  return line;
+}
+
+const lineRow = async (id: string) =>
+  (await db.select().from(schema.transaction).where(eq(schema.transaction.id, id)))[0]!;
+
+beforeEach(async () => {
+  await resetDatabase();
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+  vi.stubEnv("__NEXT_EXPERIMENTAL_AUTH_INTERRUPTS", "1");
+  drive = new FakeDrive();
+  vi.mocked(openDrive).mockReturnValue(drive);
+  stubTokenEndpoint();
+});
+
+describe("Periksa koneksi is Administrator only", () => {
+  it("refuses a Staff member without the Grant and a Pimpinan", async () => {
+    const { staff, pimpinan } = await scene();
+    drive.calls = 0;
+
+    for (const person of [staff, pimpinan]) {
+      vi.mocked(requirePerson).mockResolvedValue(person as Person);
+      await expect(digestOf(checkDriveConnectionAction())).resolves.toBe(FORBIDDEN);
+    }
+    expect(drive.calls).toBe(0);
+  });
+});
+
+describe("the check, in order", () => {
+  it("reports a working token, the four folders, no exposure and the sweep", async () => {
+    await scene();
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toEqual({
+      token: "ok",
+      folders: [
+        { folder: "root", state: "ok" },
+        { folder: "staging", state: "ok" },
+        { folder: "bukti-transaksi", state: "ok" },
+        { folder: "pelaksanaan-offline", state: "ok" },
+      ],
+      exposed: [],
+      sweep: { synced: 0, waiting: 0, failures: [] },
+    });
+    expect(describeDriveCheck(report).warnings).toEqual([]);
+    const [row] = await db.select().from(schema.driveConnection);
+    expect(row!.lastUsedAt).toBeInstanceOf(Date);
+  });
+
+  it("marks the connection broken on invalid_grant, and stops", async () => {
+    await scene();
+    stubTokenEndpoint({ refresh: { status: 400, body: { error: "invalid_grant" } } });
+    drive.calls = 0;
+
+    await expect(checkDriveConnectionAction()).resolves.toEqual({ token: "broken" });
+
+    const [row] = await db.select().from(schema.driveConnection);
+    expect(row).toMatchObject({ status: "broken" });
+    expect(row!.brokenAt).toBeInstanceOf(Date);
+    expect(drive.calls).toBe(0);
+  });
+
+  it("reports a trashed folder, and skips the sweep while the tree is not usable", async () => {
+    const { admin, trip } = await scene();
+    await anUnsyncedLine(trip.id, admin.id, "Konsumsi rapat");
+    drive.trash(folders.buktiTransaksiFolderId);
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toMatchObject({
+      token: "ok",
+      folders: expect.arrayContaining([{ folder: "bukti-transaksi", state: "trashed" }]),
+      sweep: null,
+    });
+  });
+});
+
+describe("the safety check", () => {
+  /** A link-shared company folder, and `id` moved into it by hand. */
+  async function moveUnderASharedFolder(id: string) {
+    const company = await drive.createFolder({ name: "Arsip Perusahaan" });
+    await drive.createPermission(company.id, { type: "anyone", role: "reader" });
+    await drive.updateFile(id, { addParent: company.id, removeParent: MY_DRIVE });
+  }
+
+  it.each([
+    ["root", () => folders.rootFolderId],
+    ["staging", () => folders.stagingFolderId],
+  ] as const)("warns when an inherited anyone permission reaches the %s", async (folder, idOf) => {
+    await scene();
+    await moveUnderASharedFolder(idOf());
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toMatchObject({ token: "ok", exposed: [folder] });
+    expect(describeDriveCheck(report).warnings).toEqual([exposureWarning(folder)]);
+  });
+
+  it("warns on a direct anyone permission too", async () => {
+    await scene();
+    await drive.createPermission(folders.rootFolderId, { type: "anyone", role: "reader" });
+
+    await expect(checkDriveConnectionAction()).resolves.toMatchObject({ exposed: ["root"] });
+  });
+
+  it("says exactly the ticket's sentence for the root", () => {
+    expect(exposureWarning("root")).toBe(
+      "Folder utama dapat dibuka siapa saja yang punya link — pindahkan keluar dari folder yang dibagikan.",
+    );
+  });
+});
+
+describe("the sweep", () => {
+  it("finishes unsynced transactions, oldest first, and stops at the bound", async () => {
+    const { admin, trip } = await scene();
+    const first = await anUnsyncedLine(trip.id, admin.id, "Pertama");
+    const second = await anUnsyncedLine(trip.id, admin.id, "Kedua");
+    const third = await anUnsyncedLine(trip.id, admin.id, "Ketiga");
+
+    await expect(sweepUnsynced(admin, drive, folders, 2)).resolves.toEqual({
+      synced: 2,
+      waiting: 1,
+      failures: [],
+    });
+    expect((await lineRow(first.id)).driveSyncedAt).toBeInstanceOf(Date);
+    expect((await lineRow(second.id)).driveSyncedAt).toBeInstanceOf(Date);
+    expect((await lineRow(third.id)).driveSyncedAt).toBeNull();
+    expect(SWEEP_LIMIT).toBe(25);
+  });
+
+  it("never counts a legacy or zero-receipt line as owed", async () => {
+    const { admin, trip } = await scene();
+    const legacy = await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 10_000,
+      createdByPersonId: admin.id,
+    });
+    await addTransactionEvidence({ transactionId: legacy.id, uploadedByPersonId: admin.id });
+    await addTransaction({ perjadinId: trip.id, amountIdr: 5_000, createdByPersonId: admin.id });
+
+    await expect(sweepUnsynced(admin, drive, folders)).resolves.toEqual({
+      synced: 0,
+      waiting: 0,
+      failures: [],
+    });
+  });
+
+  it("reports a trashed transaction folder, and does not recreate it", async () => {
+    const { admin, trip } = await scene();
+    const line = await anUnsyncedLine(trip.id, admin.id, "Taksi");
+    const trashed = await drive.createFolder({
+      name: "dibuang",
+      parentId: folders.stagingFolderId,
+    });
+    drive.trash(trashed.id);
+    await db
+      .update(schema.transaction)
+      .set({ driveFolderId: trashed.id })
+      .where(eq(schema.transaction.id, line.id));
+    const before = drive.files.size;
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toMatchObject({
+      sweep: {
+        synced: 0,
+        waiting: 1,
+        failures: [{ transactionId: line.id, description: "Taksi", reason: "folder-trashed" }],
+      },
+    });
+    expect(describeDriveCheck(report).failures).toEqual([
+      "2026-09-02 · Taksi: folder ada di Sampah Google Drive.",
+    ]);
+    // The Perjadin folder is the one new thing; the trashed transaction folder is not remade.
+    expect(drive.files.size).toBe(before + 1);
+    expect((await lineRow(line.id)).driveFolderId).toBe(trashed.id);
+  });
+
+  it("runs after a reconnect", async () => {
+    const { admin, trip } = await scene();
+    const line = await anUnsyncedLine(trip.id, admin.id, "Konsumsi");
+    const segment = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+    stubTokenEndpoint({
+      exchange: {
+        access_token: "access",
+        refresh_token: "again",
+        scope: `openid email ${DRIVE_FILE_SCOPE}`,
+        id_token: `${segment({ alg: "RS256" })}.${segment({ email: "bukti@perusahaan.test" })}.c2ln`,
+      },
+    });
+
+    await expect(
+      completeDriveConnection({
+        params: new URLSearchParams({ state: "s", code: "c" }),
+        stateCookie: "s",
+        person: admin,
+      }),
+    ).resolves.toBe("connected");
+
+    expect((await lineRow(line.id)).driveSyncedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("the belum tersinkron marker", () => {
+  it("shows only on a line whose Drive receipt is still owed", async () => {
+    const { admin, trip } = await scene();
+    await anUnsyncedLine(trip.id, admin.id, "Belum");
+    const synced = await anUnsyncedLine(trip.id, admin.id, "Sudah");
+    await db
+      .update(schema.transaction)
+      .set({ driveSyncedAt: new Date() })
+      .where(eq(schema.transaction.id, synced.id));
+    const legacy = await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 10_000,
+      description: "Lama",
+      createdByPersonId: admin.id,
+    });
+    await addTransactionEvidence({ transactionId: legacy.id, uploadedByPersonId: admin.id });
+    await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 5_000,
+      description: "Kosong",
+      createdByPersonId: admin.id,
+    });
+
+    const html = renderToStaticMarkup(
+      await LaporanPage({ params: Promise.resolve({ id: trip.id }) } as never),
+    );
+
+    const cards = html.split('data-slot="card"').slice(1);
+    const marked = cards
+      .filter((card) => card.includes(UNSYNCED_TOOLTIP))
+      .map((card) => /(Belum|Sudah|Lama|Kosong)/.exec(card)?.[1]);
+    expect(marked).toEqual(["Belum"]);
+  });
+});

@@ -42,13 +42,17 @@ import {
  * touches nothing" is held.
  */
 
+/** Why a line is still owed after a reconcile. */
+export type UnsyncedReason =
+  | "folder-trashed"
+  | "folder-missing"
+  | "drive-failed"
+  /** A receipt committed while this ran is still owed; its own run, or the next sweep, does it. */
+  | "newer-receipts";
+
 export type ReconcileResult =
   | { outcome: "synced" }
-  | {
-      outcome: "unsynced";
-      /** `newer-receipts`: a receipt committed while this ran is still owed; its own run does it. */
-      reason: "folder-trashed" | "folder-missing" | "drive-failed" | "newer-receipts";
-    }
+  | { outcome: "unsynced"; reason: UnsyncedReason }
   | { outcome: "no-such-transaction" };
 
 export async function reconcileTransaction(

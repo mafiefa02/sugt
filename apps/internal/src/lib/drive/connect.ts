@@ -8,7 +8,8 @@ import {
   type Person,
 } from "@sugt/db/queries";
 
-import { ensureFixedFolders } from "./fixed-folders";
+import { sweepUnsynced } from "./check";
+import { ensureFixedFolders, readyFolders } from "./fixed-folders";
 import { DRIVE_FILE_SCOPE, exchangeDriveCode, openDrive } from "./google";
 import { encryptRefreshToken } from "./token-crypto";
 
@@ -57,8 +58,9 @@ export type DriveConnectOutcome = (typeof DRIVE_CONNECT_OUTCOMES)[number];
  * 7. A refresh token came back.
  *
  * Then the token is encrypted and stored — **overwriting** any old one, never revoking it — and the
- * fixed folders are ensured with the exchange's own access token. A root or `_staging` found
- * trashed or missing keeps the token stored but is answered with the problem, not `connected`.
+ * fixed folders are ensured with the exchange's own access token. A root or `_staging` found trashed
+ * or missing keeps the token stored but is answered with the problem, not `connected`. With the tree
+ * usable, one bounded sweep then reconciles what was recorded while the connection was down (#375).
  */
 export async function completeDriveConnection(input: {
   params: URLSearchParams;
@@ -94,8 +96,19 @@ export async function completeDriveConnection(input: {
 
   // The row was just written, so it is there; its ids are whatever the last connect settled.
   const stored = (await driveCredentials(person))!;
-  const ensured = await ensureFixedFolders(openDrive(exchange.accessToken), driveFolderIds(stored));
+  const drive = openDrive(exchange.accessToken);
+  const ensured = await ensureFixedFolders(drive, driveFolderIds(stored));
   await recordDriveFolders(person, ensured);
+
+  // Work recorded while the connection was down never reached Drive: finish what one bounded sweep
+  // can before returning. The connect has already succeeded, so a sweep that throws is logged, not
+  // allowed to turn it into a failure — what it left is still unsynced, for Periksa koneksi.
+  const folders = readyFolders(ensured);
+  if (folders) {
+    await sweepUnsynced(person, drive, folders).catch((error: unknown) => {
+      console.error("The sweep after reconnecting Google Drive threw.", error);
+    });
+  }
 
   return ensured.folderProblem ?? "connected";
 }

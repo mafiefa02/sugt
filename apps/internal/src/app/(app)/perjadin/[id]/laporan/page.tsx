@@ -170,7 +170,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
  * signed-in reader, since `perjadinAcquittal` is an open money read (ADR-0026, #180).
  */
 async function viewable(line: AcquittalTransaction): Promise<ViewableTransaction> {
-  const { driveFolderId, ...rest } = line;
+  const { driveFolderId, driveSyncedAt, ...rest } = line;
   const evidence = await Promise.all(
     line.evidence.map(async (file) => ({
       id: file.id,
@@ -183,7 +183,13 @@ async function viewable(line: AcquittalTransaction): Promise<ViewableTransaction
           : null,
     })),
   );
-  return { ...rest, evidence, folderUrl: driveFolderId ? driveFolderUrl(driveFolderId) : null };
+  return {
+    ...rest,
+    evidence,
+    folderUrl: driveFolderId ? driveFolderUrl(driveFolderId) : null,
+    // Unsynced: never finished, and holding a Drive receipt — a legacy or empty line never is.
+    unsynced: driveSyncedAt === null && line.evidence.some((file) => file.driveFileId !== null),
+  };
 }
 
 /**

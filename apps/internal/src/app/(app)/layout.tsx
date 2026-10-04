@@ -1,6 +1,7 @@
 import { AppShell } from "-/components/app-shell";
 import { parseSidebarState, SIDEBAR_STATE_COOKIE } from "-/components/sidebar-state";
 import { SignOutButton } from "-/components/sign-out-button";
+import { receiptUploadGate } from "-/lib/drive/upload-gate";
 import { getPerson } from "-/lib/person";
 import { canViewDashboard, hasGrant } from "@sugt/db/queries";
 import { cookies } from "next/headers";
@@ -43,13 +44,19 @@ export default async function SignedInLayout({
   // expanded width on a collapsed reload (#359). No cookie, or an unknown value, is expanded.
   const sidebarState = parseSidebarState((await cookies()).get(SIDEBAR_STATE_COOKIE)?.value);
 
+  // The Pengaturan badge (#375): read only for an Administrator, the only viewer of that link — one
+  // small single-row query, and none at all for anyone else.
+  const canAdminister = hasGrant(person, "Administrator");
+  const driveNeedsAttention = canAdminister && !(await receiptUploadGate(person)).open;
+
   return (
     <AppShell
       role={person.role}
       personName={person.fullName}
       canEditMonitoring={hasGrant(person, "Editor")}
       canViewDashboard={canViewDashboard(person)}
-      canAdminister={hasGrant(person, "Administrator")}
+      canAdminister={canAdminister}
+      driveNeedsAttention={driveNeedsAttention}
       sidebarState={sidebarState}
       footerAction={
         /* Sign-out ends the profile row of the shell's footer — the one `SidebarBody` the desktop

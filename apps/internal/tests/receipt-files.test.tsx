@@ -88,6 +88,7 @@ describe("the acquittal's receipt links and gate", () => {
     participantType: "Siswa" as const,
     evidence: [{ id: "e1", contentType: "image/jpeg", byteSize: 10, url: driveFileUrl("file-1") }],
     folderUrl: driveFolderUrl("folder-1"),
+    unsynced: false,
   };
 
   it("links each receipt and the folder to Drive, in a new tab", () => {
