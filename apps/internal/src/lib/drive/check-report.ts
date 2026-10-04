@@ -1,4 +1,4 @@
-import type { DriveCheckReport, FolderCheck, SweepFailure } from "./check";
+import type { DriveCheckReport, ExposableFolder, FolderCheck, SweepFailure } from "./check";
 
 /**
  * **What Periksa koneksi says** (#375) — the report as sentences, kept apart from both the check
@@ -28,7 +28,7 @@ const FAILURE_REASONS: Record<SweepFailure["reason"], string> = {
 };
 
 /** The prominent warning when a link-shared folder reaches the root or `_staging`. */
-export function exposureWarning(folder: "root" | "staging"): string {
+export function exposureWarning(folder: ExposableFolder): string {
   return `${FOLDER_NAMES[folder]} dapat dibuka siapa saja yang punya link — pindahkan keluar dari folder yang dibagikan.`;
 }
 
@@ -51,6 +51,12 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
         warnings: [],
         failures: [],
       };
+    case "already-broken":
+      return {
+        lines: ["Koneksi sudah terputus — Hubungkan ulang."],
+        warnings: [],
+        failures: [],
+      };
     case "unreachable":
       return {
         lines: ["Google Drive tidak dapat dihubungi — coba lagi."],
@@ -63,14 +69,14 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
         ...report.folders.map(
           (check) => `${FOLDER_NAMES[check.folder]}: ${FOLDER_STATES[check.state]}.`,
         ),
-        report.sweep
+        report.sweep.ran
           ? `${report.sweep.synced} transaksi disinkronkan, ${report.sweep.waiting} masih menunggu.`
-          : "Sinkronisasi dilewati sampai folder di atas beres.",
+          : `Sinkronisasi dilewati sampai folder di atas beres; ${report.sweep.waiting} transaksi masih menunggu.`,
       ];
       return {
         lines,
         warnings: report.exposed.map(exposureWarning),
-        failures: (report.sweep?.failures ?? []).map(
+        failures: (report.sweep.ran ? report.sweep.failures : []).map(
           (failure) =>
             `${failure.spentOn} · ${failure.description}: ${FAILURE_REASONS[failure.reason]}.`,
         ),

@@ -54,7 +54,7 @@ function AppSidebarNav({
         return (
           <RailTooltip
             key={item.href}
-            label={item.alert ? `${item.label} — ${ATTENTION}` : item.label}
+            label={item.badge ? `${item.label} — ${ATTENTION}` : item.label}
             render={
               <Link
                 href={item.href}
@@ -70,7 +70,7 @@ function AppSidebarNav({
           >
             <span className="relative inline-flex shrink-0">
               <item.icon className={cn("size-4", !active && "text-muted-foreground")} />
-              {item.alert && (
+              {item.badge && (
                 <span
                   aria-hidden
                   className="absolute -top-1 -right-1 size-2 rounded-full bg-destructive ring-2 ring-sidebar"
@@ -78,7 +78,7 @@ function AppSidebarNav({
               )}
             </span>
             <span className="group-data-[state=collapsed]/sidebar:sr-only">{item.label}</span>
-            {item.alert && <span className="sr-only"> — {ATTENTION}</span>}
+            {item.badge && <span className="sr-only"> — {ATTENTION}</span>}
           </RailTooltip>
         );
       })}

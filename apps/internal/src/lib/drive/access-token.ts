@@ -30,10 +30,9 @@ export type DriveToken =
  */
 export async function refreshDriveToken(
   person: Person,
-  /** The row, when the caller already read it — saves reading it twice. */
-  read?: DriveCredentials | null,
+  /** The connection row, as the caller read it — every caller reads it first, to decide first. */
+  credentials: DriveCredentials | null,
 ): Promise<DriveToken> {
-  const credentials = read === undefined ? await driveCredentials(person) : read;
   if (!credentials || credentials.status === "broken") return { outcome: "drive-disconnected" };
 
   const refreshToken = decryptRefreshToken(credentials.refreshToken);
@@ -69,6 +68,8 @@ export type DriveAccess =
  */
 export async function driveAccessToken(person: Person): Promise<DriveAccess> {
   const credentials = await driveCredentials(person);
+  // Checked here as well as in `refreshDriveToken`, because the folder check below must come before
+  // any call to Google and must not mistake a broken connection for unresolved folders.
   if (!credentials || credentials.status === "broken") return { outcome: "drive-disconnected" };
 
   const folders = readyFolders(credentials);

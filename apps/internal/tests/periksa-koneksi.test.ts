@@ -7,6 +7,7 @@ import { completeDriveConnection } from "-/lib/drive/connect";
 import { FakeDrive, MY_DRIVE } from "-/lib/drive/fake-drive";
 import type { ReadyFolders } from "-/lib/drive/fixed-folders";
 import { DRIVE_FILE_SCOPE, openDrive } from "-/lib/drive/google";
+import { receiptUploadGate } from "-/lib/drive/upload-gate";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
@@ -146,7 +147,7 @@ describe("the check, in order", () => {
         { folder: "pelaksanaan-offline", state: "ok" },
       ],
       exposed: [],
-      sweep: { synced: 0, waiting: 0, failures: [] },
+      sweep: { ran: true, synced: 0, waiting: 0, failures: [] },
     });
     expect(describeDriveCheck(report).warnings).toEqual([]);
     const [row] = await db.select().from(schema.driveConnection);
@@ -166,6 +167,39 @@ describe("the check, in order", () => {
     expect(drive.calls).toBe(0);
   });
 
+  it("answers already-broken, asking Google nothing, when the page was older than the break", async () => {
+    await scene();
+    await db.update(schema.driveConnection).set({ status: "broken", brokenAt: new Date() });
+    const fetched = vi.fn();
+    vi.stubGlobal("fetch", fetched);
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toEqual({ token: "already-broken" });
+    expect(fetched).not.toHaveBeenCalled();
+    expect(describeDriveCheck(report).lines).toEqual(["Koneksi sudah terputus — Hubungkan ulang."]);
+  });
+
+  it("records a trashed root, closing the upload gate, and clears it once restored", async () => {
+    const { admin } = await scene();
+    drive.trash(folders.rootFolderId);
+
+    await checkDriveConnectionAction();
+
+    await expect(db.select().from(schema.driveConnection)).resolves.toMatchObject([
+      { folderProblem: "root-trashed" },
+    ]);
+    await expect(receiptUploadGate(admin)).resolves.toMatchObject({ open: false });
+
+    drive.restore(folders.rootFolderId);
+    await checkDriveConnectionAction();
+
+    await expect(db.select().from(schema.driveConnection)).resolves.toMatchObject([
+      { folderProblem: null },
+    ]);
+    await expect(receiptUploadGate(admin)).resolves.toEqual({ open: true });
+  });
+
   it("reports a trashed folder, and skips the sweep while the tree is not usable", async () => {
     const { admin, trip } = await scene();
     await anUnsyncedLine(trip.id, admin.id, "Konsumsi rapat");
@@ -176,8 +210,11 @@ describe("the check, in order", () => {
     expect(report).toMatchObject({
       token: "ok",
       folders: expect.arrayContaining([{ folder: "bukti-transaksi", state: "trashed" }]),
-      sweep: null,
+      sweep: { ran: false, waiting: 1 },
     });
+    expect(describeDriveCheck(report).lines).toContain(
+      "Sinkronisasi dilewati sampai folder di atas beres; 1 transaksi masih menunggu.",
+    );
   });
 });
 
@@ -223,7 +260,7 @@ describe("the sweep", () => {
     const second = await anUnsyncedLine(trip.id, admin.id, "Kedua");
     const third = await anUnsyncedLine(trip.id, admin.id, "Ketiga");
 
-    await expect(sweepUnsynced(admin, drive, folders, 2)).resolves.toEqual({
+    await expect(sweepUnsynced(admin, drive, folders, { limit: 2 })).resolves.toEqual({
       synced: 2,
       waiting: 1,
       failures: [],
@@ -232,6 +269,40 @@ describe("the sweep", () => {
     expect((await lineRow(second.id)).driveSyncedAt).toBeInstanceOf(Date);
     expect((await lineRow(third.id)).driveSyncedAt).toBeNull();
     expect(SWEEP_LIMIT).toBe(25);
+  });
+
+  it("moves past a line that fails every time, so the lines behind it are reached", async () => {
+    const { admin, trip } = await scene();
+    const stuck = await anUnsyncedLine(trip.id, admin.id, "Macet");
+    const trashed = await drive.createFolder({
+      name: "dibuang",
+      parentId: folders.stagingFolderId,
+    });
+    drive.trash(trashed.id);
+    await db
+      .update(schema.transaction)
+      .set({ driveFolderId: trashed.id })
+      .where(eq(schema.transaction.id, stuck.id));
+    const healthy = await anUnsyncedLine(trip.id, admin.id, "Sehat");
+
+    const first = await sweepUnsynced(admin, drive, folders, { limit: 1 });
+    const second = await sweepUnsynced(admin, drive, folders, { limit: 1 });
+
+    expect(first).toMatchObject({ synced: 0, failures: [{ transactionId: stuck.id }] });
+    expect(second).toEqual({ synced: 1, waiting: 1, failures: [] });
+    expect((await lineRow(healthy.id)).driveSyncedAt).toBeInstanceOf(Date);
+  });
+
+  it("starts no reconcile past its time budget, and counts what is left as waiting", async () => {
+    const { admin, trip } = await scene();
+    await anUnsyncedLine(trip.id, admin.id, "Satu");
+    await anUnsyncedLine(trip.id, admin.id, "Dua");
+
+    await expect(sweepUnsynced(admin, drive, folders, { budgetMs: -1 })).resolves.toEqual({
+      synced: 0,
+      waiting: 2,
+      failures: [],
+    });
   });
 
   it("never counts a legacy or zero-receipt line as owed", async () => {
@@ -269,6 +340,7 @@ describe("the sweep", () => {
 
     expect(report).toMatchObject({
       sweep: {
+        ran: true,
         synced: 0,
         waiting: 1,
         failures: [{ transactionId: line.id, description: "Taksi", reason: "folder-trashed" }],

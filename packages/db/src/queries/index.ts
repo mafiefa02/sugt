@@ -311,6 +311,7 @@ export {
 export {
   claimPerjadinDriveFolder,
   claimTransactionDriveFolder,
+  markTransactionSyncFailed,
   markTransactionSynced,
   reconcileTarget,
   unsyncedTransactions,

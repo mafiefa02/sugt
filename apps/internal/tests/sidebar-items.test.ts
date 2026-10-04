@@ -109,9 +109,9 @@ describe("sidebarItems", () => {
 
     expect(
       items(true)
-        .filter((item) => item.alert)
+        .filter((item) => item.badge)
         .map((item) => item.href),
     ).toEqual(["/pengaturan"]);
-    expect(items(false).some((item) => item.alert)).toBe(false);
+    expect(items(false).some((item) => item.badge)).toBe(false);
   });
 });

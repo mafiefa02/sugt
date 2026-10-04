@@ -28,11 +28,11 @@ export type NavItem = {
   /** Shown only to an Administrator. Absent means "no gate". */
   administratorOnly?: boolean;
   /** Carries the badge while the company Google Drive needs an Administrator (#375). */
-  flagsDrive?: boolean;
+  driveBadge?: boolean;
 };
 
-/** A link as one viewer sees it: `alert` puts the badge on it. */
-export type VisibleNavItem = NavItem & { alert: boolean };
+/** A link as one viewer sees it: `badge` puts the Drive badge on it. */
+export type VisibleNavItem = NavItem & { badge: boolean };
 
 /**
  * The sidebar's destinations, in order — with one exception: **Pendamping moves to the top when the
@@ -96,7 +96,7 @@ const NAV: NavItem[] = [
     icon: Settings,
     staffOnly: true,
     administratorOnly: true,
-    flagsDrive: true,
+    driveBadge: true,
   },
 ];
 
@@ -125,7 +125,7 @@ export function sidebarItems({
       (!item.editorOnly || canEditMonitoring) &&
       (!item.dashboardView || canViewDashboard) &&
       (!item.administratorOnly || canAdminister),
-  ).map((item) => ({ ...item, alert: Boolean(item.flagsDrive) && driveNeedsAttention }));
+  ).map((item) => ({ ...item, badge: Boolean(item.driveBadge) && driveNeedsAttention }));
   if (canViewDashboard) return visible;
   const isPendamping = (item: NavItem) => item.href === "/pendamping";
   return [...visible.filter(isPendamping), ...visible.filter((item) => !isPendamping(item))];

@@ -1,4 +1,11 @@
-import { driveCredentials, unsyncedTransactions, type Person } from "@sugt/db/queries";
+import {
+  driveCredentials,
+  driveFolderIds,
+  recordDriveFolders,
+  unsyncedTransactions,
+  type DriveFolderProblem,
+  type Person,
+} from "@sugt/db/queries";
 
 import { refreshDriveToken } from "./access-token";
 import { readyFolders, type ReadyFolders } from "./fixed-folders";
@@ -11,8 +18,15 @@ import { reconcileTransaction, type UnsyncedReason } from "./reconcile";
  * reconnect callback runs the sweep half of it too.
  */
 
-/** How many unsynced transactions one press reconciles — sized to fit a Vercel function's limit. */
+/** How many unsynced transactions one press reconciles. */
 export const SWEEP_LIMIT = 25;
+
+/**
+ * How long one sweep keeps starting reconciles: past this it stops, and what is left is reported as
+ * waiting. Well inside the 60 seconds `/pengaturan` and the callback declare as `maxDuration`, so a
+ * slow Drive cannot turn a press — or a reconnect that already succeeded — into a timeout.
+ */
+export const SWEEP_BUDGET_MS = 40_000;
 
 export type SweepFailure = {
   transactionId: string;
@@ -24,20 +38,23 @@ export type SweepFailure = {
 export type SweepReport = { synced: number; waiting: number; failures: SweepFailure[] };
 
 /**
- * **The sweep**: reconcile the unsynced transactions, oldest first, at most `limit`, one at a time.
- * A trashed folder is reported, never recreated (the reconcile's own rule). `waiting` is what is
- * still owed afterwards — the failures, and anything past the bound.
+ * **The sweep**: reconcile the unsynced transactions in the order `unsyncedTransactions` gives — at
+ * most `limit`, one at a time, and none started once `budgetMs` has passed. A trashed folder is
+ * reported, never recreated (the reconcile's own rule). `waiting` is what is still owed afterwards:
+ * the failures, and anything past the bound or the budget.
  */
 export async function sweepUnsynced(
   person: Person,
   drive: DriveClient,
   folders: ReadyFolders,
-  limit = SWEEP_LIMIT,
+  { limit = SWEEP_LIMIT, budgetMs = SWEEP_BUDGET_MS }: { limit?: number; budgetMs?: number } = {},
 ): Promise<SweepReport> {
   const owed = await unsyncedTransactions(person, limit);
   const failures: SweepFailure[] = [];
+  const startedAt = Date.now();
   let synced = 0;
   for (const line of owed.lines) {
+    if (Date.now() - startedAt > budgetMs) break;
     const result = await reconcileTransaction(person, drive, folders, line.id);
     if (result.outcome === "synced") synced += 1;
     else {
@@ -58,20 +75,25 @@ export type FolderCheck = {
   state: "ok" | "trashed" | "missing";
 };
 
+/** The two folders that must never be reachable by a link: what the safety check looks at. */
+export type ExposableFolder = Extract<FolderCheck["folder"], "root" | "staging">;
+
 export type DriveCheckReport =
   /** No connection to check. */
   | { token: "not-connected" }
   /** Google refused the token, or it would not decrypt: the connection is now marked broken. */
   | { token: "broken" }
+  /** It was already broken — this page was older than that. Google was not asked. */
+  | { token: "already-broken" }
   /** Google could not be reached. Nothing was concluded or changed. */
   | { token: "unreachable" }
   | {
       token: "ok";
       folders: FolderCheck[];
       /** Which of the root and `_staging` an `anyone` permission reaches, inherited or direct. */
-      exposed: ("root" | "staging")[];
-      /** The sweep, or `null` when the tree is not usable and it was not run. */
-      sweep: SweepReport | null;
+      exposed: ExposableFolder[];
+      /** The sweep — or, when the tree is not usable and it did not run, how many lines wait. */
+      sweep: ({ ran: true } & SweepReport) | { ran: false; waiting: number };
     };
 
 /**
@@ -80,17 +102,20 @@ export type DriveCheckReport =
  * 1. **Refresh the token.** `invalid_grant` marks the connection broken (`refreshDriveToken`) and
  *    stops. A successful refresh updates `last_used_at`.
  * 2. **`files.get` on the root, `_staging`, `Bukti Transaksi` and `Pelaksanaan Offline`**, each
- *    reported ok, trashed or missing.
+ *    reported ok, trashed or missing — and **recorded** as the connection's `folder_problem`, so the
+ *    card, the sidebar badge and the upload gate all stop treating the tree as usable at once. Found
+ *    whole again, a problem it had recorded is cleared.
  * 3. **The safety check**: `permissions.list` on the root and on `_staging`. An `anyone` permission
  *    on either — inherited or direct — means the folder has been moved under a link-shared folder, or
  *    shared by hand, and files nobody should see can be opened by link.
- * 4. **The sweep** (`sweepUnsynced`), only when the tree is usable.
+ * 4. **The sweep** (`sweepUnsynced`), only when the tree is usable; otherwise how many lines wait.
  *
  * The caller has already checked the Administrator Grant.
  */
 export async function checkDriveConnection(person: Person): Promise<DriveCheckReport> {
   const credentials = await driveCredentials(person);
   if (!credentials) return { token: "not-connected" };
+  if (credentials.status === "broken") return { token: "already-broken" };
   const token = await refreshDriveToken(person, credentials);
   if (token.outcome === "drive-unreachable") return { token: "unreachable" };
   if (token.outcome === "drive-disconnected") return { token: "broken" };
@@ -110,25 +135,42 @@ export async function checkDriveConnection(person: Person): Promise<DriveCheckRe
         return { folder, state: !file ? "missing" : file.trashed ? "trashed" : "ok" };
       }),
     );
-    const isOk = (folder: FolderCheck["folder"]) =>
-      folders.some((check) => check.folder === folder && check.state === "ok");
 
-    const exposed: ("root" | "staging")[] = [];
-    for (const [folder, id] of [
-      ["root", stored.rootFolderId],
-      ["staging", stored.stagingFolderId],
-    ] as const) {
-      if (!id || !isOk(folder)) continue;
+    const problem = folderProblemOf(folders);
+    if (problem !== stored.folderProblem) {
+      await recordDriveFolders(person, { ...driveFolderIds(stored), folderProblem: problem });
+    }
+
+    const exposed: ExposableFolder[] = [];
+    for (const [folder, id] of named.slice(0, 2) as [ExposableFolder, string | null][]) {
+      const found = folders.find((check) => check.folder === folder);
+      if (!id || found?.state !== "ok") continue;
       const permissions = await drive.listPermissions(id);
       if (permissions.some((permission) => permission.type === "anyone")) exposed.push(folder);
     }
 
-    const ready = readyFolders(stored);
-    const usable = ready && folders.every((check) => check.state === "ok");
-    const sweep = usable ? await sweepUnsynced(person, drive, ready) : null;
+    const ready = problem === null ? readyFolders({ ...stored, folderProblem: null }) : null;
+    const sweep = ready
+      ? { ran: true as const, ...(await sweepUnsynced(person, drive, ready)) }
+      : { ran: false as const, waiting: (await unsyncedTransactions(person, 0)).total };
     return { token: "ok", folders, exposed, sweep };
   } catch (error) {
     if (isDriveFailure(error)) return { token: "unreachable" };
     throw error;
   }
+}
+
+/**
+ * The problem the four folders amount to, as `ensureFixedFolders` names them: the root's first, then
+ * `_staging`'s; a missing or trashed subfolder is "unfinished", which a reconnect recreates.
+ */
+function folderProblemOf(folders: FolderCheck[]): DriveFolderProblem | null {
+  const state = (folder: FolderCheck["folder"]) =>
+    folders.find((check) => check.folder === folder)!.state;
+  for (const folder of ["root", "staging"] as const) {
+    const found = state(folder);
+    if (found !== "ok") return `${folder}-${found}`;
+  }
+  const subfoldersOk = state("bukti-transaksi") === "ok" && state("pelaksanaan-offline") === "ok";
+  return subfoldersOk ? null : "folders-unfinished";
 }

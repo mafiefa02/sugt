@@ -24,6 +24,12 @@ import { PeriksaKoneksi } from "./periksa-koneksi";
 export const metadata: Metadata = { title: "Pengaturan" };
 
 /**
+ * Periksa koneksi's Server Action runs under this page's segment config, and its sweep can reconcile
+ * up to 25 transactions; it stops starting new ones after `SWEEP_BUDGET_MS`, inside this limit.
+ */
+export const maxDuration = 60;
+
+/**
  * **Pengaturan** (#372) — Administrator only. Today it holds one card: the company Google Drive that
  * transaction evidence is stored in (ADR-0040).
  *
