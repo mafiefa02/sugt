@@ -17,7 +17,11 @@
         "REVALIDATE_SECRET",
         "INTERNAL_APP_URL",
         "PUBLIC_APP_URL",
-        "JADWAL_SHEET_CSV_URL"
+        "JADWAL_SHEET_CSV_URL",
+        "GOOGLE_DRIVE_CLIENT_ID",
+        "GOOGLE_DRIVE_CLIENT_SECRET",
+        "GOOGLE_DRIVE_ACCOUNT_EMAIL",
+        "DRIVE_TOKEN_KEY"
       ]
     },
     "typecheck": {
@@ -34,7 +38,11 @@
         "REVALIDATE_SECRET",
         "INTERNAL_APP_URL",
         "PUBLIC_APP_URL",
-        "JADWAL_SHEET_CSV_URL"
+        "JADWAL_SHEET_CSV_URL",
+        "GOOGLE_DRIVE_CLIENT_ID",
+        "GOOGLE_DRIVE_CLIENT_SECRET",
+        "GOOGLE_DRIVE_ACCOUNT_EMAIL",
+        "DRIVE_TOKEN_KEY"
       ]
     },
     "dev": {
@@ -52,7 +60,11 @@
         "REVALIDATE_SECRET",
         "INTERNAL_APP_URL",
         "PUBLIC_APP_URL",
-        "JADWAL_SHEET_CSV_URL"
+        "JADWAL_SHEET_CSV_URL",
+        "GOOGLE_DRIVE_CLIENT_ID",
+        "GOOGLE_DRIVE_CLIENT_SECRET",
+        "GOOGLE_DRIVE_ACCOUNT_EMAIL",
+        "DRIVE_TOKEN_KEY"
       ]
     }
   }

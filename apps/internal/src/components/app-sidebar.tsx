@@ -26,13 +26,15 @@ function AppSidebarNav({
   role,
   canEditMonitoring,
   canViewDashboard,
+  canAdminister,
 }: {
   role: Role;
   canEditMonitoring: boolean;
   canViewDashboard: boolean;
+  canAdminister: boolean;
 }) {
   const pathname = usePathname();
-  const visible = sidebarItems({ role, canEditMonitoring, canViewDashboard });
+  const visible = sidebarItems({ role, canEditMonitoring, canViewDashboard, canAdminister });
 
   return (
     <nav className="flex flex-col gap-0.5 p-3">

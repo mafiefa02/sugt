@@ -1674,6 +1674,59 @@ asking. Receipt access is therefore a signed URL minted by the internal app **af
 checked the caller is Staff. That check is the only thing standing between Teaching Team and a
 receipt, so it belongs at one choke point, not at each call site.
 
+### The company Google Drive connection
+
+Receipts are moving to the company's Google Drive
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Nothing
+uploads there yet; what exists is the connection an Administrator makes on `/pengaturan` (#372).
+
+```sql
+create table drive_connection (
+  singleton                      boolean primary key default true check (singleton),
+  account_email                  text not null,
+  refresh_token_ciphertext       text not null,
+  refresh_token_iv               text not null,
+  refresh_token_tag              text not null,
+  root_folder_id                 text,
+  staging_folder_id              text,
+  bukti_transaksi_folder_id      text,
+  pelaksanaan_offline_folder_id  text,
+  readme_file_id                 text,
+  folder_problem                 text check (folder_problem in
+                                   ('root-trashed', 'root-missing',
+                                    'staging-trashed', 'staging-missing',
+                                    'folders-unfinished')),
+  status                         text not null check (status in ('connected', 'broken')),
+  broken_at                      timestamptz,
+  last_used_at                   timestamptz,
+  connected_by_person_id         uuid not null references person (id),
+  connected_at                   timestamptz not null default now(),
+  check ((status = 'broken') = (broken_at is not null))
+);
+```
+
+**The database holds that there is one connection or none.** `singleton` is the primary key and
+CHECKed true, so a second row has nowhere to go. "Belum terhubung" is no row; there is no
+disconnect, so a row is never deleted. It also holds that `status` and `broken_at` move together.
+
+**The application holds everything about the token.** The refresh token is stored only as
+AES-256-GCM ciphertext, with its IV and tag, under `DRIVE_TOKEN_KEY`. That key is in the
+environment, never here, so the table alone yields no token. `@sugt/internal` encrypts, decrypts,
+and talks to Google. It marks the row `broken` on the first `invalid_grant`, or on a token that
+will not decrypt. It also checks that the account connected is `GOOGLE_DRIVE_ACCOUNT_EMAIL`.
+
+**Drive ids, never paths.** The five ids name the fixed tree ADR-0040 draws: the root, `_staging`
+(a sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` and the README.
+They are nullable because the row is written before the folders are ensured, in a second write,
+since no transaction is held open across a call to Google. `folder_problem` is set when a reconnect
+finds the root or `_staging` trashed or gone, or when Drive failed partway through. The root and
+`_staging` are never quietly recreated, so the token stays stored while the card does not say
+Terhubung. Uploads and the card read one rule: usable means no `folder_problem` and every id set.
+
+**Who reaches it.** The card's read and the connect writes need the Administrator Grant. The
+credential read, and the two writes a token refresh makes (`last_used_at`, broken), need Staff,
+because any Staff member uploads through the connection.
+
 ---
 
 ## Where the code lives

@@ -291,6 +291,20 @@ export {
   type SessionRecordRatings,
 } from "./session-records";
 export { assignGrant, personGrants, revokeGrant, type SetGrantResult } from "./grants";
+export type { DriveConnectionStatus, DriveFolderProblem } from "../schema/drive";
+export {
+  driveConnectionCard,
+  driveCredentials,
+  driveFolderIds,
+  markDriveConnectionBroken,
+  recordDriveFolders,
+  saveDriveConnection,
+  touchDriveConnection,
+  type DriveConnectionCard,
+  type DriveCredentials,
+  type DriveFolderIds,
+  type EncryptedRefreshToken,
+} from "./drive-connection";
 export {
   canViewDashboard,
   hasGrant,

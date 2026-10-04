@@ -15,6 +15,7 @@ function hrefsFor(role: Role, grants: Grant[]) {
     role,
     canEditMonitoring: hasGrant(person, "Editor"),
     canViewDashboard: canViewDashboard(person),
+    canAdminister: hasGrant(person, "Administrator"),
   }).map((item) => item.href);
 }
 
@@ -33,12 +34,15 @@ const FULL = [
 ];
 
 describe("sidebarItems", () => {
-  it("gives a Staff Administrator every link, Dashboard first", () => {
-    expect(hrefsFor("Staff", ["Administrator"])).toEqual(FULL);
-    expect(hrefsFor("Staff", ["Administrator", "Dashboard Viewer"])).toEqual(FULL);
+  it("gives a Staff Administrator every link, Dashboard first and Pengaturan last", () => {
+    expect(hrefsFor("Staff", ["Administrator"])).toEqual([...FULL, "/pengaturan"]);
+    expect(hrefsFor("Staff", ["Administrator", "Dashboard Viewer"])).toEqual([
+      ...FULL,
+      "/pengaturan",
+    ]);
   });
 
-  it("gives a Staff Editor every link, with or without Dashboard Viewer", () => {
+  it("gives a Staff Editor every link but Pengaturan, with or without Dashboard Viewer", () => {
     expect(hrefsFor("Staff", ["Editor"])).toEqual(FULL);
     expect(hrefsFor("Staff", ["Editor", "Dashboard Viewer"])).toEqual(FULL);
   });

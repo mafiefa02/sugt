@@ -52,6 +52,15 @@ export default defineConfig({
       AGGREGATES_SECRET: "test-aggregates-secret",
       REVALIDATE_SECRET: "test-revalidate-secret",
       PUBLIC_APP_URL: "http://localhost:3000",
+      /**
+       * The company Google Drive connection (#372). Values, not secrets: Google's token endpoint is
+       * stubbed at the network boundary and Drive itself is the in-memory `fake-drive.ts`.
+       * `DRIVE_TOKEN_KEY` is 32 bytes of zeros, base64 — real AES-256-GCM, a throwaway key.
+       */
+      GOOGLE_DRIVE_CLIENT_ID: "test-drive-client-id",
+      GOOGLE_DRIVE_CLIENT_SECRET: "test-drive-client-secret",
+      GOOGLE_DRIVE_ACCOUNT_EMAIL: "bukti@perusahaan.test",
+      DRIVE_TOKEN_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     },
   },
 });
