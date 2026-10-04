@@ -6,10 +6,9 @@ import {
   receiptMigrationState,
   type Person,
 } from "@sugt/db/queries";
-import { MAX_RECEIPT_BYTES } from "@sugt/domain";
 
 import type { ReadyFolders } from "./fixed-folders";
-import type { DriveClient } from "./google";
+import { type DriveClient, isDriveFailure, isLinkShared } from "./google";
 import {
   receiptExtension,
   SNIFF_LENGTH,
@@ -68,7 +67,7 @@ export type MigrationSkip = {
    * `unreadable`: its first bytes say JPEG, PNG or WebP, but the image will not decode — a truncated
    * upload, say. Like an unsupported type, a `--replace` file is what moves it.
    */
-  reason: "not-in-bucket" | "unsupported-type" | "unreadable" | "too-large";
+  reason: "not-in-bucket" | "unsupported-type" | "unreadable";
 };
 
 export type MigrationReport = {
@@ -78,11 +77,17 @@ export type MigrationReport = {
   skipped: MigrationSkip[];
   /** Written and moved, but the reconcile has not put them in place yet — a sweep will. */
   unsynced: { evidenceId: string; reason: Exclude<ReconcileResult, { outcome: "synced" }> }[];
+  /**
+   * Drive failed on these before their row was written — left as they were, and taken again by the
+   * next run. A database failure is not one of these: it stops the run.
+   */
+  failed: { evidenceId: string; storagePath: string }[];
 };
 
 /**
  * Prepare one legacy file for Drive: a PDF as it is; a JPEG, PNG or WebP re-encoded to JPEG; anything
- * else — HEIC, say — refused. The type is the sniff's, never the old row's.
+ * else — HEIC, say — refused. The type is the sniff's, never the old row's. There is no size cap
+ * here: the upload runs locally, so any size goes.
  */
 async function prepare(
   bytes: Uint8Array,
@@ -90,22 +95,17 @@ async function prepare(
 ): Promise<{ bytes: Uint8Array; contentType: ReceiptContentType } | MigrationSkip["reason"]> {
   const sniffed = sniffReceiptType(bytes.subarray(0, SNIFF_LENGTH));
   if (!sniffed) return "unsupported-type";
-  let prepared: { bytes: Uint8Array; contentType: ReceiptContentType };
-  if (sniffed === "application/pdf") prepared = { bytes, contentType: sniffed };
-  else {
-    // One image that will not decode is that row's problem, not a reason to stop the whole run.
-    const reencoded = await reencodeImage(bytes).catch(() => null);
-    if (!reencoded) return "unreadable";
-    prepared = { bytes: reencoded, contentType: "image/jpeg" };
-  }
-  return prepared.bytes.length > MAX_RECEIPT_BYTES ? "too-large" : prepared;
+  if (sniffed === "application/pdf") return { bytes, contentType: sniffed };
+  // One image that will not decode is that row's problem, not a reason to stop the whole run.
+  const reencoded = await reencodeImage(bytes).catch(() => null);
+  return reencoded ? { bytes: reencoded, contentType: "image/jpeg" } : "unreadable";
 }
 
 /**
  * **Migrate every legacy receipt, oldest first.** Per row:
  *
  * 1. **Download** it from the bucket — or take its `--replace` file.
- * 2. **Sniff and prepare** it (`prepare`); an unsupported or over-cap file is skipped and listed.
+ * 2. **Sniff and prepare** it (`prepare`); an unsupported or undecodable file is skipped and listed.
  * 3. **Upload** it to `_staging`, named `{uuid}.{ext}`, with `sugtPerjadinId`.
  * 4. **Append the report line, then write the row** (`moveReceiptToDrive`): `drive_file_id`, the new
  *    type and size, `storage_path` cleared, the line unsynced.
@@ -113,13 +113,14 @@ async function prepare(
  *
  * **Resumable**: only rows still holding a `storage_path` are read, so a second run skips what the
  * first finished. A crash between the upload and the write leaves only an orphan in private
- * `_staging`, which ADR-0040 accepts.
+ * `_staging`, which ADR-0040 accepts. Drive failing on one row lists it under `failed` and moves on;
+ * a database failure stops the run, since nothing after it could be trusted to land.
  */
 export async function migrateLegacyReceipts(
   deps: MigrationDeps,
   options: MigrationOptions = {},
 ): Promise<MigrationReport> {
-  const report: MigrationReport = { migrated: [], skipped: [], unsynced: [] };
+  const report: MigrationReport = { migrated: [], skipped: [], unsynced: [], failed: [] };
 
   for (const receipt of await legacyReceipts(deps.person)) {
     const skip = (reason: MigrationSkip["reason"]) =>
@@ -147,13 +148,20 @@ export async function migrateLegacyReceipts(
       continue;
     }
 
-    const file = await deps.drive.uploadFile({
-      name: `${randomUUID()}.${receiptExtension(prepared.contentType)}`,
-      parentId: deps.folders.stagingFolderId,
-      mimeType: prepared.contentType,
-      bytes: prepared.bytes,
-      appProperties: { sugtPerjadinId: receipt.perjadinId },
-    });
+    let file: { id: string };
+    try {
+      file = await deps.drive.uploadFile({
+        name: `${randomUUID()}.${receiptExtension(prepared.contentType)}`,
+        parentId: deps.folders.stagingFolderId,
+        mimeType: prepared.contentType,
+        bytes: prepared.bytes,
+        appProperties: { sugtPerjadinId: receipt.perjadinId },
+      });
+    } catch (error) {
+      if (!isDriveFailure(error)) throw error;
+      report.failed.push({ evidenceId: receipt.id, storagePath: receipt.storagePath });
+      continue;
+    }
     await deps.appendReport({
       evidenceId: receipt.id,
       storagePath: receipt.storagePath,
@@ -189,7 +197,10 @@ export type VerifyProblem =
       evidenceId: string;
     }
   | { problem: "unsynced" | "not-shared"; transactionId: string }
-  | { problem: "bucket-count-mismatch"; bucketObjects: number; reportLines: number };
+  /** Objects still in the bucket that the report does not account for — not safe to delete yet. */
+  | { problem: "unreported-objects"; storagePaths: string[] }
+  /** No report to check the bucket against: deleting the bucket needs it. */
+  | { problem: "report-missing" };
 
 /**
  * **`--verify`**: the migration is done only when all of these hold —
@@ -198,13 +209,16 @@ export type VerifyProblem =
  * - every Drive receipt exists in Drive, untrashed, inside its own line's folder, at its recorded
  *   size;
  * - every line with a Drive receipt is synced, and its folder carries the anyone/reader permission;
- * - the bucket holds exactly as many objects as the report has lines, when both are given.
+ * - every object left in the bucket is accounted for by the report — compared as sets of keys, so a
+ *   report line written twice by an interrupted run does not count twice, and an object nobody
+ *   migrated cannot hide behind an extra line. Checked when the bucket's keys are given; a missing
+ *   report is itself a failure.
  *
  * An empty list is a pass.
  */
 export async function verifyMigration(
   deps: Pick<MigrationDeps, "person" | "drive">,
-  counts: { bucketObjects?: number; reportLines?: number } = {},
+  bucket?: { keys: string[]; reportedKeys: string[] | null },
 ): Promise<VerifyProblem[]> {
   const state = await receiptMigrationState(deps.person);
   const problems: VerifyProblem[] = [];
@@ -229,22 +243,18 @@ export async function verifyMigration(
     if (!line.driveSyncedAt) problems.push({ problem: "unsynced", transactionId: line.id });
     const shared =
       line.driveFolderId !== null &&
-      (await deps.drive.listPermissions(line.driveFolderId)).some(
-        (permission) =>
-          !permission.inherited && permission.type === "anyone" && permission.role === "reader",
-      );
+      isLinkShared(await deps.drive.listPermissions(line.driveFolderId));
     if (!shared) problems.push({ problem: "not-shared", transactionId: line.id });
   }
-  if (
-    counts.bucketObjects !== undefined &&
-    counts.reportLines !== undefined &&
-    counts.bucketObjects !== counts.reportLines
-  ) {
-    problems.push({
-      problem: "bucket-count-mismatch",
-      bucketObjects: counts.bucketObjects,
-      reportLines: counts.reportLines,
-    });
+  if (bucket) {
+    if (bucket.reportedKeys === null) problems.push({ problem: "report-missing" });
+    else {
+      const reported = new Set(bucket.reportedKeys);
+      const unreported = bucket.keys.filter((key) => !reported.has(key));
+      if (unreported.length > 0) {
+        problems.push({ problem: "unreported-objects", storagePaths: unreported });
+      }
+    }
   }
   return problems;
 }

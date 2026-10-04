@@ -1,6 +1,6 @@
 import { FakeDrive } from "-/lib/drive/fake-drive";
 import type { ReadyFolders } from "-/lib/drive/fixed-folders";
-import { openDrive } from "-/lib/drive/google";
+import { DriveRequestError, openDrive } from "-/lib/drive/google";
 import {
   migrateLegacyReceipts,
   verifyMigration,
@@ -183,7 +183,7 @@ describe("migrating a legacy receipt", () => {
 
     const second = await migrateLegacyReceipts(deps(person));
 
-    expect(second).toEqual({ migrated: [], skipped: [], unsynced: [] });
+    expect(second).toEqual({ migrated: [], skipped: [], unsynced: [], failed: [] });
     expect(drive.files.size).toBe(uploadsBefore);
     expect(reportLines).toHaveLength(1);
   });
@@ -263,6 +263,12 @@ describe("migrating a legacy receipt", () => {
 });
 
 describe("--verify", () => {
+  /** The bucket as `--verify` reads it, against the report collected so far. */
+  const bucketAgainstReport = () => ({
+    keys: [...bucket.keys()],
+    reportedKeys: reportLines.map((line) => line.storagePath),
+  });
+
   it("fails while a row still holds a storage_path, and passes once all are moved", async () => {
     const { person, line } = await scene();
     await aLegacyReceipt(line.id, person.id, await phonePhoto(400, 300));
@@ -273,18 +279,23 @@ describe("--verify", () => {
 
     await migrateLegacyReceipts(deps(person));
 
-    await expect(
-      verifyMigration(deps(person), {
-        bucketObjects: bucket.size,
-        reportLines: reportLines.length,
-      }),
-    ).resolves.toEqual([]);
+    await expect(verifyMigration(deps(person), bucketAgainstReport())).resolves.toEqual([]);
   });
 
-  it("names a misplaced file, an unshared folder, and a bucket that does not match the report", async () => {
+  it("passes with a report line written twice by an interrupted run", async () => {
+    const { person, line } = await scene();
+    await aLegacyReceipt(line.id, person.id, await phonePhoto(400, 300));
+    await migrateLegacyReceipts(deps(person));
+    reportLines.push({ ...reportLines[0]!, driveFileId: "an-orphan-in-staging" });
+
+    await expect(verifyMigration(deps(person), bucketAgainstReport())).resolves.toEqual([]);
+  });
+
+  it("names a misplaced file, an unshared folder, and an object the report does not account for", async () => {
     const { person, line } = await scene();
     const legacy = await aLegacyReceipt(line.id, person.id, await phonePhoto(400, 300));
     await migrateLegacyReceipts(deps(person));
+    bucket.set("never-migrated", jpeg());
     const row = await evidenceRow(legacy.id);
     const [after] = await db
       .select()
@@ -296,12 +307,138 @@ describe("--verify", () => {
     });
     drive.files.get(after!.driveFolderId!)!.permissions.length = 0;
 
-    await expect(
-      verifyMigration(deps(person), { bucketObjects: 2, reportLines: 1 }),
-    ).resolves.toEqual([
+    await expect(verifyMigration(deps(person), bucketAgainstReport())).resolves.toEqual([
       { problem: "file-misplaced", evidenceId: legacy.id },
       { problem: "not-shared", transactionId: line.id },
-      { problem: "bucket-count-mismatch", bucketObjects: 2, reportLines: 1 },
+      { problem: "unreported-objects", storagePaths: ["never-migrated"] },
     ]);
+  });
+
+  it("names a missing, a trashed and a resized file, an unsynced line, and a missing report", async () => {
+    const { person, trip, line } = await scene();
+    const other = await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 5_000,
+      createdByPersonId: person.id,
+    });
+    const third = await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 7_000,
+      createdByPersonId: person.id,
+    });
+    const gone = await aLegacyReceipt(line.id, person.id, await phonePhoto(400, 300));
+    const trashed = await aLegacyReceipt(other.id, person.id, await phonePhoto(400, 300));
+    const resized = await aLegacyReceipt(third.id, person.id, pdf(3000));
+    await migrateLegacyReceipts(deps(person));
+    drive.remove((await evidenceRow(gone.id)).driveFileId!);
+    drive.trash((await evidenceRow(trashed.id)).driveFileId!);
+    await db
+      .update(schema.transactionEvidence)
+      .set({ byteSize: 1 })
+      .where(eq(schema.transactionEvidence.id, resized.id));
+    await db
+      .update(schema.transaction)
+      .set({ driveSyncedAt: null })
+      .where(eq(schema.transaction.id, third.id));
+
+    const problems = await verifyMigration(deps(person), { keys: [], reportedKeys: null });
+
+    expect(problems).toEqual(
+      expect.arrayContaining([
+        { problem: "file-missing", evidenceId: gone.id },
+        { problem: "file-trashed", evidenceId: trashed.id },
+        { problem: "size-mismatch", evidenceId: resized.id },
+        { problem: "unsynced", transactionId: third.id },
+        { problem: "report-missing" },
+      ]),
+    );
+  });
+});
+
+describe("the edges of a run", () => {
+  it("skips an object that is not in the bucket", async () => {
+    const { person, line } = await scene();
+    const legacy = await addTransactionEvidence({
+      transactionId: line.id,
+      uploadedByPersonId: person.id,
+    });
+
+    await expect(migrateLegacyReceipts(deps(person))).resolves.toMatchObject({
+      skipped: [{ evidenceId: legacy.id, reason: "not-in-bucket" }],
+    });
+  });
+
+  it("lists a row Drive failed on, leaves it as it was, and carries on", async () => {
+    const { person, line } = await scene();
+    const failing = await aLegacyReceipt(line.id, person.id, await phonePhoto(400, 300));
+    const fine = await aLegacyReceipt(line.id, person.id, pdf());
+    vi.spyOn(drive, "uploadFile").mockRejectedValueOnce(
+      new DriveRequestError("files.create(upload)", 503),
+    );
+
+    const report = await migrateLegacyReceipts(deps(person));
+
+    expect(report.failed).toEqual([{ evidenceId: failing.id, storagePath: failing.storagePath }]);
+    expect(report.migrated).toMatchObject([{ evidenceId: fine.id }]);
+    expect((await evidenceRow(failing.id)).storagePath).toBe(failing.storagePath);
+    expect(reportLines.map((line) => line.evidenceId)).toEqual([fine.id]);
+  });
+
+  it("applies a photo's EXIF orientation as it re-encodes", async () => {
+    const sideways = new Uint8Array(
+      await sharp({ create: { width: 400, height: 300, channels: 3, background: "#808080" } })
+        .jpeg()
+        .withMetadata({ orientation: 6 })
+        .toBuffer(),
+    );
+
+    const upright = await sharp(await reencodeImage(sideways)).metadata();
+
+    expect([upright.width, upright.height, upright.orientation]).toEqual([300, 400, undefined]);
+  });
+});
+
+describe("the real Drive upload", () => {
+  it("sends multipart/related: the JSON metadata, then the bytes, between the boundaries", async () => {
+    const { openDrive: realOpenDrive } =
+      await vi.importActual<typeof import("-/lib/drive/google")>("-/lib/drive/google");
+    let sent: { url: string; contentType: string; body: Uint8Array } | null = null;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      sent = {
+        url: String(input),
+        contentType: new Headers(init?.headers).get("content-type")!,
+        body: new Uint8Array(await new Response(init?.body).arrayBuffer()),
+      };
+      return Response.json({ id: "drive-id" });
+    });
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0xff, 0x00, 0x0d, 0x0a]);
+
+    const file = await realOpenDrive("token").uploadFile({
+      name: "a.pdf",
+      parentId: "staging",
+      mimeType: "application/pdf",
+      bytes,
+      appProperties: { sugtPerjadinId: "p1" },
+    });
+
+    expect(file).toEqual({ id: "drive-id" });
+    const { url, contentType, body } = sent!;
+    expect(url).toBe(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+    );
+    const boundary = /boundary=(.+)$/.exec(contentType)![1]!;
+    const text = Buffer.from(body).toString("latin1");
+    const parts = text.split(`--${boundary}`);
+    expect(parts[0]).toBe("");
+    expect(parts.at(-1)).toBe("--");
+    expect(JSON.parse(parts[1]!.split("\r\n\r\n")[1]!)).toEqual({
+      name: "a.pdf",
+      mimeType: "application/pdf",
+      parents: ["staging"],
+      appProperties: { sugtPerjadinId: "p1" },
+    });
+    // The bytes themselves may hold a CRLF, so cut at the first blank line only.
+    const binary = parts[2]!.slice(parts[2]!.indexOf("\r\n\r\n") + 4, -2);
+    expect(Buffer.from(binary, "latin1")).toEqual(Buffer.from(bytes));
   });
 });

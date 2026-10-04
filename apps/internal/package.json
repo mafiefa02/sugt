@@ -10,7 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "drive:migrate-receipts": "tsx --env-file-if-exists=.env scripts/drive-migrate-receipts.ts"
+    "drive:migrate-receipts": "tsx scripts/drive-migrate-receipts.ts"
   },
   "dependencies": {
     "@milkdown/kit": "catalog:",

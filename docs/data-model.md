@@ -1686,14 +1686,17 @@ is the whole difference from a receipt.
 ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Catat
 transaksi and a line's own "Unggah bukti" both upload to Drive, and nothing writes to the
 `receipts` bucket any more. It holds legacy receipts alone, until they are migrated and the bucket
-is deleted (#377, #379).
+is deleted (#377, #379). The Drive side is the connection below and the `drive_*` columns in
+[Money](#money).
 
-**Migrating the legacy receipts** is a local, resumable script:
+**Migrating the legacy receipts** is a local, resumable script,
 `pnpm --filter @sugt/internal drive:migrate-receipts --as <administrator email>`
-(`apps/internal/scripts/drive-migrate-receipts.ts`). Run `--dry-run` first. Then run it for real;
-it writes `receipt-migration-report.csv`, the old key beside each new Drive id. Then run `--verify`.
-`--replace <evidenceId>=<file>` supplies a converted file for one the script could not take. The Drive side is the connection below and
-the `drive_*` columns in [Money](#money).
+(`apps/internal/scripts/drive-migrate-receipts.ts`). It reads only the shell's environment, so
+export the target's variables first. It opens by printing which database and Supabase project it is
+pointed at. Run `--dry-run` first, which writes nothing anywhere. Then run it for real; it appends
+to a report named for the database host, the old key beside each new Drive id. Then run `--verify`,
+which checks every object left in the bucket against that report before the bucket may be deleted.
+`--replace <evidenceId>=<file>` supplies a converted file for one the script could not take.
 
 Two buckets, and the split is doing real work:
 

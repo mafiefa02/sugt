@@ -1,4 +1,4 @@
-import { and, asc, count, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { db } from "../client";
 import { transaction, transactionEvidence } from "../schema/travel";
@@ -13,6 +13,9 @@ import { requireGrant } from "./staff-only";
  * A legacy receipt is an evidence row with `storage_path` set and no `drive_file_id`: an object in
  * the private Supabase `receipts` bucket. Migrating one swaps the first for the second in a single
  * update, which the exactly-one CHECK holds either side of.
+ *
+ * **These serve a script, not a screen** — the one bend in this layer's third convention, and the
+ * module goes when the migration is done and #379 drops `storage_path`.
  */
 
 /** One receipt still in the Supabase bucket, as the script fetches and moves it. */
@@ -92,6 +95,11 @@ export type ReceiptMigrationState = {
   driveTransactions: { id: string; driveFolderId: string | null; driveSyncedAt: Date | null }[];
 };
 
+/**
+ * The state `--verify` checks: how many legacy rows remain, every Drive receipt with its line's
+ * folder, and every line that holds one. One read of each, for the whole database — a one-off check
+ * run by hand, on a few hundred receipts.
+ */
 export async function receiptMigrationState(caller: Person): Promise<ReceiptMigrationState> {
   requireGrant(caller, "Administrator");
 
@@ -112,7 +120,7 @@ export async function receiptMigrationState(caller: Person): Promise<ReceiptMigr
       .from(transactionEvidence)
       .innerJoin(transaction, eq(transaction.id, transactionEvidence.transactionId))
       .where(isNotNull(transactionEvidence.driveFileId))
-      .orderBy(asc(transactionEvidence.uploadedAt), sql`${transactionEvidence.id}`),
+      .orderBy(asc(transactionEvidence.uploadedAt), asc(transactionEvidence.id)),
   ]);
 
   const driveTransactions = new Map<string, ReceiptMigrationState["driveTransactions"][number]>();

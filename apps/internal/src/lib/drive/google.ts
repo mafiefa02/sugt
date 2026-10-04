@@ -274,6 +274,18 @@ async function readJson<T>(operation: string, response: Response): Promise<T> {
   }
 }
 
+/**
+ * Is a folder shared "anyone with the link can view" **on itself** — the one share the app makes on a
+ * transaction folder (ADR-0040)? An inherited one does not count: it is not the app's, and the
+ * folder above can stop sharing at any time.
+ */
+export function isLinkShared(permissions: DrivePermission[]): boolean {
+  return permissions.some(
+    (permission) =>
+      !permission.inherited && permission.type === "anyone" && permission.role === "reader",
+  );
+}
+
 /** `fetch`, with a request that got no answer turned into a `DriveRequestError` of status 0. */
 async function send(operation: string, url: string, init?: RequestInit): Promise<Response> {
   try {
@@ -298,7 +310,7 @@ export function openDrive(accessToken: string): DriveClient {
     return response;
   }
 
-  return {
+  const client: DriveClient = {
     async createFolder({ name, parentId, appProperties }) {
       const response = await call("files.create", `${DRIVE_API}/files?fields=id`, {
         method: "POST",
@@ -314,21 +326,8 @@ export function openDrive(accessToken: string): DriveClient {
     },
 
     async createFile({ name, parentId, mimeType, content }) {
-      const boundary = `sugt-${crypto.randomUUID()}`;
-      const body =
-        `--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n` +
-        `${JSON.stringify({ name, mimeType, parents: [parentId] })}\r\n` +
-        `--${boundary}\r\ncontent-type: ${mimeType}\r\n\r\n${content}\r\n--${boundary}--`;
-      const response = await call(
-        "files.create",
-        `${DRIVE_UPLOAD_API}/files?uploadType=multipart&fields=id`,
-        {
-          method: "POST",
-          headers: { "content-type": `multipart/related; boundary=${boundary}` },
-          body,
-        },
-      );
-      return readJson<{ id: string }>("files.create", response);
+      const bytes = new TextEncoder().encode(content);
+      return client.uploadFile({ name, parentId, mimeType, bytes });
     },
 
     async uploadFile({ name, parentId, mimeType, bytes, appProperties }) {
@@ -342,7 +341,8 @@ export function openDrive(accessToken: string): DriveClient {
       const body = new Blob([
         `--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`,
         `--${boundary}\r\ncontent-type: ${mimeType}\r\n\r\n`,
-        bytes as Uint8Array<ArrayBuffer>,
+        // A copy: `Blob` takes no view over a `SharedArrayBuffer`, and this one is never that.
+        bytes.slice(),
         `\r\n--${boundary}--`,
       ]);
       const response = await call(
@@ -473,4 +473,5 @@ export function openDrive(accessToken: string): DriveClient {
       return { sessionUri };
     },
   };
+  return client;
 }
