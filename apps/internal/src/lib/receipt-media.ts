@@ -1,22 +1,19 @@
-import { randomUUID } from "node:crypto";
-
 import { requireEnv } from "-/lib/env";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * **Receipts in Supabase Storage — the server half of the upload, and the whole of the read.**
+ * **Legacy receipts in Supabase Storage — the read, and nothing else.**
  *
- * The same pattern as `story-media.ts`, against the **private** `receipts` bucket instead of
- * the public one. The bytes never pass through this app: the browser PUTs a photographed
- * receipt straight to Storage through a signed upload URL minted here with the service-role
- * key, so a phone photograph is not bound by Vercel's 4.5 MB function limit.
+ * **Every upload goes to the company Google Drive since ADR-0040** (`lib/drive/`): Catat transaksi
+ * since #373, a row's own Unggah bukti since #374, and nothing writes to the `receipts` bucket any
+ * more. What is left here is the signed link for a receipt recorded before Drive, until those are
+ * migrated and this file goes (#377, #379).
  *
- * **The private bucket is what makes this file different from its sibling.** A Story
- * photograph is published, so its URL is public and permanent. A receipt is Staff-only
- * (ADR-0004), and sign-in is Better Auth, so there is no `auth.uid()` and no storage RLS to
- * express that — see `docs/adr/0011-supabase-and-better-auth.md`. Reading a receipt therefore
- * goes through `signedReceiptUrl` below, and the check that the caller is Staff happens
- * before it at one choke point in the query layer, exactly as `data-model.md` requires.
+ * **The private bucket is what makes this file different from `story-media.ts`.** A Story
+ * photograph is published, so its URL is public and permanent. A legacy receipt sits in a private
+ * bucket, and sign-in is Better Auth, so there is no `auth.uid()` and no storage RLS — see
+ * `docs/adr/0011-supabase-and-better-auth.md`. Reading one therefore goes through
+ * `signedReceiptUrl` below, minted on the acquittal page, an open money read (ADR-0026).
  */
 
 const BUCKET = "receipts";
@@ -36,69 +33,6 @@ function storage() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return client.storage.from(BUCKET);
-}
-
-/**
- * **The object key is opaque, and that is the decision this module turns on.**
- *
- * A signed URL carries its object path inside the JWT it is signed with, so anything the key
- * spells out travels with every link the acquittal screen renders. A structured key —
- * `perjadin/{perjadin_id}/{transaction_id}/{uuid}` — would put the trip's identifiers into a
- * string that outlives the page. A bare UUID names nothing: not the Perjadin, not the line
- * item, not who uploaded it.
- *
- * **What that costs, and why it costs nothing here.** `story-media.ts`'s sibling check is a
- * key prefix: a Story photograph is trusted only under `story/{storyId}/`, which stops one
- * Story's photograph being attached to another, and stops any other object in the shared
- * `public-media` bucket being attached at all. An opaque key has no prefix to check. It gives
- * up nothing, because the two things that check defends are already closed here:
- *
- * - `receipts` holds receipts and nothing else, and every one of them is readable by every
- *   Staff member already, so there is no object in this bucket a Staff caller could reach by
- *   forging a key that they could not reach by asking for it honestly.
- * - `transaction_evidence.storage_path` is `unique`, so an object already attached cannot be
- *   attached a second time.
- *
- * What remains is a Staff member attaching their own freshly minted key to a line item other
- * than the one they minted it against — which they could equally do by minting against that
- * line item in the first place. The line item is still checked against its Perjadin in
- * `attachTransactionEvidence`, so the Perjadin boundary holds regardless of the key.
- */
-function opaqueKey(): string {
-  return randomUUID();
-}
-
-/** A minted upload target. `signedUrl` is absolute and carries its own token — the browser PUTs the file bytes straight to it, no credential of its own. */
-export type ReceiptUploadTarget = {
-  /** The opaque object key, kept so the finalize step can read the file back and store it in the row. */
-  path: string;
-  /** The absolute URL the browser PUTs to. Valid for two hours (the server's fixed window). */
-  signedUrl: string;
-};
-
-/** Mint one signed upload URL. `upsert` stays false, so a leaked token can write the object once and no more. */
-export async function mintReceiptUpload(): Promise<ReceiptUploadTarget> {
-  const path = opaqueKey();
-  const { data, error } = await storage().createSignedUploadUrl(path);
-  if (error) throw error;
-  return { path, signedUrl: data.signedUrl };
-}
-
-/** What Storage recorded about a file it accepted — read back rather than trusted from the browser. */
-export type ReceiptObjectFacts = { contentType: string; byteSize: number };
-
-/**
- * Read a landed receipt's real content type and size from Storage. Under the signed-URL
- * pattern the server never sees the bytes, so this read-back is the only defensible source
- * for the two columns `transaction_evidence` stores — not what the browser claimed. Returns
- * `null` if the object is not there, which is how a PUT that never landed is told apart from
- * one that did.
- */
-export async function readReceiptFacts(path: string): Promise<ReceiptObjectFacts | null> {
-  const { data, error } = await storage().info(path);
-  if (error) return null;
-  if (typeof data.size !== "number" || typeof data.contentType !== "string") return null;
-  return { contentType: data.contentType, byteSize: data.size };
 }
 
 /**

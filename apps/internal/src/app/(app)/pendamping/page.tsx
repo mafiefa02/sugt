@@ -1,4 +1,5 @@
 import { DashboardStaff } from "-/components/dashboard-staff";
+import { receiptUploadGate } from "-/lib/drive/upload-gate";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import { myUpcomingPerjadin, staffDashboard } from "@sugt/db/queries";
@@ -31,9 +32,11 @@ export default async function Page() {
   // Two independent reads, in parallel. `myUpcomingPerjadin` is scoped *by* the caller, not gated by
   // role, and carries no money that needs the choke point (ADR-0026) — so it is read directly rather
   // than behind `staffSurface`, unlike the dashboard aggregate.
-  const [dashboard, upcoming] = await Promise.all([
+  const [dashboard, upcoming, uploadGate] = await Promise.all([
     staffSurface(() => staffDashboard(person)),
     myUpcomingPerjadin(person),
+    // Each trip card's Catat Transaksi is closed, with the reason, while Drive is (ADR-0040).
+    receiptUploadGate(person),
   ]);
   // `en-CA` formats as `YYYY-MM-DD`; `Asia/Jakarta` pins it to WIB. Read here, on the server, and
   // passed down so the trip timeline's done legs never depend on a clock read during client render
@@ -44,6 +47,7 @@ export default async function Page() {
       dashboard={dashboard}
       upcoming={upcoming}
       today={today}
+      uploadGate={uploadGate}
     />
   );
 }

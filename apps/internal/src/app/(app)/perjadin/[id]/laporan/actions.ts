@@ -1,25 +1,47 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+
+import { driveAccessToken } from "-/lib/drive/access-token";
+import type { ReadyFolders } from "-/lib/drive/fixed-folders";
+import { type DriveClient, isDriveFailure, openDrive } from "-/lib/drive/google";
+import {
+  evidenceFileName,
+  isReceiptContentType,
+  receiptExtension,
+  SNIFF_LENGTH,
+  sniffReceiptType,
+  transactionFolderName,
+  type ReceiptContentType,
+} from "-/lib/drive/receipt-files";
+import { reconcileTransaction } from "-/lib/drive/reconcile";
+import { receiptUploadGate } from "-/lib/drive/upload-gate";
+import { DRIVE_FOLDERS_UNRESOLVED, DRIVE_NOT_CONNECTED } from "-/lib/drive/upload-messages";
+import { requireEnv } from "-/lib/env";
 import { requirePerson, type Person } from "-/lib/person";
-import { mintReceiptUpload, readReceiptFacts, type ReceiptUploadTarget } from "-/lib/receipt-media";
 import { staffSurface } from "-/lib/staff-surface";
 import {
   attachTransactionEvidence,
   filePerjadinReport,
   perjadinAcquittal,
+  receiptsOnLine,
   recordTransaction,
   requireStaff,
   type FilePerjadinReportResult,
   type NewEvidence,
 } from "@sugt/db/queries";
-import { MAX_RECEIPTS_PER_TRANSACTION } from "@sugt/domain";
+import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_TRANSACTION } from "@sugt/domain";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 import type {
+  DriveRefusal,
   FinalizeReceiptsResult,
-  ReceiptToFinalize,
+  OpenReceiptSessionsResult,
+  ReceiptToOpen,
   RecordTransactionActionResult,
   TransactionToRecord,
+  UploadedReceipt,
 } from "./action-types";
 
 /**
@@ -31,9 +53,9 @@ import type {
  *
  * None opens a transaction. The boundary is the query layer's fifth convention and lives in
  * `@sugt/db`; `requireStaff` inside each query is what closes the path, since a layout does not run
- * before a Server Action. The three that touch Storage — minting, and the two that read receipts
- * back — also call it themselves, first, through `staffOnTrip`, because Storage is reached before
- * any query runs. Every refusal comes back as a value.
+ * before a Server Action. Every one that touches Drive — opening upload sessions, recording a line,
+ * attaching receipts to one — also calls it itself, first, through `staffOnTrip`, because Google is
+ * reached before any query runs. Every refusal comes back as a value.
  */
 
 /**
@@ -55,39 +77,177 @@ async function staffOnTrip(person: Person, perjadinId: string): Promise<boolean>
 }
 
 /**
- * Read each landed receipt's real content type and size back from Storage — the server never saw
- * the bytes — so the evidence row holds what Storage recorded, not what the browser claimed. One
- * whose read-back fails is a PUT that never landed: it is counted in `failed`, never written with
- * guessed columns. What a miss means is the caller's to decide. Run only after `staffOnTrip`.
+ * Why `driveAccessToken` said no, as the action answers it: with the gate's own sentence for the two
+ * states the page also closes on, so the dialog says exactly what a fresh page would have.
  */
-async function readBack(
-  receipts: ReceiptToFinalize[],
-): Promise<{ ready: NewEvidence[]; failed: number }> {
-  const facts = await Promise.all(
-    receipts.map(async (item): Promise<NewEvidence | null> => {
-      const read = await readReceiptFacts(item.path);
-      if (!read) return null;
-      return { storagePath: item.path, contentType: read.contentType, byteSize: read.byteSize };
-    }),
-  );
-  const ready = facts.filter((file): file is NewEvidence => file !== null);
-  return { ready, failed: receipts.length - ready.length };
+async function driveRefusal(
+  person: Person,
+  outcome: Exclude<Awaited<ReturnType<typeof driveAccessToken>>["outcome"], "ok">,
+): Promise<DriveRefusal> {
+  if (outcome === "drive-unreachable") return { outcome };
+  const gate = await receiptUploadGate(person);
+  const fallback =
+    outcome === "drive-disconnected" ? DRIVE_NOT_CONNECTED : DRIVE_FOLDERS_UNRESOLVED;
+  return { outcome, reason: gate.open ? fallback : gate.reason };
 }
 
 /**
- * Record one line item against the Advance, **with the receipts the dialog has already uploaded**
- * (ADR-0039).
+ * Open a Drive resumable upload session per file a receipt control is about to send (ADR-0040) —
+ * the Catat transaksi dialog, or with `transactionId` a row's own Unggah bukti. The browser `PUT`s
+ * each file's bytes straight to its session, so no receipt passes through Vercel and its 4.5 MB
+ * request limit never applies.
  *
- * The browser PUTs every staged file first and calls this only once all of them landed. Each is
- * then read back from Storage — the server never saw the bytes — and if **any** read-back fails,
- * nothing is recorded: a line is written with all its evidence or not at all, so a partial success
- * is refused rather than recorded short. The objects that did land stay in the bucket unreferenced,
- * the way ADR-0018 already leaves orphans; the keys are opaque and the bucket private.
+ * **Every check runs before Google is asked anything**: Staff and the Perjadin (`staffOnTrip`), the
+ * count — for a row, that the line is on this Perjadin and has a slot for each file — each file's
+ * type and size, and only then the connection. No more sessions open than the line has slots.
  *
- * **The Staff check and the Perjadin read run before Storage is touched** (`staffOnTrip`). A batch
- * over `MAX_RECEIPTS_PER_TRANSACTION` is refused before the read-back too, so a caller cannot make
- * this read back an unbounded list; `recordTransaction` refuses the count again, and that is the
- * rule's real home — this early return only saves the Storage calls.
+ * Each session opens in `_staging`, named `{uuid}.{ext}`, carrying `sugtPerjadinId`, declaring the
+ * file's exact size — Drive refuses a longer body — and the uploading page's `Origin`, without which
+ * the browser cannot read the file id back (#370). The origin is the request's own, since every
+ * preview has its own URL.
+ */
+export async function openReceiptSessionsAction(
+  perjadinId: string,
+  files: ReceiptToOpen[],
+  transactionId?: string,
+): Promise<OpenReceiptSessionsResult> {
+  const person = await requirePerson();
+
+  if (!(await staffOnTrip(person, perjadinId))) return { outcome: "no-such-perjadin" };
+  if (files.length === 0) return { outcome: "evidence-missing" };
+  const existing =
+    transactionId === undefined ? 0 : await receiptsOnLine(person, perjadinId, transactionId);
+  if (existing === null) return { outcome: "no-such-transaction" };
+  if (existing + files.length > MAX_RECEIPTS_PER_TRANSACTION) {
+    return {
+      outcome: "too-many-receipts",
+      limit: MAX_RECEIPTS_PER_TRANSACTION,
+      count: existing + files.length,
+    };
+  }
+  const typed = files.flatMap((file) =>
+    isReceiptContentType(file.contentType) ? [{ ...file, contentType: file.contentType }] : [],
+  );
+  if (typed.length !== files.length) return { outcome: "unsupported-type" };
+  if (files.some((file) => !(file.size > 0) || file.size > MAX_RECEIPT_BYTES)) {
+    return { outcome: "too-large", limit: MAX_RECEIPT_BYTES };
+  }
+
+  const access = await driveAccessToken(person);
+  if (access.outcome !== "ok") return driveRefusal(person, access.outcome);
+
+  const origin = (await headers()).get("origin") ?? requireEnv("BETTER_AUTH_URL");
+  const drive = openDrive(access.accessToken);
+  try {
+    const sessions = await Promise.all(
+      typed.map((file) => {
+        return drive.openResumableSession({
+          name: `${randomUUID()}.${receiptExtension(file.contentType)}`,
+          parentId: access.folders.stagingFolderId,
+          mimeType: file.contentType,
+          size: file.size,
+          origin,
+          appProperties: { sugtPerjadinId: perjadinId },
+        });
+      }),
+    );
+    return { outcome: "ready", sessionUris: sessions.map((session) => session.sessionUri) };
+  } catch (error) {
+    if (isDriveFailure(error)) return { outcome: "drive-unreachable" };
+    throw error;
+  }
+}
+
+/** A receipt the server has checked in Drive, with what it really is. */
+type VerifiedReceipt = { driveFileId: string; contentType: ReceiptContentType; byteSize: number };
+
+/**
+ * Check one uploaded file in Drive before it is recorded — the server never saw the bytes, and the
+ * browser never had to tell the truth. It must sit in `_staging`, untrashed, carry this Perjadin's
+ * `sugtPerjadinId`, and be no larger than the cap; then its first bytes must be a PDF or one of the
+ * three images. The type is the sniff's and the size is Drive's.
+ */
+async function verifyReceipt(
+  drive: DriveClient,
+  stagingFolderId: string,
+  perjadinId: string,
+  driveFileId: string,
+): Promise<VerifiedReceipt | "unverified" | "unsupported-type"> {
+  const file = await drive.getFile(driveFileId);
+  if (
+    !file ||
+    file.trashed ||
+    !file.parents.includes(stagingFolderId) ||
+    file.appProperties.sugtPerjadinId !== perjadinId ||
+    file.size === null ||
+    file.size === 0 ||
+    file.size > MAX_RECEIPT_BYTES
+  ) {
+    return "unverified";
+  }
+  const contentType = sniffReceiptType(await drive.readRange(driveFileId, 0, SNIFF_LENGTH - 1));
+  if (!contentType) return "unsupported-type";
+  return { driveFileId, contentType, byteSize: file.size };
+}
+
+/**
+ * Check a batch (`verifyReceipt` each). A file named twice counts once as verified and again as
+ * unverified, so a batch can never attach one file twice. What a miss means is the caller's to
+ * decide: a new line refuses on any, a row keeps what checked out.
+ */
+async function verifyBatch(
+  drive: DriveClient,
+  stagingFolderId: string,
+  perjadinId: string,
+  receipts: UploadedReceipt[],
+): Promise<{ verified: VerifiedReceipt[]; unverified: number; unsupported: number }> {
+  const ids = [...new Set(receipts.map((receipt) => receipt.driveFileId))];
+  const checks = await Promise.all(
+    ids.map((id) => verifyReceipt(drive, stagingFolderId, perjadinId, id)),
+  );
+  return {
+    verified: checks.filter((check): check is VerifiedReceipt => typeof check === "object"),
+    unverified:
+      checks.filter((check) => check === "unverified").length + receipts.length - ids.length,
+    unsupported: checks.filter((check) => check === "unsupported-type").length,
+  };
+}
+
+/**
+ * Reconcile a line whose rows are already written, and answer whether it synced. **Never throws**:
+ * after the commit, a Drive failure the reconcile answers and a throw it does not are both "not yet
+ * synced" — an error here would invite a retry that writes the receipts twice.
+ */
+async function reconcileAfterCommit(
+  person: Person,
+  drive: DriveClient,
+  folders: ReadyFolders,
+  transactionId: string,
+): Promise<boolean> {
+  return reconcileTransaction(person, drive, folders, transactionId).then(
+    (reconciled) => reconciled.outcome === "synced",
+    (error: unknown) => {
+      console.error(`Reconcile of transaction ${transactionId} threw after its commit.`, error);
+      return false;
+    },
+  );
+}
+
+/**
+ * Record one line item against the Advance, **with the receipts the dialog has already uploaded to
+ * Drive** (ADR-0039, ADR-0040). The write order is the ADR's:
+ *
+ * 1. **Check** — Staff, the Perjadin, the count, the amount, the connection — before any Drive call.
+ *    The transaction's and each receipt's uuid are generated now, because the names need them.
+ * 2. **Verify** each file (`verifyReceipt`). Any failure refuses the whole record.
+ * 3. **Build** the transaction folder privately **inside `_staging`**, and rename and move each
+ *    receipt into it.
+ * 4. **Commit** the line, its evidence rows and its folder id in one write (`recordTransaction`).
+ * 5. **Reconcile** — move the folder into the Perjadin's, share it, mark it synced. If that fails the
+ *    line still stands: `synced: false`, never an error.
+ *
+ * A refusal before the commit leaves what it made in private `_staging`, unreferenced. ADR-0040
+ * accepts that rather than build a cleanup, as ADR-0039 accepted orphans in the private bucket.
  */
 export async function recordTransactionAction(
   input: TransactionToRecord,
@@ -97,6 +257,7 @@ export async function recordTransactionAction(
   if (!(await staffOnTrip(person, input.perjadinId))) return { outcome: "no-such-perjadin" };
 
   const { receipts, ...line } = input;
+  if (receipts.length === 0) return { outcome: "evidence-missing" };
   if (receipts.length > MAX_RECEIPTS_PER_TRANSACTION) {
     return {
       outcome: "too-many-receipts",
@@ -104,84 +265,127 @@ export async function recordTransactionAction(
       count: receipts.length,
     };
   }
+  // Refused here as well as in `recordTransaction`, so a zero amount never leaves a folder behind.
+  if (!(line.amountIdr > 0)) return { outcome: "amount-not-positive" };
 
-  const { ready, failed } = await readBack(receipts);
-  if (failed > 0) return { outcome: "receipts-not-landed", failed };
+  const access = await driveAccessToken(person);
+  if (access.outcome !== "ok") return driveRefusal(person, access.outcome);
+  const drive = openDrive(access.accessToken);
+  const staging = access.folders.stagingFolderId;
 
-  const result = await staffSurface(() => recordTransaction(person, { ...line, evidence: ready }));
-  if (result.outcome === "recorded") revalidatePath(`/perjadin/${input.perjadinId}/laporan`);
-  return result;
-}
+  const transactionId = randomUUID();
+  let evidence: (NewEvidence & VerifiedReceipt & { id: string })[];
+  let driveFolderId: string;
+  try {
+    const checked = await verifyBatch(drive, staging, input.perjadinId, receipts);
+    if (checked.unverified > 0)
+      return { outcome: "receipt-unverified", failed: checked.unverified };
+    if (checked.unsupported > 0) return { outcome: "unsupported-type" };
+    evidence = checked.verified.map((receipt) => ({ ...receipt, id: randomUUID() }));
 
-/**
- * Mint upload URLs for `count` receipts — never more than one line may carry
- * (`MAX_RECEIPTS_PER_TRANSACTION`), whichever path is asking.
- *
- * **Gated on Staff and on the Perjadin existing** (`staffOnTrip`), both before any URL is minted:
- * an upload URL is a write credential, so it is not handed out against a trip nobody can file for or
- * that is not there. Minting is a money WRITE with no query of its own to hold the guard, which is
- * why the explicit check has been load-bearing here since #180.
- */
-export async function mintReceiptUploadsAction(
-  perjadinId: string,
-  count: number,
-): Promise<ReceiptUploadTarget[]> {
-  const person = await requirePerson();
-
-  if (!(await staffOnTrip(person, perjadinId))) {
-    throw new Error(`No Perjadin ${perjadinId} to attach receipts to.`);
+    const folderName = transactionFolderName(line.spentOn, line.category, transactionId);
+    driveFolderId = (
+      await drive.createFolder({
+        name: folderName,
+        parentId: staging,
+        appProperties: { sugtPerjadinId: input.perjadinId, sugtTransactionId: transactionId },
+      })
+    ).id;
+    await Promise.all(
+      evidence.map((receipt) =>
+        drive.updateFile(receipt.driveFileId, {
+          name: evidenceFileName(
+            line.spentOn,
+            line.category,
+            transactionId,
+            receipt.id,
+            receipt.contentType,
+          ),
+          addParent: driveFolderId,
+          removeParent: staging,
+          appProperties: { sugtTransactionId: transactionId },
+        }),
+      ),
+    );
+  } catch (error) {
+    if (isDriveFailure(error)) return { outcome: "drive-unreachable" };
+    throw error;
   }
 
-  const wanted = Math.min(Math.max(0, Math.trunc(count)), MAX_RECEIPTS_PER_TRANSACTION);
-  return Promise.all(Array.from({ length: wanted }, () => mintReceiptUpload()));
+  const result = await staffSurface(() =>
+    recordTransaction(person, { ...line, transactionId, driveFolderId, evidence }),
+  );
+  if (result.outcome !== "recorded") return result;
+
+  const synced = await reconcileAfterCommit(person, drive, access.folders, transactionId);
+  revalidatePath(`/perjadin/${input.perjadinId}/laporan`);
+  return { outcome: "recorded", transactionId, synced };
 }
 
 /**
- * Record the receipts whose bytes have landed, against a line that already exists — its row's own
- * "Unggah bukti".
+ * Record receipts the browser has uploaded to Drive against a line that already exists — its row's
+ * own **Unggah bukti** (ADR-0040, #374). The write order is the reverse of Catat transaksi's:
  *
- * Each is read back from Storage (`readBack`), after the Staff check (`staffOnTrip`) — without that
- * order, a caller whose every read-back failed would return normally with no Staff check having run
- * at all. A receipt whose read-back fails is dropped and counted. Partial success is a real state
- * here and is reported rather than swallowed: the line already stands, so a receipt that did land is
- * worth keeping. (Recording a new line is the opposite — `recordTransactionAction` refuses on any
- * miss.) A batch larger than one line may carry is refused before the read-back, so the Storage calls
- * stay bounded; `attachTransactionEvidence` holds the real count, against what the line has already.
+ * 1. **Check** — Staff and the Perjadin (`staffOnTrip`), that the line is on it, that it has a slot
+ *    for each file, and the connection — before any Drive call.
+ * 2. **Verify** each file (`verifyBatch`). One that fails is counted and dropped; the rest go on —
+ *    the line already stands, so a receipt that checks out is worth keeping.
+ * 3. **Commit first**: `attachTransactionEvidence` locks the line `for update`, counts again, writes
+ *    the rows and marks the line unsynced, in one transaction.
+ * 4. **Then reconcile**: create the line's folders if it has none, move and name the new files out
+ *    of `_staging`, share the folder if it is not yet, mark it synced.
  *
- * The key is opaque, so unlike Cerita there is no prefix to check; `receipt-media.ts` explains why
- * that gives nothing up here. What is checked instead is the pair the boundary actually rests on —
- * the line item belongs to this Perjadin — and `attachTransactionEvidence` does it inside its own
- * transaction.
+ * **Why the database goes first here.** The line's folder is usually **already public**. A file
+ * moved in before the count was settled could become a sixth receipt anyone can open that no row
+ * records. So the count and the rows come first, under the lock, and the files move after. If the
+ * reconcile fails, the receipts **are** recorded and wait in private `_staging` for the next one.
  */
 export async function finalizeReceiptsAction(
   perjadinId: string,
   transactionId: string,
-  landed: ReceiptToFinalize[],
+  landed: UploadedReceipt[],
 ): Promise<FinalizeReceiptsResult> {
   const person = await requirePerson();
 
   if (!(await staffOnTrip(person, perjadinId))) return { outcome: "no-such-perjadin" };
-  if (landed.length > MAX_RECEIPTS_PER_TRANSACTION) {
+  const existing = await receiptsOnLine(person, perjadinId, transactionId);
+  if (existing === null) return { outcome: "no-such-transaction" };
+  if (existing + landed.length > MAX_RECEIPTS_PER_TRANSACTION) {
     return { outcome: "too-many-receipts", limit: MAX_RECEIPTS_PER_TRANSACTION };
   }
+  if (landed.length === 0) return { outcome: "attached", attached: 0, failed: 0, synced: true };
 
-  const { ready, failed } = await readBack(landed);
+  const access = await driveAccessToken(person);
+  if (access.outcome !== "ok") return driveRefusal(person, access.outcome);
+  const drive = openDrive(access.accessToken);
 
-  if (ready.length === 0) return { outcome: "attached", attached: 0, failed };
+  let checked;
+  try {
+    checked = await verifyBatch(drive, access.folders.stagingFolderId, perjadinId, landed);
+  } catch (error) {
+    if (isDriveFailure(error)) return { outcome: "drive-unreachable" };
+    throw error;
+  }
+  const failed = checked.unverified + checked.unsupported;
+  if (checked.verified.length === 0)
+    return { outcome: "attached", attached: 0, failed, synced: true };
 
   // The write's own refusals are returned rather than discarded. `no-such-transaction` is a stale
-  // screen and `too-many-receipts` a line that would pass five; both are reachable, and swallowing
-  // either would tell the PIC that receipts attached when none did — the worst answer available on
-  // a screen whose point is that evidence is attached to the line it belongs to.
+  // screen and `too-many-receipts` a line that would pass five — a second tab got there first under
+  // the lock; both are reachable, and swallowing either would tell the PIC that receipts attached
+  // when none did.
+  const evidence = checked.verified.map((receipt) => ({ ...receipt, id: randomUUID() }));
   const result = await staffSurface(() =>
-    attachTransactionEvidence(person, perjadinId, transactionId, ready),
+    attachTransactionEvidence(person, perjadinId, transactionId, evidence),
   );
   if (result.outcome === "no-such-transaction") return result;
-  if (result.outcome === "too-many-receipts")
+  if (result.outcome === "too-many-receipts") {
     return { outcome: result.outcome, limit: result.limit };
+  }
 
+  const synced = await reconcileAfterCommit(person, drive, access.folders, transactionId);
   revalidatePath(`/perjadin/${perjadinId}/laporan`);
-  return { outcome: "attached", attached: result.count, failed };
+  return { outcome: "attached", attached: result.count, failed, synced };
 }
 
 /**

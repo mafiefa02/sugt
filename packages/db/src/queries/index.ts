@@ -252,6 +252,7 @@ export {
   attachTransactionEvidence,
   filePerjadinReport,
   perjadinAcquittal,
+  receiptsOnLine,
   recordTransaction,
   type AcquittalEvidence,
   type AcquittalTransaction,
@@ -291,6 +292,42 @@ export {
   type SessionRecordRatings,
 } from "./session-records";
 export { assignGrant, personGrants, revokeGrant, type SetGrantResult } from "./grants";
+export type { DriveConnectionStatus, DriveFolderProblem } from "../schema/drive";
+export {
+  driveConnectionCard,
+  driveCredentials,
+  driveFolderIds,
+  markDriveConnectionBroken,
+  recordDriveFolders,
+  saveDriveConnection,
+  touchDriveConnection,
+  type DriveConnectionCard,
+  type DriveCredentials,
+  type DriveFolderIds,
+  type EncryptedRefreshToken,
+  driveUploadState,
+  type DriveUploadState,
+} from "./drive-connection";
+export {
+  legacyReceipts,
+  moveReceiptToDrive,
+  receiptMigrationState,
+  type LegacyReceipt,
+  type ReceiptMigrationState,
+} from "./receipt-migration";
+export {
+  claimPerjadinDriveFolder,
+  claimTransactionDriveFolder,
+  markTransactionSyncFailed,
+  markTransactionSynced,
+  perjadinDriveFolder,
+  reconcileTarget,
+  unsyncedTransactions,
+  type PerjadinDriveFolder,
+  type ReconcileEvidence,
+  type ReconcileTarget,
+  type UnsyncedTransaction,
+} from "./drive-sync";
 export {
   canViewDashboard,
   hasGrant,

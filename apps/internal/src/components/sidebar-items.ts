@@ -11,6 +11,7 @@ import {
   Newspaper,
   Plane,
   School,
+  Settings,
   Users,
 } from "lucide-react";
 import type { Route } from "next";
@@ -24,7 +25,14 @@ export type NavItem = {
   editorOnly?: boolean;
   /** Shown only to a Person who may read the Dashboard (`canViewDashboard`). Absent means "no gate". */
   dashboardView?: boolean;
+  /** Shown only to an Administrator. Absent means "no gate". */
+  administratorOnly?: boolean;
+  /** Carries the badge while the company Google Drive needs an Administrator (#375). */
+  driveBadge?: boolean;
 };
+
+/** A link as one viewer sees it: `badge` puts the Drive badge on it. */
+export type VisibleNavItem = NavItem & { badge: boolean };
 
 /**
  * The sidebar's destinations, in order — with one exception: **Pendamping moves to the top when the
@@ -62,6 +70,13 @@ export type NavItem = {
  * page redirects a grant-less Staff to `/pendamping`, so — same rule again — the link is hidden for
  * exactly the callers it would bounce. The shell computes `canViewDashboard` once (the one predicate
  * the page guard shares) and passes the boolean down.
+ *
+ * `administratorOnly` is a fourth (#372): **Pengaturan** is shown only to an Administrator, because
+ * its page `forbidden()`s everyone else — the same "worse than no link" rule once more.
+ *
+ * **Pengaturan carries a badge while Drive needs an Administrator** (#375) — not connected, broken,
+ * or its folders unresolved: the states in which nobody can upload a receipt. Only Administrators
+ * see the link, so only they see the badge, and they are the ones who can act on it.
  */
 const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: Gauge, staffOnly: false, dashboardView: true },
@@ -75,6 +90,14 @@ const NAV: NavItem[] = [
   { href: "/sekolah", label: "Direktori Sekolah", icon: School, staffOnly: false },
   { href: "/kelompok-sekolah", label: "Kelompok Sekolah", icon: Boxes, staffOnly: false },
   { href: "/orang", label: "Orang", icon: Users, staffOnly: false },
+  {
+    href: "/pengaturan",
+    label: "Pengaturan",
+    icon: Settings,
+    staffOnly: true,
+    administratorOnly: true,
+    driveBadge: true,
+  },
 ];
 
 /**
@@ -86,17 +109,23 @@ export function sidebarItems({
   role,
   canEditMonitoring,
   canViewDashboard,
+  canAdminister,
+  driveNeedsAttention,
 }: {
   role: Role;
   canEditMonitoring: boolean;
   canViewDashboard: boolean;
-}): NavItem[] {
+  canAdminister: boolean;
+  /** Receipts cannot be uploaded until an Administrator fixes the Drive connection. */
+  driveNeedsAttention: boolean;
+}): VisibleNavItem[] {
   const visible = NAV.filter(
     (item) =>
       (!item.staffOnly || role === "Staff") &&
       (!item.editorOnly || canEditMonitoring) &&
-      (!item.dashboardView || canViewDashboard),
-  );
+      (!item.dashboardView || canViewDashboard) &&
+      (!item.administratorOnly || canAdminister),
+  ).map((item) => ({ ...item, badge: Boolean(item.driveBadge) && driveNeedsAttention }));
   if (canViewDashboard) return visible;
   const isPendamping = (item: NavItem) => item.href === "/pendamping";
   return [...visible.filter(isPendamping), ...visible.filter((item) => !isPendamping(item))];

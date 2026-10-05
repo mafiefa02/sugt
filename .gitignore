@@ -58,3 +58,7 @@ docs/RAB_*.xlsx
 # the founding Staff — real names and email addresses, on the same reasoning.
 # `founding-staff.example.sql` beside it is the committed template.
 packages/db/seed/founding-staff.sql
+
+# The legacy-receipt migration's mapping report (#377): Supabase keys beside Drive ids, kept locally
+# until the bucket is deleted — never committed.
+receipt-migration-report*.csv
