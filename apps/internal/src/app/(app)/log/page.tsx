@@ -1,6 +1,7 @@
 import { StickyTable, StickyTableHeader } from "-/components/sortable-table";
 import { driveFolderUrl } from "-/lib/drive/receipt-files";
 import { shortenKabupaten } from "-/lib/format-destination";
+import { formatWibIndonesian } from "-/lib/format-wib";
 import { requirePerson } from "-/lib/person";
 import {
   ACTIVITY_LOG_AKSI_FILTERS,
@@ -26,7 +27,8 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { forbidden } from "next/navigation";
 
-import { formatTripDates, formatWaktu, logHref, parseLogParams } from "./log-params";
+import { formatTripDates } from "./log-format";
+import { logHref, parseLogParams } from "./log-params";
 
 export const metadata: Metadata = { title: "Log" };
 
@@ -205,7 +207,7 @@ function LogRow({ row }: { row: ActivityLogRow }) {
   return (
     <TableRow className="align-top">
       <TableCell className="text-muted-foreground tabular-nums">
-        {formatWaktu(row.occurredAt)}
+        {formatWibIndonesian(row.occurredAt)}
       </TableCell>
       <TableCell>{row.actorEmail}</TableCell>
       <TableCell className="min-w-64 whitespace-normal">

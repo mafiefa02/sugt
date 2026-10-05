@@ -345,8 +345,8 @@ export const transactionEvidence = pgTable(
 /**
  * **The Activity Log** (#395): one row per act on a Perjadin's money, receipts, documents or
  * report — who, when, which trip, what. **Append-only**: each write in `queries/activity-log.ts`'s
- * callers inserts its entry in the same database transaction as the change, so a refused or failed
- * write logs nothing, and nothing in the app updates or deletes a row. Read only by an Administrator,
+ * callers inserts its entry in the same database transaction as the change, so a refused or
+ * failed write logs nothing, and nothing in the app updates or deletes a row. Read only by an Administrator,
  * on `/log`.
  *
  * `actor_email` is a **copy** of the actor's email at that moment, so the row stays true if the
@@ -355,7 +355,7 @@ export const transactionEvidence = pgTable(
  * `action`, typed in `queries/activity-log.ts`.
  *
  * `backfilled` marks the rows migration 0039 derived from `transaction` and `transaction_evidence`
- * — the only history that already recorded who and when. `on delete cascade` from `perjadin`
+ * — the only rows that already recorded who and when. `on delete cascade` from `perjadin`
  * mirrors `transaction`; no app path deletes a Perjadin.
  */
 export const activityLog = pgTable(

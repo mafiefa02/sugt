@@ -1,6 +1,6 @@
 -- #395: the Activity Log. The DDL above the backfill is drizzle-kit's; the backfill below it is
 -- hand-written, deriving the two entries the existing rows already record who and when for.
--- Uang Perjalanan and Laporan history cannot be recovered: no column records who set an Advance or
+-- Who set an Uang Perjalanan or sent a Laporan cannot be recovered: no column records who set an Advance or
 -- filed a report, so those start empty. `actor_email` is the person's current email, the best
 -- available; `search_text` is rendered exactly as `activityLogSearchText` renders it, with the
 -- receipt cap of five written out as it stood.
@@ -20,8 +20,8 @@ CREATE TABLE "activity_log" (
 ALTER TABLE "activity_log" ADD CONSTRAINT "activity_log_actor_person_id_person_id_fk" FOREIGN KEY ("actor_person_id") REFERENCES "public"."person"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "activity_log" ADD CONSTRAINT "activity_log_perjadin_id_perjadin_id_fk" FOREIGN KEY ("perjadin_id") REFERENCES "public"."perjadin"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "activity_log_occurred_at_id_idx" ON "activity_log" USING btree ("occurred_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
--- Catat transaksi: one per existing line, at `created_at`, by `created_by_person_id`. A line and the
--- receipts recorded with it are inserted in one database transaction, so they share `now()`: the
+-- Catat transaksi: one per existing line, at `created_at`, by `created_by_person_id`. A line and
+-- the receipts recorded with it are inserted in one database transaction, so they share `now()`: the
 -- receipts whose `uploaded_at` equals the line's `created_at` are the ones it was recorded with.
 INSERT INTO "activity_log" ("occurred_at", "actor_person_id", "actor_email", "perjadin_id", "action", "details", "search_text", "backfilled")
 SELECT

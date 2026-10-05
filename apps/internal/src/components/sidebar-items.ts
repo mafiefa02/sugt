@@ -73,8 +73,8 @@ export type VisibleNavItem = NavItem & { badge: boolean };
  * the page guard shares) and passes the boolean down.
  *
  * `administratorOnly` is a fourth (#372): **Pengaturan** is shown only to an Administrator, because
- * its page `forbidden()`s everyone else — the same "worse than no link" rule once more. **Log**, the
- * Activity Log (#395), carries it for the same reason.
+ * its page `forbidden()`s everyone else — the same "worse than no link" rule once more. **Log**,
+ * the Activity Log (#395), carries it for the same reason.
  *
  * **Pengaturan carries a badge while Drive needs an Administrator** (#375) — not connected, broken,
  * or its folders unresolved: the states in which nobody can upload a receipt. Only Administrators

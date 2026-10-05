@@ -1,5 +1,7 @@
-import { formatTripDates, formatWaktu, logHref, parseLogParams } from "-/app/(app)/log/log-params";
+import { formatTripDates } from "-/app/(app)/log/log-format";
+import { logHref, parseLogParams } from "-/app/(app)/log/log-params";
 import Page from "-/app/(app)/log/page";
+import { formatWibIndonesian } from "-/lib/format-wib";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
@@ -155,7 +157,7 @@ describe("the URL is the view", () => {
   });
 
   it("formats Waktu in WIB and a trip's dates short", () => {
-    expect(formatWaktu(new Date("2026-10-14T01:05:00Z"))).toBe("14 Okt 2026, 08.05");
+    expect(formatWibIndonesian(new Date("2026-10-14T01:05:00Z"))).toBe("14 Okt 2026, 08.05");
     expect(formatTripDates("2026-10-12", "2026-10-15")).toBe("12–15 Okt 2026");
     expect(formatTripDates("2026-10-12", "2026-10-12")).toBe("12 Okt 2026");
     expect(formatTripDates("2026-09-30", "2026-10-02")).toBe("30 Sep – 2 Okt 2026");

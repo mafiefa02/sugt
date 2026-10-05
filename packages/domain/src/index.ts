@@ -593,8 +593,8 @@ export const MAX_RECEIPTS_PER_TRANSACTION = 5;
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 /**
- * **What an Activity Log entry records** ([#395](https://github.com/sugt-itb/sugt-itb-26/issues/395)):
- * one act on a Perjadin's money, receipts, documents or report. A closed set, mirrored character
+ * **What an Activity Log entry records**
+ * ([#395](https://github.com/sugt-itb/sugt-itb-26/issues/395)): one act on a Perjadin's money, receipts, documents or report. A closed set, mirrored character
  * for character by `activity_log_action_check` (see `packages/db/src/schema/travel.ts`).
  *
  * The two `document_*` values are in the set before anything writes them, so the Dokumen tickets

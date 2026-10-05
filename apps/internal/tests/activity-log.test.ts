@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 
 import { db, schema } from "@sugt/db";
 import {
-  ACTIVITY_LOG_PAGE_SIZE,
   activityLogAksi,
   activityLogPage,
   activityLogRincian,
@@ -369,7 +368,7 @@ describe("activityLogPage — /log's read", () => {
     const samarinda = await addPerjadin({
       picPersonId: rina.id,
       advanceIdr: 15_000_000,
-      destination: "Kelompok 18: Samarinda, Bontang dan Balikpapan",
+      destination: "Kelompok 18: Samarinda, Bontang dan Kabupaten Kutai Kartanegara",
       startsOn: "2026-10-12",
       endsOn: "2026-10-15",
     });
@@ -457,7 +456,7 @@ describe("activityLogPage — /log's read", () => {
       driveFolderId: "folder-1",
       perjadin: {
         id: samarinda.id,
-        destination: "Kelompok 18: Samarinda, Bontang dan Balikpapan",
+        destination: "Kelompok 18: Samarinda, Bontang dan Kabupaten Kutai Kartanegara",
         startsOn: "2026-10-12",
         endsOn: "2026-10-15",
         picName: "Budi Hartono",
@@ -468,7 +467,8 @@ describe("activityLogPage — /log's read", () => {
 
   it("pages 50 at a time, with the total count", async () => {
     const { admin, rina, samarinda, log } = await twoTrips();
-    for (let i = 0; i < ACTIVITY_LOG_PAGE_SIZE + 1; i += 1) {
+    // One more than a page of 50.
+    for (let i = 0; i < 51; i += 1) {
       const minute = String(i).padStart(2, "0");
       await log(samarinda, rina, advanceSet(1_000 + i), `2026-10-01T03:${minute}:00Z`);
     }
@@ -480,6 +480,11 @@ describe("activityLogPage — /log's read", () => {
     expect(first.rows).toHaveLength(50);
     expect(first.rows[0]?.details).toEqual({ amountIdr: 1_050 });
     expect(second.rows.map((row) => row.details)).toEqual([{ amountIdr: 1_000 }]);
+
+    // A page past the last is the last, so the footer and the rows agree.
+    const beyond = await activityLogPage(admin, { ...NO_FILTERS, page: 9 });
+    expect(beyond).toMatchObject({ total: 51, page: 2, pageCount: 2 });
+    expect(beyond.rows).toHaveLength(1);
   });
 
   it("breaks a tie on the same instant by id, newest id first", async () => {
@@ -510,8 +515,10 @@ describe("activityLogPage — /log's read", () => {
 
     // The actor's email.
     expect(await search("RINA@")).toEqual([[samarinda.id, "advance_set"]]);
-    // The destination.
+    // The destination, as stored and as the screen shortens it.
     expect(await search("bontang")).toEqual([[samarinda.id, "advance_set"]]);
+    expect(await search("Kab. Kutai")).toEqual([[samarinda.id, "advance_set"]]);
+    expect(await search("Kabupaten Kutai")).toEqual([[samarinda.id, "advance_set"]]);
     // The current PIC's name.
     expect(await search("Hartono")).toEqual([
       [bandung.id, "report_filed"],

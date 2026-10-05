@@ -93,7 +93,7 @@ export function activityLogRincian(entry: ActivityLogEntry): string {
 }
 
 /** `search_text`: the Aksi and Rincian as the screen shows them, lower-cased once at write time. */
-export function activityLogSearchText(entry: ActivityLogEntry, backfilled: boolean): string {
+function activityLogSearchText(entry: ActivityLogEntry, backfilled: boolean): string {
   return `${activityLogAksi(entry.action, backfilled)} · ${activityLogRincian(entry)}`.toLowerCase();
 }
 
@@ -173,10 +173,10 @@ function containing(text: string): string {
 }
 
 /**
- * **`/log`: one page of the Activity Log, newest first, with the count of everything that matches.**
+ * **`/log`: one page of the Activity Log, newest first, with the count of all that matches.**
  * Administrator only. Never loads all rows: filtering and search run in SQL, and the read is one
  * page (`limit 50 offset …`) plus one `count(*)`. The `(occurred_at desc, id desc)` index serves
- * the order.
+ * the order. A page past the last is the last.
  *
  * The Perjadin's PIC is joined live, so the column names the **current** PIC. The date range is in
  * WIB calendar days: `dari` from its midnight, `sampai` up to the next one.
@@ -196,7 +196,9 @@ export async function activityLogPage(
     conditions.push(
       or(
         ilike(activityLog.actorEmail, pattern),
+        // As stored, and as the screen shows it — `shortenKabupaten` writes "Kab." for "Kabupaten".
         ilike(perjadin.destination, pattern),
+        ilike(sql`regexp_replace(${perjadin.destination}, '\\mKabupaten ', 'Kab. ', 'g')`, pattern),
         ilike(pic.fullName, pattern),
         like(activityLog.searchText, pattern),
       ),
@@ -218,44 +220,45 @@ export async function activityLogPage(
     );
   }
   const where = and(...conditions);
-  const page = Math.max(1, Math.floor(filters.page));
 
-  const [rows, [matched]] = await Promise.all([
-    db
-      .select({
-        id: activityLog.id,
-        occurredAt: activityLog.occurredAt,
-        actorEmail: activityLog.actorEmail,
-        action: activityLog.action,
-        details: activityLog.details,
-        backfilled: activityLog.backfilled,
-        perjadinId: perjadin.id,
-        destination: perjadin.destination,
-        startsOn: perjadin.startsOn,
-        endsOn: perjadin.endsOn,
-        picName: pic.fullName,
-        driveFolderId: transaction.driveFolderId,
-      })
-      .from(activityLog)
-      .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
-      .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
-      .leftJoin(
-        transaction,
-        sql`${transaction.id} = (${activityLog.details} ->> 'transactionId')::uuid`,
-      )
-      .where(where)
-      .orderBy(desc(activityLog.occurredAt), desc(activityLog.id))
-      .limit(ACTIVITY_LOG_PAGE_SIZE)
-      .offset((page - 1) * ACTIVITY_LOG_PAGE_SIZE),
-    db
-      .select({ total: count() })
-      .from(activityLog)
-      .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
-      .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
-      .where(where),
-  ]);
-
+  // Counted first, so a `?page=` past the last page shows the last page rather than none.
+  const [matched] = await db
+    .select({ total: count() })
+    .from(activityLog)
+    .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
+    .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
+    .where(where);
   const total = matched?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / ACTIVITY_LOG_PAGE_SIZE));
+  const page = Math.min(Math.max(1, Math.floor(filters.page)), pageCount);
+
+  const rows = await db
+    .select({
+      id: activityLog.id,
+      occurredAt: activityLog.occurredAt,
+      actorEmail: activityLog.actorEmail,
+      action: activityLog.action,
+      details: activityLog.details,
+      backfilled: activityLog.backfilled,
+      perjadinId: perjadin.id,
+      destination: perjadin.destination,
+      startsOn: perjadin.startsOn,
+      endsOn: perjadin.endsOn,
+      picName: pic.fullName,
+      driveFolderId: transaction.driveFolderId,
+    })
+    .from(activityLog)
+    .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
+    .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
+    .leftJoin(
+      transaction,
+      sql`${transaction.id} = (${activityLog.details} ->> 'transactionId')::uuid`,
+    )
+    .where(where)
+    .orderBy(desc(activityLog.occurredAt), desc(activityLog.id))
+    .limit(ACTIVITY_LOG_PAGE_SIZE)
+    .offset((page - 1) * ACTIVITY_LOG_PAGE_SIZE);
+
   return {
     rows: rows.map((row) => ({
       ...({ action: row.action, details: row.details } as ActivityLogEntry),
@@ -274,6 +277,6 @@ export async function activityLogPage(
     })),
     total,
     page,
-    pageCount: Math.max(1, Math.ceil(total / ACTIVITY_LOG_PAGE_SIZE)),
+    pageCount,
   };
 }

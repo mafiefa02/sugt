@@ -12,9 +12,10 @@ import {
 /**
  * **Migration 0039 backfills the Activity Log** (#395) from the two tables that already record who
  * and when. Each existing line becomes a `transaction_recorded` entry at its `created_at`, counting
- * the receipts inserted with it — same database transaction, so the same `now()` — and every later
- * Unggah bukti batch (one uploader, one `uploaded_at`) becomes an `evidence_uploaded` entry. All are
- * `backfilled`, carry the actor's current email, and hold the `search_text` the app would render.
+ * the receipts inserted with it — same database transaction, so the same `now()` — and every
+ * later Unggah bukti batch (one uploader, one `uploaded_at`) becomes an `evidence_uploaded` entry.
+ * All are `backfilled`, carry the actor's current email, and hold the `search_text` the app would
+ * render.
  *
  * The seed skips foreign keys (`session_replication_role = replica`): the backfill reads `person`,
  * `transaction` and `transaction_evidence` and nothing else.

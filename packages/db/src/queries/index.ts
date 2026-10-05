@@ -43,15 +43,12 @@
 export type { Caller, ParticipantToken, PerjadinToken, Person, ServiceCaller } from "./caller";
 export {
   ACTIVITY_LOG_AKSI_FILTERS,
-  ACTIVITY_LOG_PAGE_SIZE,
   activityLogAksi,
   activityLogPage,
   activityLogRincian,
   type ActivityLogAksiFilter,
-  type ActivityLogDetails,
   type ActivityLogEntry,
   type ActivityLogFilters,
-  type ActivityLogPage,
   type ActivityLogRow,
 } from "./activity-log";
 export {

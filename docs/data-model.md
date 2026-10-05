@@ -1579,8 +1579,9 @@ Perjalanan and Laporan history cannot be recovered**: no column records who set 
 a report, so those start at the migration. `/log` marks a backfilled row "(dari data lama)".
 
 **The Log stays small** — a few thousand rows over the whole Programme — so `/log` reads one page of
-50 plus one `count(*)`, and the index above serves "newest 50". Its search is a plain `ilike` with
-no index. If search over a much larger table ever becomes slow, a `pg_trgm` trigram index on the
+50 plus one `count(*)`, and the index above serves "newest 50". Its search is a plain substring
+match with no index: `ilike` on the email, the destination and the PIC's name, `like` on the
+already lower-cased `search_text`. If search over a much larger table ever becomes slow, a `pg_trgm` trigram index on the
 searched text is the known fix.
 
 ---

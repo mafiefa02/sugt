@@ -475,7 +475,7 @@ export async function planPerjadin(
         .values(uniquePimpinan.map((personId) => ({ perjadinId: id, personId })));
     }
 
-    // The Activity Log (#395): the planned Advance, in this transaction so it commits with the trip.
+    // The Activity Log (#395): the planned Advance, in this transaction, committing with the trip.
     await logActivity(tx, caller, id, {
       action: "advance_set",
       details: { amountIdr: input.advanceIdr },
