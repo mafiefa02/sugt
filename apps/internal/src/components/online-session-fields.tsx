@@ -67,8 +67,8 @@ function OnlineSessionFields({
               : formatSessionStartTimeWithWib(session.endsAt, session.timeZone)}
           </span>
         </Row>
-        <Row label="Pengajar Siswa">{session.pengajarSiswaName}</Row>
-        <Row label="Pengajar GTK-MS">{session.pengajarGtkMsName}</Row>
+        <Row label="Narasumber Siswa">{session.pengajarSiswaName}</Row>
+        <Row label="Narasumber GTK-MS">{session.pengajarGtkMsName}</Row>
       </dl>
     </div>
   );
@@ -167,7 +167,7 @@ function EditDialog({ session }: { session: OnlineSessionDetail }) {
         <DialogHeader>
           <DialogTitle>Ubah Sesi daring</DialogTitle>
           <DialogDescription>
-            Sekolah, tanggal, jam mulai dan jam selesai, dan kedua Pengajar.
+            Sekolah, tanggal, jam mulai dan jam selesai, dan kedua Narasumber.
           </DialogDescription>
         </DialogHeader>
 
@@ -236,10 +236,10 @@ function EditDialog({ session }: { session: OnlineSessionDetail }) {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-pengajar-siswa`}>Pengajar Siswa</Label>
+              <Label htmlFor={`${idPrefix}-pengajar-siswa`}>Narasumber Siswa</Label>
               <Input
                 id={`${idPrefix}-pengajar-siswa`}
-                placeholder="Nama pengajar Siswa"
+                placeholder="Nama narasumber Siswa"
                 value={pengajarSiswaName}
                 onChange={(event) => {
                   setPengajarSiswaName(event.target.value);
@@ -248,10 +248,10 @@ function EditDialog({ session }: { session: OnlineSessionDetail }) {
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-pengajar-gtk-ms`}>Pengajar GTK-MS</Label>
+              <Label htmlFor={`${idPrefix}-pengajar-gtk-ms`}>Narasumber GTK-MS</Label>
               <Input
                 id={`${idPrefix}-pengajar-gtk-ms`}
-                placeholder="Nama pengajar GTK-MS"
+                placeholder="Nama narasumber GTK-MS"
                 value={pengajarGtkMsName}
                 onChange={(event) => {
                   setPengajarGtkMsName(event.target.value);

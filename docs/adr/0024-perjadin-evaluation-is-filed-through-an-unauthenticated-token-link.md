@@ -72,3 +72,14 @@ and _"every member of a Group may file one… and nobody else may"_ are amended 
 - **The link is unauthenticated and shared by hand.** Anyone holding it may file, as many times as
   they like. `/ep/{token}` is excluded from the proxy cookie-redirect matcher, the second such hole
   after `/f/{token}`, and both are the ones a reviewer should scrutinise.
+
+## Amendment (2026-10-06): the `Pengajar` role is `Narasumber`
+
+The self-declared Role value **`Pengajar`** is renamed **`Narasumber`**
+([#393](https://github.com/sugt-itb/sugt-itb-26/issues/393)), the label the internal app now gives the
+Teaching Team on every screen. `PERJADIN_EVALUATION_ROLES` is `["Narasumber", "Pendamping",
+"Pimpinan"]`, and migration `0038_evaluation_role_narasumber` drops `perjadin_evaluation_filed_by_role_check`,
+runs `UPDATE perjadin_evaluation SET filed_by_role = 'Narasumber' WHERE filed_by_role = 'Pengajar'`, then
+adds the new CHECK — the update sits between the two, as in ADR-0028's `Editor` rename. Nothing else
+about the decision changes: the role is still self-declared and untrusted. The body above keeps
+`Pengajar` as the point-in-time record.

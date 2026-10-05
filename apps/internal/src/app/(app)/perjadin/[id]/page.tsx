@@ -183,7 +183,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
       <div className="border-b border-border px-7 py-5">
         <h2 className="font-heading text-sm font-medium">Evaluasi Perjadin</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Bagikan tautan agar Pengajar, Pendamping dan Pimpinan dapat menilai perjalanannya —
+          Bagikan tautan agar Narasumber, Pendamping dan Pimpinan dapat menilai perjalanannya —
           penginapan, transportasi, konsumsi dan ketepatan waktu — tanpa perlu masuk.
         </p>
         <div className="mt-3">

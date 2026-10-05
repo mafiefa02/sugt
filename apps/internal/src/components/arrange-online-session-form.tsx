@@ -194,11 +194,11 @@ function ArrangeOnlineSessionForm(
         {/* The two cohort-named Pengajar side by side (#318), one name each, both required. */}
         <Field
           id={pengajarSiswaId}
-          label="Pengajar Siswa"
+          label="Narasumber Siswa"
         >
           <Input
             id={pengajarSiswaId}
-            placeholder="Nama pengajar Siswa"
+            placeholder="Nama narasumber Siswa"
             value={pengajarSiswaName}
             onChange={(event) => {
               setPengajarSiswaName(event.target.value);
@@ -208,11 +208,11 @@ function ArrangeOnlineSessionForm(
 
         <Field
           id={pengajarGtkMsId}
-          label="Pengajar GTK-MS"
+          label="Narasumber GTK-MS"
         >
           <Input
             id={pengajarGtkMsId}
-            placeholder="Nama pengajar GTK-MS"
+            placeholder="Nama narasumber GTK-MS"
             value={pengajarGtkMsName}
             onChange={(event) => {
               setPengajarGtkMsName(event.target.value);

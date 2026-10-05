@@ -384,14 +384,15 @@ export type PerjadinAspect = (typeof PERJADIN_ASPECTS)[number];
  * on the unauthenticated `/ep/{token}` form (ADR-0024). It is not validated against the Group or
  * the Pimpinan roster: the identity is untrusted by design, exactly as `participant_feedback.name`
  * is (ADR-0012). The three cover everyone the evaluation wants to hear from — the name-based
- * **Pengajar** (Teaching Team), the signed-in DITSAMA **Pendamping** who travel, and the
- * record-only **Pimpinan** — none of whom the old signed-in-Group gate could all admit.
+ * **Narasumber** (the Teaching Team's UI label; `Pengajar` until #393), the signed-in DITSAMA
+ * **Pendamping** who travel, and the record-only **Pimpinan** — none of whom the old
+ * signed-in-Group gate could all admit.
  *
  * These are **values a column may hold**, so `perjadin_evaluation.filed_by_role` CHECKs this list
  * character for character (see `packages/db/src/schema/evaluations.ts`), and the form's Role
  * selector is driven off it — one list behind the schema, the query and the form.
  */
-export const PERJADIN_EVALUATION_ROLES = ["Pengajar", "Pendamping", "Pimpinan"] as const;
+export const PERJADIN_EVALUATION_ROLES = ["Narasumber", "Pendamping", "Pimpinan"] as const;
 export type PerjadinEvaluationRole = (typeof PERJADIN_EVALUATION_ROLES)[number];
 
 /**

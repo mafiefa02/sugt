@@ -245,7 +245,7 @@ function AnggotaRoster({ anggota }: { anggota: MyUpcomingPerjadin["anggota"] }) 
       names: anggota.staff.map((person) => ({ key: person.personId, name: person.fullName })),
     },
     {
-      label: "Pengajar",
+      label: "Narasumber",
       names: anggota.pengajar.map((person) => ({ key: person.id, name: person.name })),
     },
     {

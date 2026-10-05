@@ -82,7 +82,7 @@ function PerjadinFeedbackTokenDialog({
           <DialogTitle>QR Evaluasi Perjadin</DialogTitle>
           <DialogDescription>
             {issued === null
-              ? "Bagikan QR atau tautan ini agar Pengajar, Pendamping dan Pimpinan dapat mengisi evaluasi perjalanan tanpa perlu masuk."
+              ? "Bagikan QR atau tautan ini agar Narasumber, Pendamping dan Pimpinan dapat mengisi evaluasi perjalanan tanpa perlu masuk."
               : confirmingReissue
                 ? "Tautan yang sedang dibagikan akan langsung mati begitu tautan baru dibuat. Lanjutkan?"
                 : "Tunjukkan atau bagikan tautan ini untuk diisi."}

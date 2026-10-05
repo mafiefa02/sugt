@@ -38,7 +38,7 @@ const CLASS_KINDS_ORDERED = Object.keys(CLASS_LABELS) as ClassKind[];
 /** The Aspect names in Indonesian — form copy around the English domain terms (`CONTEXT.md`). */
 const ASPECT_LABELS: Record<ParticipantFeedbackAspect, string> = {
   materials: "Materi",
-  instructor: "Pengajar",
+  instructor: "Narasumber",
   relevance: "Relevansi",
 };
 

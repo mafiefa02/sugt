@@ -956,7 +956,7 @@ create table perjadin_feedback_token (
 create table perjadin_evaluation (
   id             uuid primary key default gen_random_uuid(),
   perjadin_id    uuid not null references perjadin (id) on delete cascade,
-  filed_by_role  text not null check (filed_by_role in ('Pengajar', 'Pendamping', 'Pimpinan')),
+  filed_by_role  text not null check (filed_by_role in ('Narasumber', 'Pendamping', 'Pimpinan')),
   filed_by_name  text not null,
 
   lodging      smallint          check (lodging     between 1 and 10),   -- nullable; see below
@@ -995,7 +995,7 @@ room. Any signed-in Person may issue it; a Perjadin is a real trip once it exist
 cancelled state to bar (as the Session token has).
 
 **`filed_by_role` and `filed_by_name` are self-declared and untrusted.** There is no
-`filed_by_person_id` and no foreign key: the filer may be a name-based Pengajar or a record-only
+`filed_by_person_id` and no foreign key: the filer may be a name-based Narasumber or a record-only
 Pimpinan, neither of whom has a `person` row to point at, so identity is a Role from a fixed three
 (CHECKed character for character, `PERJADIN_EVALUATION_ROLES`) plus a free-text name referenced by
 nothing — exactly as `participant_feedback.name` is. The one-per-filer `unique` is gone with the
@@ -1046,7 +1046,7 @@ explain why the gate lived in the application rather than in a composite foreign
 evaluation on the trip. Both were tested and both were wrong.
 
 That reasoning is now moot, because the filer is not a `person` any more. The people best placed
-to judge a trip include the name-based **Pengajar** and the record-only **Pimpinan**, neither of
+to judge a trip include the name-based **Narasumber** and the record-only **Pimpinan**, neither of
 whom signs in — so the signed-in gate excluded exactly the voices the form wanted. Identity is now
 **self-declared and untrusted** (ADR-0024): `filed_by_role` is one of three CHECKed values and
 `filed_by_name` is free text, the same model as `participant_feedback.name`. There is nothing to
@@ -1352,7 +1352,7 @@ Preparation Checklist is an internal-monitoring aid — Staff hand-tick a pre-de
 and it gates nothing. The _set of items that exists_ is **not** a table: since the amendment to
 [ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md) it is a **flat
 fixed six** — `sk_perjalanan`, `tiket_pp` ("Tiket / transportasi PP"), `booking_penginapan`,
-`transportasi_lokal`, `staff`, and `pengajar_lengkap` ("Pengajar sudah lengkap") — assembled in the
+`transportasi_lokal`, `staff`, and `pengajar_lengkap` ("Narasumber sudah lengkap") — assembled in the
 query layer at read time with **no per-member part**, so it no longer reads the Group at all. A row
 here means one of those is ticked; un-ticking is a `DELETE`, so there is no "unchecked" row to keep.
 
@@ -1859,7 +1859,7 @@ Stated plainly, because an absent constraint reads as an oversight otherwise.
 ([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)): the Group is
 Staff-only and its minimum at planning is just the PIC, so there is no per-Stream teaching-team rule
 left to hold. A Perjadin _should_ end with a teaching team, but nothing blocks it — completeness is
-the hand-ticked "Pengajar sudah lengkap" box, not a constraint.
+the hand-ticked "Narasumber sudah lengkap" box, not a constraint.
 
 **"Two _different_ Schools cannot share a date and time on one Perjadin."** The Group is one
 travelling party and cannot be in two places at once. This used to be the
