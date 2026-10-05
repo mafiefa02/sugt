@@ -32,7 +32,7 @@ import { useMemo, useState } from "react";
  * destination is its identity), its **PIC** name, or any of its **pengajar**, **Group-member** or
  * **School** names. Those three arrays are search-only: nothing below renders them.
  *
- * Sorting defaults to Keberangkatan, newest first; the sort state is `useState`, not the URL. A row
+ * Sorting defaults to Mulai, newest first; the sort state is `useState`, not the URL. A row
  * opens the trip on click, and its title is a real link besides. **Persiapan** is the checklist
  * dialog's trigger for Staff (`canTogglePreparation`) and a static pill for anyone else.
  */
@@ -110,16 +110,16 @@ function PerjadinDirectoryList({
                   Sekolah
                 </SortableTableHead>
                 <SortableTableHead
-                  column="departure"
+                  column="start"
                   {...head}
                 >
-                  Keberangkatan
+                  Mulai
                 </SortableTableHead>
                 <SortableTableHead
-                  column="return"
+                  column="end"
                   {...head}
                 >
-                  Kepulangan
+                  Selesai
                 </SortableTableHead>
                 <SortableTableHead
                   column="pic"

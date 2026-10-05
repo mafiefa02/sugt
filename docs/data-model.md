@@ -570,8 +570,8 @@ stopped joining `province` for the zone and treat it as the constant WIB.
 
 **An arranged offline Session's `held_on` lies inside its Perjadin's `starts_on`–`ends_on`.**
 Nothing holds that — not this schema, and until now not any document either. It is scoped to
-_arranged_ deliberately: a trip's range is correctable (it is the departure→return span now,
-[ADR-0021](./adr/0021-perjadin-date-range-is-departure-and-return.md)), and a resize that would
+_arranged_ deliberately: a trip's range is correctable (two typed dates,
+[ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md)), and a resize that would
 strand an arranged Session is refused rather than allowed, while delivered and cancelled ones stay
 where they are and may legitimately sit outside the window their Perjadin now claims. A CHECK cannot
 carry it, because a CHECK sees only the row it is written on and the date range sits on `perjadin`;
@@ -1161,13 +1161,6 @@ create table perjadin (
 
   advance_idr                 bigint not null check (advance_idr >= 0),
 
-  departure_at                timestamp,
-  departure_zone              text check (departure_zone in ('WIB', 'WITA', 'WIT')),
-  departure_mode              text check (departure_mode in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')),
-  return_at                   timestamp,
-  return_zone                 text check (return_zone in ('WIB', 'WITA', 'WIT')),
-  return_mode                 text check (return_mode in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')),
-
   pic_person_id               uuid not null,
   pic_role                    text not null default 'Staff' check (pic_role = 'Staff'),
 
@@ -1184,18 +1177,15 @@ create table perjadin (
 );
 ```
 
-**The six travel-logistics columns are nullable and store wall-clock, not instants**
-([#106](https://github.com/mafiefa02/sugt/issues/106)). Nullable so the Perjadins that predate
-them stay valid — no backfill, no invented travel — while the plan form requires all six on a new
-trip. Each `*_at` is a `timestamp` **without** a time zone: a date and a wall-clock time, carrying
-its zone in a separate `*_zone` tag exactly as `session.starts_at` does, because the Surat Tugas
-says "07:30 WIB", not a UTC moment. `departure_zone` is always `WIB` (the origin is Bandung) and
-`return_zone` is derived at insert from the Province of the last School visited — both snapshots
-set server-side, never recomputed on read, so an edited Sub-Cluster cannot rewrite an issued Surat
-Tugas. The zone columns still admit all three `TIME_ZONES` because the detail page's edit surface
-can correct a return zone; `*_mode` CHECKs `TRANSPORT_MODES`. Both value lists live in
-`@sugt/domain` and are written out character for character here, for the reason
-`transaction_category_check` gives.
+**`starts_on` and `ends_on` are typed — Tanggal mulai and Tanggal selesai — and a Perjadin carries
+no travel legs** ([ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md),
+superseding [ADR-0021](./adr/0021-perjadin-date-range-is-departure-and-return.md)). The six leg
+columns (`departure_at`/`_zone`/`_mode`, `return_at`/`_zone`/`_mode`) and their four CHECKs were
+dropped, with their data: many trips are done PP, out to a nearby Sub-Cluster and back, sometimes
+daily, so one departure and one return with a time and a mode described a journey that did not
+happen. The plan form writes both dates directly; `ends_on >= starts_on` is the one rule the
+database holds about them, and planning and the date edit both refuse an inverted range
+(`ends-before-starts`) before it gets that far, same day allowed.
 
 A Group also carries **extra Staff beyond the PIC** — a coordinator, a treasurer, a documentarian —
 as ordinary `group_member` rows (`role = 'Staff'`, `stream = null`), the same shape the PIC's row
@@ -1361,7 +1351,7 @@ create table perjadin_preparation_item (
 Preparation Checklist is an internal-monitoring aid — Staff hand-tick a pre-departure to-do list,
 and it gates nothing. The _set of items that exists_ is **not** a table: since the amendment to
 [ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md) it is a **flat
-fixed seven** — `sk_perjalanan`, `tiket_keberangkatan`, `tiket_kepulangan`, `booking_penginapan`,
+fixed six** — `sk_perjalanan`, `tiket_pp` ("Tiket / transportasi PP"), `booking_penginapan`,
 `transportasi_lokal`, `staff`, and `pengajar_lengkap` ("Pengajar sudah lengkap") — assembled in the
 query layer at read time with **no per-member part**, so it no longer reads the Group at all. A row
 here means one of those is ticked; un-ticking is a `DELETE`, so there is no "unchecked" row to keep.
@@ -1375,6 +1365,9 @@ team is complete. That `DELETE` lives inside the teacher-mutation queries
 (`queries/perjadin-teachers.ts`), which is what makes it impossible to change the team without
 clearing the box. No other item is ever touched automatically. `dosen:` ticks the old model left in
 the table are **orphans**: no item derives them, so they are silently ignored and never cleaned up.
+So are ticks on `tiket_keberangkatan` and `tiket_kepulangan`, the two ticket boxes
+[ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md) folded into
+`tiket_pp` when the travel legs went — no data migration.
 
 The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent — the write
 upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than duplicating a row.
@@ -1382,8 +1375,8 @@ upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than d
 is a single box** — "confirmed with the Pendamping" (the on-Perjadin label for the DITSAMA role,
 [#141](https://github.com/mafiefa02/sugt/issues/141)), not one row per member; the stored key stays
 `staff`. `N` is therefore the
-constant **7**, and the Perjadin list's Persiapan `x/N` pill counts the ticks whose key is one of
-the seven fixed items.
+constant **6**, and every count — the Perjadin list's Persiapan `x/N` pill, the trip card's, the
+dialog's — is taken off the derived six, so an orphan can never make one read 7/6.
 
 ---
 
@@ -1908,18 +1901,18 @@ places:
 2. **Arranging an offline Session** — Rencanakan Perjadin calls it against every Session on
    the trip, before the transaction opens, and refuses the whole plan naming the Schools
    whose dates fall outside.
-3. **Resizing the trip** — the trip's range is its departure and return dates now
-   ([ADR-0021](./adr/0021-perjadin-date-range-is-departure-and-return.md)), so it is edited by
-   editing the legs, and `updatePerjadinLogistics` in `@sugt/db` recomputes `starts_on`/`ends_on`
-   from the new leg dates. It **clamps, never shifts**: if the new `[departure … return]` window
-   would leave an **arranged** Session outside it, the whole edit is refused (`would-strand`) and no
-   Session moves; delivered and cancelled ones may sit outside the window their trip now claims and
-   do not block it. One transaction with the trip's own update. The retired `movePerjadinDates` and
-   its offset-shift ([#55](https://github.com/mafiefa02/sugt/issues/55)) belonged to the standalone
-   typed range and went with it. The edit surface is Detail Perjadin's Staff-only "Ubah perjalanan"
-   dialog; the resize and its refusal are held by the query, with tests.
+3. **Resizing the trip** — the trip's range is two typed dates
+   ([ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md)), and
+   `updatePerjadinDates` in `@sugt/db` writes the new `starts_on`/`ends_on`. It **clamps, never
+   shifts** (ADR-0021's rule, kept): it locks the trip and its arranged Sessions, and if the new
+   window would leave an **arranged** Session outside it, the whole edit is refused (`would-strand`)
+   and no Session moves; delivered and cancelled ones may sit outside the window their trip now
+   claims and do not block it. One transaction with the trip's own update. The retired
+   `movePerjadinDates` and its offset-shift ([#55](https://github.com/mafiefa02/sugt/issues/55)) are
+   not coming back. The edit surface is Detail Perjadin's Staff-only **Ubah tanggal** dialog; the
+   resize and its refusal are held by the query, with tests.
 
-   **It never touches `starts_at`.** A leg-date correction changes which days a trip spans, not the
+   **It never touches `starts_at`.** A date correction changes which days a trip spans, not the
    hour a School is expecting somebody — and it does not move any Session's `held_on` at all, since
    it clamps rather than shifting.
 

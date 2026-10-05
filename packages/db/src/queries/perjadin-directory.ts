@@ -43,15 +43,15 @@ export type DirectoryPerjadin = {
   picFullName: string;
   /**
    * The Preparation Checklist pill's `x` and `N` ([#114](https://github.com/mafiefa02/sugt/issues/114)).
-   * `preparationTotal` is the constant **7** — the flat fixed item set (amendment to ADR-0018), with
+   * `preparationTotal` is the constant **6** — the flat fixed item set (amendment to ADR-0018), with
    * no per-member derivation; `preparationDone` counts the present ticks whose key is one of the
-   * seven fixed items. An orphan `dosen:` tick from the old model matches none, so the pill never
-   * reads past `N`.
+   * six fixed items. An orphan from an older model — a `dosen:` tick, or one on a ticket key
+   * ADR-0041 retired — matches none, so the pill never reads past `N`.
    */
   preparationDone: number;
   preparationTotal: number;
   /**
-   * The fixed seven with their tick state, for the Persiapan dialog the Staff pill opens (#343) — the
+   * The fixed six with their tick state, for the Persiapan dialog the Staff pill opens (#343) — the
    * same `derivePreparationChecklist` `myUpcomingPerjadin` and the detail read run. `preparationDone`
    * and `preparationTotal` are counted off this very list, so the pill and the dialog's boxes agree.
    */
@@ -161,7 +161,7 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
   if (trips.length === 0) return [];
 
   // The checklist for the Persiapan pill and its dialog (#343): one batched read of every trip's ticks,
-  // bucketed by trip and folded into the fixed seven — the shape `myUpcomingPerjadin` uses, rather
+  // bucketed by trip and folded into the fixed six — the shape `myUpcomingPerjadin` uses, rather
   // than a join that would multiply each trip row by its ticks. A trip absent here has no ticks.
   const tickRows = await db
     .select({
@@ -186,7 +186,7 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
 
   // The pill's `x/N` is counted off the same derived checklist the dialog shows — one read of the
   // ticks for both, the way `myUpcomingPerjadin`'s card does it, so the pill and the boxes agree.
-  // `N` is the flat fixed seven (amendment to ADR-0018); an orphan `dosen:` tick matches no item.
+  // `N` is the flat fixed six (amendment to ADR-0018); an orphan `dosen:` tick matches no item.
   return trips.map((trip) => {
     const preparation = derivePreparationChecklist(ticksByTrip.get(trip.id) ?? []);
     return {

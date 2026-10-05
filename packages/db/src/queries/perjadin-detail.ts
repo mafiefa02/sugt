@@ -4,7 +4,6 @@ import {
   type SessionStatus,
   type Stream,
   type TimeZone,
-  type TransportMode,
 } from "@sugt/domain";
 import { and, asc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -63,17 +62,6 @@ export type PerjadinSession = {
   taughtBy: { id: string; name: string }[];
 };
 
-/**
- * One leg's travel logistics, as the detail screen reads them. Null on every Perjadin planned
- * before the columns existed (#106) — the screen shows those legs as not recorded.
- */
-export type PerjadinTravelLeg = {
-  /** Wall-clock date and time, `YYYY-MM-DD HH:MM:SS`, meaningful only beside `zone`. */
-  at: string;
-  zone: TimeZone;
-  mode: TransportMode;
-};
-
 /** A School eligible to hold a Session on this trip — one of the trip's Sub-Cluster's Schools. */
 export type EligibleSchool = {
   id: string;
@@ -94,10 +82,6 @@ export type PerjadinDetail = {
   endsOn: string;
   picPersonId: string;
   picFullName: string;
-  /** Departure from Bandung; null when this trip predates the logistics columns. */
-  departure: PerjadinTravelLeg | null;
-  /** Return; null when this trip predates the logistics columns. */
-  return: PerjadinTravelLeg | null;
   /**
    * **The Report deadline is not here.** It is on `perjadinAcquittal`, because the Perjadin
    * Report *is* the acquittal — `docs/data-model.md` says so in as many words — and this payload
@@ -169,12 +153,6 @@ export async function perjadinDetail(
         endsOn: perjadin.endsOn,
         picPersonId: pic.id,
         picFullName: pic.fullName,
-        departureAt: perjadin.departureAt,
-        departureZone: perjadin.departureZone,
-        departureMode: perjadin.departureMode,
-        returnAt: perjadin.returnAt,
-        returnZone: perjadin.returnZone,
-        returnMode: perjadin.returnMode,
       })
       .from(perjadin)
       .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
@@ -280,25 +258,12 @@ export async function perjadinDetail(
     taughtBySession.set(link.sessionId, list);
   }
 
-  // The Preparation Checklist is a flat fixed seven now (amendment to ADR-0018) — no per-member
+  // The Preparation Checklist is a flat fixed six now (amendment to ADR-0018) — no per-member
   // derivation, so it does not read the Group at all.
   const preparation = derivePreparationChecklist(preparationTicks);
 
-  const { departureAt, departureZone, departureMode, returnAt, returnZone, returnMode, ...header } =
-    trip;
-
   return {
-    ...header,
-    // A leg reads as recorded only when all three of its columns are present. They are written
-    // together and the CHECKs pin the zone/mode, so in practice they are all-or-nothing.
-    departure:
-      departureAt !== null && departureZone !== null && departureMode !== null
-        ? { at: departureAt, zone: departureZone, mode: departureMode }
-        : null,
-    return:
-      returnAt !== null && returnZone !== null && returnMode !== null
-        ? { at: returnAt, zone: returnZone, mode: returnMode }
-        : null,
+    ...trip,
     group,
     sessions: sessions.map((row) => ({
       ...row,
@@ -482,77 +447,55 @@ export async function setPerjadinPimpinan(
   });
 }
 
-/**
- * The six logistics fields as the edit surface submits them. Unlike the plan form, the return
- * **zone is explicit here** — it was derived from the last School at plan time, but a correction
- * may be needed. The departure zone stays WIB (the origin is always Bandung), so it is not asked
- * for and not accepted: the query fixes it.
- */
-export type PerjadinLogisticsInput = {
-  departureDate: string;
-  departureTime: string;
-  departureMode: TransportMode;
-  returnDate: string;
-  returnTime: string;
-  returnMode: TransportMode;
-  returnZone: TimeZone;
+/** The trip's two typed dates as the **Ubah tanggal** editor submits them, `YYYY-MM-DD` each. */
+export type PerjadinDatesInput = {
+  startsOn: string;
+  endsOn: string;
 };
 
-export type UpdatePerjadinLogisticsResult =
+export type UpdatePerjadinDatesResult =
   /**
    * `startsOnMoved`: the correction changed `starts_on` — the date the trip's Drive folder is named
    * after (ADR-0040), so the caller renames it (#376).
    */
   | { outcome: "updated"; startsOnMoved: boolean }
   /**
-   * The return date lands before the departure date, so the derived `[starts_on … ends_on]` range
-   * would be inverted (ADR-0021). Same-day is allowed. Refused before the transaction opens.
+   * Tanggal selesai before Tanggal mulai, so the `[starts_on … ends_on]` range would be inverted.
+   * Same-day is allowed. Refused before the transaction opens.
    */
-  | { outcome: "return-before-departure" }
+  | { outcome: "ends-before-starts" }
   /**
-   * At least one **arranged** Session would fall outside the new `[departure … return]` window; the
-   * range is not resized and nothing is written. The same shape the retired `movePerjadinDates`
-   * used — this is the resize-and-clamp guard that replaced the auto-shift (ADR-0021).
+   * At least one **arranged** Session would fall outside the new `[starts_on … ends_on]` window; the
+   * range is not resized and nothing is written. The resize-and-clamp guard ADR-0021 introduced and
+   * ADR-0041 kept.
    */
   | { outcome: "would-strand"; strandedCount: number; startsOn: string; endsOn: string }
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" };
 
 /**
- * Correct a Perjadin's departure/return logistics after planning — and, with them, the trip's
- * range. Staff-only.
+ * **Ubah tanggal** — correct a Perjadin's typed date range after planning. Staff-only.
  *
- * **The range is the leg dates now (ADR-0021).** `starts_on`/`ends_on` are no longer typed; they
- * are `departure.date` and `return.date`, so editing a leg date *is* editing the range. This write
- * therefore sets all six logistics columns **plus** `starts_on`/`ends_on`, in one transaction.
- *
- * **Resize and clamp, never auto-shift.** Moving a leg date resizes the window; it does not move any
- * Session. If the new `[departure … return]` window would leave an **arranged** Session outside it,
- * the whole edit is refused (`would-strand`) rather than stranding it — the mirror of planning's
+ * **Resize and clamp, never auto-shift** (ADR-0021, kept by ADR-0041). Moving a date resizes the
+ * window; it does not move any Session. If the new window would leave an **arranged** Session outside
+ * it, the whole edit is refused (`would-strand`) rather than stranding it — the mirror of planning's
  * `session-outside-perjadin`. Only arranged Sessions are checked: a delivered or cancelled Session
  * records something that already happened and may legitimately sit outside the window its trip now
  * claims (`docs/data-model.md`, Delivery). Online Sessions carry no `perjadin_id` and are excluded.
- *
- * `departure_zone` is fixed to WIB and never taken from the caller; `return_zone` is the caller's,
- * because a return from a WITA/WIT city is read in that city's wall-clock and the derivation at plan
- * time can be wrong. The `*_at` values are wall-clock `date time` strings, the same shape planning
- * wrote — no instant, no conversion.
  */
-export async function updatePerjadinLogistics(
+export async function updatePerjadinDates(
   caller: Person,
   perjadinId: string,
-  input: PerjadinLogisticsInput,
-): Promise<UpdatePerjadinLogisticsResult> {
+  input: PerjadinDatesInput,
+): Promise<UpdatePerjadinDatesResult> {
   requireStaff(caller);
 
-  // The derived range: departure date opens it, return date closes it (ADR-0021).
-  const newStartsOn = input.departureDate;
-  const newEndsOn = input.returnDate;
+  const { startsOn: newStartsOn, endsOn: newEndsOn } = input;
 
   // An inverted range is refused before the transaction opens — same-day allowed. `perjadin_dates_check`
   // holds `ends_on >= starts_on` at the database too, but returning a value lets the edit surface point
-  // at the return field rather than surfacing a raw constraint violation.
-  if (newEndsOn < newStartsOn) return { outcome: "return-before-departure" };
+  // at Tanggal selesai rather than surfacing a raw constraint violation.
+  if (newEndsOn < newStartsOn) return { outcome: "ends-before-starts" };
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
@@ -586,17 +529,7 @@ export async function updatePerjadinLogistics(
 
     await tx
       .update(perjadin)
-      .set({
-        departureAt: `${input.departureDate} ${input.departureTime}`,
-        departureZone: "WIB",
-        departureMode: input.departureMode,
-        returnAt: `${input.returnDate} ${input.returnTime}`,
-        returnZone: input.returnZone,
-        returnMode: input.returnMode,
-        // The range rides along, derived from the leg dates it was just given (ADR-0021).
-        startsOn: newStartsOn,
-        endsOn: newEndsOn,
-      })
+      .set({ startsOn: newStartsOn, endsOn: newEndsOn })
       .where(eq(perjadin.id, perjadinId));
 
     return { outcome: "updated", startsOnMoved: trip.startsOn !== newStartsOn };

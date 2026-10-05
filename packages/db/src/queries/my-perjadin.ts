@@ -1,4 +1,4 @@
-import type { SessionStatus, TimeZone, TransportMode } from "@sugt/domain";
+import type { SessionStatus, TimeZone } from "@sugt/domain";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
@@ -79,12 +79,11 @@ export type MyPerjadinSchool = {
 /**
  * One upcoming trip the caller is on, everything the home strip renders.
  *
- * The six leg fields are straight off `perjadin` and all nullable — a trip planned before the
- * logistics columns existed (#106) carries none. `preparation` is the flat fixed seven (amendment
- * to ADR-0018), each item carrying its tick state — the same `derivePreparationChecklist` the detail
- * read runs. It carries the whole checklist rather than a bare `x`/`N` because the card's pill *and*
- * its Persiapan dialog read from one payload: the pill is `preparation.filter(i => i.checked).length`
- * out of `preparation.length` (always seven), and the dialog toggles the very items shown here.
+ * `preparation` is the flat fixed six (amendment to ADR-0018), each item carrying its tick state —
+ * the same `derivePreparationChecklist` the detail read runs. It carries the whole checklist rather
+ * than a bare `x`/`N` because the card's pill *and* its Persiapan dialog read from one payload: the
+ * pill is `preparation.filter(i => i.checked).length` out of `preparation.length` (always six), and
+ * the dialog toggles the very items shown here.
  */
 export type MyUpcomingPerjadin = {
   id: string;
@@ -104,15 +103,7 @@ export type MyUpcomingPerjadin = {
    * domain constant, where the acquittal reduces its loaded rows through `sumAdvanceDrawdownIdr`.
    */
   drawnDownIdr: number;
-  /** Departure from Bandung's date and time; null when this trip predates the logistics columns. */
-  departureAt: string | null;
-  departureZone: TimeZone | null;
-  departureMode: TransportMode | null;
-  /** Return; null when this trip predates the logistics columns. */
-  returnAt: string | null;
-  returnZone: TimeZone | null;
-  returnMode: TransportMode | null;
-  /** The fixed seven, each with its current tick state — the pill's `x`/`N` and the dialog's boxes. */
+  /** The fixed six, each with its current tick state — the pill's `x`/`N` and the dialog's boxes. */
   preparation: PreparationItem[];
   /**
    * Who is on the trip, in three lists the way `docs/data-model.md` splits them: the Staff Group,
@@ -151,12 +142,6 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
       picPersonId: perjadin.picPersonId,
       picFullName: person.fullName,
       advanceIdr: perjadin.advanceIdr,
-      departureAt: perjadin.departureAt,
-      departureZone: perjadin.departureZone,
-      departureMode: perjadin.departureMode,
-      returnAt: perjadin.returnAt,
-      returnZone: perjadin.returnZone,
-      returnMode: perjadin.returnMode,
     })
     .from(perjadin)
     .innerJoin(
@@ -251,7 +236,7 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
         .orderBy(asc(school.name), asc(session.heldOn), asc(session.startsAt), asc(session.id)),
       // Every fixed-item tick on these trips. Not a count like `perjadinDirectory`'s pill: the card's
       // Persiapan dialog toggles the boxes, so it needs the whole tick per item (who and when), which
-      // `derivePreparationChecklist` folds into the fixed seven below — the same derivation the detail
+      // `derivePreparationChecklist` folds into the fixed six below — the same derivation the detail
       // read runs. A `dosen:` orphan the old model left behind matches no fixed key, so it drops out.
       db
         .select({
@@ -288,8 +273,8 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
   }
 
   // Preparation ticks bucketed by trip; `derivePreparationChecklist` folds each bucket into the
-  // fixed seven below. A trip absent here has no ticks, and `derivePreparationChecklist([])` gives
-  // the same seven all unchecked — so the pill reads `0/7` rather than the trip dropping its pill.
+  // fixed six below. A trip absent here has no ticks, and `derivePreparationChecklist([])` gives
+  // the same six all unchecked — so the pill reads `0/6` rather than the trip dropping its pill.
   const preparationTicksByTrip = new Map<string, PreparationTick[]>();
   for (const row of preparationRows) {
     const list = preparationTicksByTrip.get(row.perjadinId) ?? [];

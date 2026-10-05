@@ -224,6 +224,15 @@ three Classes.
 Creation is a plain validated form — pick a **Sub-Cluster**, dates and people. It is not a
 planning aid: no ranking, no suggestions, no coverage data inside the form itself.
 
+**The dates are two typed fields, Tanggal mulai and Tanggal selesai**, both required, the same day
+allowed and an end before the start refused. The form asks nothing about getting there — no
+Keberangkatan, no Kepulangan, no time, no transport mode — because many trips are done PP, out to a
+nearby Sub-Cluster and back, sometimes daily
+([ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md)). Each
+Session's date picker is bounded by the two dates. On the trip's own screen Staff correct them with
+**Ubah tanggal** beside the range; the edit moves no Session, and is refused whole if a Session still
+to be delivered would fall outside the new range. A Pimpinan sees the dates read-only.
+
 **A trip goes to one Sub-Cluster.** That is what a journey is: a set of Schools near enough
 to reach on one trip. Choosing it is what decides which Schools may appear on the trip at
 all, so the form no longer asks anyone to assemble that set by hand — which was the old
@@ -251,17 +260,17 @@ of every eight Sessions are invisible to anything trip-shaped.
 **A Perjadin's screen carries a Preparation Checklist** — a private, hand-ticked list of
 pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid and nothing more:
 no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Every trip has
-the same six fixed boxes — SK Perjalanan, the two tickets, lodging, local transport and one
-"confirmed with the Staff" — plus one per Teaching Team member of the Group. Any Staff member may
+the same six fixed boxes — SK Perjalanan, "Tiket / transportasi PP", lodging, local transport, one
+"confirmed with the Pendamping" and "Pengajar sudah lengkap" — and no per-member ones. Any Staff member may
 tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
 screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
 the Persiapan column of the Perjadin list, and on the trip cards of the Staff home strip. For Staff
 the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
 
 **The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):
-Perjadin, Sekolah (Schools with a Session that was not cancelled), Keberangkatan, Kepulangan, PIC,
+Perjadin, Sekolah (Schools with a Session that was not cancelled), Mulai, Selesai, PIC,
 Persiapan and Terlaksana — delivered over not-cancelled Sessions, as an `x/N` badge in the same three
-tones, `0/0` grey. It opens newest Keberangkatan first; every column sorts, a new column descending
+tones, `0/0` grey. It opens newest Mulai first; every column sorts, a new column descending
 first. The header stays in view while the list scrolls, a row opens its trip, and the search box
 above narrows it.
 

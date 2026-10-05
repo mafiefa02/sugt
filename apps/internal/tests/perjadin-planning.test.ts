@@ -7,7 +7,7 @@ import {
   perjadinDirectory,
   perjadinPlan,
   planPerjadin,
-  updatePerjadinLogistics,
+  updatePerjadinDates,
   type PlanPerjadinInput,
 } from "@sugt/db/queries";
 import type { Role } from "@sugt/domain";
@@ -92,12 +92,11 @@ async function twoSchools(kabupatenKota: [string, string] = ["Kota Bandung", "Ko
 }
 
 /**
- * The travel logistics a valid plan carries. The zones are the server's — WIB out, derived back. The
- * leg **dates** are also the trip's range now (ADR-0021): `starts_on = 2026-09-01`, `ends_on =
+ * The typed range a valid plan carries (ADR-0041): `starts_on = 2026-09-01`, `ends_on =
  * 2026-09-03`, so every in-window Session below sits between these two dates.
  */
-const DEPARTURE = { date: "2026-09-01", time: "07:30", mode: "Pesawat" } as const;
-const RETURN = { date: "2026-09-03", time: "18:00", mode: "Pesawat" } as const;
+const STARTS_ON = "2026-09-01";
+const ENDS_ON = "2026-09-03";
 
 /** Everything a valid trip needs, so each test below can spoil exactly one thing. */
 async function validPlan(kabupatenKota?: [string, string]) {
@@ -124,8 +123,8 @@ async function validPlan(kabupatenKota?: [string, string]) {
         taughtByTeacherIndexes: [],
       },
     ],
-    departure: DEPARTURE,
-    return: RETURN,
+    startsOn: STARTS_ON,
+    endsOn: ENDS_ON,
   };
 
   return { pic, cluster, subCluster, schools, input };
@@ -279,8 +278,8 @@ describe("Rencanakan Perjadin", () => {
           taughtByTeacherIndexes: [1],
         },
       ],
-      departure: DEPARTURE,
-      return: RETURN,
+      startsOn: STARTS_ON,
+      endsOn: ENDS_ON,
     });
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
@@ -612,18 +611,38 @@ describe("Rencanakan Perjadin", () => {
     expect(result.outcome).toBe("planned");
   });
 
-  it("refuses a return date earlier than the departure date, and writes nothing", async () => {
+  it("plans with the typed range, written straight to starts_on and ends_on", async () => {
     const { pic, input } = await validPlan();
 
-    // The range is the leg dates now (ADR-0021): a return before the departure would derive an
-    // inverted range. The departure stays 2026-09-01; the return is pulled back before it.
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const [row] = await db
+      .select({ startsOn: schema.perjadin.startsOn, endsOn: schema.perjadin.endsOn })
+      .from(schema.perjadin)
+      .where(eq(schema.perjadin.id, planned.perjadinId));
+    expect(row).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-03" });
+  });
+
+  it("refuses a Tanggal selesai earlier than the Tanggal mulai, and writes nothing", async () => {
+    const { pic, input } = await validPlan();
+
+    const result = await planPerjadin(pic, { ...input, endsOn: "2026-08-30" });
+
+    expect(result).toEqual({ outcome: "ends-before-starts" });
+    expect(await perjadinRows()).toEqual([]);
+  });
+
+  it("allows a one-day trip, Tanggal mulai and Tanggal selesai the same day", async () => {
+    const { pic, input } = await validPlan();
+
     const result = await planPerjadin(pic, {
       ...input,
-      return: { date: "2026-08-30", time: "18:00", mode: "Pesawat" },
+      endsOn: "2026-09-01",
+      sessions: [input.sessions[0]!],
     });
 
-    expect(result).toEqual({ outcome: "return-before-departure" });
-    expect(await perjadinRows()).toEqual([]);
+    expect(result.outcome).toBe("planned");
   });
 
   it("refuses a trip with no Session on it, and writes nothing", async () => {
@@ -811,8 +830,8 @@ describe("the derived Perjadin destination", () => {
           taughtByTeacherIndexes: [],
         },
       ],
-      departure: DEPARTURE,
-      return: RETURN,
+      startsOn: STARTS_ON,
+      endsOn: ENDS_ON,
     });
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
@@ -833,10 +852,9 @@ describe("the Perjadin list and detail", () => {
     await planPerjadin(pic, input);
     await planPerjadin(pic, {
       ...input,
-      // The range is the leg dates now (ADR-0021), so a later trip is a later departure/return, not
-      // a separately typed range. Its one Session sits inside the new window.
-      departure: { date: "2026-10-01", time: "07:30", mode: "Pesawat" },
-      return: { date: "2026-10-02", time: "18:00", mode: "Pesawat" },
+      // A later trip; its one Session sits inside the new window.
+      startsOn: "2026-10-01",
+      endsOn: "2026-10-02",
       sessions: [
         {
           schoolId: input.sessions[0]!.schoolId,
@@ -971,19 +989,12 @@ describe("the Perjadin list and detail", () => {
   });
 });
 
-describe("extra Staff and travel logistics", () => {
+describe("extra Staff and the date edit", () => {
   beforeEach(resetDatabase);
 
-  async function logisticsOf(perjadinId: string) {
+  async function datesOf(perjadinId: string) {
     const [row] = await db
-      .select({
-        departureAt: schema.perjadin.departureAt,
-        departureZone: schema.perjadin.departureZone,
-        departureMode: schema.perjadin.departureMode,
-        returnAt: schema.perjadin.returnAt,
-        returnZone: schema.perjadin.returnZone,
-        returnMode: schema.perjadin.returnMode,
-      })
+      .select({ startsOn: schema.perjadin.startsOn, endsOn: schema.perjadin.endsOn })
       .from(schema.perjadin)
       .where(eq(schema.perjadin.id, perjadinId));
     return row;
@@ -1043,115 +1054,49 @@ describe("extra Staff and travel logistics", () => {
     expect(await perjadinRows()).toEqual([]);
   });
 
-  it("writes the six logistics columns, WIB out and the wall-clock times back", async () => {
-    const { pic, input } = await validPlan();
-
-    const planned = await planPerjadin(pic, input);
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
-
-    const log = await logisticsOf(planned.perjadinId);
-    expect(log?.departureAt).toBe("2026-09-01 07:30:00");
-    expect(log?.departureZone).toBe("WIB");
-    expect(log?.departureMode).toBe("Pesawat");
-    expect(log?.returnAt).toBe("2026-09-03 18:00:00");
-    expect(log?.returnMode).toBe("Pesawat");
-  });
-
-  it("derives return_zone from the last-visited School's Province, not Bandung's", async () => {
-    const pic = await staff();
-    await addProvince("JB", "Jawa Barat", "WIB");
-    await addProvince("KT", "Kalimantan Timur", "WITA");
-    const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
-    const subCluster = await addSubCluster({
-      slug: "kalimantan",
-      name: "Kelompok Kalimantan",
-      clusterId: cluster.id,
-    });
-    const bandung = await addSchool({
-      slug: "sman-bandung",
-      name: "SMAN Bandung",
-      clusterId: cluster.id,
-      subClusterId: subCluster.id,
-      provinceCode: "JB",
-      kabupatenKota: "Kota Bandung",
-    });
-    const samarinda = await addSchool({
-      slug: "sman-samarinda",
-      name: "SMAN Samarinda",
-      clusterId: cluster.id,
-      subClusterId: subCluster.id,
-      provinceCode: "KT",
-      kabupatenKota: "Kota Samarinda",
-    });
-
-    const planned = await planPerjadin(pic, {
-      subClusterId: subCluster.id,
-      advanceIdr: 5_000_000,
-      picPersonId: pic.id,
-      teacherNames: [],
-      pimpinan: [],
-      sessions: [
-        {
-          schoolId: bandung.id,
-          heldOn: "2026-09-02",
-          startsAt: "09:00",
-          taughtByTeacherIndexes: [],
-        },
-        {
-          schoolId: samarinda.id,
-          heldOn: "2026-09-04",
-          startsAt: "09:00",
-          taughtByTeacherIndexes: [],
-        },
-      ],
-      departure: DEPARTURE,
-      return: { date: "2026-09-05", time: "20:00", mode: "Pesawat" },
-    });
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
-
-    const log = await logisticsOf(planned.perjadinId);
-    expect(log?.returnZone).toBe("WITA");
-    expect(log?.departureZone).toBe("WIB");
-  });
-
-  it("updates the logistics, fixing departure to WIB and taking the given return zone", async () => {
+  it("updates the typed dates and reports whether the start moved", async () => {
     const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
-    const result = await updatePerjadinLogistics(pic, planned.perjadinId, {
-      departureDate: "2026-09-01",
-      departureTime: "06:00",
-      departureMode: "Kereta",
-      returnDate: "2026-09-03",
-      returnTime: "22:00",
-      returnMode: "Travel",
-      returnZone: "WIT",
+    const result = await updatePerjadinDates(pic, planned.perjadinId, {
+      startsOn: "2026-08-31",
+      endsOn: "2026-09-04",
     });
 
-    expect(result).toEqual({ outcome: "updated", startsOnMoved: false });
-    const log = await logisticsOf(planned.perjadinId);
-    expect(log?.departureAt).toBe("2026-09-01 06:00:00");
-    expect(log?.departureZone).toBe("WIB");
-    expect(log?.departureMode).toBe("Kereta");
-    expect(log?.returnZone).toBe("WIT");
-    expect(log?.returnMode).toBe("Travel");
+    expect(result).toEqual({ outcome: "updated", startsOnMoved: true });
+    expect(await datesOf(planned.perjadinId)).toEqual({
+      startsOn: "2026-08-31",
+      endsOn: "2026-09-04",
+    });
   });
 
-  it("refuses a non-Staff caller on the logistics edit", async () => {
+  it("refuses an inverted range on the date edit, and leaves the dates alone", async () => {
+    const { pic, input } = await validPlan();
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const result = await updatePerjadinDates(pic, planned.perjadinId, {
+      startsOn: "2026-09-03",
+      endsOn: "2026-09-01",
+    });
+
+    expect(result).toEqual({ outcome: "ends-before-starts" });
+    expect(await datesOf(planned.perjadinId)).toEqual({
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-03",
+    });
+  });
+
+  it("refuses a non-Staff caller on the date edit", async () => {
     const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
     await expect(
-      updatePerjadinLogistics(nonStaff(), planned.perjadinId, {
-        departureDate: "2026-09-01",
-        departureTime: "06:00",
-        departureMode: "Kereta",
-        returnDate: "2026-09-03",
-        returnTime: "22:00",
-        returnMode: "Travel",
-        returnZone: "WIT",
+      updatePerjadinDates(nonStaff(), planned.perjadinId, {
+        startsOn: "2026-09-01",
+        endsOn: "2026-09-03",
       }),
     ).rejects.toSatisfy(isNotStaffError);
   });

@@ -17,13 +17,13 @@ import {
   setPerjadinStaff,
   togglePreparationItem,
   updatePerjadinAdvance,
-  updatePerjadinLogistics,
+  updatePerjadinDates,
   type AddPerjadinSessionResult,
   type AddPerjadinTeacherResult,
   type CancelSessionResult,
   type ChangePerjadinPicResult,
   type EditPerjadinSessionResult,
-  type PerjadinLogisticsInput,
+  type PerjadinDatesInput,
   type PerjadinSessionInput,
   type RemovePerjadinTeacherResult,
   type RenamePerjadinTeacherResult,
@@ -31,7 +31,7 @@ import {
   type SetPerjadinStaffResult,
   type TogglePreparationItemResult,
   type UpdatePerjadinAdvanceResult,
-  type UpdatePerjadinLogisticsResult,
+  type UpdatePerjadinDatesResult,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
 import QRCode from "qrcode";
@@ -212,23 +212,22 @@ export async function issuePerjadinFeedbackTokenAction(
 }
 
 /**
- * **Correct a Perjadin's departure/return logistics** — and, with them, its date range.
+ * **Ubah tanggal — correct a Perjadin's typed date range** (ADR-0041).
  *
- * The range is the leg dates now (ADR-0021), so this write resizes `starts_on`/`ends_on` too. It
- * clamps rather than shifting: an edit that would strand an arranged Session comes back as
+ * It clamps rather than shifting: an edit that would strand an arranged Session comes back as
  * `would-strand` and nothing moves.
  *
  * **A correction that moves `starts_on` renames the trip's Drive folder** (#376), after the commit and
  * best effort: a failed rename never fails the correction, and the next reconcile on that trip
  * repairs it. Every refusal above comes back before anything reaches Drive.
  */
-export async function updatePerjadinLogisticsAction(
+export async function updatePerjadinDatesAction(
   perjadinId: string,
-  input: PerjadinLogisticsInput,
-): Promise<UpdatePerjadinLogisticsResult> {
+  input: PerjadinDatesInput,
+): Promise<UpdatePerjadinDatesResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => updatePerjadinLogistics(person, perjadinId, input));
+  const result = await staffSurface(() => updatePerjadinDates(person, perjadinId, input));
   if (result.outcome === "updated") {
     if (result.startsOnMoved) await renamePerjadinFolder(person, perjadinId);
     revalidatePath(`/perjadin/${perjadinId}`);
