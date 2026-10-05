@@ -9,7 +9,7 @@ import { reconcileTransaction } from "-/lib/drive/reconcile";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
-import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_TRANSACTION } from "@sugt/domain";
+import { MAX_RECEIPTS_PER_TRANSACTION, MAX_UPLOAD_BYTES } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -147,9 +147,9 @@ describe("no Drive call before the guard", () => {
     ).resolves.toEqual({ outcome: "unsupported-type" });
     await expect(
       openReceiptSessionsAction(trip.id, [
-        { size: MAX_RECEIPT_BYTES + 1, contentType: "image/jpeg" },
+        { size: MAX_UPLOAD_BYTES + 1, contentType: "image/jpeg" },
       ]),
-    ).resolves.toEqual({ outcome: "too-large", limit: MAX_RECEIPT_BYTES });
+    ).resolves.toEqual({ outcome: "too-large", limit: MAX_UPLOAD_BYTES });
     await expect(recordTransactionAction(aLine(trip.id, []))).resolves.toEqual({
       outcome: "evidence-missing",
     });
@@ -181,6 +181,23 @@ describe("opening upload sessions", () => {
     });
     expect(sessions[0]!.name).toMatch(/^[0-9a-f-]{36}\.jpg$/);
     expect(sessions[1]!.name).toMatch(/\.pdf$/);
+  });
+  it("accepts a declared size of exactly 50 MB and refuses one byte more (#394)", async () => {
+    const { trip } = await scene();
+    expect(MAX_UPLOAD_BYTES).toBe(50 * 1024 * 1024);
+
+    await expect(
+      openReceiptSessionsAction(trip.id, [
+        { size: MAX_UPLOAD_BYTES, contentType: "application/pdf" },
+      ]),
+    ).resolves.toMatchObject({ outcome: "ready" });
+    expect([...drive.sessions.values()][0]).toMatchObject({ size: MAX_UPLOAD_BYTES });
+
+    await expect(
+      openReceiptSessionsAction(trip.id, [
+        { size: MAX_UPLOAD_BYTES + 1, contentType: "application/pdf" },
+      ]),
+    ).resolves.toEqual({ outcome: "too-large", limit: MAX_UPLOAD_BYTES });
   });
 });
 
@@ -291,7 +308,7 @@ describe("a receipt that is not what it claims records nothing", () => {
   it("refuses a file over the cap as Drive holds it", async () => {
     const { trip } = await scene();
     const [id] = await upload(trip.id, [jpeg()]);
-    drive.files.get(id!)!.size = MAX_RECEIPT_BYTES + 1;
+    drive.files.get(id!)!.size = MAX_UPLOAD_BYTES + 1;
 
     await expect(recordTransactionAction(aLine(trip.id, [id!]))).resolves.toMatchObject({
       outcome: "receipt-unverified",

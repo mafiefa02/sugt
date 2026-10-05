@@ -1678,7 +1678,9 @@ A Story's photographs are public by intent, which is the whole difference from a
 **Receipts are not in Supabase Storage.** They live in the company's Google Drive
 ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)): Catat
 transaksi and a line's own "Unggah bukti" both upload there, and the database holds each file's
-Drive id ([Money](#money)). The Drive side is the connection below and the `drive_*` columns.
+Drive id ([Money](#money)). The Drive side is the connection below and the `drive_*` columns. Every
+upload is at most **50 MB** per file (`MAX_UPLOAD_BYTES`, ADR-0040 as amended by #394), checked as
+the declared size when the upload session opens and again on the size Drive reports back.
 
 One bucket:
 
@@ -1757,8 +1759,11 @@ environment, never here, so the table alone yields no token. `@sugt/internal` en
 and talks to Google. It marks the row `broken` on the first `invalid_grant`, or on a token that
 will not decrypt. It also checks that the account connected is `GOOGLE_DRIVE_ACCOUNT_EMAIL`.
 
-**Drive ids, never paths.** The five ids name the fixed tree ADR-0040 draws: the root, `_staging`
-(a sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` and the README.
+**Drive ids, never paths.** The five ids name the fixed tree ADR-0040 draws: the root ("SUGT ITB
+2026 Internal App Object Storage"), `_staging` ("SUGT ITB 2026 _staging — jangan dibagikan", a
+sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` and the README. The
+names matter only when a first connect creates the folders; the root and `_staging` are found by
+stored id after that, so a rename by hand breaks nothing and nothing renames them back.
 They are nullable because the row is written before the folders are ensured, in a second write,
 since no transaction is held open across a call to Google. `folder_problem` is set when a reconnect
 finds the root or `_staging` trashed or gone, or when Drive failed partway through. The root and

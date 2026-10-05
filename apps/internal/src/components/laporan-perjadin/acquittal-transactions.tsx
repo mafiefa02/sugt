@@ -22,11 +22,11 @@ import {
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
 import {
   isAcceptedReceipt,
-  MAX_RECEIPT_MEGABYTES,
+  MAX_UPLOAD_MEGABYTES,
   prepareReceipt,
   putToDriveSession,
   RECEIPT_ACCEPT,
-  RECEIPT_TOO_LARGE,
+  UPLOAD_TOO_LARGE,
   UNSUPPORTED_RECEIPT,
   type PreparedReceipt,
 } from "-/lib/drive/receipt-upload";
@@ -384,7 +384,7 @@ function Receipts({
       if (batch.length > 0) {
         const { prepared, unsupported, tooLarge } = await prepareAll(batch);
         if (unsupported > 0) notes.push(`${unsupported} berkas: ${UNSUPPORTED_RECEIPT}`);
-        if (tooLarge > 0) notes.push(`${tooLarge} berkas: ${RECEIPT_TOO_LARGE}`);
+        if (tooLarge > 0) notes.push(`${tooLarge} berkas: ${UPLOAD_TOO_LARGE}`);
 
         if (prepared.length > 0) {
           const sent = await uploadToDrive(perjadinId, prepared, line.id);
@@ -536,7 +536,7 @@ function RecordTransaction({
 
   /**
    * Upload every staged receipt to Drive, then record the line with them — all or nothing (ADR-0039,
-   * ADR-0040). Each file is prepared first (images re-encoded, EXIF stripped; the 20 MB cap), then
+   * ADR-0040). Each file is prepared first (images re-encoded, EXIF stripped; the 50 MB cap), then
    * the server opens a session per file and the bytes go straight to Drive. A failed upload records
    * nothing and keeps every value and every staged file, so "Catat" again retries the whole of it
    * against fresh sessions. Files that did land stay in private `_staging`, which ADR-0040 accepts.
@@ -549,7 +549,7 @@ function RecordTransaction({
       // A new line is all or nothing: any file that cannot be sent refuses the whole of it.
       const { prepared, unsupported, tooLarge } = await prepareAll(staged);
       if (unsupported > 0) return setRefusal(UNSUPPORTED_RECEIPT);
-      if (tooLarge > 0) return setRefusal(RECEIPT_TOO_LARGE);
+      if (tooLarge > 0) return setRefusal(UPLOAD_TOO_LARGE);
 
       const sent = await uploadToDrive(perjadinId, prepared);
       if ("refusal" in sent) {
@@ -784,7 +784,7 @@ function RecordTransaction({
             </Label>
             <p className="-mt-0.5 text-xs text-muted-foreground">
               1–{MAX_RECEIPTS_PER_TRANSACTION} berkas JPG, PNG, WebP atau PDF, masing-masing paling
-              besar {MAX_RECEIPT_MEGABYTES} MB. Foto diperkecil sebelum diunggah.
+              besar {MAX_UPLOAD_MEGABYTES} MB. Foto diperkecil sebelum diunggah.
             </p>
             {/*
               Required and staged, not uploaded on pick: `submit` PUTs them all before it records the
@@ -953,7 +953,7 @@ function sessionRefusalFor(result: Exclude<OpenReceiptSessionsResult, { outcome:
     case "too-many-receipts":
       return CAP_NOTE;
     case "too-large":
-      return RECEIPT_TOO_LARGE;
+      return UPLOAD_TOO_LARGE;
     case "unsupported-type":
       return UNSUPPORTED_RECEIPT;
     default:

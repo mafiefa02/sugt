@@ -300,7 +300,7 @@ What both controls take:
 
 - JPG, PNG, WebP or PDF; anything else is refused before it uploads. An iPhone photo arrives as a
   JPG.
-- At most 20 MB per file.
+- At most 50 MB per file.
 - Every photo is shrunk before it uploads — longest side 2400 px — which also strips its location
   and camera data, since the link is public.
 
@@ -602,10 +602,12 @@ The card is in one of four states:
 **Connecting** goes to Google's consent screen for the company account and back. If the wrong
 account was picked, the Drive permission was unticked, or Google sent no long-lived token, the card
 says so in its own words and stores nothing. A first connect creates the app's folders in the
-company Drive. A reconnect reuses them. If it finds the main folder or `_staging` in the Drive trash
-or gone, the card shows Folder bermasalah; it does not recreate them. There is no disconnect
-button. A successful reconnect also finishes what was recorded while the connection was down, as
-Periksa koneksi does below.
+company Drive: the main folder, **SUGT ITB 2026 Internal App Object Storage**, and beside it, never
+inside it, **SUGT ITB 2026 \_staging — jangan dibagikan**. A reconnect reuses them. The app knows
+them by id, not by name, so renaming either by hand in Drive breaks nothing and is never undone. If
+it finds the main folder or `_staging` in the Drive trash or gone, the card shows Folder bermasalah;
+it does not recreate them. There is no disconnect button. A successful reconnect also finishes what
+was recorded while the connection was down, as Periksa koneksi does below.
 
 **Periksa koneksi**, on the Terhubung card, checks the connection and reports each step:
 
