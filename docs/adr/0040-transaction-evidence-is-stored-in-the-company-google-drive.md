@@ -255,9 +255,14 @@ My Drive/
 ```
 
 **The per-file cap is 50 MB, for every upload.** `MAX_RECEIPT_BYTES` (20 MB) becomes
-`MAX_UPLOAD_BYTES` = 50 MiB in `@sugt/domain`, renamed because the Perjadin Dokumen
-([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042) upload under the same cap. It
-is enforced at the same four points as before: the browser after re-encoding, the declared size when
-the session opens, the session's own `X-Upload-Content-Length`, and the size Drive reports on
-read-back. Images are still re-encoded first, so the cap mostly matters for PDFs. The bytes still go
+`MAX_UPLOAD_BYTES` in `@sugt/domain`: 50 MB, meaning 50 × 1024 × 1024 bytes, as the old 20 MB did.
+It is renamed because the attendance-sheet uploads that
+[#397](https://github.com/sugt-itb/sugt-itb-26/issues/397) is to add (in a forthcoming ADR-0042) will
+share it. It is enforced at four points, the two named under File handling plus two the code already
+had: the browser after re-encoding, the declared size when the session opens, the session's own
+`X-Upload-Content-Length`, and the size Drive reports on read-back. Images are still re-encoded first, so the cap mostly matters for PDFs. The bytes still go
 from the browser straight to Drive, so Vercel's request limit is not in play.
+
+The body above keeps the `SUGT 2026 …` names, the old README text and the 20 MB cap as the
+point-in-time record of what was first decided; the running tool uses the names and the cap in this
+amendment.

@@ -582,9 +582,11 @@ export const MAX_EXTRA_STAFF_PER_GROUP = 10;
 export const MAX_RECEIPTS_PER_TRANSACTION = 5;
 
 /**
- * **The largest one uploaded file may be: 50 MB** ([ADR-0040](../../../docs/adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
- * amended by #394). One cap for every upload to Drive — receipts now, the Perjadin Dokumen next — so it
- * is named for the upload, not the receipt. A product rule beside the count above, read by the
+ * **The largest one uploaded file may be: 50 MB**, meaning 50 × 1024 × 1024 bytes
+ * ([ADR-0040](../../../docs/adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
+ * amended by [#394](https://github.com/sugt-itb/sugt-itb-26/issues/394)). One cap for every upload to
+ * Drive — receipts now, and the attendance-sheet uploads [#397](https://github.com/sugt-itb/sugt-itb-26/issues/397)
+ * is to add — so it is named for the upload, not the receipt. A product rule beside the count above, read by the
  * browser — which refuses a bigger file after compressing it — and by the server, which declares it
  * to Drive when opening the upload session and checks it again on the file Drive holds.
  */
