@@ -1,0 +1,224 @@
+import type { PerjadinDocumentKind, PerjadinDocumentParticipantType } from "@sugt/domain";
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
+
+import { db } from "../client";
+import { driveConnection } from "../schema/drive";
+import { school } from "../schema/reference";
+import { perjadin, perjadinDocument, perjadinDocumentFolder } from "../schema/travel";
+import type { Person } from "./caller";
+import { requireStaff } from "./staff-only";
+
+/**
+ * **What the document reconcile reads and writes** (ADR-0042, #397) — one Perjadin Document's place
+ * in the company Drive, the same way `./drive-sync.ts` is one transaction's. Staff-only throughout:
+ * the reconcile runs after a Staff member uploads, or when an Administrator — Staff too — sweeps.
+ *
+ * **No row lock is held across a call to Google.** Every folder id is claimed by compare-and-set:
+ * the write lands only where the id is still what the caller last read, and a caller that lost
+ * reads back the winner's and trashes the folder it made.
+ */
+
+/** `Dokumen/` and `Dokumen/Pelaksanaan Offline/`, as the connection holds them. */
+export type DokumenFolderIds = {
+  dokumenFolderId: string | null;
+  dokumenPelaksanaanOfflineFolderId: string | null;
+};
+
+/** The two Dokumen folder ids, or `null` when Drive was never connected. */
+export async function dokumenFolderIds(caller: Person): Promise<DokumenFolderIds | null> {
+  requireStaff(caller);
+
+  const [row] = await db
+    .select({
+      dokumenFolderId: driveConnection.dokumenFolderId,
+      dokumenPelaksanaanOfflineFolderId: driveConnection.dokumenPelaksanaanOfflineFolderId,
+    })
+    .from(driveConnection);
+  return row ?? null;
+}
+
+/**
+ * **Claim one Dokumen folder** — `Dokumen/` or the `Pelaksanaan Offline/` under it — replacing
+ * `expected`, the id the caller found missing, trashed or unset. Answers the id that won: `next`,
+ * or one a concurrent caller set first, in which case the caller trashes its own.
+ *
+ * A new `Dokumen/` cannot still hold the old `Pelaksanaan Offline/`, so claiming it clears that
+ * too.
+ */
+export async function claimDokumenFolder(
+  caller: Person,
+  folder: keyof DokumenFolderIds,
+  expected: string | null,
+  next: string,
+): Promise<string> {
+  requireStaff(caller);
+
+  const column = driveConnection[folder];
+  const [claimed] = await db
+    .update(driveConnection)
+    .set(
+      folder === "dokumenFolderId"
+        ? { dokumenFolderId: next, dokumenPelaksanaanOfflineFolderId: null }
+        : { dokumenPelaksanaanOfflineFolderId: next },
+    )
+    .where(sql`${column} is not distinct from ${expected}`)
+    .returning({ id: column });
+  if (claimed?.id) return claimed.id;
+
+  const [winner] = await db.select({ id: column }).from(driveConnection);
+  return winner?.id ?? next;
+}
+
+/** Everything the reconcile needs to put one document in place. */
+export type DocumentReconcileTarget = {
+  documentId: string;
+  perjadinId: string;
+  kind: PerjadinDocumentKind;
+  documentDate: string;
+  schoolName: string | null;
+  participantType: PerjadinDocumentParticipantType | null;
+  driveFileId: string;
+  destination: string;
+  startsOn: string;
+  /** The Perjadin's folder under `Dokumen/Pelaksanaan Offline`, once claimed. */
+  dokumenFolderId: string | null;
+  /** This kind's folder in it, once claimed. */
+  kindFolderId: string | null;
+};
+
+/** The document, its Perjadin and its folders. `null` when there is no such document. */
+export async function documentReconcileTarget(
+  caller: Person,
+  documentId: string,
+): Promise<DocumentReconcileTarget | null> {
+  requireStaff(caller);
+
+  const [row] = await db
+    .select({
+      documentId: perjadinDocument.id,
+      perjadinId: perjadin.id,
+      kind: perjadinDocument.kind,
+      documentDate: perjadinDocument.documentDate,
+      schoolName: school.name,
+      participantType: perjadinDocument.participantType,
+      driveFileId: perjadinDocument.driveFileId,
+      destination: perjadin.destination,
+      startsOn: perjadin.startsOn,
+      dokumenFolderId: perjadin.driveDokumenFolderId,
+      kindFolderId: perjadinDocumentFolder.driveFolderId,
+    })
+    .from(perjadinDocument)
+    .innerJoin(perjadin, eq(perjadin.id, perjadinDocument.perjadinId))
+    .leftJoin(school, eq(school.id, perjadinDocument.schoolId))
+    .leftJoin(
+      perjadinDocumentFolder,
+      and(
+        eq(perjadinDocumentFolder.perjadinId, perjadinDocument.perjadinId),
+        eq(perjadinDocumentFolder.kind, perjadinDocument.kind),
+      ),
+    )
+    .where(eq(perjadinDocument.id, documentId));
+  return row ?? null;
+}
+
+/** Claim the Perjadin's Dokumen folder unless another caller did first. Answers the winner. */
+export async function claimPerjadinDokumenFolder(
+  caller: Person,
+  perjadinId: string,
+  folderId: string,
+): Promise<string> {
+  requireStaff(caller);
+
+  const [claimed] = await db
+    .update(perjadin)
+    .set({ driveDokumenFolderId: folderId })
+    .where(and(eq(perjadin.id, perjadinId), isNull(perjadin.driveDokumenFolderId)))
+    .returning({ id: perjadin.driveDokumenFolderId });
+  if (claimed?.id) return claimed.id;
+
+  const [winner] = await db
+    .select({ id: perjadin.driveDokumenFolderId })
+    .from(perjadin)
+    .where(eq(perjadin.id, perjadinId));
+  return winner!.id!;
+}
+
+/** The same for one kind's folder: the primary key `(perjadin_id, kind)` is the compare-and-set. */
+export async function claimDocumentKindFolder(
+  caller: Person,
+  perjadinId: string,
+  kind: PerjadinDocumentKind,
+  folderId: string,
+): Promise<string> {
+  requireStaff(caller);
+
+  const [claimed] = await db
+    .insert(perjadinDocumentFolder)
+    .values({ perjadinId, kind, driveFolderId: folderId })
+    .onConflictDoNothing()
+    .returning({ id: perjadinDocumentFolder.driveFolderId });
+  if (claimed) return claimed.id;
+
+  const [winner] = await db
+    .select({ id: perjadinDocumentFolder.driveFolderId })
+    .from(perjadinDocumentFolder)
+    .where(
+      and(eq(perjadinDocumentFolder.perjadinId, perjadinId), eq(perjadinDocumentFolder.kind, kind)),
+    );
+  return winner!.id;
+}
+
+/** The reconcile finished this document: named, in its kind folder, shared. */
+export async function markDocumentSynced(caller: Person, documentId: string): Promise<void> {
+  requireStaff(caller);
+
+  await db
+    .update(perjadinDocument)
+    .set({ driveSyncedAt: sql`now()`, driveSyncFailedAt: null })
+    .where(eq(perjadinDocument.id, documentId));
+}
+
+/** A reconcile could not finish it, so the sweep tries other documents first next time. */
+export async function markDocumentSyncFailed(caller: Person, documentId: string): Promise<void> {
+  requireStaff(caller);
+
+  await db
+    .update(perjadinDocument)
+    .set({ driveSyncFailedAt: sql`now()` })
+    .where(and(eq(perjadinDocument.id, documentId), isNull(perjadinDocument.driveSyncedAt)));
+}
+
+/** One document the sweep will reconcile, with what Periksa koneksi says about it if it fails. */
+export type UnsyncedDocument = { id: string; kind: PerjadinDocumentKind; documentDate: string };
+
+/**
+ * **The documents the sweep owes**: every one not yet synced, at most `limit`, and how many in all
+ * — in the order `unsyncedTransactions` uses: never-failed first, oldest first, then the
+ * longest-failed, so a few that fail every time cannot hold the bounded sweep.
+ */
+export async function unsyncedDocuments(
+  caller: Person,
+  limit: number,
+): Promise<{ total: number; documents: UnsyncedDocument[] }> {
+  requireStaff(caller);
+
+  const unsynced = isNull(perjadinDocument.driveSyncedAt);
+  const [documents, [counted]] = await Promise.all([
+    db
+      .select({
+        id: perjadinDocument.id,
+        kind: perjadinDocument.kind,
+        documentDate: perjadinDocument.documentDate,
+      })
+      .from(perjadinDocument)
+      .where(unsynced)
+      .orderBy(
+        sql`${perjadinDocument.driveSyncFailedAt} asc nulls first`,
+        asc(perjadinDocument.uploadedAt),
+        asc(perjadinDocument.id),
+      )
+      .limit(limit),
+    db.select({ total: count() }).from(perjadinDocument).where(unsynced),
+  ]);
+  return { total: counted?.total ?? 0, documents };
+}

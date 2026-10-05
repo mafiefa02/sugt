@@ -1,5 +1,5 @@
 import { StickyTable, StickyTableHeader } from "-/components/sortable-table";
-import { driveFolderUrl } from "-/lib/drive/receipt-files";
+import { driveFileUrl, driveFolderUrl } from "-/lib/drive/receipt-files";
 import { shortenKabupaten } from "-/lib/format-destination";
 import { formatWibIndonesian } from "-/lib/format-wib";
 import { requirePerson } from "-/lib/person";
@@ -236,6 +236,19 @@ function LogRow({ row }: { row: ActivityLogRow }) {
               className="underline underline-offset-4"
             >
               Buka folder
+            </a>
+          </>
+        )}
+        {row.documentFileId && (
+          <>
+            {" · "}
+            <a
+              href={driveFileUrl(row.documentFileId)}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-4"
+            >
+              Buka
             </a>
           </>
         )}

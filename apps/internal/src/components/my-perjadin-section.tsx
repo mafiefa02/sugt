@@ -2,12 +2,13 @@
 
 import { FeedbackTokenDialog } from "-/components/feedback-token";
 import { RecordTransaction } from "-/components/laporan-perjadin/acquittal-transactions";
+import { PerjadinDokumenDialog } from "-/components/perjadin-dokumen-dialog";
 import { PerjadinFeedbackTokenDialog } from "-/components/perjadin-feedback-token";
 import { SessionMarkDeliveredDialog } from "-/components/perjadin-mark-delivered";
 import { PerjadinPreparationDialog } from "-/components/perjadin-preparation";
 import { progressTone } from "-/components/progress-tone";
 import { spentPercent, tripTimeline, type TimelineNode } from "-/components/trip-timeline";
-import type { ReceiptUploadGate } from "-/lib/drive/upload-gate";
+import type { UploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
 import { formatWibDate } from "-/lib/format-wib";
 import type { MyPerjadinTrip } from "@sugt/db/queries";
@@ -52,7 +53,7 @@ function MyPerjadinSection({
   title: string;
   description: string;
   trips: MyPerjadinTrip[];
-  uploadGate: ReceiptUploadGate;
+  uploadGate: UploadGate;
 }) {
   // Reveal three at a time from the client, never a refetch — the full list is already in hand, and
   // the button only widens the slice. Hidden once everything is shown.
@@ -108,7 +109,7 @@ function MyPerjadinSection({
  * its own click and opens the checklist without toggling. The chevron is decorative and outside the
  * trigger, rotated from the item's `data-open`.
  */
-function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: ReceiptUploadGate }) {
+function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: UploadGate }) {
   // The pill's `x/N` is read straight off the checklist the card also hands the dialog — one payload
   // for both, so the pill and the boxes can never disagree. `N` is always six (amendment to ADR-0018).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
@@ -200,6 +201,20 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Rece
                     className="rounded-full"
                   >
                     Catat Transaksi
+                  </Button>
+                }
+              />
+              <PerjadinDokumenDialog
+                perjadinId={trip.id}
+                destination={trip.destination}
+                uploadGate={uploadGate}
+                trigger={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-full"
+                  >
+                    Dokumen
                   </Button>
                 }
               />

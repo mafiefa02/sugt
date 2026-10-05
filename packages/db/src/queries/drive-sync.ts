@@ -22,6 +22,8 @@ import { requireStaff } from "./staff-only";
 /** A Perjadin's Drive folder and the two facts it is named from. */
 export type PerjadinDriveFolder = {
   driveFolderId: string | null;
+  /** Its folder under `Dokumen/Pelaksanaan Offline` (ADR-0042), named the same way. */
+  driveDokumenFolderId: string | null;
   destination: string;
   startsOn: string;
 };
@@ -39,6 +41,7 @@ export async function perjadinDriveFolder(
   const [trip] = await db
     .select({
       driveFolderId: perjadin.driveFolderId,
+      driveDokumenFolderId: perjadin.driveDokumenFolderId,
       destination: perjadin.destination,
       startsOn: perjadin.startsOn,
     })

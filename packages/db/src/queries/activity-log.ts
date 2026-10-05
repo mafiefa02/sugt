@@ -1,8 +1,12 @@
 import {
   ACTIVITY_LOG_ACTION_LABELS,
   formatRupiah,
+  formatTimeRange,
   MAX_RECEIPTS_PER_TRANSACTION,
   type ActivityLogAction,
+  type PerjadinDocumentKind,
+  type PerjadinDocumentParticipantType,
+  type TimeZone,
   type TransactionCategory,
   type TransactionParticipantType,
 } from "@sugt/domain";
@@ -11,7 +15,7 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../client";
 import { person } from "../schema/people";
-import { activityLog, perjadin, transaction } from "../schema/travel";
+import { activityLog, perjadin, perjadinDocument, transaction } from "../schema/travel";
 import type { Person } from "./caller";
 import { requireGrant } from "./staff-only";
 
@@ -26,7 +30,23 @@ import { requireGrant } from "./staff-only";
  * - **`activityLogPage`**, `/log`'s one read: Administrator only.
  */
 
-/** What `details` holds for each action. The two `document_*` shapes are #397's and #398's. */
+/**
+ * What a `document_uploaded` entry records of its Perjadin Document (#397): enough to say which
+ * sheet it was after the document itself is gone. The four Peserta fields are present on a Daftar
+ * Hadir Peserta only; `timeZone` is its School's, which its two times are read in.
+ */
+export type DocumentLogDetails = {
+  documentId: string;
+  kind: PerjadinDocumentKind;
+  documentDate: string;
+  schoolName?: string;
+  participantType?: PerjadinDocumentParticipantType;
+  startsAt?: string;
+  endsAt?: string;
+  timeZone?: TimeZone;
+};
+
+/** What `details` holds for each action. `document_deleted`'s shape is #398's. */
 export type ActivityLogDetails = {
   advance_set: { amountIdr: number };
   advance_changed: { fromIdr: number; toIdr: number };
@@ -49,7 +69,7 @@ export type ActivityLogDetails = {
     total: number;
   };
   report_filed: { transactionCount: number; totalIdr: number };
-  document_uploaded: Record<string, unknown>;
+  document_uploaded: DocumentLogDetails;
   document_deleted: Record<string, unknown>;
 };
 
@@ -85,11 +105,25 @@ export function activityLogRincian(entry: ActivityLogEntry): string {
     }
     case "report_filed":
       return `${entry.details.transactionCount} transaksi · total ${formatRupiah(entry.details.totalIdr)}`;
-    // Nothing writes these until #397 and #398, which define their details and their Rincian.
     case "document_uploaded":
+      return documentRincian(entry.details);
+    // Nothing writes this until #398, which defines its details and its Rincian.
     case "document_deleted":
       return "";
   }
+}
+
+/**
+ * A Perjadin Document as one line — `Daftar Hadir Peserta · 2026-10-14 · SMA Y · Siswa ·
+ * 08.00–11.30 WITA`, or just its kind and date for the other two.
+ */
+function documentRincian(details: DocumentLogDetails): string {
+  const { kind, documentDate, schoolName, participantType, startsAt, endsAt, timeZone } = details;
+  const parts: string[] = [kind, documentDate];
+  if (schoolName && participantType && startsAt && endsAt && timeZone) {
+    parts.push(schoolName, participantType, formatTimeRange(startsAt, endsAt, timeZone));
+  }
+  return parts.join(" · ");
 }
 
 /** `search_text`: the Aksi and Rincian as the screen shows them, lower-cased once at write time. */
@@ -157,6 +191,8 @@ export type ActivityLogRow = ActivityLogEntry & {
   perjadin: { id: string; destination: string; startsOn: string; endsOn: string; picName: string };
   /** The Drive folder of the transaction the entry names, when it has one. */
   driveFolderId: string | null;
+  /** The Drive file of the Perjadin Document the entry names, while the document stands. */
+  documentFileId: string | null;
 };
 
 export type ActivityLogPage = {
@@ -246,6 +282,7 @@ export async function activityLogPage(
       endsOn: perjadin.endsOn,
       picName: pic.fullName,
       driveFolderId: transaction.driveFolderId,
+      documentFileId: perjadinDocument.driveFileId,
     })
     .from(activityLog)
     .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
@@ -253,6 +290,10 @@ export async function activityLogPage(
     .leftJoin(
       transaction,
       sql`${transaction.id} = (${activityLog.details} ->> 'transactionId')::uuid`,
+    )
+    .leftJoin(
+      perjadinDocument,
+      sql`${perjadinDocument.id} = (${activityLog.details} ->> 'documentId')::uuid`,
     )
     .where(where)
     .orderBy(desc(activityLog.occurredAt), desc(activityLog.id))
@@ -274,6 +315,7 @@ export async function activityLogPage(
         picName: row.picName,
       },
       driveFolderId: row.driveFolderId,
+      documentFileId: row.documentFileId,
     })),
     total,
     page,

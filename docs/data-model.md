@@ -1380,6 +1380,70 @@ dialog's — is taken off the derived six, so an orphan can never make one read 
 
 ---
 
+### Perjadin Documents
+
+```sql
+create table perjadin_document (
+  id                     uuid primary key default gen_random_uuid(),
+  perjadin_id            uuid not null references perjadin (id) on delete cascade,
+  kind                   text not null check (kind in
+                           ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber',
+                            'Daftar Hadir Pendamping')),
+  document_date          date not null,
+  school_id              uuid references school (id),
+  participant_type       text check (participant_type in ('Siswa', 'GTK-MS')),
+  starts_at              time,
+  ends_at                time,
+  drive_file_id          text not null unique,
+  content_type           text not null check (content_type = 'application/pdf'),
+  byte_size              integer not null,
+  uploaded_by_person_id  uuid not null references person (id),
+  uploaded_at            timestamptz not null default now(),
+  drive_synced_at        timestamptz,
+  drive_sync_failed_at   timestamptz,
+  check ((kind = 'Daftar Hadir Peserta') = (school_id is not null and participant_type is not null
+                                            and starts_at is not null and ends_at is not null)),
+  check (kind = 'Daftar Hadir Peserta' or (school_id is null and participant_type is null
+                                           and starts_at is null and ends_at is null)),
+  check (ends_at > starts_at)
+);
+
+create table perjadin_document_folder (
+  perjadin_id      uuid not null references perjadin (id) on delete cascade,
+  kind             text not null check (kind in (…the three…)),
+  drive_folder_id  text not null,
+  primary key (perjadin_id, kind)
+);
+
+alter table perjadin add column drive_dokumen_folder_id text;
+```
+
+**A Perjadin's attendance sheets, one PDF each** (#397,
+[ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)). `kind` is
+character for character `PERJADIN_DOCUMENT_KINDS`, and `participant_type` is
+`PERJADIN_DOCUMENT_PARTICIPANT_TYPES`, a const of its own as `PRETEST_PARTICIPANT_TYPES` is.
+
+**The database holds which fields a sheet carries.** A Daftar Hadir Peserta, and only it, has a
+School, a cohort and a session's local start and end; the other two kinds have none of the four.
+The two CHECKs hold that both ways round, and a third holds `ends_at` after `starts_at`. The
+content type is pinned to PDF.
+
+**The application holds the rest**, in `recordPerjadinDocument`: `document_date` lies inside the
+trip, and a Peserta sheet's School is in the Perjadin's Sub-Cluster, refused as
+`school-outside-sub-cluster` the way offline Sessions refuse it. That second rule cannot be a foreign
+key, for the reason Sessions give: Sub-Clusters are editable (ADR-0016). There is **no duplicate
+rule**: two sheets of one kind and date are two rows, told apart in Drive by `D-{doc8}`.
+
+**The row and its Activity Log entry are written in one transaction**, and the row lands with
+`drive_synced_at` null; the reconcile sets it once the file is named, filed and shared. `id` is
+generated before the insert, because the file's name carries it.
+
+**Folders.** `perjadin.drive_dokumen_folder_id` is the trip's folder under `Dokumen/Pelaksanaan
+Offline`, and `perjadin_document_folder` holds its three kind folders, each made on first use. Both
+are claimed by compare-and-set: the first by `where drive_dokumen_folder_id is null`, the second by
+the primary key, `on conflict do nothing`. A caller that lost trashes its own folder and uses the
+winner's.
+
 ## Money
 
 **There is no `perjadin_report` table.** A Perjadin yields exactly one Report, always, so the
@@ -1739,10 +1803,24 @@ A Story's photographs are public by intent, which is the whole difference from a
 
 ## Object storage
 
-**Receipts are not in Supabase Storage.** They live in the company's Google Drive
+**Receipts and Perjadin Documents are not in Supabase Storage.** Receipts live in the company's
+Google Drive
 ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)): Catat
 transaksi and a line's own "Unggah bukti" both upload there, and the database holds each file's
-Drive id ([Money](#money)). The Drive side is the connection below and the `drive_*` columns. Every
+Drive id ([Money](#money)). Perjadin Documents are beside them, under `Dokumen/`
+([ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md),
+[Perjadin Documents](#perjadin-documents)):
+
+```
+SUGT ITB 2026 Internal App Object Storage/
+├── Bukti Transaksi/Pelaksanaan Offline/{destination} · {starts_on}/…
+└── Dokumen/Pelaksanaan Offline/{destination} · {starts_on}/
+    ├── Daftar Hadir Peserta/{date} · {school} · {Siswa|GTK-MS} · Daftar Hadir Peserta · D-{doc8}.pdf
+    ├── Daftar Hadir Pendamping/{date} · Daftar Hadir Pendamping · D-{doc8}.pdf
+    └── Daftar Hadir Narasumber/{date} · Daftar Hadir Narasumber · D-{doc8}.pdf
+```
+
+The Drive side is the connection below and the `drive_*` columns. Every
 upload is at most **50 MB** per file (`MAX_UPLOAD_BYTES`, ADR-0040 as amended by #394), checked as
 the declared size when the upload session opens and again on the size Drive reports back.
 
@@ -1756,7 +1834,8 @@ One bucket:
 audit needs a spreadsheet with an "anyone with the link can view" link per transaction, so each
 transaction's folder in Drive is shared that way (ADR-0040), and the acquittal links straight to
 it and to each file. The app renders and signs nothing. What stays private is everything above a
-transaction folder: the root, `_staging` and each Perjadin's folder.
+transaction folder: the root, `_staging` and each Perjadin's folder. **A Perjadin Document is shared
+file by file**, so all of `Dokumen/`'s folders stay private (ADR-0042).
 
 **Historical: the `receipts` bucket.** Until #379 a second, private bucket held receipts, under
 opaque `{uuid}` keys, read through short-lived URLs the app signed after checking Staff. A key
@@ -1800,6 +1879,8 @@ create table drive_connection (
   bukti_transaksi_folder_id      text,
   pelaksanaan_offline_folder_id  text,
   readme_file_id                 text,
+  dokumen_folder_id                      text,
+  dokumen_pelaksanaan_offline_folder_id  text,
   folder_problem                 text check (folder_problem in
                                    ('root-trashed', 'root-missing',
                                     'staging-trashed', 'staging-missing',
@@ -1828,6 +1909,12 @@ will not decrypt. It also checks that the account connected is `GOOGLE_DRIVE_ACC
 sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` and the README. The
 names matter only when a first connect creates the folders; the root and `_staging` are found by
 stored id after that, so a rename by hand breaks nothing and nothing renames them back.
+
+**`dokumen_folder_id` and `dokumen_pelaksanaan_offline_folder_id`** are `Dokumen/` and its
+`Pelaksanaan Offline/` (ADR-0042), beside `Bukti Transaksi`. They are not part of the five: a
+connection made before them has neither, and a receipt must not wait on them. A connect, Periksa
+koneksi and the document reconcile each make whichever is unset, missing or trashed, and claim it by
+compare-and-set, so no Administrator has to reconnect for them.
 They are nullable because the row is written before the folders are ensured, in a second write,
 since no transaction is held open across a call to Google. `folder_problem` is set when a reconnect
 finds the root or `_staging` trashed or gone, or when Drive failed partway through. The root and
@@ -2134,6 +2221,7 @@ path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` c
 trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive nothing — and
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
 links go with the names. `activity_log` cascades too, so the trip's Activity Log entries go with it.
+So do `perjadin_document` and `perjadin_document_folder`; the files and folders stay in Drive.
 
 `session.perjadin_id` deliberately does **not** cascade and has no `on delete` action at all,
 so an offline Session blocks the delete. A trip that produced teaching cannot be quietly

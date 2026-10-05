@@ -44,10 +44,11 @@ export function receiptExtension(contentType: ReceiptContentType): string {
   return EXTENSIONS[contentType];
 }
 
-const SEPARATOR = " · ";
+/** The separator in every app-made name. Shared with the Dokumen names (`document-files.ts`). */
+export const SEPARATOR = " · ";
 
 /** The first 8 hex characters of a uuid — its first group. */
-function short(uuid: string): string {
+export function short(uuid: string): string {
   return uuid.replaceAll("-", "").slice(0, 8);
 }
 

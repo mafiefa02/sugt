@@ -1,5 +1,7 @@
 import type {
   ActivityLogAction,
+  PerjadinDocumentKind,
+  PerjadinDocumentParticipantType,
   Role,
   Stream,
   TransactionCategory,
@@ -13,16 +15,18 @@ import {
   date,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
   text,
+  time,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 
 import { person } from "./people";
-import { subCluster } from "./reference";
+import { school, subCluster } from "./reference";
 
 /**
  * Travel: the Perjadin, its Group, and the acquittal state.
@@ -81,6 +85,9 @@ export const perjadin = pgTable(
     // first time a transaction on it is reconciled — never under a row lock held across a call
     // to Google. Null until then. An id, never a path, so a rename or move by hand breaks nothing.
     driveFolderId: text("drive_folder_id"),
+    // The Perjadin's folder under `Dokumen/Pelaksanaan Offline` (ADR-0042), claimed by the same
+    // compare-and-set the first time one of its Perjadin Documents is reconciled. Null until then.
+    driveDokumenFolderId: text("drive_dokumen_folder_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -382,5 +389,93 @@ export const activityLog = pgTable(
     ),
     // `/log` reads newest first, 50 at a time; this serves that order without a sort.
     index("activity_log_occurred_at_id_idx").on(t.occurredAt.desc(), t.id.desc()),
+  ],
+);
+
+/**
+ * **Perjadin Documents** (#397, ADR-0042): the trip's attendance sheets, one PDF each, in the
+ * company Google Drive under `Dokumen/`. Three kinds. A **Daftar Hadir Peserta** is one School's
+ * attendance at one session, for one cohort, so it alone carries a School, a cohort and the
+ * session's local start and end; the other two are one day's sheet and carry none of the four. Two
+ * CHECKs hold that both ways round, so a row can neither lack a Peserta field nor carry one it
+ * should not.
+ *
+ * **The School must be in the Perjadin's Sub-Cluster** — held by the application
+ * (`recordPerjadinDocument`), not here, for the reason offline Sessions give: Sub-Clusters are
+ * editable, so a foreign key into the grouping would forbid regrouping (ADR-0016).
+ *
+ * `id` is generated before the insert, because the file's name carries it (`D-{doc8}`). There is no
+ * duplicate rule: two sheets of one kind and date are allowed, and the marker tells them apart.
+ * `drive_synced_at` and `drive_sync_failed_at` mean what they mean on `transaction`.
+ */
+export const perjadinDocument = pgTable(
+  "perjadin_document",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    perjadinId: uuid("perjadin_id")
+      .notNull()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<PerjadinDocumentKind>().notNull(),
+    // Tanggal Sesi on a Peserta sheet, Tanggal Dokumen on the other two.
+    documentDate: date("document_date").notNull(),
+    schoolId: uuid("school_id").references(() => school.id),
+    participantType: text("participant_type").$type<PerjadinDocumentParticipantType>(),
+    // Wall-clock times local to the School, read beside its Province's Time Zone.
+    startsAt: time("starts_at"),
+    endsAt: time("ends_at"),
+    driveFileId: text("drive_file_id").notNull().unique(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    uploadedByPersonId: uuid("uploaded_by_person_id")
+      .notNull()
+      .references(() => person.id),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+    driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
+    driveSyncFailedAt: timestamp("drive_sync_failed_at", { withTimezone: true }),
+  },
+  (t) => [
+    check(
+      "perjadin_document_kind_check",
+      sql`${t.kind} in ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber', 'Daftar Hadir Pendamping')`,
+    ),
+    check(
+      "perjadin_document_participant_type_check",
+      sql`${t.participantType} in ('Siswa', 'GTK-MS')`,
+    ),
+    check("perjadin_document_content_type_check", sql`${t.contentType} = 'application/pdf'`),
+    check(
+      "perjadin_document_peserta_fields_check",
+      sql`(${t.kind} = 'Daftar Hadir Peserta') = (${t.schoolId} is not null and ${t.participantType} is not null and ${t.startsAt} is not null and ${t.endsAt} is not null)`,
+    ),
+    check(
+      "perjadin_document_other_fields_null_check",
+      sql`${t.kind} = 'Daftar Hadir Peserta' or (${t.schoolId} is null and ${t.participantType} is null and ${t.startsAt} is null and ${t.endsAt} is null)`,
+    ),
+    check("perjadin_document_times_check", sql`${t.endsAt} > ${t.startsAt}`),
+    // The dialog lists a trip's documents; Postgres does not index the FK on its own (#270).
+    index("perjadin_document_perjadin_id_idx").on(t.perjadinId),
+  ],
+);
+
+/**
+ * **A Perjadin's three kind folders** under its Dokumen folder (ADR-0042), each made the first time
+ * a document of that kind is reconciled. The primary key is the compare-and-set: the insert does
+ * nothing on conflict, and a caller that lost reads back the winner's id and trashes its own.
+ */
+export const perjadinDocumentFolder = pgTable(
+  "perjadin_document_folder",
+  {
+    perjadinId: uuid("perjadin_id")
+      .notNull()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<PerjadinDocumentKind>().notNull(),
+    driveFolderId: text("drive_folder_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.perjadinId, t.kind] }),
+    check(
+      "perjadin_document_folder_kind_check",
+      sql`${t.kind} in ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber', 'Daftar Hadir Pendamping')`,
+    ),
   ],
 );

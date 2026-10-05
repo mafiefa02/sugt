@@ -2,15 +2,18 @@ import {
   driveCredentials,
   driveFolderIds,
   recordDriveFolders,
+  unsyncedDocuments,
   unsyncedTransactions,
   type DriveFolderProblem,
   type Person,
 } from "@sugt/db/queries";
 
 import { refreshDriveToken } from "./access-token";
+import { ensureDokumenFolders } from "./dokumen-folders";
 import { readyFolders, type ReadyFolders } from "./fixed-folders";
 import { type DriveClient, isDriveFailure, openDrive } from "./google";
 import { reconcileTransaction, type UnsyncedReason } from "./reconcile";
+import { type DocumentUnsyncedReason, reconcileDocument } from "./reconcile-document";
 
 /**
  * **Periksa koneksi** (ADR-0040, #375): whether the company Drive connection works, whether its tree
@@ -18,7 +21,7 @@ import { reconcileTransaction, type UnsyncedReason } from "./reconcile";
  * reconnect callback runs the sweep half of it too.
  */
 
-/** How many unsynced transactions one press reconciles. */
+/** How many unsynced transactions one press reconciles — and, after them, how many documents. */
 export const SWEEP_LIMIT = 25;
 
 /**
@@ -35,13 +38,28 @@ export type SweepFailure = {
   reason: UnsyncedReason | "no-such-transaction";
 };
 
-export type SweepReport = { synced: number; waiting: number; failures: SweepFailure[] };
+/** A Perjadin Document the sweep could not finish (ADR-0042). */
+export type DocumentSweepFailure = {
+  documentId: string;
+  kind: string;
+  documentDate: string;
+  reason: DocumentUnsyncedReason | "no-such-document";
+};
+
+export type SweepReport = {
+  synced: number;
+  waiting: number;
+  failures: SweepFailure[];
+  /** The same for Perjadin Documents, swept after the transactions within the same budget. */
+  documents: { synced: number; waiting: number; failures: DocumentSweepFailure[] };
+};
 
 /**
  * **The sweep**: reconcile the unsynced transactions in the order `unsyncedTransactions` gives — at
- * most `limit`, one at a time, and none started once `budgetMs` has passed. A trashed folder is
- * reported, never recreated (the reconcile's own rule). `waiting` is what is still owed afterwards:
- * the failures, and anything past the bound or the budget.
+ * most `limit`, one at a time, and none started once `budgetMs` has passed — then the unsynced
+ * Perjadin Documents the same way (ADR-0042), within what is left of the budget. A trashed folder
+ * is reported, never recreated (the reconciles' own rule). `waiting` is what is still owed
+ * afterwards: the failures, and anything past the bound or the budget.
  */
 export async function sweepUnsynced(
   person: Person,
@@ -66,7 +84,34 @@ export async function sweepUnsynced(
       });
     }
   }
-  return { synced, waiting: owed.total - synced, failures };
+
+  const owedDocuments = await unsyncedDocuments(person, limit);
+  const documentFailures: DocumentSweepFailure[] = [];
+  let documentsSynced = 0;
+  for (const document of owedDocuments.documents) {
+    if (Date.now() - startedAt > budgetMs) break;
+    const result = await reconcileDocument(person, drive, folders, document.id);
+    if (result.outcome === "synced") documentsSynced += 1;
+    else {
+      documentFailures.push({
+        documentId: document.id,
+        kind: document.kind,
+        documentDate: document.documentDate,
+        reason: result.outcome === "unsynced" ? result.reason : result.outcome,
+      });
+    }
+  }
+
+  return {
+    synced,
+    waiting: owed.total - synced,
+    failures,
+    documents: {
+      synced: documentsSynced,
+      waiting: owedDocuments.total - documentsSynced,
+      failures: documentFailures,
+    },
+  };
 }
 
 /** One of the four fixed folders, as Periksa koneksi found it. */
@@ -92,8 +137,15 @@ export type DriveCheckReport =
       folders: FolderCheck[];
       /** Which of the root and `_staging` an `anyone` permission reaches, inherited or direct. */
       exposed: ExposableFolder[];
-      /** The sweep — or, when the tree is not usable and it did not run, how many lines wait. */
-      sweep: ({ ran: true } & SweepReport) | { ran: false; waiting: number };
+      /**
+       * `Dokumen/` and its `Pelaksanaan Offline/` (ADR-0042): there, or made just now — a
+       * connection made before them gets them here. `skipped` while the tree is not usable.
+       */
+      dokumen: "ok" | "created" | "skipped";
+      /** The sweep — or, when the tree is not usable and it did not run, how much waits. */
+      sweep:
+        | ({ ran: true } & SweepReport)
+        | { ran: false; waiting: number; documentsWaiting: number };
     };
 
 /**
@@ -108,7 +160,8 @@ export type DriveCheckReport =
  * 3. **The safety check**: `permissions.list` on the root and on `_staging`. An `anyone` permission
  *    on either — inherited or direct — means the folder has been moved under a link-shared folder, or
  *    shared by hand, and files nobody should see can be opened by link.
- * 4. **The sweep** (`sweepUnsynced`), only when the tree is usable; otherwise how many lines wait.
+ * 4. **The Dokumen folders** (`ensureDokumenFolders`), made if missing, when the tree is usable.
+ * 5. **The sweep** (`sweepUnsynced`), only when the tree is usable; otherwise how much waits.
  *
  * The caller has already checked the Administrator Grant.
  */
@@ -150,10 +203,19 @@ export async function checkDriveConnection(person: Person): Promise<DriveCheckRe
     }
 
     const ready = problem === null ? readyFolders({ ...stored, folderProblem: null }) : null;
+    const dokumen = ready
+      ? (await ensureDokumenFolders(person, drive, ready.rootFolderId)).created
+        ? ("created" as const)
+        : ("ok" as const)
+      : ("skipped" as const);
     const sweep = ready
       ? { ran: true as const, ...(await sweepUnsynced(person, drive, ready)) }
-      : { ran: false as const, waiting: (await unsyncedTransactions(person, 0)).total };
-    return { token: "ok", folders, exposed, sweep };
+      : {
+          ran: false as const,
+          waiting: (await unsyncedTransactions(person, 0)).total,
+          documentsWaiting: (await unsyncedDocuments(person, 0)).total,
+        };
+    return { token: "ok", folders, exposed, dokumen, sweep };
   } catch (error) {
     if (isDriveFailure(error)) return { token: "unreachable" };
     throw error;

@@ -5,8 +5,9 @@ import { openDrive } from "./google";
 import { perjadinFolderName } from "./receipt-files";
 
 /**
- * **Rename a Perjadin's Drive folder after its start date was corrected** (#376, ADR-0040), so the
- * company Drive shows `{destination} · {new starts_on}`.
+ * **Rename a Perjadin's Drive folders after its start date was corrected** (#376, ADR-0040), so the
+ * company Drive shows `{destination} · {new starts_on}` — its receipts folder and, once it has one,
+ * its Dokumen folder (ADR-0042). File names carry no `starts_on`, so nothing else moves.
  *
  * **Best effort, after the commit.** The correction has already been written; nothing here can fail
  * it or roll it back. A trip with no Drive folder yet, or a connection that is not `connected`, makes
@@ -18,16 +19,20 @@ import { perjadinFolderName } from "./receipt-files";
 export async function renamePerjadinFolder(person: Person, perjadinId: string): Promise<void> {
   try {
     const trip = await perjadinDriveFolder(person, perjadinId);
-    if (!trip?.driveFolderId) return;
+    // The receipts folder and the Dokumen folder (ADR-0042) carry the same name.
+    const folderIds = [trip?.driveFolderId, trip?.driveDokumenFolderId].filter((id): id is string =>
+      Boolean(id),
+    );
+    if (!trip || folderIds.length === 0) return;
 
     const credentials = await driveCredentials(person);
     if (credentials?.status !== "connected") return;
     const token = await refreshDriveToken(person, credentials);
     if (token.outcome !== "ok") return;
 
-    await openDrive(token.accessToken).updateFile(trip.driveFolderId, {
-      name: perjadinFolderName(trip.destination, trip.startsOn),
-    });
+    const drive = openDrive(token.accessToken);
+    const name = perjadinFolderName(trip.destination, trip.startsOn);
+    await Promise.all(folderIds.map((id) => drive.updateFile(id, { name })));
   } catch (error) {
     console.error(`Renaming the Drive folder of Perjadin ${perjadinId} failed.`, error);
   }
