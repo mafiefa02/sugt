@@ -319,17 +319,17 @@ function PerjadinPlanForm({
       </div>
 
       <div className="border-b border-border px-7 py-5">
-        <h2 className="font-heading text-sm font-medium">Teaching Team</h2>
+        <h2 className="font-heading text-sm font-medium">Narasumber</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Nama pengajar untuk Perjadin ini. Tambahkan satu per satu; hingga{" "}
+          Nama narasumber untuk Perjadin ini. Tambahkan satu per satu; hingga{" "}
           {MAX_TEACHING_TEAM_PER_PERJADIN} nama.
         </p>
 
         <div className="mt-3 flex max-w-md gap-2">
           <Input
             id={teacherDraftId}
-            aria-label="Nama pengajar"
-            placeholder="Nama pengajar"
+            aria-label="Nama narasumber"
+            placeholder="Nama narasumber"
             value={teacherDraft}
             disabled={teacherNames.length >= MAX_TEACHING_TEAM_PER_PERJADIN}
             onChange={(event) => {
@@ -350,7 +350,7 @@ function PerjadinPlanForm({
             }
             onClick={addTeacher}
           >
-            Tambah pengajar
+            Tambah narasumber
           </Button>
         </div>
 
@@ -571,10 +571,10 @@ function PerjadinPlanForm({
                                 aria-label="Diajar oleh"
                                 placeholder={
                                   teacherOptions.length === 0
-                                    ? "Belum ada pengajar"
-                                    : "Pilih pengajar…"
+                                    ? "Belum ada narasumber"
+                                    : "Pilih narasumber…"
                                 }
-                                emptyLabel="Tidak ada pengajar."
+                                emptyLabel="Tidak ada narasumber."
                                 options={teacherOptions}
                                 value={draft.taughtBy.map(String)}
                                 onValueChange={(next) => {
@@ -671,7 +671,7 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
           )}
           {result.outcome === "too-many-teachers" && (
             <p>
-              Nama pengajar terlalu banyak: maksimal {result.limit}, bukan {result.count}.
+              Nama narasumber terlalu banyak: maksimal {result.limit}, bukan {result.count}.
             </p>
           )}
           {result.outcome === "too-many-sessions-per-school" && (

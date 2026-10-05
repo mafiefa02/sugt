@@ -41,7 +41,7 @@ export function proxy(request: NextRequest) {
  *   - `/f/**` — the Participant Feedback handler. Reached by a **short-lived token**
  *     in the URL, by a Participant who has no account and never will.
  *   - `/ep/**` — the Perjadin Evaluation handler (ADR-0024). The same hole as `/f/**`,
- *     one form over: reached by a **short-lived token** in the URL, by a Pengajar,
+ *     one form over: reached by a **short-lived token** in the URL, by a Narasumber,
  *     Pendamping or Pimpinan who need not sign in and self-declare who they are.
  *   - `/api/aggregates/**` — the four routes the public site reads. They authenticate
  *     with a **shared secret** in a header, not a session.

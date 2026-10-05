@@ -234,9 +234,10 @@ function TripCard({
 }
 
 /**
- * Who is on the trip, inline: Pendamping (the Staff Group), Pengajar (the trip-scoped teacher names)
- * and Pimpinan (record-only), in that order. A group with nobody in it is left out rather than
- * labelled over an empty list, and the names are plain — the PIC is already named in the header.
+ * Who is on the trip, inline: Pendamping (the Staff Group), Narasumber (the trip-scoped teacher
+ * names) and Pimpinan (record-only), in that order. A group with nobody in it is left out rather
+ * than labelled over an empty list, and the names are plain — the PIC is already named in the
+ * header.
  */
 function AnggotaRoster({ anggota }: { anggota: MyUpcomingPerjadin["anggota"] }) {
   const groups = [
@@ -245,7 +246,7 @@ function AnggotaRoster({ anggota }: { anggota: MyUpcomingPerjadin["anggota"] }) 
       names: anggota.staff.map((person) => ({ key: person.personId, name: person.fullName })),
     },
     {
-      label: "Pengajar",
+      label: "Narasumber",
       names: anggota.pengajar.map((person) => ({ key: person.id, name: person.name })),
     },
     {

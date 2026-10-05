@@ -196,13 +196,13 @@ on its own with a **searchable School combobox** (type a name or a Kabupaten/Kot
 action appears on a School's own page, which is where you already are when you are thinking about one
 School. Six of every eight Sessions are online, so this is not a secondary path.
 
-**It names two Pengajar, one per cohort.** One professor taught the Siswa cohort and one taught
+**It names two Narasumber, one per cohort.** One professor taught the Siswa cohort and one taught
 GTK-MS, so the form asks for exactly those two names, both required — not a variable list (ADR-0036).
 There is no separate "mark delivered" step and no who-taught prompt: the Session is recorded
-delivered with its two Pengajar in one act.
+delivered with its two Narasumber in one act.
 
 **Correcting an online Session is an edit; removing one is a delete.** Its fields — School, date,
-times and the two Pengajar — are editable from its detail page, and a Session recorded in error is
+times and the two Narasumber — are editable from its detail page, and a Session recorded in error is
 **hard-deleted** behind a confirm dialog rather than cancelled. (Cancellation, with a required
 reason, remains for offline Sessions, and only while one is still arranged — a Session that was
 delivered and then went wrong is a correction, not a cancellation.)
@@ -261,8 +261,8 @@ of every eight Sessions are invisible to anything trip-shaped.
 pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid and nothing more:
 no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Every trip has
 the same six fixed boxes — SK Perjalanan, "Tiket / transportasi PP", lodging, local transport, one
-"confirmed with the Pendamping" and "Pengajar sudah lengkap" — and no per-member ones. Any Staff member may
-tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
+"confirmed with the Pendamping" and "Narasumber sudah lengkap" — and no per-member ones. Any Staff
+member may tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
 screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
 the Persiapan column of the Perjadin list, and on the trip cards of the Staff home strip. For Staff
 the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.

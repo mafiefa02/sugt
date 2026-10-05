@@ -384,14 +384,15 @@ export type PerjadinAspect = (typeof PERJADIN_ASPECTS)[number];
  * on the unauthenticated `/ep/{token}` form (ADR-0024). It is not validated against the Group or
  * the Pimpinan roster: the identity is untrusted by design, exactly as `participant_feedback.name`
  * is (ADR-0012). The three cover everyone the evaluation wants to hear from — the name-based
- * **Pengajar** (Teaching Team), the signed-in DITSAMA **Pendamping** who travel, and the
- * record-only **Pimpinan** — none of whom the old signed-in-Group gate could all admit.
+ * **Narasumber** (the Teaching Team's UI label; `Pengajar` until #393), the signed-in DITSAMA
+ * **Pendamping** who travel, and the record-only **Pimpinan** — none of whom the old
+ * signed-in-Group gate could all admit.
  *
  * These are **values a column may hold**, so `perjadin_evaluation.filed_by_role` CHECKs this list
  * character for character (see `packages/db/src/schema/evaluations.ts`), and the form's Role
  * selector is driven off it — one list behind the schema, the query and the form.
  */
-export const PERJADIN_EVALUATION_ROLES = ["Pengajar", "Pendamping", "Pimpinan"] as const;
+export const PERJADIN_EVALUATION_ROLES = ["Narasumber", "Pendamping", "Pimpinan"] as const;
 export type PerjadinEvaluationRole = (typeof PERJADIN_EVALUATION_ROLES)[number];
 
 /**
@@ -426,7 +427,7 @@ export const FEEDBACK_TOKEN_LIFETIME_HOURS = 24;
 /**
  * How long a Perjadin's Evaluation link stays open — **14 days**, far longer than the Session
  * feedback token's 24 hours. A Participant Feedback QR is held up in the room and scanned on the
- * spot, so a day is generous; a Perjadin link is shared by hand to the Pengajar, Pendamping and
+ * spot, so a day is generous; a Perjadin link is shared by hand to the Narasumber, Pendamping and
  * Pimpinan after a trip that may have run over a week, and they file when they get to it. Counted
  * from issue, like `FEEDBACK_TOKEN_LIFETIME_HOURS`, and expressed in hours so both tokens set
  * their `expires_at` the same way (`now() + make_interval(hours => …)`).

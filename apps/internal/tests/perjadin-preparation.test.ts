@@ -91,7 +91,7 @@ describe("the derived checklist", () => {
 
     expect(items.map((item) => item.itemKey)).toEqual(FIXED_KEYS);
     expect(items.find((item) => item.itemKey === "pengajar_lengkap")?.label).toBe(
-      "Pengajar sudah lengkap",
+      "Narasumber sudah lengkap",
     );
     expect(items.find((item) => item.itemKey === "tiket_pp")?.label).toBe(
       "Tiket / transportasi PP",
@@ -153,7 +153,7 @@ describe("the derived checklist", () => {
   });
 });
 
-describe("the one automatic un-tick — Pengajar sudah lengkap", () => {
+describe("the one automatic un-tick — Narasumber sudah lengkap", () => {
   beforeEach(resetDatabase);
 
   async function tickPengajarLengkap(

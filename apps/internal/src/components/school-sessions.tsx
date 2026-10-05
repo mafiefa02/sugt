@@ -126,7 +126,7 @@ const ASPECT_LABELS: Record<SessionAspect, string> = {
   turnout: "Kehadiran",
   school_support: "Dukungan Sekolah",
   coordination: "Koordinasi",
-  instructor: "Pengajar",
+  instructor: "Narasumber",
   relevance: "Relevansi",
 };
 

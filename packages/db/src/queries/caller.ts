@@ -95,8 +95,8 @@ export type ParticipantToken = {
  * so no read query will ever accept this arm.
  *
  * A Perjadin Evaluation used to be a signed-in write by a Group member; ADR-0024 retargeted it onto
- * the Participant Feedback token pattern so the name-based Pengajar and the record-only Pimpinan —
- * who have no login — can file too. The handler resolving the token needs the Perjadin, and that
+ * the Participant Feedback token pattern so the name-based Narasumber and the record-only Pimpinan
+ * — who have no login — can file too. The handler resolving the token needs the Perjadin, and that
  * resolution is an internal step (`apps/internal/src/lib/perjadin-feedback-token.ts`) rather than a
  * query taking a `PerjadinToken`: the token has to be checked before there is a caller to check it
  * as. See ADR-0012, ADR-0024 and [#167](https://github.com/mafiefa02/sugt/issues/167).

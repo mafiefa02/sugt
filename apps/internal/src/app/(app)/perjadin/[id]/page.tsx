@@ -175,7 +175,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
 
       {/*
         The Evaluation is now filed through a shared link, not a signed-in dialog (ADR-0024): the
-        people best placed to judge the trip include the name-based Pengajar and the record-only
+        people best placed to judge the trip include the name-based Narasumber and the record-only
         Pimpinan, neither of whom can sign in. Any signed-in Person issues the QR/link here and hands
         it out; the filer self-declares a Role and Name on `/ep/{token}`. So the old Group-member
         gate is gone — this block shows for everyone who can see the page.
@@ -183,7 +183,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
       <div className="border-b border-border px-7 py-5">
         <h2 className="font-heading text-sm font-medium">Evaluasi Perjadin</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Bagikan tautan agar Pengajar, Pendamping dan Pimpinan dapat menilai perjalanannya —
+          Bagikan tautan agar Narasumber, Pendamping dan Pimpinan dapat menilai perjalanannya —
           penginapan, transportasi, konsumsi dan ketepatan waktu — tanpa perlu masuk.
         </p>
         <div className="mt-3">

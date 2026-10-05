@@ -41,7 +41,7 @@ export const PREPARATION_FIXED_ITEMS = [
   { itemKey: "booking_penginapan", label: "Booking penginapan" },
   { itemKey: "transportasi_lokal", label: "Konfirmasi dengan pihak transportasi lokal" },
   { itemKey: "staff", label: "Konfirmasi dengan para Pendamping" },
-  { itemKey: "pengajar_lengkap", label: "Pengajar sudah lengkap" },
+  { itemKey: "pengajar_lengkap", label: "Narasumber sudah lengkap" },
 ] as const;
 
 /** The item key the teacher-mutation queries clear on any Teaching-Team change (amendment to ADR-0018). */

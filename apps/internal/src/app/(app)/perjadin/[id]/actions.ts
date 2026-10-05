@@ -84,7 +84,7 @@ export async function setPerjadinPimpinanAction(
 }
 
 /**
- * **Add one trip-scoped teacher name.** The teacher writes clear the "Pengajar sudah lengkap"
+ * **Add one trip-scoped teacher name.** The teacher writes clear the "Narasumber sudah lengkap"
  * Preparation tick, which shows on the `/perjadin` list's Persiapan `x/N` pill — so, like
  * `togglePreparationItemAction`, this revalidates both routes.
  */
