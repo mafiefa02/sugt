@@ -9,6 +9,7 @@ import { progressTone } from "-/components/progress-tone";
 import { spentPercent, tripTimeline, type TimelineNode } from "-/components/trip-timeline";
 import type { ReceiptUploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
+import { formatWibDate } from "-/lib/format-wib";
 import type { MyPerjadinTrip } from "@sugt/db/queries";
 import { formatRupiah, formatSessionStartTimeWithWib } from "@sugt/domain";
 import {
@@ -27,7 +28,8 @@ import { useState } from "react";
 
 /**
  * **One section of `/pendamping`'s own trips** (#199) — Perjalanan Dinas Anda or Perjalanan Dinas
- * Sebelumnya (#396), each the client island over its half of `myPerjadin`'s payload (#197). It wires that read straight into the reusable dialogs #198
+ * Sebelumnya (#396), each the client island over its half of `myPerjadin`'s payload (#197). It
+ * wires that read straight into the reusable dialogs #198
  * carved out: the Preparation checklist, the two feedback-QR dialogs and the transaction entry form
  * all open from a card's own labelled control rather than a page of their own, and each Session on a
  * trip's timeline carries its own Tandai confirmation (#349). Each trip is a card in one single-open
@@ -155,7 +157,12 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Rece
               {trip.startsOn} – {trip.endsOn}
             </span>
           </div>
-          {trip.report.callerIsPic && <ReportLine trip={trip} />}
+          {trip.report && (
+            <ReportLine
+              perjadinId={trip.id}
+              report={trip.report}
+            />
+          )}
         </div>
         <ChevronDown
           aria-hidden
@@ -232,24 +239,32 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Rece
 }
 
 /**
- * **The PIC's Laporan line** (#396), on their own cards only — what Pekerjaan PIC Anda used to show.
- * Unfiled, it names the acquittal's own deadline, in the destructive colour once that has passed;
- * filed, the day it was filed. The link sits above the card's stretched trigger (`relative z-10`),
- * so it opens the Laporan rather than toggling the card.
+ * **The PIC's Laporan line** (#396), on their own cards only. Unfiled, it names the acquittal's own
+ * deadline, in the destructive colour once that has passed; filed, the WIB day it was filed, read
+ * the way the Laporan reads it. The link sits above the card's stretched trigger
+ * (`relative z-10`), so it opens the Laporan rather than toggling the card.
  */
-function ReportLine({ trip }: { trip: MyPerjadinTrip }) {
-  const { dueOn, overdue, filedOn } = trip.report;
+function ReportLine({
+  perjadinId,
+  report,
+}: {
+  perjadinId: string;
+  report: NonNullable<MyPerjadinTrip["report"]>;
+}) {
+  const { dueOn, overdue, filedAt } = report;
   return (
     <p className="flex flex-wrap items-center gap-x-2 text-xs lg:basis-full">
-      {filedOn ? (
-        <span className="text-muted-foreground">Laporan: terkirim {filedOn}</span>
+      {filedAt ? (
+        <span className="text-muted-foreground">
+          Laporan: terkirim <span className="tabular-nums">{formatWibDate(filedAt)}</span>
+        </span>
       ) : (
         <span className={overdue ? "text-destructive" : "text-muted-foreground"}>
           Laporan: belum dikirim · tenggat <span className="tabular-nums">{dueOn}</span>
         </span>
       )}
       <Link
-        href={`/perjadin/${trip.id}/laporan`}
+        href={`/perjadin/${perjadinId}/laporan`}
         className="relative z-10 underline underline-offset-4 hover:text-foreground"
       >
         Buka laporan

@@ -203,7 +203,7 @@ function CountBadge({ done, total }: { done: number; total: number }) {
 /**
  * **The Persiapan pill** ([#114](https://github.com/mafiefa02/sugt/issues/114)), `x/N` in the shared
  * progress tone. For Staff it is the trigger of the checklist dialog, toggleable — the same pill the
- * home strip's trip card wears (`my-perjadin-section.tsx`); for anyone else it is a static badge.
+ * `/pendamping` card wears (`my-perjadin-section.tsx`); for anyone else it is a static badge.
  * Opening the dialog never also opens the trip: `ClickableTableRow` ignores a click on a button, and
  * one inside the dialog's portal, so the click stops short of the row's navigation.
  */

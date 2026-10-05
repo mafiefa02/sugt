@@ -11,8 +11,7 @@ export const metadata: Metadata = { title: "Pendamping" };
  * **Pendamping** — a Staff member's own trips, and nothing else (#396): a one-line greeting,
  * **Perjalanan Dinas Anda** (the trips not yet over) and **Perjalanan Dinas Sebelumnya** (the ones
  * that are). A past trip keeps every action, because the Laporan and the attendance sheets are often
- * finished after it. The Programme-wide counts, the Advance strip and Pekerjaan PIC Anda are gone;
- * a PIC's Laporan state is a line on each of their trip cards instead.
+ * finished after it. A PIC's Laporan state is a line on each of their trip cards.
  *
  * **"Pendamping" here is a route/label and collides in name only** with the Perjadin role label
  * (`PERJADIN_ROLE_LABELS.Staff` → "Pendamping"): this is the Staff landing screen, not that trip role.

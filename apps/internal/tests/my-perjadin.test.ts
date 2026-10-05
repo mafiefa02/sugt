@@ -1,3 +1,4 @@
+import { formatWibDate } from "-/lib/format-wib";
 import { db, schema } from "@sugt/db";
 import { myPerjadin, perjadinAcquittal } from "@sugt/db/queries";
 import type { Person } from "@sugt/db/queries";
@@ -179,7 +180,7 @@ describe("myPerjadin splits at today (WIB) and orders each section", () => {
 describe("myPerjadin carries the PIC's Laporan line", () => {
   beforeEach(resetDatabase);
 
-  it("is unfiled with the acquittal's deadline, overdue once it has passed, or filed on its WIB day", async () => {
+  it("is unfiled with the acquittal's deadline, overdue once it has passed, or filed", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -212,24 +213,19 @@ describe("myPerjadin carries the PIC's Laporan line", () => {
     const { previous } = await myPerjadin(caller);
     const reportOf = (id: string) => previous.find((trip) => trip.id === id)?.report;
 
-    expect(reportOf(due.id)).toEqual({
-      callerIsPic: true,
-      dueOn: wibDaysFromToday(1),
-      overdue: false,
-      filedOn: null,
-    });
+    expect(reportOf(due.id)).toEqual({ dueOn: wibDaysFromToday(1), overdue: false, filedAt: null });
     expect(reportOf(overdue.id)).toEqual({
-      callerIsPic: true,
       dueOn: wibDaysFromToday(-1),
       overdue: true,
-      filedOn: null,
+      filedAt: null,
     });
     expect(reportOf(filed.id)).toEqual({
-      callerIsPic: true,
       dueOn: "2026-01-10",
       overdue: true,
-      filedOn: "2026-01-10",
+      filedAt: new Date("2026-01-09T20:00:00Z"),
     });
+    // The card and the Laporan both read the filed day in WIB, where 20:00 UTC is the next day.
+    expect(formatWibDate(new Date("2026-01-09T20:00:00Z"))).toBe("2026-01-10");
 
     // The same deadline the acquittal shows — one rule, read from one place.
     const acquittal = await perjadinAcquittal(caller, overdue.id);
@@ -254,7 +250,7 @@ describe("myPerjadin carries the PIC's Laporan line", () => {
     await addGroupMember(joined.id, caller.id);
 
     const { current } = await myPerjadin(caller);
-    expect(current[0]?.report.callerIsPic).toBe(false);
+    expect(current[0]?.report).toBeNull();
   });
 });
 

@@ -15,7 +15,7 @@ import {
 } from "../schema/travel";
 import { advanceDrawdownCategoryList } from "./advance-drawdown";
 import type { Person } from "./caller";
-import { DEADLINE_TIME_ZONE, perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
+import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
 import {
   derivePreparationChecklist,
   type PreparationItem,
@@ -95,12 +95,12 @@ export type MyPerjadinTrip = {
   picPersonId: string;
   picFullName: string;
   /**
-   * The Perjadin Report's state, for the line the card shows **only when the caller is the PIC**
-   * (`report.callerIsPic`). `dueOn` is the acquittal's own deadline (`perjadinReportDeadline`), and
-   * `overdue` compares it with today in the office's zone, as `daysRemaining` does there. `filedOn`
-   * is the WIB calendar day the Report was filed, null until then.
+   * The Perjadin Report's state, for the line on the card — **null unless the caller is the
+   * PIC**, so there is no line to draw. `dueOn` is the acquittal's own deadline
+   * (`perjadinReportDeadline`), and `overdue` compares it with today in the office's zone, as
+   * `daysRemaining` does there. `filedAt` is null until the Report is filed.
    */
-  report: { callerIsPic: boolean; dueOn: string; overdue: boolean; filedOn: string | null };
+  report: { dueOn: string; overdue: boolean; filedAt: Date | null } | null;
   /** Fixed at planning and transferred before departure, so never null and never absent. */
   advanceIdr: number;
   /**
@@ -163,9 +163,7 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
       isCurrent,
       reportDueOn: sql<string>`to_char(${perjadinReportDeadline}, 'YYYY-MM-DD')`,
       reportOverdue: sql<boolean>`${perjadinReportDeadline} < ${todayInDeadlineZone}`,
-      reportFiledOn: sql<
-        string | null
-      >`to_char(${perjadin.reportFiledAt} at time zone ${DEADLINE_TIME_ZONE}, 'YYYY-MM-DD')`,
+      reportFiledAt: perjadin.reportFiledAt,
     })
     .from(perjadin)
     .innerJoin(
@@ -185,18 +183,13 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
 
   if (rows.length === 0) return { current: [], previous: [] };
 
-  const trips = rows.map(
-    ({ isCurrent: current, reportDueOn, reportOverdue, reportFiledOn, ...trip }) => ({
-      ...trip,
-      current,
-      report: {
-        callerIsPic: trip.picPersonId === caller.id,
-        dueOn: reportDueOn,
-        overdue: reportOverdue,
-        filedOn: reportFiledOn,
-      },
-    }),
-  );
+  const trips = rows.map(({ reportDueOn, reportOverdue, reportFiledAt, ...trip }) => ({
+    ...trip,
+    report:
+      trip.picPersonId === caller.id
+        ? { dueOn: reportDueOn, overdue: reportOverdue, filedAt: reportFiledAt }
+        : null,
+  }));
 
   const tripIds = trips.map((trip) => trip.id);
 
@@ -353,14 +346,14 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
     });
   }
 
-  const built = trips.map(({ current, ...trip }) => {
+  const built = trips.map(({ isCurrent, ...trip }) => {
     const staff = (staffByTrip.get(trip.id) ?? []).map((member) => ({
       ...member,
       isPic: member.personId === trip.picPersonId,
     }));
     const pengajar = pengajarByTrip.get(trip.id) ?? [];
     const pimpinan = pimpinanByTrip.get(trip.id) ?? [];
-    return {
+    const card: MyPerjadinTrip = {
       ...trip,
       drawnDownIdr: drawnDownByTrip.get(trip.id) ?? 0,
       preparation: derivePreparationChecklist(preparationTicksByTrip.get(trip.id) ?? []),
@@ -371,13 +364,13 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
         anggotaTotal: staff.length + pengajar.length + pimpinan.length,
       },
       schools: schoolsByTrip.get(trip.id) ?? [],
-      current,
     };
+    return { isCurrent, trip: card };
   });
 
   // The rows are already in section order, so splitting keeps each section's order.
   return {
-    current: built.filter((trip) => trip.current).map(({ current: _, ...trip }) => trip),
-    previous: built.filter((trip) => !trip.current).map(({ current: _, ...trip }) => trip),
+    current: built.filter((entry) => entry.isCurrent).map((entry) => entry.trip),
+    previous: built.filter((entry) => !entry.isCurrent).map((entry) => entry.trip),
   };
 }

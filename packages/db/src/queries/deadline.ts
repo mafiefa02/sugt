@@ -8,11 +8,12 @@ import { perjadin } from "../schema/travel";
  * DITSAMA is in Bandung, and Indonesia spans three zones — so a date compared against `now()` is
  * compared against *Bandung's* current day, not the database session's default zone.
  *
- * Shared beneath the query modules that compare against it — the Perjadin acquittal's `daysRemaining`
- * and the personal trips read's `ends_on` cutoff and report line — the way `./group-rules.ts` is, so the one
- * decision has a single home (convention 3) and a zone change is one edit rather than several. It
- * stays here rather than in `@sugt/domain` because it is a fact about where the Programme is
- * administered, not a term `CONTEXT.md` defines, and no screen renders it.
+ * Shared beneath the query modules that compare against it — the Perjadin acquittal's
+ * `daysRemaining`, and the personal trips read's `ends_on` cutoff and report line — the way
+ * `./group-rules.ts` is, so the one decision has a single home (convention 3) and a zone change is
+ * one edit rather than several. It stays here rather than in `@sugt/domain` because it is a fact
+ * about where the Programme is administered, not a term `CONTEXT.md` defines, and no screen renders
+ * it.
  */
 export const DEADLINE_TIME_ZONE = "Asia/Jakarta";
 
