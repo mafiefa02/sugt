@@ -280,12 +280,18 @@ catalogs:
     shadcn:
       specifier: ^4.21.0
       version: 4.21.0
+    sharp:
+      specifier: ^0.34.5
+      version: 0.34.5
     tailwind-merge:
       specifier: ^3.6.0
       version: 3.6.0
     tailwindcss:
       specifier: ^4
       version: 4.3.3
+    tsx:
+      specifier: ^4.20.0
+      version: 4.23.12
     tw-animate-css:
       specifier: ^1.4.0
       version: 1.4.0
@@ -388,9 +394,15 @@ importers:
       postgres:
         specifier: 'catalog:'
         version: 3.4.9
+      sharp:
+        specifier: 'catalog:'
+        version: 0.34.5
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -5633,8 +5645,7 @@ snapshots:
     dependencies:
       hono: 4.13.0
 
-  '@img/colour@1.1.0':
-    optional: true
+  '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.34.5':
     optionalDependencies:
@@ -8758,7 +8769,6 @@ snapshots:
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-ia32': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
-    optional: true
 
   shebang-command@2.0.0:
     dependencies:

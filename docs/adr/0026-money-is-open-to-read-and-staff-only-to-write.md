@@ -1,5 +1,11 @@
 # Reading money is open to any signed-in Person; writing it stays Staff-only
 
+> **Receipts are widened further by [ADR-0040](./0040-transaction-evidence-is-stored-in-the-company-google-drive.md):**
+> each transaction's receipts sit in a Google Drive folder that **anyone with the link** can view,
+> signed in or not. The rest of money stays as below. Where this ADR describes the upload
+> credential for the private `receipts` bucket and the service-role Storage read, those become a Drive
+> upload session and a read from Drive; that each write calls `requireStaff` itself still stands.
+
 The internal boundary was **delivery-vs-money**: [ADR-0004](./0004-delivery-data-is-open-internally-money-is-not.md)
 opened delivery data to everyone signed in and kept the Perjadin Report and its financial detail to
 Staff. This reverses that ADR's money-read half. The boundary is now **read (any signed-in Person)

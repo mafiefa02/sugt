@@ -32,11 +32,12 @@ export default defineConfig({
       /**
        * Values, not secrets. The Google ones are never sent anywhere: the tests stub
        * Google's token endpoint at the network boundary, which is the only service they
-       * fake over the network. Two other seams are stubbed as modules, each because no test can
+       * fake over the network. The other seams are stubbed as modules, each because no test can
        * reach what is behind it: a static render of a client component stubs `next/navigation`'s
-       * router, which needs a mounted app router; and the receipt Server Actions' test stubs the
-       * signed-in session (`next/headers`), Supabase Storage (the service-role key) and
-       * `next/cache` — the database behind them stays real.
+       * router, which needs a mounted app router; the Server Actions' tests stub the signed-in
+       * session (`-/lib/person`), `next/cache`, and `next/headers` (cookies, the request's
+       * `Origin`); and Google Drive itself is the in-memory `FakeDrive` swapped in for
+       * `openDrive`. The database behind all of them stays real.
        */
       BETTER_AUTH_SECRET: "test-secret-not-used-outside-vitest",
       BETTER_AUTH_URL: "http://localhost:3001",
@@ -52,6 +53,15 @@ export default defineConfig({
       AGGREGATES_SECRET: "test-aggregates-secret",
       REVALIDATE_SECRET: "test-revalidate-secret",
       PUBLIC_APP_URL: "http://localhost:3000",
+      /**
+       * The company Google Drive connection (#372). Values, not secrets: Google's token endpoint is
+       * stubbed at the network boundary and Drive itself is the in-memory `fake-drive.ts`.
+       * `DRIVE_TOKEN_KEY` is 32 bytes of zeros, base64 — real AES-256-GCM, a throwaway key.
+       */
+      GOOGLE_DRIVE_CLIENT_ID: "test-drive-client-id",
+      GOOGLE_DRIVE_CLIENT_SECRET: "test-drive-client-secret",
+      GOOGLE_DRIVE_ACCOUNT_EMAIL: "bukti@perusahaan.test",
+      DRIVE_TOKEN_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     },
   },
 });

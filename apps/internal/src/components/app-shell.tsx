@@ -32,6 +32,8 @@ function AppShell({
   personName,
   canEditMonitoring,
   canViewDashboard,
+  canAdminister,
+  driveNeedsAttention,
   sidebarState,
   footerAction,
   children,
@@ -42,6 +44,10 @@ function AppShell({
   canEditMonitoring: boolean;
   /** Whether the viewer may read the Dashboard (`/`) — gates its nav link (#322). */
   canViewDashboard: boolean;
+  /** Whether the viewer holds the Administrator Grant — gates the `/pengaturan` nav link (#372). */
+  canAdminister: boolean;
+  /** Whether Drive needs an Administrator — the badge on Pengaturan (#375). False for anyone else. */
+  driveNeedsAttention: boolean;
   /** The desktop sidebar's state as the layout read it from its cookie. */
   sidebarState: SidebarState;
   /** Sign-out, once there is a session to end: the end of the profile row, or on the rail under the avatar. */
@@ -54,6 +60,8 @@ function AppShell({
       personName={personName}
       canEditMonitoring={canEditMonitoring}
       canViewDashboard={canViewDashboard}
+      canAdminister={canAdminister}
+      driveNeedsAttention={driveNeedsAttention}
       footerAction={footerAction}
     />
   );
@@ -96,12 +104,16 @@ function SidebarBody({
   personName,
   canEditMonitoring,
   canViewDashboard,
+  canAdminister,
+  driveNeedsAttention,
   footerAction,
 }: {
   role: Role;
   personName: string;
   canEditMonitoring: boolean;
   canViewDashboard: boolean;
+  canAdminister: boolean;
+  driveNeedsAttention: boolean;
   footerAction?: React.ReactNode;
 }) {
   return (
@@ -112,6 +124,8 @@ function SidebarBody({
         role={role}
         canEditMonitoring={canEditMonitoring}
         canViewDashboard={canViewDashboard}
+        canAdminister={canAdminister}
+        driveNeedsAttention={driveNeedsAttention}
       />
 
       <div className="mt-auto border-t border-sidebar-border">

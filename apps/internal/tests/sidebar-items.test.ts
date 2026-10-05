@@ -15,6 +15,8 @@ function hrefsFor(role: Role, grants: Grant[]) {
     role,
     canEditMonitoring: hasGrant(person, "Editor"),
     canViewDashboard: canViewDashboard(person),
+    canAdminister: hasGrant(person, "Administrator"),
+    driveNeedsAttention: false,
   }).map((item) => item.href);
 }
 
@@ -33,12 +35,15 @@ const FULL = [
 ];
 
 describe("sidebarItems", () => {
-  it("gives a Staff Administrator every link, Dashboard first", () => {
-    expect(hrefsFor("Staff", ["Administrator"])).toEqual(FULL);
-    expect(hrefsFor("Staff", ["Administrator", "Dashboard Viewer"])).toEqual(FULL);
+  it("gives a Staff Administrator every link, Dashboard first and Pengaturan last", () => {
+    expect(hrefsFor("Staff", ["Administrator"])).toEqual([...FULL, "/pengaturan"]);
+    expect(hrefsFor("Staff", ["Administrator", "Dashboard Viewer"])).toEqual([
+      ...FULL,
+      "/pengaturan",
+    ]);
   });
 
-  it("gives a Staff Editor every link, with or without Dashboard Viewer", () => {
+  it("gives a Staff Editor every link but Pengaturan, with or without Dashboard Viewer", () => {
     expect(hrefsFor("Staff", ["Editor"])).toEqual(FULL);
     expect(hrefsFor("Staff", ["Editor", "Dashboard Viewer"])).toEqual(FULL);
   });
@@ -83,5 +88,30 @@ describe("sidebarItems", () => {
       "/kelompok-sekolah",
       "/orang",
     ]);
+  });
+
+  it("badges Pengaturan, and nothing else, while Drive needs an Administrator", () => {
+    const admin: Person = {
+      id: "p",
+      fullName: "P",
+      email: "p@example.com",
+      role: "Staff",
+      grants: ["Administrator"],
+    };
+    const items = (driveNeedsAttention: boolean) =>
+      sidebarItems({
+        role: "Staff",
+        canEditMonitoring: true,
+        canViewDashboard: true,
+        canAdminister: hasGrant(admin, "Administrator"),
+        driveNeedsAttention,
+      });
+
+    expect(
+      items(true)
+        .filter((item) => item.badge)
+        .map((item) => item.href),
+    ).toEqual(["/pengaturan"]);
+    expect(items(false).some((item) => item.badge)).toBe(false);
   });
 });

@@ -1174,6 +1174,7 @@ create table perjadin (
   returned_to_treasurer_idr   bigint,
   returned_at                 timestamptz,
   report_filed_at             timestamptz,
+  drive_folder_id             text,
   created_at                  timestamptz not null default now(),
 
   check (ends_on >= starts_on),
@@ -1407,17 +1408,24 @@ create table transaction (
                           'Alat dan Bahan Research Project', 'Seminar kit', 'Lainnya')),
   participant_type      text not null check (participant_type in ('Siswa', 'GTK-MS')),
   created_by_person_id  uuid not null references person (id),
-  created_at            timestamptz not null default now()
+  created_at            timestamptz not null default now(),
+  drive_folder_id       text,
+  drive_synced_at       timestamptz,
+  drive_sync_failed_at  timestamptz
 );
 
 create table transaction_evidence (
   id                    uuid primary key default gen_random_uuid(),
   transaction_id        uuid not null references transaction (id) on delete cascade,
-  storage_path          text not null unique,
+  storage_path          text unique,
+  drive_file_id         text unique,
   content_type          text not null,
   byte_size             bigint not null,
   uploaded_by_person_id uuid not null references person (id),
-  uploaded_at           timestamptz not null default now()
+  uploaded_at           timestamptz not null default now(),
+  check ((storage_path is null) <> (drive_file_id is null)),
+  check (drive_file_id is null
+         or content_type in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp'))
 );
 ```
 
@@ -1476,8 +1484,48 @@ Evidence is **one to five per transaction** (ADR-0039). The application holds th
 the database: `recordTransaction` writes a line and its evidence together and refuses zero or
 more than five, and `attachTransactionEvidence` refuses a batch that would take a line past five,
 counting under a lock on the parent row. There is no CHECK, because the shared database may
-already hold lines with none or more, and those are grandfathered. `storage_path` is the object
-key in the private bucket, and `unique` on it means an upload cannot be attached twice.
+already hold lines with none or more, and those are grandfathered.
+
+**A receipt lives in exactly one place, and the database holds that** (ADR-0040). Receipts are
+moving to the company's Google Drive. `drive_file_id` is the file's Drive id, for every receipt
+recorded since — by Catat transaksi or by a line's own "Unggah bukti". `storage_path` is a legacy
+object key in the private Supabase bucket, for receipts from before Drive. One
+CHECK makes exactly one of the two set; another pins a Drive receipt's `content_type` to the four
+types the server sniffs from its first bytes. `unique` on each means a file cannot be attached
+twice. Both are ids or keys, never paths, so a folder renamed or moved by hand in Drive breaks
+nothing.
+
+**`drive_folder_id` on `transaction` and on `perjadin` name the line's and the trip's Drive
+folders**, and `transaction.drive_synced_at` records when the reconcile last finished the line.
+It finishes a line by putting its folder inside the Perjadin's, naming and moving its files there,
+and sharing the folder "anyone with the link". Catat transaksi builds the line's folder privately
+in `_staging` before it commits, so the folder id is written with the line. The Perjadin's folder
+is claimed by **compare-and-set** (`… where drive_folder_id is null`) the first time a line on it
+is reconciled. No row lock is ever held across a call to Google; a caller that lost the race
+trashes its own folder and uses the winner's.
+
+**"Unsynced" means `drive_synced_at is null` and at least one evidence row with a
+`drive_file_id`.** It is derived, not stored. A legacy line, or a line with no receipt, is never
+unsynced. A reconcile that fails after the commit leaves the line recorded and unsynced, and its
+files wait in private `_staging` until the next reconcile finishes it. A reconcile marks a line
+synced only for the receipts it read. If a newer receipt was committed while it ran, the mark does
+not land, so that receipt stays owed rather than stranded under a line that claims to be done.
+
+**`drive_sync_failed_at` keeps the sweep moving.** It records when a reconcile last failed to finish
+the line, for example because its folder is in the Drive trash, which is never recreated, and it is
+cleared when the line syncs. Periksa koneksi's sweep is bounded per press. It takes lines that have
+never failed first, oldest first, then the longest-failed, so lines that fail every time cannot fill
+every press while the lines behind them wait for good.
+
+**The two receipt writes run in opposite orders, on purpose.** Catat transaksi builds the line's
+folder in private `_staging`, moves the files into it, and only then commits. A line's own "Unggah
+bukti" (`attachTransactionEvidence`) **commits first**. It locks the line, counts, writes the
+evidence rows and sets `drive_synced_at` back to null, all in one transaction. Only then does the
+reconcile move the new files out of `_staging` into the line's folder. The difference is the
+folder: a new line's folder is private until it is shared last, but an existing line's folder is
+usually **already public**. A file moved in before the count was settled could become a sixth
+receipt anyone can open that no row records. So the count and the rows come first, under the lock,
+and the files follow.
 
 ---
 
@@ -1634,6 +1682,22 @@ is the whole difference from a receipt.
 
 ## Object storage
 
+**Receipts are moving out of Supabase Storage to the company's Google Drive**
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Catat
+transaksi and a line's own "Unggah bukti" both upload to Drive, and nothing writes to the
+`receipts` bucket any more. It holds legacy receipts alone, until they are migrated and the bucket
+is deleted (#377, #379). The Drive side is the connection below and the `drive_*` columns in
+[Money](#money).
+
+**Migrating the legacy receipts** is a local, resumable script,
+`pnpm --filter @sugt/internal drive:migrate-receipts --as <administrator email>`
+(`apps/internal/scripts/drive-migrate-receipts.ts`). It reads only the shell's environment, so
+export the target's variables first. It opens by printing which database and Supabase project it is
+pointed at. Run `--dry-run` first, which writes nothing anywhere. Then run it for real; it appends
+to a report named for the database host, the old key beside each new Drive id. Then run `--verify`,
+which checks every object left in the bucket against that report before the bucket may be deleted.
+`--replace <evidenceId>=<file>` supplies a converted file for one the script could not take.
+
 Two buckets, and the split is doing real work:
 
 | Bucket         | Visibility | Holds                                                            |
@@ -1673,6 +1737,59 @@ Because sign-in is Better Auth rather than Supabase Auth, storage policies canno
 asking. Receipt access is therefore a signed URL minted by the internal app **after** it has
 checked the caller is Staff. That check is the only thing standing between Teaching Team and a
 receipt, so it belongs at one choke point, not at each call site.
+
+### The company Google Drive connection
+
+Receipts are moving to the company's Google Drive
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Nothing
+uploads there yet; what exists is the connection an Administrator makes on `/pengaturan` (#372).
+
+```sql
+create table drive_connection (
+  singleton                      boolean primary key default true check (singleton),
+  account_email                  text not null,
+  refresh_token_ciphertext       text not null,
+  refresh_token_iv               text not null,
+  refresh_token_tag              text not null,
+  root_folder_id                 text,
+  staging_folder_id              text,
+  bukti_transaksi_folder_id      text,
+  pelaksanaan_offline_folder_id  text,
+  readme_file_id                 text,
+  folder_problem                 text check (folder_problem in
+                                   ('root-trashed', 'root-missing',
+                                    'staging-trashed', 'staging-missing',
+                                    'folders-unfinished')),
+  status                         text not null check (status in ('connected', 'broken')),
+  broken_at                      timestamptz,
+  last_used_at                   timestamptz,
+  connected_by_person_id         uuid not null references person (id),
+  connected_at                   timestamptz not null default now(),
+  check ((status = 'broken') = (broken_at is not null))
+);
+```
+
+**The database holds that there is one connection or none.** `singleton` is the primary key and
+CHECKed true, so a second row has nowhere to go. "Belum terhubung" is no row; there is no
+disconnect, so a row is never deleted. It also holds that `status` and `broken_at` move together.
+
+**The application holds everything about the token.** The refresh token is stored only as
+AES-256-GCM ciphertext, with its IV and tag, under `DRIVE_TOKEN_KEY`. That key is in the
+environment, never here, so the table alone yields no token. `@sugt/internal` encrypts, decrypts,
+and talks to Google. It marks the row `broken` on the first `invalid_grant`, or on a token that
+will not decrypt. It also checks that the account connected is `GOOGLE_DRIVE_ACCOUNT_EMAIL`.
+
+**Drive ids, never paths.** The five ids name the fixed tree ADR-0040 draws: the root, `_staging`
+(a sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` and the README.
+They are nullable because the row is written before the folders are ensured, in a second write,
+since no transaction is held open across a call to Google. `folder_problem` is set when a reconnect
+finds the root or `_staging` trashed or gone, or when Drive failed partway through. The root and
+`_staging` are never quietly recreated, so the token stays stored while the card does not say
+Terhubung. Uploads and the card read one rule: usable means no `folder_problem` and every id set.
+
+**Who reaches it.** The card's read and the connect writes need the Administrator Grant. The
+credential read, and the two writes a token refresh makes (`last_used_at`, broken), need Staff,
+because any Staff member uploads through the connection.
 
 ---
 
@@ -1821,6 +1938,13 @@ places:
    hour a School is expecting somebody — and it does not move any Session's `held_on` at all, since
    it clamps rather than shifting.
 
+   **A correction that moves `starts_on` also renames the trip's Drive folder**, which is named
+   `{destination} · {starts_on}` ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
+   #376). The rename runs after the commit and is best effort: a failed rename never fails or rolls
+   back the correction. The next reconcile that touches that Perjadin sets the name back to what the
+   database says, because folder names are app-owned. That is a Catat transaksi or Unggah bukti on
+   it, or a sweep reaching one of its unsynced lines. Until then the folder keeps the old date.
+
 So an arranged offline Session can no longer be born outside its trip, nor moved outside it, nor
 stranded when the trip's range is resized — path 3 refuses the resize rather than moving Sessions.
 Both halves of #28's invariant now hold, at the data layer and at the surface that drives it:
@@ -1957,8 +2081,9 @@ exists at all.
 ### What deleting a Perjadin does
 
 `group_member` cascades. `transaction` cascades, and `transaction_evidence` cascades from
-that — so deleting a Perjadin destroys its acquittal, objects in the `receipts` bucket
-included, and nothing warns you. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
+that — so deleting a Perjadin destroys its acquittal rows, and nothing warns you. The files are
+not removed: neither the legacy objects in the `receipts` bucket nor the Perjadin's folder in the
+company Google Drive (ADR-0040), which outlive their rows. No path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
 trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive nothing — and
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
 links go with the names.

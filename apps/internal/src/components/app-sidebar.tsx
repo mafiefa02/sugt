@@ -7,6 +7,9 @@ import { cn } from "@sugt/ui/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+/** What the badge means, for a screen reader and the collapsed rail's tooltip. */
+const ATTENTION = "Google Drive perlu perhatian";
+
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -26,13 +29,23 @@ function AppSidebarNav({
   role,
   canEditMonitoring,
   canViewDashboard,
+  canAdminister,
+  driveNeedsAttention,
 }: {
   role: Role;
   canEditMonitoring: boolean;
   canViewDashboard: boolean;
+  canAdminister: boolean;
+  driveNeedsAttention: boolean;
 }) {
   const pathname = usePathname();
-  const visible = sidebarItems({ role, canEditMonitoring, canViewDashboard });
+  const visible = sidebarItems({
+    role,
+    canEditMonitoring,
+    canViewDashboard,
+    canAdminister,
+    driveNeedsAttention,
+  });
 
   return (
     <nav className="flex flex-col gap-0.5 p-3">
@@ -41,7 +54,7 @@ function AppSidebarNav({
         return (
           <RailTooltip
             key={item.href}
-            label={item.label}
+            label={item.badge ? `${item.label} — ${ATTENTION}` : item.label}
             render={
               <Link
                 href={item.href}
@@ -55,8 +68,17 @@ function AppSidebarNav({
               />
             }
           >
-            <item.icon className={cn("size-4 shrink-0", !active && "text-muted-foreground")} />
+            <span className="relative inline-flex shrink-0">
+              <item.icon className={cn("size-4", !active && "text-muted-foreground")} />
+              {item.badge && (
+                <span
+                  aria-hidden
+                  className="absolute -top-1 -right-1 size-2 rounded-full bg-destructive ring-2 ring-sidebar"
+                />
+              )}
+            </span>
             <span className="group-data-[state=collapsed]/sidebar:sr-only">{item.label}</span>
+            {item.badge && <span className="sr-only"> — {ATTENTION}</span>}
           </RailTooltip>
         );
       })}

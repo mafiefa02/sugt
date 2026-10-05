@@ -277,6 +277,29 @@ nothing is recorded, and the form keeps what was typed and picked so the PIC can
 receipts can be added later from the line's own "Unggah bukti", up to five in total. A line
 entered before this rule may have none; it is marked on the screen and fixed the same way.
 
+**Receipts open in Google Drive** (ADR-0040). The dialog, and each line's own "Unggah bukti", upload
+to the company Google Drive, and the app no longer shows a receipt itself. "Unggah bukti" adds to a
+line already recorded, up to five receipts in total. A file that is not a real receipt is reported
+as failed, and the rest are kept.
+
+- Each line shows **Bukti 1…n**, links that open each receipt in Drive in a new tab.
+- A line also shows **Buka folder**, a link to its own Drive folder that anyone holding it can
+  view — the link the external audit will use.
+- Receipts recorded before the move still open through the app's own short-lived links.
+
+What both controls take:
+
+- JPG, PNG, WebP or PDF; anything else is refused before it uploads. An iPhone photo arrives as a
+  JPG.
+- At most 20 MB per file.
+- Every photo is shrunk before it uploads — longest side 2400 px — which also strips its location
+  and camera data, since the link is public.
+
+**While Drive is not connected, or its connection has broken**, "Catat transaksi" and every
+"Unggah bukti" are disabled, and the screen says why and that an Administrator fixes it on
+Pengaturan. If Drive stops answering after a line is recorded, the line still stands; the dialog
+says its receipts are not yet in place in Drive, and that is finished later.
+
 **Each transaction carries a category**, from a closed list of eleven plus _Lainnya_ —
 _Tiket Pesawat/Kereta PP_, _Uang Harian_, _Honorarium Narasumber_, _Akomodasi_,
 _Transport Bandara/Stasiun_, _Transport Lokal Dalam Provinsi_, _Konsumsi_, _Modul_, _ATK_,
@@ -548,6 +571,52 @@ revocation that partly landed.
 The founding Staff rows are seeded, because nothing else can be: without a Person, nobody
 can sign in to reach this screen. See
 [ADR-0013](./adr/0013-people-are-added-in-the-tool-and-their-role-is-write-once.md).
+
+### Pengaturan — the company Google Drive
+
+**Only an Administrator sees Pengaturan**, in the sidebar and at `/pengaturan`. Anyone else,
+Pimpinan included, gets the 403. It holds one card for now: the company Google Drive that
+transaction evidence is moving to
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)).
+
+The card is in one of four states:
+
+- **Belum terhubung** — a short explanation and **Hubungkan Google Drive**.
+- **Terhubung** — the account, a link that opens the root folder in Drive, who connected it and
+  when, when it was last used, and **Hubungkan ulang**.
+- **Terputus sejak {tanggal}** — Google stopped accepting the stored token. Receipts cannot be
+  uploaded until an Administrator presses **Hubungkan ulang**.
+- **Folder bermasalah** — the token works, but the main folder or `_staging` is in the Drive trash
+  or gone, or Drive failed while the folders were being set up. It says which, and offers
+  **Hubungkan ulang**.
+
+**Connecting** goes to Google's consent screen for the company account and back. If the wrong
+account was picked, the Drive permission was unticked, or Google sent no long-lived token, the card
+says so in its own words and stores nothing. A first connect creates the app's folders in the
+company Drive. A reconnect reuses them. If it finds the main folder or `_staging` in the Drive trash
+or gone, the card shows Folder bermasalah; it does not recreate them. There is no disconnect
+button. A successful reconnect also finishes what was recorded while the connection was down, as
+Periksa koneksi does below.
+
+**Periksa koneksi**, on the Terhubung card, checks the connection and reports each step:
+
+- whether Google still accepts the token — if not, the card turns to Terputus;
+- whether the main folder, `_staging`, Bukti Transaksi and Pelaksanaan Offline are still there, in
+  the Drive trash, or gone;
+- whether a "anyone with the link" share reaches the main folder or `_staging`. That happens when
+  someone moves the main folder into a shared company folder. It is warned about prominently: "Folder
+  utama dapat dibuka siapa saja yang punya link — pindahkan keluar dari folder yang dibagikan."
+- a **sweep** of the transactions whose receipts are not yet in place in Drive, oldest first, up to
+  25 per press: "{n} transaksi disinkronkan, {m} masih menunggu", with the reason for any that could
+  not be finished, such as a folder in the Drive trash, which is never recreated.
+
+**A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
+connected, broken, or its folders unresolved — the states in which nobody can upload a receipt.
+
+**On the acquittal**, a line whose receipts are recorded but not yet in place in Drive shows a small
+"belum tersinkron" mark. Its tooltip reads "Bukti belum tersinkron ke Google Drive — Administrator
+dapat menyelesaikannya lewat Periksa koneksi." A line from before Drive, or with no receipt, never
+shows it.
 
 ---
 

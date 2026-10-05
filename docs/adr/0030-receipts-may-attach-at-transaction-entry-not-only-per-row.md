@@ -4,6 +4,10 @@
 > Upload at entry is no longer optional: a transaction is recorded with one to five receipts or not at
 > all. The files are uploaded **before** the line is written, not after, and the evidence rule is now
 > held at entry rather than only at filing. The entry-time control and the row's own upload stand.
+>
+> **This ADR's storage-layer points are also superseded, by [ADR-0040](./0040-transaction-evidence-is-stored-in-the-company-google-drive.md).**
+> `mintReceiptUploadsAction`, the client PUT to Storage and the read-back from Storage are replaced
+> by Drive upload sessions and a first-bytes check in Drive.
 
 Amends [ADR-0007](0007-the-tool-generates-the-acquittal.md).
 

@@ -528,7 +528,11 @@ describe("recording a line item with its receipts (ADR-0039)", () => {
     const first = aLine(trip.id, 1);
     await recordTransaction(staff, first);
     const input = aLine(trip.id, 2);
-    input.evidence[1] = { ...input.evidence[1]!, storagePath: first.evidence[0]!.storagePath };
+    input.evidence[1] = {
+      contentType: "image/jpeg",
+      byteSize: 10,
+      storagePath: first.evidence[0]!.storagePath!,
+    };
 
     const refusal = await refusedBy(recordTransaction(staff, input));
 

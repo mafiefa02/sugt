@@ -1,0 +1,27 @@
+import { formatWib } from "-/lib/format-wib";
+import { driveUploadState, type Person } from "@sugt/db/queries";
+
+import { readyFolders } from "./fixed-folders";
+import { DRIVE_FOLDERS_UNRESOLVED, DRIVE_NOT_CONNECTED, driveBrokenSince } from "./upload-messages";
+
+/**
+ * **Can a receipt be uploaded right now?** (ADR-0040, #373) Catat transaksi and every row's Unggah
+ * bukti render disabled, with this reason, when it cannot — wherever the dialog renders: the
+ * acquittal and the Staff Beranda's trip cards.
+ *
+ * The page's answer is a courtesy. The Server Actions refuse the same states themselves
+ * (`driveAccessToken`), since nothing a page renders runs before a Server Action, and answer with
+ * this same reason.
+ */
+export type ReceiptUploadGate = { open: true } | { open: false; reason: string };
+
+export async function receiptUploadGate(person: Person): Promise<ReceiptUploadGate> {
+  const state = await driveUploadState(person);
+  if (!state) return { open: false, reason: DRIVE_NOT_CONNECTED };
+  if (state.status === "broken") {
+    // `drive_connection_broken_at_check` guarantees a broken row has `broken_at`.
+    return { open: false, reason: driveBrokenSince(formatWib(state.brokenAt!)) };
+  }
+  if (!readyFolders(state)) return { open: false, reason: DRIVE_FOLDERS_UNRESOLVED };
+  return { open: true };
+}

@@ -499,7 +499,11 @@ export type PerjadinLogisticsInput = {
 };
 
 export type UpdatePerjadinLogisticsResult =
-  | { outcome: "updated" }
+  /**
+   * `startsOnMoved`: the correction changed `starts_on` — the date the trip's Drive folder is named
+   * after (ADR-0040), so the caller renames it (#376).
+   */
+  | { outcome: "updated"; startsOnMoved: boolean }
   /**
    * The return date lands before the departure date, so the derived `[starts_on … ends_on]` range
    * would be inverted (ADR-0021). Same-day is allowed. Refused before the transaction opens.
@@ -552,7 +556,7 @@ export async function updatePerjadinLogistics(
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
-      .select({ id: perjadin.id })
+      .select({ id: perjadin.id, startsOn: perjadin.startsOn })
       .from(perjadin)
       .where(eq(perjadin.id, perjadinId))
       .for("update");
@@ -595,7 +599,7 @@ export async function updatePerjadinLogistics(
       })
       .where(eq(perjadin.id, perjadinId));
 
-    return { outcome: "updated" };
+    return { outcome: "updated", startsOnMoved: trip.startsOn !== newStartsOn };
   });
 }
 
