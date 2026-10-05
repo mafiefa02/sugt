@@ -10,6 +10,7 @@ import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../client";
 import { person } from "../schema/people";
 import { perjadin, perjadinPimpinan, transaction, transactionEvidence } from "../schema/travel";
+import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
 import { todayInDeadlineZone } from "./deadline";
 import { requireStaff } from "./staff-only";
@@ -382,6 +383,18 @@ export async function recordTransaction(
       })),
     );
 
+    await logActivity(tx, caller, input.perjadinId, {
+      action: "transaction_recorded",
+      details: {
+        transactionId: line!.id,
+        category: input.category,
+        amountIdr: input.amountIdr,
+        participantType: input.participantType,
+        spentOn: input.spentOn,
+        receiptCount: input.evidence.length,
+      },
+    });
+
     return { outcome: "recorded", transactionId: line!.id };
   });
 }
@@ -436,7 +449,12 @@ export async function attachTransactionEvidence(
 
   return db.transaction(async (tx) => {
     const [line] = await tx
-      .select({ id: transaction.id })
+      .select({
+        id: transaction.id,
+        category: transaction.category,
+        amountIdr: transaction.amountIdr,
+        spentOn: transaction.spentOn,
+      })
       .from(transaction)
       .where(and(eq(transaction.id, transactionId), eq(transaction.perjadinId, perjadinId)))
       .for("update");
@@ -467,6 +485,18 @@ export async function attachTransactionEvidence(
       .update(transaction)
       .set({ driveSyncedAt: null })
       .where(eq(transaction.id, transactionId));
+
+    await logActivity(tx, caller, perjadinId, {
+      action: "evidence_uploaded",
+      details: {
+        transactionId,
+        category: line.category,
+        amountIdr: line.amountIdr,
+        spentOn: line.spentOn,
+        added: evidence.length,
+        total: existing + evidence.length,
+      },
+    });
 
     return { outcome: "attached", count: evidence.length };
   });
@@ -553,6 +583,19 @@ export async function filePerjadinReport(
 
     const filedAt = new Date();
     await tx.update(perjadin).set({ reportFiledAt: filedAt }).where(eq(perjadin.id, perjadinId));
+
+    // Every category, as the acquittal's totals count them — not only the float draw-down.
+    const [lines] = await tx
+      .select({
+        transactionCount: count(),
+        totalIdr: sql<number>`coalesce(sum(${transaction.amountIdr}), 0)`.mapWith(Number),
+      })
+      .from(transaction)
+      .where(eq(transaction.perjadinId, perjadinId));
+    await logActivity(tx, caller, perjadinId, {
+      action: "report_filed",
+      details: { transactionCount: lines?.transactionCount ?? 0, totalIdr: lines?.totalIdr ?? 0 },
+    });
 
     return { outcome: "filed", filedAt };
   });

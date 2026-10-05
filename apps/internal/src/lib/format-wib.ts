@@ -10,3 +10,22 @@ export function formatWib(when: Date): string {
   }).format(when);
   return `${formatted} WIB`;
 }
+
+const INDONESIAN_WIB = new Intl.DateTimeFormat("id-ID", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "Asia/Jakarta",
+});
+
+/**
+ * `14 Okt 2026, 08.05` — an instant in WIB, written the Indonesian way. **The one exception to #166's
+ * ISO form**: `/log`'s Waktu column (#395), where product.md asks for exactly this. Anywhere else,
+ * use `formatWib`.
+ */
+export function formatWibIndonesian(when: Date): string {
+  return INDONESIAN_WIB.format(when);
+}

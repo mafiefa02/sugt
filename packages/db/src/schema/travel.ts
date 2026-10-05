@@ -1,11 +1,19 @@
-import type { Role, Stream, TransactionCategory, TransactionParticipantType } from "@sugt/domain";
+import type {
+  ActivityLogAction,
+  Role,
+  Stream,
+  TransactionCategory,
+  TransactionParticipantType,
+} from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   date,
   foreignKey,
   index,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -331,5 +339,48 @@ export const transactionEvidence = pgTable(
       "transaction_evidence_content_type_check",
       sql`${t.contentType} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`,
     ),
+  ],
+);
+
+/**
+ * **The Activity Log** (#395): one row per act on a Perjadin's money, receipts, documents or
+ * report — who, when, which trip, what. **Append-only**: each write in `queries/activity-log.ts`'s
+ * callers inserts its entry in the same database transaction as the change, so a refused or
+ * failed write logs nothing, and nothing in the app updates or deletes a row. Read only by an Administrator,
+ * on `/log`.
+ *
+ * `actor_email` is a **copy** of the actor's email at that moment, so the row stays true if the
+ * email later changes. `search_text` is the lower-cased Aksi and Rincian text, rendered once at
+ * write time so `/log`'s search runs in SQL over what the screen shows. `details` has one shape per
+ * `action`, typed in `queries/activity-log.ts`.
+ *
+ * `backfilled` marks the rows migration 0039 derived from `transaction` and `transaction_evidence`
+ * — the only rows that already recorded who and when. `on delete cascade` from `perjadin`
+ * mirrors `transaction`; no app path deletes a Perjadin.
+ */
+export const activityLog = pgTable(
+  "activity_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    actorPersonId: uuid("actor_person_id")
+      .notNull()
+      .references(() => person.id),
+    actorEmail: text("actor_email").notNull(),
+    perjadinId: uuid("perjadin_id")
+      .notNull()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    action: text("action").$type<ActivityLogAction>().notNull(),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull(),
+    searchText: text("search_text").notNull(),
+    backfilled: boolean("backfilled").notNull().default(false),
+  },
+  (t) => [
+    check(
+      "activity_log_action_check",
+      sql`${t.action} in ('advance_set', 'advance_changed', 'transaction_recorded', 'evidence_uploaded', 'report_filed', 'document_uploaded', 'document_deleted')`,
+    ),
+    // `/log` reads newest first, 50 at a time; this serves that order without a sort.
+    index("activity_log_occurred_at_id_idx").on(t.occurredAt.desc(), t.id.desc()),
   ],
 );

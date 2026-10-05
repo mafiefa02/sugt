@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { db, schema } from "@sugt/db";
 import type {
+  ActivityLogAction,
   ClassKind,
   Grant,
   ParticipantFeedbackAspect,
@@ -621,6 +622,38 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
   return evidence!;
 }
 
+export type ActivityLogFixture = {
+  perjadinId: string;
+  actorPersonId: string;
+  actorEmail: string;
+  action: ActivityLogAction;
+  details: Record<string, unknown>;
+  searchText?: string;
+  occurredAt?: Date;
+  backfilled?: boolean;
+};
+
+/**
+ * One Activity Log entry, written directly so a test of `/log`'s read can choose when it happened.
+ * A test of what a write logs calls the write instead.
+ */
+export async function addActivityLogEntry(fixture: ActivityLogFixture) {
+  const [entry] = await db
+    .insert(schema.activityLog)
+    .values({
+      perjadinId: fixture.perjadinId,
+      actorPersonId: fixture.actorPersonId,
+      actorEmail: fixture.actorEmail,
+      action: fixture.action,
+      details: fixture.details,
+      searchText: fixture.searchText ?? "",
+      backfilled: fixture.backfilled ?? false,
+      ...(fixture.occurredAt ? { occurredAt: fixture.occurredAt } : {}),
+    })
+    .returning();
+  return entry!;
+}
+
 /**
  * Each test starts from a known set of rows and leaves none behind.
  *
@@ -678,7 +711,8 @@ export async function resetDatabase() {
       public."assessment_completion",
       public."preparation_card",
       public."preparation_checklist_item",
-      public."drive_connection"
+      public."drive_connection",
+      public."activity_log"
     restart identity cascade
   `);
 }

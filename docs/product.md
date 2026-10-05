@@ -628,6 +628,39 @@ connected, broken, or its folders unresolved — the states in which nobody can 
 "belum tersinkron" mark. Its tooltip reads "Bukti belum tersinkron ke Google Drive — Administrator
 dapat menyelesaikannya lewat Periksa koneksi." A line with no receipt never shows it.
 
+### Log — Administrator only
+
+**Only an Administrator sees Log**, in the sidebar just above Pengaturan and at `/log`. Anyone else,
+Pimpinan included, gets the 403. It is the Activity Log: who did what to a Perjadin's money,
+receipts, documents and report, and when.
+
+A table, newest first, 50 rows a page:
+
+| Waktu (WIB)        | Oleh   | Perjadin                                                                              | Aksi                   | Rincian                                                                     |
+| ------------------ | ------ | ------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
+| 14 Okt 2026, 08.05 | rina@… | Kelompok 18: Samarinda, Bontang dan Balikpapan — 12–15 Okt 2026 — PIC: Rina Setiawati | Unggah bukti           | Konsumsi · Rp1.250.000 · tgl 2026-10-12 · +1 bukti (kini 3/5) · Buka folder |
+| 8 Okt 2026, 16.02  | budi@… | (the same)                                                                            | Uang Perjalanan diubah | Rp15.000.000 → Rp18.500.000                                                 |
+
+- **Waktu** is when the act happened in the app, in WIB. "tgl" in Rincian is the date the money
+  was spent, and the two differ.
+- **Oleh** is the email the person had at that moment.
+- **Perjadin** links to the trip, with its dates and its current PIC.
+- **Aksi** is one of Uang Perjalanan ditetapkan, Uang Perjalanan diubah, Catat transaksi, Unggah
+  bukti, Laporan dikirim, Dokumen diunggah and Dokumen dihapus. Entries derived from data recorded
+  before the Log existed read "(dari data lama)" after it.
+- **Rincian** says what changed. A transaction's row links to its folder in Drive, when it has one.
+
+**Above the table**, a search box, an Aksi filter and a Rentang tanggal:
+
+- the search matches, ignoring case, the email, the Perjadin's destination, its PIC's name, and the
+  Aksi and Rincian text;
+- Aksi is Semua, Uang Perjalanan, Catat transaksi, Unggah bukti, Dokumen or Laporan dikirim;
+- Rentang tanggal is two WIB dates, dari and sampai, both included.
+
+They combine, and **all of them are in the URL**, with the page number, so a view can be bookmarked.
+Below the table are the number of entries that match and the page links. The page does not update
+itself: new entries appear on the next load or filter change.
+
 ---
 
 ## What it deliberately does not do

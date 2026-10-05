@@ -591,3 +591,34 @@ export const MAX_RECEIPTS_PER_TRANSACTION = 5;
  * to Drive when opening the upload session and checks it again on the file Drive holds.
  */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/**
+ * **What an Activity Log entry records**
+ * ([#395](https://github.com/sugt-itb/sugt-itb-26/issues/395)): one act on a Perjadin's money, receipts, documents or report. A closed set, mirrored character
+ * for character by `activity_log_action_check` (see `packages/db/src/schema/travel.ts`).
+ *
+ * The two `document_*` values are in the set before anything writes them, so the Dokumen tickets
+ * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397),
+ * [#398](https://github.com/sugt-itb/sugt-itb-26/issues/398)) need no CHECK migration.
+ */
+export const ACTIVITY_LOG_ACTIONS = [
+  "advance_set",
+  "advance_changed",
+  "transaction_recorded",
+  "evidence_uploaded",
+  "report_filed",
+  "document_uploaded",
+  "document_deleted",
+] as const;
+export type ActivityLogAction = (typeof ACTIVITY_LOG_ACTIONS)[number];
+
+/** The Aksi column of `/log`: what each action reads as on screen. */
+export const ACTIVITY_LOG_ACTION_LABELS: Record<ActivityLogAction, string> = {
+  advance_set: "Uang Perjalanan ditetapkan",
+  advance_changed: "Uang Perjalanan diubah",
+  transaction_recorded: "Catat transaksi",
+  evidence_uploaded: "Unggah bukti",
+  report_filed: "Laporan dikirim",
+  document_uploaded: "Dokumen diunggah",
+  document_deleted: "Dokumen dihapus",
+};

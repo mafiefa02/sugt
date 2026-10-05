@@ -184,6 +184,10 @@ _Avoid_: finance, bendahara (the codebase is English)
 The acquittal of one Perjadin — every transaction that consumed the Advance, each evidenced by one to five receipts recorded with it ([ADR-0039](./docs/adr/0039-every-transaction-is-recorded-with-its-evidence.md)), reconciled against what was left over — covering the whole Group and filed by its PIC against a deadline DITSAMA sets for itself.
 _Avoid_: report (unqualified), expense report, reimbursement (nothing is claimed back; the money was transferred upfront)
 
+**Activity Log**:
+The append-only record of who changed money, evidence or documents on a **Perjadin**, and when — one entry per act, written with the act itself. Read only by an **Administrator**. The UI says _Log_.
+_Avoid_: audit log ("audit" means the external auditor of ADR-0040), history, journal
+
 **Session Record**:
 What the PIC says about one **offline** Session as a whole — the visit rather than the teaching. Rates five Aspects: **Facilities**, **Turnout**, **School support**, **Timing** and **Coordination**. Filed by Staff, who organised the Session and taught none of it, so it asks nothing about how a cohort got on. **Only offline Sessions produce one** ([ADR-0035](./docs/adr/0035-online-sessions-track-no-pic-and-file-no-session-record.md)): an online Session has no PIC and files none — a third-party LMS runs online delivery.
 _Avoid_: report (unqualified), notes, minutes, evaluation (unqualified — it names none of the four)

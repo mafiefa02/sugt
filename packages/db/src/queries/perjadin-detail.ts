@@ -19,6 +19,7 @@ import {
   perjadinPreparationItem,
   perjadinTeacher,
 } from "../schema/travel";
+import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
 import { duplicatedStaff } from "./group-rules";
 import { derivePreparationChecklist, type PreparationItem } from "./preparation-checklist";
@@ -569,13 +570,25 @@ export async function updatePerjadinAdvance(
   // field rather than showing a raw constraint violation. Not coupled to spend on purpose.
   if (advanceIdr < 0) return { outcome: "negative-advance" };
 
-  const updated = await db
-    .update(perjadin)
-    .set({ advanceIdr })
-    .where(eq(perjadin.id, perjadinId))
-    .returning({ id: perjadin.id });
+  return db.transaction(async (tx) => {
+    // The old value is read under the row lock, so the Activity Log's from→to (#395) is the value
+    // this write replaced, not one a concurrent correction already moved.
+    const [trip] = await tx
+      .select({ advanceIdr: perjadin.advanceIdr })
+      .from(perjadin)
+      .where(eq(perjadin.id, perjadinId))
+      .for("update");
+    if (!trip) return { outcome: "no-such-perjadin" };
 
-  if (updated.length === 0) return { outcome: "no-such-perjadin" };
+    // Saving the figure it already holds is not a change, and logs nothing.
+    if (trip.advanceIdr === advanceIdr) return { outcome: "updated" };
 
-  return { outcome: "updated" };
+    await tx.update(perjadin).set({ advanceIdr }).where(eq(perjadin.id, perjadinId));
+    await logActivity(tx, caller, perjadinId, {
+      action: "advance_changed",
+      details: { fromIdr: trip.advanceIdr, toIdr: advanceIdr },
+    });
+
+    return { outcome: "updated" };
+  });
 }
