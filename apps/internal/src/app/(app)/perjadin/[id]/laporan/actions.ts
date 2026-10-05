@@ -30,7 +30,7 @@ import {
   type FilePerjadinReportResult,
   type NewEvidence,
 } from "@sugt/db/queries";
-import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_TRANSACTION } from "@sugt/domain";
+import { MAX_RECEIPTS_PER_TRANSACTION, MAX_UPLOAD_BYTES } from "@sugt/domain";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
@@ -129,8 +129,8 @@ export async function openReceiptSessionsAction(
     isReceiptContentType(file.contentType) ? [{ ...file, contentType: file.contentType }] : [],
   );
   if (typed.length !== files.length) return { outcome: "unsupported-type" };
-  if (files.some((file) => !(file.size > 0) || file.size > MAX_RECEIPT_BYTES)) {
-    return { outcome: "too-large", limit: MAX_RECEIPT_BYTES };
+  if (files.some((file) => !(file.size > 0) || file.size > MAX_UPLOAD_BYTES)) {
+    return { outcome: "too-large", limit: MAX_UPLOAD_BYTES };
   }
 
   const access = await driveAccessToken(person);
@@ -181,7 +181,7 @@ async function verifyReceipt(
     file.appProperties.sugtPerjadinId !== perjadinId ||
     file.size === null ||
     file.size === 0 ||
-    file.size > MAX_RECEIPT_BYTES
+    file.size > MAX_UPLOAD_BYTES
   ) {
     return "unverified";
   }

@@ -7,8 +7,8 @@ import type { DriveClient } from "./google";
  *
  * ```
  * My Drive/
- * ├── SUGT 2026 _staging — jangan dibagikan/      ← a SIBLING of the root, never inside it
- * └── SUGT 2026 Internal App Object Storage/      ← the root
+ * ├── SUGT ITB 2026 _staging — jangan dibagikan/      ← a SIBLING of the root, never inside it
+ * └── SUGT ITB 2026 Internal App Object Storage/      ← the root
  *     ├── README
  *     └── Bukti Transaksi/
  *         └── Pelaksanaan Offline/
@@ -27,13 +27,13 @@ import type { DriveClient } from "./google";
  * reuses them rather than making a second root.
  */
 
-export const ROOT_FOLDER_NAME = "SUGT 2026 Internal App Object Storage";
-export const STAGING_FOLDER_NAME = "SUGT 2026 _staging — jangan dibagikan";
+export const ROOT_FOLDER_NAME = "SUGT ITB 2026 Internal App Object Storage";
+export const STAGING_FOLDER_NAME = "SUGT ITB 2026 _staging — jangan dibagikan";
 export const BUKTI_TRANSAKSI_FOLDER_NAME = "Bukti Transaksi";
 export const PELAKSANAAN_OFFLINE_FOLDER_NAME = "Pelaksanaan Offline";
 export const README_NAME = "README";
 export const README_TEXT =
-  "Dikelola aplikasi SUGT — jangan hapus, jangan ganti nama, jangan bagikan folder ini.";
+  "Dikelola aplikasi SUGT ITB — jangan hapus, jangan ganti nama, jangan bagikan folder ini.";
 
 export type EnsuredFolders = DriveFolderIds & { folderProblem: DriveFolderProblem | null };
 

@@ -231,3 +231,33 @@ There is **one storage backend at the end, never two.**
 - **Keeping two storage backends.** Supabase for old receipts and Drive for new ones would mean two
   render paths and two access models forever. The migration exists so that never happens.
 - **A daily Cron**, for the reasons above.
+
+## Amendment (2026-10-06): "SUGT ITB 2026" folder names, and one 50 MB cap
+
+[#394](https://github.com/sugt-itb/sugt-itb-26/issues/394). Two changes, both in constants; nothing
+about the decision above moves.
+
+**The root and `_staging` are named "SUGT ITB 2026 …".** The product owner renamed both by hand in
+the production Drive. The app finds them by stored id, so that connection kept working and nothing
+renames them back: after a folder is created, its name is not app-owned. The constants only matter
+when a connection creates its folders for the first time, which now makes these names. An existing
+README is not rewritten; one is recreated, with the new text, only if it is missing. The fixed part
+of the tree is now:
+
+```
+My Drive/
+├── SUGT ITB 2026 _staging — jangan dibagikan/      ← private, NEVER under the root
+└── SUGT ITB 2026 Internal App Object Storage/      ← the root
+    ├── README                                       ← "Dikelola aplikasi SUGT ITB — jangan hapus, jangan ganti nama, jangan bagikan folder ini."
+    └── Bukti Transaksi/
+        └── Pelaksanaan Offline/
+            └── …                                    ← as drawn above
+```
+
+**The per-file cap is 50 MB, for every upload.** `MAX_RECEIPT_BYTES` (20 MB) becomes
+`MAX_UPLOAD_BYTES` = 50 MiB in `@sugt/domain`, renamed because the Perjadin Dokumen
+([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042) upload under the same cap. It
+is enforced at the same four points as before: the browser after re-encoding, the declared size when
+the session opens, the session's own `X-Upload-Content-Length`, and the size Drive reports on
+read-back. Images are still re-encoded first, so the cap mostly matters for PDFs. The bytes still go
+from the browser straight to Drive, so Vercel's request limit is not in play.

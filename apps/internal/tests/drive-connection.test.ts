@@ -309,6 +309,13 @@ describe("a successful connect", () => {
     expect(offline[0]!.parents).toEqual([bukti[0]!.id]);
     expect(readme[0]!.parents).toEqual([root[0]!.id]);
     expect(new TextDecoder().decode(drive.files.get(readme[0]!.id)!.content)).toBe(README_TEXT);
+    // The names themselves, written out: the product owner renamed the production folders to these
+    // by hand, and a fresh connection must match them (#394).
+    expect(root[0]!.name).toBe("SUGT ITB 2026 Internal App Object Storage");
+    expect(staging[0]!.name).toBe("SUGT ITB 2026 _staging — jangan dibagikan");
+    expect(README_TEXT).toBe(
+      "Dikelola aplikasi SUGT ITB — jangan hapus, jangan ganti nama, jangan bagikan folder ini.",
+    );
 
     expect(row).toMatchObject({
       rootFolderId: root[0]!.id,

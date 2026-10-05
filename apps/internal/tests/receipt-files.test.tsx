@@ -7,8 +7,8 @@ import {
   sniffReceiptType,
   transactionFolderName,
 } from "-/lib/drive/receipt-files";
-import { prepareReceipt } from "-/lib/drive/receipt-upload";
-import { MAX_RECEIPT_BYTES } from "@sugt/domain";
+import { prepareReceipt, UPLOAD_TOO_LARGE } from "-/lib/drive/receipt-upload";
+import { MAX_UPLOAD_BYTES } from "@sugt/domain";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -149,10 +149,19 @@ describe("prepareReceipt, for what needs no canvas", () => {
   });
 
   it("refuses a PDF over the cap", async () => {
-    const file = new File([new Uint8Array(MAX_RECEIPT_BYTES + 1)], "besar.pdf", {
+    const file = new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "besar.pdf", {
       type: "application/pdf",
     });
 
     await expect(prepareReceipt(file)).resolves.toBe("too-large");
+  });
+
+  it("sends a PDF of exactly 50 MB, and says 50 MB when refusing (#394)", async () => {
+    const file = new File([new Uint8Array(MAX_UPLOAD_BYTES)], "pas.pdf", {
+      type: "application/pdf",
+    });
+
+    await expect(prepareReceipt(file)).resolves.toMatchObject({ contentType: "application/pdf" });
+    expect(UPLOAD_TOO_LARGE).toBe("Berkas lebih dari 50 MB — perkecil lalu coba lagi.");
   });
 });
