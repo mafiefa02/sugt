@@ -1520,6 +1520,69 @@ usually **already public**. A file moved in before the count was settled could b
 receipt anyone can open that no row records. So the count and the rows come first, under the lock,
 and the files follow.
 
+### The Activity Log
+
+```sql
+create table activity_log (
+  id               uuid primary key default gen_random_uuid(),
+  occurred_at      timestamptz not null default now(),
+  actor_person_id  uuid not null references person (id),
+  actor_email      text not null,
+  perjadin_id      uuid not null references perjadin (id) on delete cascade,
+  action           text not null check (action in (
+                     'advance_set', 'advance_changed', 'transaction_recorded',
+                     'evidence_uploaded', 'report_filed',
+                     'document_uploaded', 'document_deleted')),
+  details          jsonb not null,
+  search_text      text not null,
+  backfilled       boolean not null default false
+);
+
+create index activity_log_occurred_at_id_idx on activity_log (occurred_at desc, id desc);
+```
+
+**One row per act on a Perjadin's money, receipts, documents or report** (#395), read only by an
+Administrator on `/log`. The `action` values are character for character `ACTIVITY_LOG_ACTIONS` in
+`packages/domain/src/index.ts`. The two `document_*` values are in the CHECK before anything writes
+them, so the Dokumen tickets need no CHECK migration.
+
+**Each entry is written in the same database transaction as the change it records**, so a refused
+or failed write logs nothing. Five writes log today, each through `logActivity` in
+`queries/activity-log.ts`:
+
+| Write                       | `action`               | `details`                                                                         |
+| --------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| `planPerjadin`              | `advance_set`          | `{ amountIdr }`                                                                   |
+| `updatePerjadinAdvance`     | `advance_changed`      | `{ fromIdr, toIdr }`; the old value is read under `for update`; no change, no row |
+| `recordTransaction`         | `transaction_recorded` | `{ transactionId, category, amountIdr, participantType, spentOn, receiptCount }`  |
+| `attachTransactionEvidence` | `evidence_uploaded`    | `{ transactionId, category, amountIdr, spentOn, added, total }`                   |
+| `filePerjadinReport`        | `report_filed`         | `{ transactionCount, totalIdr }`, every category, as the acquittal totals         |
+
+**`actor_email` is a copy**, taken when the act happens, so the row stays true if the Person's email
+later changes. **`search_text`** is the Aksi and Rincian text `/log` shows, lower-cased once at
+write time, so the page's search runs in SQL over what the screen says. Nothing in the app updates
+or deletes a row.
+
+**Migration 0039 backfills what the existing rows can tell.** `transaction` records who created a
+line and when, and `transaction_evidence` who uploaded each receipt and when, so the migration
+derives, with `backfilled = true`:
+
+- one `transaction_recorded` per existing line, at its `created_at`, by its creator. Its
+  `receiptCount` is the receipts uploaded with it — those whose `uploaded_at` equals the line's
+  `created_at`, since `recordTransaction` inserts both in one database transaction and so with one
+  `now()`;
+- one `evidence_uploaded` per later batch: the remaining receipts grouped by line, uploader and
+  `uploaded_at`, for the same reason.
+
+The backfilled `actor_email` is the Person's email at migration time, the best available. **Uang
+Perjalanan and Laporan history cannot be recovered**: no column records who set an Advance or filed
+a report, so those start at the migration. `/log` marks a backfilled row "(dari data lama)".
+
+**The Log stays small** — a few thousand rows over the whole Programme — so `/log` reads one page of
+50 plus one `count(*)`, and the index above serves "newest 50". Its search is a plain `ilike` with
+no index. If search over a much larger table ever becomes slow, a `pg_trgm` trigram index on the
+searched text is the known fix.
+
 ---
 
 ## Stories
@@ -2069,7 +2132,7 @@ not removed: the Perjadin's folder in the company Google Drive (ADR-0040) outliv
 path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
 trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive nothing — and
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
-links go with the names.
+links go with the names. `activity_log` cascades too, so the trip's Activity Log entries go with it.
 
 `session.perjadin_id` deliberately does **not** cascade and has no `on delete` action at all,
 so an offline Session blocks the delete. A trip that produced teaching cannot be quietly

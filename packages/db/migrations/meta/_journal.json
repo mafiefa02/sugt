@@ -274,6 +274,13 @@
       "when": 1791230079151,
       "tag": "0038_evaluation_role_narasumber",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791240055962,
+      "tag": "0039_activity_log",
+      "breakpoints": true
     }
   ]
 }

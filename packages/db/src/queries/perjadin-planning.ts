@@ -9,6 +9,7 @@ import { db } from "../client";
 import { session, sessionTeachingTeam } from "../schema/delivery";
 import { cluster, province, school, subCluster } from "../schema/reference";
 import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
+import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
 import { duplicatedStaff } from "./group-rules";
 import {
@@ -473,6 +474,12 @@ export async function planPerjadin(
         .insert(perjadinPimpinan)
         .values(uniquePimpinan.map((personId) => ({ perjadinId: id, personId })));
     }
+
+    // The Activity Log (#395): the planned Advance, in this transaction so it commits with the trip.
+    await logActivity(tx, caller, id, {
+      action: "advance_set",
+      details: { amountIdr: input.advanceIdr },
+    });
 
     return id;
   });
