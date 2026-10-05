@@ -490,12 +490,10 @@ export async function updatePerjadinDates(
 ): Promise<UpdatePerjadinDatesResult> {
   requireStaff(caller);
 
-  const { startsOn: newStartsOn, endsOn: newEndsOn } = input;
-
   // An inverted range is refused before the transaction opens — same-day allowed. `perjadin_dates_check`
   // holds `ends_on >= starts_on` at the database too, but returning a value lets the edit surface point
   // at Tanggal selesai rather than surfacing a raw constraint violation.
-  if (newEndsOn < newStartsOn) return { outcome: "ends-before-starts" };
+  if (input.endsOn < input.startsOn) return { outcome: "ends-before-starts" };
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
@@ -514,25 +512,24 @@ export async function updatePerjadinDates(
       .where(and(eq(session.perjadinId, perjadinId), eq(session.status, "arranged")))
       .for("update", { of: session });
 
-    const window = { startsOn: newStartsOn, endsOn: newEndsOn };
-    const stranded = arranged.filter((s) => !heldOnWithinPerjadin(s.heldOn, window));
+    const stranded = arranged.filter((s) => !heldOnWithinPerjadin(s.heldOn, input));
     if (stranded.length > 0) {
       // Return before any write: the transaction commits, but it carries only the locking reads, so
       // the trip and its Sessions are left exactly as they were. No Session is shifted.
       return {
         outcome: "would-strand",
         strandedCount: stranded.length,
-        startsOn: newStartsOn,
-        endsOn: newEndsOn,
+        startsOn: input.startsOn,
+        endsOn: input.endsOn,
       };
     }
 
     await tx
       .update(perjadin)
-      .set({ startsOn: newStartsOn, endsOn: newEndsOn })
+      .set({ startsOn: input.startsOn, endsOn: input.endsOn })
       .where(eq(perjadin.id, perjadinId));
 
-    return { outcome: "updated", startsOnMoved: trip.startsOn !== newStartsOn };
+    return { outcome: "updated", startsOnMoved: trip.startsOn !== input.startsOn };
   });
 }
 

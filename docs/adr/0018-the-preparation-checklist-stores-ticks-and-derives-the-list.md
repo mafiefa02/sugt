@@ -1,5 +1,10 @@
 # The Preparation Checklist stores ticks and derives the list
 
+> **Partially superseded by [ADR-0041](./0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md).**
+> The two ticket boxes are one `tiket_pp` ("Tiket / transportasi PP") now, so the fixed set below is
+> six, not seven; ticks on the retired `tiket_keberangkatan` and `tiket_kepulangan` keys are ignored
+> orphans like the `dosen:` ones.
+
 A Perjadin carries a **Preparation Checklist** — a private, hand-ticked list of pre-departure
 to-dos, shown only on the trip's own screen, with a `Persiapan: x/N` pill on the Perjadin list.
 This records the two decisions that shape it: the _set of items_ is derived rather than stored, and

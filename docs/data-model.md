@@ -1926,7 +1926,7 @@ places:
 So an arranged offline Session can no longer be born outside its trip, nor moved outside it, nor
 stranded when the trip's range is resized — path 3 refuses the resize rather than moving Sessions.
 Both halves of #28's invariant now hold, at the data layer and at the surface that drives it:
-Detail Perjadin's Staff-only "Ubah perjalanan" dialog is what a person resizes a trip through, and
+Detail Perjadin's Staff-only "Ubah tanggal" dialog is what a person resizes a trip through, and
 it reaches the guard in path 3.
 
 **That a Perjadin's Sessions are at Schools of its Sub-Cluster.** `perjadin.sub_cluster_id` is

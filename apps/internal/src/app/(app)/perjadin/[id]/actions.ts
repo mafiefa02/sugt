@@ -215,7 +215,7 @@ export async function issuePerjadinFeedbackTokenAction(
  * **Ubah tanggal — correct a Perjadin's typed date range** (ADR-0041).
  *
  * It clamps rather than shifting: an edit that would strand an arranged Session comes back as
- * `would-strand` and nothing moves.
+ * `would-strand` and nothing moves; an inverted range comes back as `ends-before-starts`.
  *
  * **A correction that moves `starts_on` renames the trip's Drive folder** (#376), after the commit and
  * best effort: a failed rename never fails the correction, and the next reconcile on that trip
