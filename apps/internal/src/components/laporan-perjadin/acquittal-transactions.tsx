@@ -243,8 +243,8 @@ const UNSYNCED_TOOLTIP =
   "Bukti belum tersinkron ke Google Drive — Administrator dapat menyelesaikannya lewat Periksa koneksi.";
 
 /**
- * **A quiet mark on a line whose Drive receipts are not yet in place** (ADR-0040, #375): recorded,
- * but the reconcile has not finished moving them into the line's folder. Small and muted — nothing is
+ * **A quiet mark on a line whose receipts are not yet in place in Drive** (ADR-0040, #375):
+ * recorded, but the reconcile has not finished moving them into the line's folder. Small and muted — nothing is
  * wrong with the line, and nothing is asked of whoever reads it; an Administrator's Periksa koneksi
  * finishes it. The sentence is in the tooltip for a pointer, and spoken in full from an `sr-only`
  * span for a screen reader. The trigger is a real button, so the tooltip opens on keyboard focus.
@@ -345,9 +345,8 @@ function ControlSelect<T extends string>({
 /**
  * The receipts on one line item, and the upload that adds to them.
  *
- * Each receipt is a **Bukti n** link that opens it in a new tab — in Google Drive for one recorded
- * since ADR-0040, through a signed URL for one from before — and a line with a Drive folder adds
- * **Buka folder**, the link anyone can open once the folder is shared.
+ * Each receipt is a **Bukti n** link that opens it in Google Drive in a new tab (ADR-0040), and a
+ * line with a Drive folder adds **Buka folder**, the link anyone can open once the folder is shared.
  *
  * The upload goes to Drive the same way Catat transaksi's does (ADR-0040): each file prepared in the
  * browser, a session opened per file, the bytes `PUT` straight to Drive. Then `finalizeReceiptsAction`

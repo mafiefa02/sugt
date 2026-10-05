@@ -11,8 +11,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 /**
  * **Migration 0036 refuses unmigrated receipts** (#379, ADR-0040). It drops `storage_path`, so a row
- * still holding only that — a receipt `drive:migrate-receipts` never moved — would lose the only
- * pointer to its bytes. The migration must raise instead, and drop nothing.
+ * still holding only that — a receipt the `drive:migrate-receipts` script (#377, removed here) never
+ * moved — would lose the only pointer to its bytes. The migration must raise instead, naming each
+ * such row, and drop nothing.
  *
  * The suite's own database is already past 0036, so each test makes a scratch database beside it on
  * the same cluster, migrates it to 0035, seeds `transaction_evidence` as it stood then, and applies

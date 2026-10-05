@@ -1506,8 +1506,8 @@ trashes its own folder and uses the winner's.
 
 **"Unsynced" means `drive_synced_at is null` and at least one evidence row with a
 `drive_file_id`** — that is, at least one receipt. It is derived, not stored. A line with no
-receipt is never unsynced. A reconcile that fails after the commit leaves the line recorded and unsynced, and its
-files wait in private `_staging` until the next reconcile finishes it. A reconcile marks a line
+receipt is never unsynced. A reconcile that fails after the commit leaves the line recorded and
+unsynced, and its files wait in private `_staging` until the next reconcile finishes it. A reconcile marks a line
 synced only for the receipts it read. If a newer receipt was committed while it ran, the mark does
 not land, so that receipt stays owed rather than stranded under a line that claims to be done.
 
@@ -2067,7 +2067,8 @@ exists at all.
 
 `group_member` cascades. `transaction` cascades, and `transaction_evidence` cascades from
 that — so deleting a Perjadin destroys its acquittal rows, and nothing warns you. The files are
-not removed: the Perjadin's folder in the company Google Drive (ADR-0040) outlives its rows. No path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
+not removed: the Perjadin's folder in the company Google Drive (ADR-0040) outlives its rows. No
+path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
 trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive nothing — and
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
 links go with the names.

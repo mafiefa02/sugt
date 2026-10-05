@@ -52,9 +52,9 @@ export type AcquittalTransaction = {
   amountIdr: number;
   category: TransactionCategory;
   participantType: TransactionParticipantType;
-  /** The line's Drive folder, link-shared once synced. Null on a line with no Drive receipt yet. */
+  /** The line's Drive folder, link-shared once synced. Null on a line with no receipt yet. */
   driveFolderId: string | null;
-  /** When the reconcile last finished the line; null while a Drive receipt is still owed. */
+  /** When the reconcile last finished the line; null while a receipt is still owed. */
   driveSyncedAt: Date | null;
   evidence: AcquittalEvidence[];
 };

@@ -64,8 +64,9 @@ import type {
  *
  * The order is load-bearing. An upload session is a write credential on the company Drive, and the
  * verify reads files with the company's own token; doing either first would give a non-Staff caller
- * an upload URL, or tell them whether a file exists and how big it is. The `requireStaff` is what closes this: `perjadinAcquittal` is an open money read
- * since #180 (ADR-0026), so the read alone no longer refuses a Pimpinan.
+ * an upload URL, or tell them whether a file exists and how big it is. The `requireStaff` is what
+ * closes this: `perjadinAcquittal` is an open money read since #180 (ADR-0026), so the read alone
+ * no longer refuses a Pimpinan.
  */
 async function staffOnTrip(person: Person, perjadinId: string): Promise<boolean> {
   const acquittal = await staffSurface(() => {

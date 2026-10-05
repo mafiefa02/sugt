@@ -156,7 +156,7 @@ export async function claimTransactionDriveFolder(
  * committed — and reset the line to unsynced — while that receipt's own reconcile failed. Marking the
  * line synced then would strand the new file in `_staging` under a line that claims to be done, and
  * the sweep only visits unsynced lines. So the mark is a compare-and-set: it lands only when no
- * Drive receipt on the line is outside `handledEvidenceIds`. If it does not land, the line is synced
+ * receipt on the line is outside `handledEvidenceIds`. If it does not land, the line is synced
  * only if some later reconcile already finished it.
  */
 export async function markTransactionSynced(

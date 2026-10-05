@@ -1421,8 +1421,8 @@
       },
       "policies": {},
       "checkConstraints": {
-        "transaction_evidence_drive_content_type_check": {
-          "name": "transaction_evidence_drive_content_type_check",
+        "transaction_evidence_content_type_check": {
+          "name": "transaction_evidence_content_type_check",
           "value": "\"transaction_evidence\".\"content_type\" in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')"
         }
       },

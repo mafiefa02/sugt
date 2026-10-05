@@ -336,11 +336,11 @@ export const perjadinPreparationItem = pgTable(
  * One to five per transaction (ADR-0039), held by the application rather than here — lines from
  * before that rule may hold none or more.
  *
- * **Every receipt is a file in the company Google Drive** (ADR-0040): `driveFileId` is its id there,
- * `unique` so one uploaded file is attached exactly once. Its `content_type` is one of the four types
- * the server sniffed from the first bytes, which `transaction_evidence_drive_content_type_check`
- * pins. Receipts once lived in a private Supabase bucket under a `storage_path`; they were moved to
- * Drive (#377) and the column dropped (#379).
+ * **Every receipt is a file in the company Google Drive** (ADR-0040): `driveFileId` is its id
+ * there, `unique` so one uploaded file is attached exactly once. Its `content_type` is one of the
+ * four types the server sniffed from the first bytes, which `transaction_evidence_content_type_check`
+ * pins. Receipts once lived in a private Supabase bucket under a `storage_path`; they were moved
+ * to Drive (#377) and the column dropped (#379).
  */
 export const transactionEvidence = pgTable(
   "transaction_evidence",
@@ -363,7 +363,7 @@ export const transactionEvidence = pgTable(
   (t) => [
     index("transaction_evidence_transaction_id_idx").on(t.transactionId),
     check(
-      "transaction_evidence_drive_content_type_check",
+      "transaction_evidence_content_type_check",
       sql`${t.contentType} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`,
     ),
   ],
