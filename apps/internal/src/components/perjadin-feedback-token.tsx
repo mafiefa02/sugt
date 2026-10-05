@@ -35,9 +35,9 @@ function PerjadinFeedbackTokenDialog({
   trigger,
 }: {
   perjadinId: string;
-  // An optional custom trigger so a card elsewhere (e.g. the Staff dashboard) can open this exact
-  // dialog from its own labelled control. Omitted, the default button below renders and behaviour is
-  // identical to today — every current mount site keeps working unchanged.
+  // An optional custom trigger so a card elsewhere (e.g. a `/pendamping` trip card) can open this
+  // exact dialog from its own labelled control. Omitted, the default button below renders and
+  // behaviour is identical to today — every current mount site keeps working unchanged.
   trigger?: ReactElement;
 }) {
   const [open, setOpen] = useState(false);

@@ -148,8 +148,8 @@ export const groupMember = pgTable(
       foreignColumns: [person.id, person.role],
     }),
     // The primary key `(perjadin_id, person_id)` leads with `perjadin_id`, so it cannot serve a
-    // lookup keyed on `person_id` alone. `my-perjadin.ts` joins Groups by `person_id` — "Perjalanan
-    // Saya", the Staff home strip — so that path needs its own index (#270).
+    // lookup keyed on `person_id` alone. `my-perjadin.ts` joins Groups by `person_id` — a Staff
+    // member's own trips on `/pendamping` — so that path needs its own index (#270).
     index("group_member_person_id_idx").on(t.personId),
   ],
 );

@@ -102,12 +102,6 @@ export {
   type PerjadinFeedbackFilters,
   type PerjadinFeedbackRow,
 } from "./feedback";
-export {
-  staffDashboard,
-  type ClusterReach,
-  type PicReport,
-  type StaffDashboard,
-} from "./dashboard";
 export { monitoringData, type MonitoringData, type MonitoringSession } from "./monitoring";
 export {
   assessmentCompletions,
@@ -190,13 +184,14 @@ export {
 } from "./perjadin-sessions";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
-  myUpcomingPerjadin,
+  myPerjadin,
+  type MyPerjadin,
   type MyPerjadinPengajar,
   type MyPerjadinPimpinan,
   type MyPerjadinSchool,
   type MyPerjadinSession,
   type MyPerjadinStaff,
-  type MyUpcomingPerjadin,
+  type MyPerjadinTrip,
 } from "./my-perjadin";
 export {
   togglePreparationItem,

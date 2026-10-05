@@ -129,6 +129,32 @@ delivered counts rather than from memory. It is a real loss and it is accepted: 
 decide _which Sub-Cluster is next_, and that reading now happens before you leave this
 screen instead of inside the form you launched from it.
 
+### Pendamping — your own trips
+
+`/pendamping` is a Staff member's own trips and nothing else. A Pimpinan is sent to the Dashboard
+instead. A grant-less Staff member lands here, and so does every Staff member right after
+signing in.
+
+It opens with one small line, **"Selamat datang kembali, {nama}"**. Below it are two sections, each listing the trips the person is in the
+Group of:
+
+- **Perjalanan Dinas Anda**: the trips not yet over (ending today or later, in WIB), soonest
+  first.
+- **Perjalanan Dinas Sebelumnya**: the trips that are over, the most recently ended first, with
+  every action still on them.
+
+Each trip is a card that opens to show Uang Perjalanan, Catat Transaksi, Evaluasi Perjadin, Edit,
+the Persiapan pill, the timeline of Sessions and who is on the trip. Each section shows three
+cards with **Tampilkan lebih banyak** for the rest, and is left out when it has none. With neither,
+the page says "Anda belum tergabung dalam Perjalanan Dinas."
+
+**On a trip the person is PIC of**, the card carries one line about the Laporan, with a
+**Buka laporan** link to it:
+
+- "Laporan: belum dikirim · tenggat {tanggal}", in red once that deadline, the same one the
+  acquittal shows, has passed;
+- "Laporan: terkirim {tanggal}" once it is filed.
+
 ### Concerns list
 
 A plain list of **Aspects Rated 7 or below**, across all Schools and all trips, newest first,
@@ -264,7 +290,7 @@ the same six fixed boxes — SK Perjalanan, "Tiket / transportasi PP", lodging, 
 "confirmed with the Pendamping" and "Narasumber sudah lengkap" — and no per-member ones. Any Staff
 member may tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
 screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
-the Persiapan column of the Perjadin list, and on the trip cards of the Staff home strip. For Staff
+the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. For Staff
 the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
 
 **The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):

@@ -11,6 +11,17 @@ export function formatWib(when: Date): string {
   return `${formatted} WIB`;
 }
 
+/**
+ * `2026-10-05` — the calendar day an instant falls on in WIB, in the same ISO form (#166). A day
+ * read off a timestamp — when a Laporan was filed — is WIB's day, not UTC's: a filing at 06:00 WIB
+ * is still that day, though it is the day before in UTC.
+ */
+export function formatWibDate(when: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jakarta", dateStyle: "short" }).format(
+    when,
+  );
+}
+
 const INDONESIAN_WIB = new Intl.DateTimeFormat("id-ID", {
   day: "numeric",
   month: "short",

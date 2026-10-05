@@ -1,6 +1,7 @@
 "use client";
 
 import { filePerjadinReportAction } from "-/app/(app)/perjadin/[id]/laporan/actions";
+import { formatWibDate } from "-/lib/format-wib";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import { useState, useTransition } from "react";
@@ -29,7 +30,7 @@ function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filed
   if (filedAt !== null) {
     return (
       <span className="text-sm text-muted-foreground">
-        Dilaporkan <span className="tabular-nums">{filedAt.toISOString().slice(0, 10)}</span>
+        Dilaporkan <span className="tabular-nums">{formatWibDate(filedAt)}</span>
       </span>
     );
   }

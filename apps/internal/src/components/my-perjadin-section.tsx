@@ -9,7 +9,8 @@ import { progressTone } from "-/components/progress-tone";
 import { spentPercent, tripTimeline, type TimelineNode } from "-/components/trip-timeline";
 import type { ReceiptUploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
-import type { MyUpcomingPerjadin } from "@sugt/db/queries";
+import { formatWibDate } from "-/lib/format-wib";
+import type { MyPerjadinTrip } from "@sugt/db/queries";
 import { formatRupiah, formatSessionStartTimeWithWib } from "@sugt/domain";
 import {
   Accordion,
@@ -26,8 +27,9 @@ import Link from "next/link";
 import { useState } from "react";
 
 /**
- * **Perjalanan Dinas Anda** — the Staff home's own-trips section (#199), the client island over
- * `myUpcomingPerjadin`'s payload (#197). It wires that read straight into the reusable dialogs #198
+ * **One section of `/pendamping`'s own trips** (#199) — Perjalanan Dinas Anda or Perjalanan Dinas
+ * Sebelumnya (#396), each the client island over its half of `myPerjadin`'s payload (#197). It
+ * wires that read straight into the reusable dialogs #198
  * carved out: the Preparation checklist, the two feedback-QR dialogs and the transaction entry form
  * all open from a card's own labelled control rather than a page of their own, and each Session on a
  * trip's timeline carries its own Tandai confirmation (#349). Each trip is a card in one single-open
@@ -37,14 +39,19 @@ import { useState } from "react";
  * local state, and every dialog it mounts is itself a client component. The data is fetched on the
  * server and passed down whole, so this never refetches — paging only widens the slice already here.
  *
- * The whole section — heading included — is absent when the caller is on no upcoming trip, rather
- * than a heading over an empty list: there is nothing to say, so nothing is shown.
+ * The whole section — heading included — is absent when it has no trip, rather than a heading over
+ * an empty list: there is nothing to say, so nothing is shown. Each section is its own accordion and
+ * pages on its own.
  */
 function MyPerjadinSection({
+  title,
+  description,
   trips,
   uploadGate,
 }: {
-  trips: MyUpcomingPerjadin[];
+  title: string;
+  description: string;
+  trips: MyPerjadinTrip[];
   uploadGate: ReceiptUploadGate;
 }) {
   // Reveal three at a time from the client, never a refetch — the full list is already in hand, and
@@ -55,10 +62,8 @@ function MyPerjadinSection({
 
   return (
     <section>
-      <h2 className="font-heading text-sm font-medium">Perjalanan Dinas Anda</h2>
-      <p className="mt-0.5 text-sm text-muted-foreground">
-        Perjalanan yang belum selesai, dan yang bisa Anda kerjakan pada masing-masing.
-      </p>
+      <h2 className="font-heading text-sm font-medium">{title}</h2>
+      <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
 
       {/* One single-open accordion (Base UI's default), every card collapsed to start — including
           the ones "show more" reveals, since none is ever in the open value until it is clicked.
@@ -103,13 +108,7 @@ function MyPerjadinSection({
  * its own click and opens the checklist without toggling. The chevron is decorative and outside the
  * trigger, rotated from the item's `data-open`.
  */
-function TripCard({
-  trip,
-  uploadGate,
-}: {
-  trip: MyUpcomingPerjadin;
-  uploadGate: ReceiptUploadGate;
-}) {
+function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: ReceiptUploadGate }) {
   // The pill's `x/N` is read straight off the checklist the card also hands the dialog — one payload
   // for both, so the pill and the boxes can never disagree. `N` is always six (amendment to ADR-0018).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
@@ -158,6 +157,12 @@ function TripCard({
               {trip.startsOn} – {trip.endsOn}
             </span>
           </div>
+          {trip.report && (
+            <ReportLine
+              perjadinId={trip.id}
+              report={trip.report}
+            />
+          )}
         </div>
         <ChevronDown
           aria-hidden
@@ -234,12 +239,47 @@ function TripCard({
 }
 
 /**
+ * **The PIC's Laporan line** (#396), on their own cards only. Unfiled, it names the acquittal's own
+ * deadline, in the destructive colour once that has passed; filed, the WIB day it was filed, read
+ * the way the Laporan reads it. The link sits above the card's stretched trigger
+ * (`relative z-10`), so it opens the Laporan rather than toggling the card.
+ */
+function ReportLine({
+  perjadinId,
+  report,
+}: {
+  perjadinId: string;
+  report: NonNullable<MyPerjadinTrip["report"]>;
+}) {
+  const { dueOn, overdue, filedAt } = report;
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 text-xs lg:basis-full">
+      {filedAt ? (
+        <span className="text-muted-foreground">
+          Laporan: terkirim <span className="tabular-nums">{formatWibDate(filedAt)}</span>
+        </span>
+      ) : (
+        <span className={overdue ? "text-destructive" : "text-muted-foreground"}>
+          Laporan: belum dikirim · tenggat <span className="tabular-nums">{dueOn}</span>
+        </span>
+      )}
+      <Link
+        href={`/perjadin/${perjadinId}/laporan`}
+        className="relative z-10 underline underline-offset-4 hover:text-foreground"
+      >
+        Buka laporan
+      </Link>
+    </p>
+  );
+}
+
+/**
  * Who is on the trip, inline: Pendamping (the Staff Group), Narasumber (the trip-scoped teacher
  * names) and Pimpinan (record-only), in that order. A group with nobody in it is left out rather
  * than labelled over an empty list, and the names are plain — the PIC is already named in the
  * header.
  */
-function AnggotaRoster({ anggota }: { anggota: MyUpcomingPerjadin["anggota"] }) {
+function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
   const groups = [
     {
       label: "Pendamping",

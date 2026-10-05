@@ -52,7 +52,7 @@ export type DirectoryPerjadin = {
   preparationTotal: number;
   /**
    * The fixed six with their tick state, for the Persiapan dialog the Staff pill opens (#343) — the
-   * same `derivePreparationChecklist` `myUpcomingPerjadin` and the detail read run. `preparationDone`
+   * same `derivePreparationChecklist` `myPerjadin` and the detail read run. `preparationDone`
    * and `preparationTotal` are counted off this very list, so the pill and the dialog's boxes agree.
    */
   preparation: PreparationItem[];
@@ -161,7 +161,7 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
   if (trips.length === 0) return [];
 
   // The checklist for the Persiapan pill and its dialog (#343): one batched read of every trip's ticks,
-  // bucketed by trip and folded into the fixed six — the shape `myUpcomingPerjadin` uses, rather
+  // bucketed by trip and folded into the fixed six — the shape `myPerjadin` uses, rather
   // than a join that would multiply each trip row by its ticks. A trip absent here has no ticks.
   const tickRows = await db
     .select({
@@ -185,7 +185,7 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
   }
 
   // The pill's `x/N` is counted off the same derived checklist the dialog shows — one read of the
-  // ticks for both, the way `myUpcomingPerjadin`'s card does it, so the pill and the boxes agree.
+  // ticks for both, the way `myPerjadin`'s card does it, so the pill and the boxes agree.
   // `N` is the flat fixed six (amendment to ADR-0018); an orphan `dosen:` tick matches no item.
   return trips.map((trip) => {
     const preparation = derivePreparationChecklist(ticksByTrip.get(trip.id) ?? []);

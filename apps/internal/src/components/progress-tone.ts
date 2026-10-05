@@ -1,7 +1,7 @@
 /**
  * **The three-way progress tone** a count badge wears (#114, #343): neutral before anything is done,
  * amber part-way, emerald once everything is. One helper for the Persiapan pill on `/perjadin` and on
- * the home strip, and for the Terlaksana badge — so the screens read an `x/N` the same way.
+ * `/pendamping`, and for the Terlaksana badge — so the screens read an `x/N` the same way.
  *
  * `0/0` is neutral: zero done is the first test, so an empty count never reads as complete.
  */

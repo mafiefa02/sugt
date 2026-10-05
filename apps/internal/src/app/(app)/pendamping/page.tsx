@@ -1,48 +1,62 @@
-import { DashboardStaff } from "-/components/dashboard-staff";
+import { MyPerjadinSection } from "-/components/my-perjadin-section";
 import { receiptUploadGate } from "-/lib/drive/upload-gate";
 import { requirePerson } from "-/lib/person";
-import { staffSurface } from "-/lib/staff-surface";
-import { myUpcomingPerjadin, staffDashboard } from "@sugt/db/queries";
+import { myPerjadin } from "@sugt/db/queries";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Pendamping" };
 
 /**
- * **Pendamping** — the landing screen (#40), renamed from Beranda at `/pendamping` (#294; the future
- * intent behind the name is a per-person Perjadin list, deferred). A dashboard **assembles** from
- * everything else; it does not invent, so this page is one `requirePerson()`, one dashboard read, and
- * the component that renders it. Its content is unchanged by the rename — still `DashboardStaff`.
+ * **Pendamping** — a Staff member's own trips, and nothing else (#396): a one-line greeting,
+ * **Perjalanan Dinas Anda** (the trips not yet over) and **Perjalanan Dinas Sebelumnya** (the ones
+ * that are). A past trip keeps every action, because the Laporan and the attendance sheets are often
+ * finished after it. A PIC's Laporan state is a line on each of their trip cards.
  *
  * **"Pendamping" here is a route/label and collides in name only** with the Perjadin role label
  * (`PERJADIN_ROLE_LABELS.Staff` → "Pendamping"): this is the Staff landing screen, not that trip role.
  *
- * **It is Staff-only, at `/pendamping`** (#265). `staffDashboard` calls `requireStaff` and
- * aggregates money, so a Pimpinan — a signed-in, read-only role — would 403 here; their home is the
- * Dashboard at `/` (#178), so a non-Staff caller is redirected there before the Staff-only read runs.
- * This is a real branch, unlike the retired second landing for Teaching-Team professors (T3, #153):
- * for a Staff Person the redirect never fires and the page is unchanged — one `staffDashboard`
- * read behind `staffSurface`, which for a Staff caller is defense in depth its `requireStaff` never
- * actually refuses.
+ * **It is Staff-only, at `/pendamping`** (#265). A Pimpinan — a signed-in, read-only role, on no
+ * Group — has no trips here; their home is the Dashboard at `/` (#178), so a non-Staff caller is
+ * redirected there. `myPerjadin` is scoped *by* the caller, not gated by role, and the money it
+ * carries is open to read (ADR-0026), so it needs no Staff choke point.
  */
 export default async function Page() {
   const person = await requirePerson();
   if (person.role !== "Staff") redirect("/");
 
-  // Two independent reads, in parallel. `myUpcomingPerjadin` is scoped *by* the caller, not gated by
-  // role, and carries no money that needs the choke point (ADR-0026) — so it is read directly rather
-  // than behind `staffSurface`, unlike the dashboard aggregate.
-  const [dashboard, upcoming, uploadGate] = await Promise.all([
-    staffSurface(() => staffDashboard(person)),
-    myUpcomingPerjadin(person),
+  const [trips, uploadGate] = await Promise.all([
+    myPerjadin(person),
     // Each trip card's Catat Transaksi is closed, with the reason, while Drive is (ADR-0040).
     receiptUploadGate(person),
   ]);
+
   return (
-    <DashboardStaff
-      dashboard={dashboard}
-      upcoming={upcoming}
-      uploadGate={uploadGate}
-    />
+    <div className="flex min-h-full flex-col gap-6 p-5 sm:p-7">
+      <h1 className="font-heading text-lg font-semibold">
+        Selamat datang kembali, {person.fullName}
+      </h1>
+
+      {trips.current.length === 0 && trips.previous.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Anda belum tergabung dalam Perjalanan Dinas.
+        </p>
+      ) : (
+        <>
+          <MyPerjadinSection
+            title="Perjalanan Dinas Anda"
+            description="Perjalanan yang belum selesai, dan yang bisa Anda kerjakan pada masing-masing."
+            trips={trips.current}
+            uploadGate={uploadGate}
+          />
+          <MyPerjadinSection
+            title="Perjalanan Dinas Sebelumnya"
+            description="Perjalanan yang sudah selesai, yang terbaru di atas. Laporan dan dokumennya masih bisa dikerjakan."
+            trips={trips.previous}
+            uploadGate={uploadGate}
+          />
+        </>
+      )}
+    </div>
   );
 }

@@ -7,7 +7,7 @@ import { DRIVE_FOLDERS_UNRESOLVED, DRIVE_NOT_CONNECTED, driveBrokenSince } from 
 /**
  * **Can a receipt be uploaded right now?** (ADR-0040, #373) Catat transaksi and every row's Unggah
  * bukti render disabled, with this reason, when it cannot — wherever the dialog renders: the
- * acquittal and the Staff Beranda's trip cards.
+ * acquittal and the trip cards on `/pendamping`.
  *
  * The page's answer is a courtesy. The Server Actions refuse the same states themselves
  * (`driveAccessToken`), since nothing a page renders runs before a Server Action, and answer with
