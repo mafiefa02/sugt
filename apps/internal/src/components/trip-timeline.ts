@@ -1,7 +1,7 @@
-import type { MyPerjadinSchool, MyPerjadinSession, MyUpcomingPerjadin } from "@sugt/db/queries";
+import type { MyPerjadinSchool, MyPerjadinSession, MyPerjadinTrip } from "@sugt/db/queries";
 
 /**
- * **Perjalanan Dinas Anda's trip timeline and money bar** (#349). The ordering, the done/pending state
+ * **A `/pendamping` trip card's timeline and money bar** (#349). The ordering, the done/pending state
  * and the spent ratio are plain functions so each rule is testable without React; the card renders
  * what they return, deciding only which controls a Session row offers.
  *
@@ -9,8 +9,8 @@ import type { MyPerjadinSchool, MyPerjadinSession, MyUpcomingPerjadin } from "@s
  * return leg (ADR-0041), so there is no journey to draw around them.
  */
 
-/** The fields the timeline reads — a subset of `MyUpcomingPerjadin`. */
-export type TimelineTrip = Pick<MyUpcomingPerjadin, "schools">;
+/** The fields the timeline reads — a subset of `MyPerjadinTrip`. */
+export type TimelineTrip = Pick<MyPerjadinTrip, "schools">;
 
 /** One stop on the timeline — an offline Session at one of the Schools. */
 export type TimelineNode = {

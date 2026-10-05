@@ -1,6 +1,5 @@
 import {
   MAX_RECEIPTS_PER_TRANSACTION,
-  REPORT_DEADLINE_DAYS_AFTER_RETURN,
   sumAdvanceDrawdownIdr,
   type TransactionCategory,
   type TransactionParticipantType,
@@ -12,7 +11,7 @@ import { person } from "../schema/people";
 import { perjadin, perjadinPimpinan, transaction, transactionEvidence } from "../schema/travel";
 import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
-import { todayInDeadlineZone } from "./deadline";
+import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -162,16 +161,13 @@ export async function perjadinAcquittal(
       // Computed in Postgres rather than in JavaScript, so the arithmetic happens in the
       // same calendar the dates are stored in. A `Date` here would introduce a time zone the
       // domain does not have — a Session is a calendar day, and so is a deadline.
-      reportDueOn: sql<string>`to_char(
-        ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}, 'YYYY-MM-DD'
-      )`,
+      reportDueOn: sql<string>`to_char(${perjadinReportDeadline}, 'YYYY-MM-DD')`,
       // The deadline less today, both in the office's zone: `todayInDeadlineZone` is the shared
       // `(now() at time zone …)::date` fragment (`./deadline.ts`), the calendar day in Bandung's
       // zone rather than the session's default, which nothing in this repository sets.
-      daysRemaining: sql<number>`(
-        ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}
-        - ${todayInDeadlineZone}
-      )`.mapWith(Number),
+      daysRemaining: sql<number>`(${perjadinReportDeadline} - ${todayInDeadlineZone})`.mapWith(
+        Number,
+      ),
       returnedToTreasurerIdr: perjadin.returnedToTreasurerIdr,
       returnedAt: perjadin.returnedAt,
       reportFiledAt: perjadin.reportFiledAt,

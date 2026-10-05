@@ -129,6 +129,38 @@ delivered counts rather than from memory. It is a real loss and it is accepted: 
 decide _which Sub-Cluster is next_, and that reading now happens before you leave this
 screen instead of inside the form you launched from it.
 
+### Pendamping — your own trips
+
+`/pendamping` is a Staff member's own trips and nothing else. A Pimpinan is sent to the Dashboard
+instead. A grant-less Staff member lands here, and so does every Staff member right after
+signing in.
+
+It opens with one line, **"Selamat datang kembali, {nama}"**, kept small so the first trip card
+sits high on a phone. Below it are two sections, each listing the trips the person is in the
+Group of:
+
+- **Perjalanan Dinas Anda**: the trips not yet over (ending today or later, in WIB), soonest
+  first.
+- **Perjalanan Dinas Sebelumnya**: the trips that are over, the most recently ended first. They
+  keep every action, because the Laporan and the attendance sheets are often finished after the
+  trip.
+
+Each trip is a card that opens to show Uang Perjalanan, Catat Transaksi, Evaluasi Perjadin, Edit,
+the Persiapan pill, the timeline of Sessions and who is on the trip. Each section shows three
+cards with **Tampilkan lebih banyak** for the rest, and is left out when it has none. With neither,
+the page says "Anda belum tergabung dalam Perjalanan Dinas."
+
+**On a trip the person is PIC of**, the card carries one line about the Laporan, with a
+**Buka laporan** link to it:
+
+- "Laporan: belum dikirim · tenggat {tanggal}", in red once that deadline, the same one the
+  acquittal shows, has passed;
+- "Laporan: terkirim {tanggal}" once it is filed.
+
+The page used to also show the Programme-wide delivery counts, the outstanding Advance and a
+**Pekerjaan PIC Anda** list. The counts belong on the Dashboard, and the PIC's reports are the line
+above.
+
 ### Concerns list
 
 A plain list of **Aspects Rated 7 or below**, across all Schools and all trips, newest first,
