@@ -427,7 +427,7 @@ export const FEEDBACK_TOKEN_LIFETIME_HOURS = 24;
 /**
  * How long a Perjadin's Evaluation link stays open — **14 days**, far longer than the Session
  * feedback token's 24 hours. A Participant Feedback QR is held up in the room and scanned on the
- * spot, so a day is generous; a Perjadin link is shared by hand to the Pengajar, Pendamping and
+ * spot, so a day is generous; a Perjadin link is shared by hand to the Narasumber, Pendamping and
  * Pimpinan after a trip that may have run over a week, and they file when they get to it. Counted
  * from issue, like `FEEDBACK_TOKEN_LIFETIME_HOURS`, and expressed in hours so both tokens set
  * their `expires_at` the same way (`now() + make_interval(hours => …)`).

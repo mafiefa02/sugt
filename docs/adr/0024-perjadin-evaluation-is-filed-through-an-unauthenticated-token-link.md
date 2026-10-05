@@ -80,6 +80,9 @@ The self-declared Role value **`Pengajar`** is renamed **`Narasumber`**
 Teaching Team on every screen. `PERJADIN_EVALUATION_ROLES` is `["Narasumber", "Pendamping",
 "Pimpinan"]`, and migration `0038_evaluation_role_narasumber` drops `perjadin_evaluation_filed_by_role_check`,
 runs `UPDATE perjadin_evaluation SET filed_by_role = 'Narasumber' WHERE filed_by_role = 'Pengajar'`, then
-adds the new CHECK — the update sits between the two, as in ADR-0028's `Editor` rename. Nothing else
-about the decision changes: the role is still self-declared and untrusted. The body above keeps
-`Pengajar` as the point-in-time record.
+adds the new CHECK — the update sits between the two, as in ADR-0028's `Editor` rename. The stored
+value is renamed rather than mapped to a label, unlike Staff → Pendamping, because this value is what
+the `/ep/{token}` picker offers and what the feedback list shows verbatim: one list behind the CHECK,
+the form and the badge, with no label map to drift from it. Nothing else about the decision
+changes: the role is still self-declared and untrusted. The body above keeps `Pengajar` as the
+point-in-time record.

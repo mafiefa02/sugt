@@ -15,8 +15,9 @@ import { type ReactElement, useState, useTransition } from "react";
 
 /**
  * **The Perjadin Evaluation QR** (ADR-0024) — the sibling of `feedback-token.tsx`, one trip over.
- * Anyone signed in issues a link from the trip's page and shares it (QR or copy) with the Pengajar,
- * Pendamping and Pimpinan; they open `/ep/{token}` and rate the journey without signing in.
+ * Anyone signed in issues a link from the trip's page and shares it (QR or copy) with the
+ * Narasumber, Pendamping and Pimpinan; they open `/ep/{token}` and rate the journey without
+ * signing in.
  *
  * **Offered to everyone, not only Staff** — a Perjadin Evaluation carries no money (ADR-0004), so
  * `issuePerjadinFeedbackToken` takes a plain `Person`. Unlike the Session QR there is **no cancelled

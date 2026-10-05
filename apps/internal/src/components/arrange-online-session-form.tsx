@@ -191,7 +191,7 @@ function ArrangeOnlineSessionForm(
           )}
         </Field>
 
-        {/* The two cohort-named Pengajar side by side (#318), one name each, both required. */}
+        {/* The two cohort-named Narasumber side by side (#318), one name each, both required. */}
         <Field
           id={pengajarSiswaId}
           label="Narasumber Siswa"

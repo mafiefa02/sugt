@@ -542,7 +542,7 @@ backfill. So it is nullable with only a range CHECK (`ends_at is null or ends_at
 `starts_at`. Offline rows leave it null and pass the CHECK.
 
 **The two `pengajar_*` columns are online-required, enforced both ways (#318).** An online Session
-carries `pengajar_siswa_name` and `pengajar_gtk_ms_name` — one Pengajar for the Siswa cohort and one
+carries `pengajar_siswa_name` and `pengajar_gtk_ms_name` — one Narasumber for the Siswa cohort and one
 for GTK-MS, one free-text name each ([ADR-0036](./adr/0036-online-sessions-carry-two-cohort-named-pengajar-and-are-recorded-delivered.md),
 superseding ADR-0022's `session_teacher_name` list). They are nullable in the column type so an
 _offline_ row leaves them null, but — unlike `ends_at` — the presence rule is a **NOT-NULL-for-online
@@ -550,7 +550,7 @@ CHECK**, `mode <> 'online' or (pengajar_siswa_name is not null and pengajar_gtk_
 because #318 wiped the (empty) online data, so the clean implication holds with nothing to migrate
 against. The old `participant_type` column and its `session_participant_type_check` are **dropped**:
 an online Session no longer carries a single-cohort "Peserta" — both cohorts are always taught, one
-Pengajar each. (`transaction` and `assessment_completion` keep their own `participant_type`; only the
+Narasumber each. (`transaction` and `assessment_completion` keep their own `participant_type`; only the
 Session's is gone.)
 
 **An online Session is recorded `delivered` in one step (#318).** A third-party LMS runs online
@@ -587,7 +587,7 @@ against `TOTAL_SESSIONS_PER_SCHOOL`, a constant that already lives in `@sugt/dom
 **Marking a Session delivered is status only, for both modes** (#140, #152, #153) — and for online it
 is now **legacy** (#318). An online Session is born `delivered` (above), so it never passes through
 "Tandai terlaksana"; that path survives for offline Sessions and any pre-#318 online row. When it does
-run it writes nothing but `session.status = 'delivered'` and names nobody. Online Pengajar are the two
+run it writes nothing but `session.status = 'delivered'` and names nobody. Online Narasumber are the two
 cohort-named columns on the Session, edited through the Session's own field dialog on
 `/sesi-daring/[id]`, and a mis-recorded online Session is **hard-deleted** (`deleteOnlineSession`)
 rather than corrected name by name or cancelled — the correction path that replaced the old
@@ -616,7 +616,7 @@ offline through `session_teaching_team` (below).
 **`session_teacher_name` was in turn dropped in #318.** ADR-0022's online model was a variable-length
 side table of session-scoped names; [ADR-0036](./adr/0036-online-sessions-carry-two-cohort-named-pengajar-and-are-recorded-delivered.md)
 replaced it with **two cohort-named columns on the `session` row** — `pengajar_siswa_name` and
-`pengajar_gtk_ms_name`, one Pengajar for the Siswa cohort and one for GTK-MS, one free-text name each,
+`pengajar_gtk_ms_name`, one Narasumber for the Siswa cohort and one for GTK-MS, one free-text name each,
 both required for an online row (the NOT-NULL-for-online CHECK above). An online Session is taught by
 exactly one professor per cohort, so the row-per-name shape held nothing the columns do not, and the
 app-layer `MAX_TEACHING_TEAM_PER_ONLINE_SESSION` cap that bounded the list is **gone** — the number is

@@ -367,9 +367,9 @@ export const perjadinEvaluation = pgTable(
  *
  * `expiresAt` defaults 14 days out — the `PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS` window — and is
  * stored rather than derived, as the Session token's is: the link is shared after the trip and the
- * filers (Pengajar, Pendamping, Pimpinan) file when they get to it, so it outlives the trip's dates
- * by design. There is no cancelled-trip bar the Session token needs: a Perjadin is a real trip once
- * it exists and is never cancelled, so a token always has a live trip behind it.
+ * filers (Narasumber, Pendamping, Pimpinan) file when they get to it, so it outlives the trip's
+ * dates by design. There is no cancelled-trip bar the Session token needs: a Perjadin is a real
+ * trip once it exists and is never cancelled, so a token always has a live trip behind it.
  */
 export const perjadinFeedbackToken = pgTable(
   "perjadin_feedback_token",

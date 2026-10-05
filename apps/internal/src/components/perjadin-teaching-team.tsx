@@ -13,7 +13,7 @@ import { useId, useState, useTransition } from "react";
 
 /**
  * A Perjadin's Teaching Team as trip-scoped names (ADR-0020), edited one at a time — added, renamed
- * and removed. Each write clears the "Pengajar sudah lengkap" Preparation tick, so the team's
+ * and removed. Each write clears the "Narasumber sudah lengkap" Preparation tick, so the team's
  * completeness must be re-confirmed by hand after any change (the amendment to ADR-0018).
  *
  * Read-only for a professor; the controls appear only for Staff, whom the write re-checks.

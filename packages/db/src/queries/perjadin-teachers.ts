@@ -18,7 +18,7 @@ import { requireStaff } from "./staff-only";
  * a person could reach honestly comes back as a value; `NotStaffError` is the opposite case and
  * still throws.
  *
- * **Each of the three clears the "Pengajar sudah lengkap" Preparation tick** so that changing the
+ * **Each of the three clears the "Narasumber sudah lengkap" Preparation tick** so that changing the
  * team forces a fresh manual confirmation it is complete (the amendment to ADR-0018). The Item is
  * now defined and derived as one of the fixed six (T4/#139, `./preparation-checklist.ts`); this is
  * the one place in the system that clears a tick automatically. A `DELETE` matching no row is not an
@@ -27,7 +27,9 @@ import { requireStaff } from "./staff-only";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/** Clear the "Pengajar sudah lengkap" tick for one trip — keyed by the shared canonical constant. */
+/**
+ * Clear the "Narasumber sudah lengkap" tick for one trip — keyed by the shared canonical constant.
+ */
 async function clearPengajarLengkap(tx: Tx, perjadinId: string): Promise<void> {
   await tx
     .delete(perjadinPreparationItem)

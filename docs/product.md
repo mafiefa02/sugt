@@ -262,8 +262,7 @@ pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid 
 no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Every trip has
 the same six fixed boxes — SK Perjalanan, "Tiket / transportasi PP", lodging, local transport, one
 "confirmed with the Pendamping" and "Narasumber sudah lengkap" — and no per-member ones. Any Staff
-member may
-tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
+member may tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
 screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
 the Persiapan column of the Perjadin list, and on the trip cards of the Staff home strip. For Staff
 the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
