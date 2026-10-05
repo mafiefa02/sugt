@@ -9,8 +9,7 @@
     "typegen": "next typegen",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "drive:migrate-receipts": "tsx scripts/drive-migrate-receipts.ts"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@milkdown/kit": "catalog:",
@@ -38,9 +37,7 @@
     "@types/react-dom": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
     "postgres": "catalog:",
-    "sharp": "catalog:",
     "tailwindcss": "catalog:",
-    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

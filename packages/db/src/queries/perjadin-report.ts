@@ -30,15 +30,10 @@ import { requireStaff } from "./staff-only";
  * stricter than the process it serves.
  */
 
-/**
- * One uploaded receipt, in exactly one of two places (ADR-0040): `driveFileId` in the company
- * Google Drive, or — for a receipt from before Drive — `storagePath`, an opaque key in the private
- * Supabase `receipts` bucket that the page signs a short-lived URL for.
- */
+/** One uploaded receipt: `driveFileId` is its file in the company Google Drive (ADR-0040). */
 export type AcquittalEvidence = {
   id: string;
-  storagePath: string | null;
-  driveFileId: string | null;
+  driveFileId: string;
   contentType: string;
   byteSize: number;
   uploadedAt: Date;
@@ -247,7 +242,6 @@ async function transactionsOf(perjadinId: string): Promise<AcquittalTransaction[
     .select({
       id: transactionEvidence.id,
       transactionId: transactionEvidence.transactionId,
-      storagePath: transactionEvidence.storagePath,
       driveFileId: transactionEvidence.driveFileId,
       contentType: transactionEvidence.contentType,
       byteSize: transactionEvidence.byteSize,
@@ -381,8 +375,7 @@ export async function recordTransaction(
       input.evidence.map((file) => ({
         ...(file.id ? { id: file.id } : {}),
         transactionId: line!.id,
-        storagePath: file.storagePath ?? null,
-        driveFileId: file.driveFileId ?? null,
+        driveFileId: file.driveFileId,
         contentType: file.contentType,
         byteSize: file.byteSize,
         uploadedByPersonId: caller.id,
@@ -395,22 +388,16 @@ export async function recordTransaction(
 
 /**
  * A receipt whose bytes have already landed in the company Google Drive (`driveFileId`, ADR-0040).
- * Every receipt the app writes is one of these. The `storagePath` arm describes a legacy row in the
- * Supabase `receipts` bucket; nothing in the app writes one any more, and it stays only so tests can
- * stand up the legacy rows the acquittal still renders, until #379 drops the column. Exactly one of
- * the two, which `transaction_evidence_one_store_check` holds too. The content
- * type and size are read back by the app — sniffed from the first bytes, for Drive — rather than
+ * The content type and size are read back by the app — sniffed from the first bytes — rather than
  * taken from the browser, which never had to tell the truth about either.
  */
 export type NewEvidence = {
   /** The row's id, when the caller needed it first — a Drive file is named after it. */
   id?: string;
+  driveFileId: string;
   contentType: string;
   byteSize: number;
-} & (
-  | { driveFileId: string; storagePath?: undefined }
-  | { storagePath: string; driveFileId?: undefined }
-);
+};
 
 export type AttachEvidenceResult =
   | { outcome: "attached"; count: number }
@@ -435,7 +422,7 @@ export type AttachEvidenceResult =
  * both pass the count. A line already over five from before the rule is grandfathered: it keeps
  * what it has and gains nothing.
  *
- * **A Drive receipt makes the line unsynced** (ADR-0040): `drive_synced_at` goes back to null in
+ * **A new receipt makes the line unsynced** (ADR-0040): `drive_synced_at` goes back to null in
  * the same write, so the reconcile that follows — or the next sweep, if that one fails — knows a
  * file is still waiting in `_staging` to be named and moved into the line's folder.
  */
@@ -470,19 +457,16 @@ export async function attachTransactionEvidence(
       evidence.map((file) => ({
         ...(file.id ? { id: file.id } : {}),
         transactionId,
-        storagePath: file.storagePath ?? null,
-        driveFileId: file.driveFileId ?? null,
+        driveFileId: file.driveFileId,
         contentType: file.contentType,
         byteSize: file.byteSize,
         uploadedByPersonId: caller.id,
       })),
     );
-    if (evidence.some((file) => file.driveFileId)) {
-      await tx
-        .update(transaction)
-        .set({ driveSyncedAt: null })
-        .where(eq(transaction.id, transactionId));
-    }
+    await tx
+      .update(transaction)
+      .set({ driveSyncedAt: null })
+      .where(eq(transaction.id, transactionId));
 
     return { outcome: "attached", count: evidence.length };
   });

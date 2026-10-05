@@ -273,11 +273,11 @@ export const transaction = pgTable(
       .references(() => person.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // The line's own Drive folder, shared "anyone with the link" once reconciled (ADR-0040). Null on
-    // a line recorded before Drive, until a receipt is first added to it there.
+    // a line with no receipt yet, until a receipt is first added to it.
     driveFolderId: text("drive_folder_id"),
     // When the reconcile last finished this line: folder in place, files named and inside it,
     // folder shared. Null while that is still owed. "Unsynced" is null **and** at least one
-    // Drive-backed receipt — a legacy or zero-receipt line is never unsynced.
+    // receipt — a zero-receipt line is never unsynced.
     driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
     // When a reconcile last failed to finish this line (#375). The sweep takes lines never failed
     // first, then the longest-failed, so a line that fails every time — its folder trashed by hand —
@@ -336,16 +336,11 @@ export const perjadinPreparationItem = pgTable(
  * One to five per transaction (ADR-0039), held by the application rather than here — lines from
  * before that rule may hold none or more.
  *
- * **A receipt lives in exactly one of two places** while receipts move to Google Drive (ADR-0040),
- * and `transaction_evidence_one_store_check` holds it:
- * - `driveFileId` — the file's id in the company Drive, for every receipt recorded since. Its
- *   `content_type` is one of the four types the server sniffed from the first bytes, which
- *   `transaction_evidence_drive_content_type_check` pins.
- * - `storagePath` — a legacy object key in the private Supabase `receipts` bucket, **opaque** (a
- *   bare UUID naming nothing, since a signed URL carries its path inside its JWT). These are
- *   migrated to Drive and the column dropped later (#377, #379).
- *
- * `unique` on each means one uploaded file can be attached exactly once.
+ * **Every receipt is a file in the company Google Drive** (ADR-0040): `driveFileId` is its id there,
+ * `unique` so one uploaded file is attached exactly once. Its `content_type` is one of the four types
+ * the server sniffed from the first bytes, which `transaction_evidence_drive_content_type_check`
+ * pins. Receipts once lived in a private Supabase bucket under a `storage_path`; they were moved to
+ * Drive (#377) and the column dropped (#379).
  */
 export const transactionEvidence = pgTable(
   "transaction_evidence",
@@ -354,8 +349,7 @@ export const transactionEvidence = pgTable(
     transactionId: uuid("transaction_id")
       .notNull()
       .references(() => transaction.id, { onDelete: "cascade" }),
-    storagePath: text("storage_path").unique(),
-    driveFileId: text("drive_file_id").unique(),
+    driveFileId: text("drive_file_id").notNull().unique(),
     contentType: text("content_type").notNull(),
     byteSize: bigint("byte_size", { mode: "number" }).notNull(),
     uploadedByPersonId: uuid("uploaded_by_person_id")
@@ -364,17 +358,13 @@ export const transactionEvidence = pgTable(
     uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
   },
   // Evidence is fetched per transaction on the Laporan (`perjadin-report.ts`), and the FK is not
-  // auto-indexed. `storage_path`'s unique index does not help — it keys the object path, not the FK
+  // auto-indexed. `drive_file_id`'s unique index does not help — it keys the file, not the FK
   // (#270).
   (t) => [
     index("transaction_evidence_transaction_id_idx").on(t.transactionId),
     check(
-      "transaction_evidence_one_store_check",
-      sql`(${t.storagePath} is null) <> (${t.driveFileId} is null)`,
-    ),
-    check(
       "transaction_evidence_drive_content_type_check",
-      sql`${t.driveFileId} is null or ${t.contentType} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`,
+      sql`${t.contentType} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`,
     ),
   ],
 );

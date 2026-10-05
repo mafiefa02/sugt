@@ -1417,15 +1417,13 @@ create table transaction (
 create table transaction_evidence (
   id                    uuid primary key default gen_random_uuid(),
   transaction_id        uuid not null references transaction (id) on delete cascade,
-  storage_path          text unique,
-  drive_file_id         text unique,
-  content_type          text not null,
+  drive_file_id         text not null unique,
+  content_type          text not null
+                        check (content_type in
+                          ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')),
   byte_size             bigint not null,
   uploaded_by_person_id uuid not null references person (id),
-  uploaded_at           timestamptz not null default now(),
-  check ((storage_path is null) <> (drive_file_id is null)),
-  check (drive_file_id is null
-         or content_type in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp'))
+  uploaded_at           timestamptz not null default now()
 );
 ```
 
@@ -1486,14 +1484,16 @@ more than five, and `attachTransactionEvidence` refuses a batch that would take 
 counting under a lock on the parent row. There is no CHECK, because the shared database may
 already hold lines with none or more, and those are grandfathered.
 
-**A receipt lives in exactly one place, and the database holds that** (ADR-0040). Receipts are
-moving to the company's Google Drive. `drive_file_id` is the file's Drive id, for every receipt
-recorded since — by Catat transaksi or by a line's own "Unggah bukti". `storage_path` is a legacy
-object key in the private Supabase bucket, for receipts from before Drive. One
-CHECK makes exactly one of the two set; another pins a Drive receipt's `content_type` to the four
-types the server sniffs from its first bytes. `unique` on each means a file cannot be attached
-twice. Both are ids or keys, never paths, so a folder renamed or moved by hand in Drive breaks
-nothing.
+**Every receipt is a file in the company's Google Drive** (ADR-0040). `drive_file_id` is the
+file's Drive id, written by Catat transaksi or by a line's own "Unggah bukti", and `not null`. A
+CHECK pins `content_type` to the four types the server sniffs from the first bytes. `unique` means
+a file cannot be attached twice. It is an id, never a path, so a folder renamed or moved by hand in
+Drive breaks nothing.
+
+**Receipts were once in a private Supabase bucket**, under a `storage_path` column. They were
+moved to Drive by a one-off script (#377, run in #378), and migration 0036 dropped the column
+(#379). That migration refuses to run while any row still lacks a `drive_file_id`, so it can never
+drop the only pointer to a receipt the script had not moved.
 
 **`drive_folder_id` on `transaction` and on `perjadin` name the line's and the trip's Drive
 folders**, and `transaction.drive_synced_at` records when the reconcile last finished the line.
@@ -1505,8 +1505,8 @@ is reconciled. No row lock is ever held across a call to Google; a caller that l
 trashes its own folder and uses the winner's.
 
 **"Unsynced" means `drive_synced_at is null` and at least one evidence row with a
-`drive_file_id`.** It is derived, not stored. A legacy line, or a line with no receipt, is never
-unsynced. A reconcile that fails after the commit leaves the line recorded and unsynced, and its
+`drive_file_id`** — that is, at least one receipt. It is derived, not stored. A line with no
+receipt is never unsynced. A reconcile that fails after the commit leaves the line recorded and unsynced, and its
 files wait in private `_staging` until the next reconcile finishes it. A reconcile marks a line
 synced only for the receipts it read. If a newer receipt was committed while it ran, the mark does
 not land, so that receipt stays owed rather than stranded under a line that claims to be done.
@@ -1627,14 +1627,14 @@ says publishing is Staff-only; without this it would be the one such rule held b
 It also means a Story's author inherits write-once `role`, which is the correct behaviour: the
 person who wrote it was Staff when they wrote it.
 
-**`story_photo` mirrors `transaction_evidence`** column for column, deliberately: same
-`storage_path unique`, same `content_type`/`byte_size`, same uploader and timestamp. One
-upload pattern to build and one to learn. `uploaded_by_person_id` references `person` alone
-rather than the pair, exactly as `transaction_evidence` does — uploading is not a role-gated
-act, and the Story it hangs off already carries the Staff constraint. Keys are
-`story/{story_id}/{uuid}` in `public-media`, mirroring the `receipts` convention. **Dropping
-`position` makes that mirror tighter**, and the mirror is worth keeping true: a caption is now
-the only column one table has and the other does not.
+**`story_photo` was built to mirror `transaction_evidence`** column for column: `storage_path
+unique`, `content_type`/`byte_size`, uploader and timestamp, so there was one upload pattern to
+build and one to learn. Receipts have since moved to Google Drive (ADR-0040), so the two now
+differ in where the file lives — a Drive id there, a `storage_path` here — and a Story photograph
+is the app's only upload to Supabase Storage. `uploaded_by_person_id` references `person` alone
+rather than the pair, exactly as `transaction_evidence` does — uploading is not a role-gated act,
+and the Story it hangs off already carries the Staff constraint. Keys are
+`story/{story_id}/{uuid}` in `public-media`.
 
 **There is no ordering.** The gallery renders by `uploaded_at`, tie-broken by `id`, and Staff
 cannot rearrange it without deleting and re-uploading — a cost named and accepted rather than
@@ -1677,47 +1677,32 @@ the line being written, not a separate record the action waits on. Filing gains 
 condition: `filePerjadinReport`'s evidence check is unchanged, and now only ever fires on a line
 recorded before the rule.
 
-The two buckets stay exactly as split below. A Story's photographs are public by intent, which
-is the whole difference from a receipt.
+A Story's photographs are public by intent, which is the whole difference from a receipt — see
+[Object storage](#object-storage).
 
 ## Object storage
 
-**Receipts are moving out of Supabase Storage to the company's Google Drive**
-([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Catat
-transaksi and a line's own "Unggah bukti" both upload to Drive, and nothing writes to the
-`receipts` bucket any more. It holds legacy receipts alone, until they are migrated and the bucket
-is deleted (#377, #379). The Drive side is the connection below and the `drive_*` columns in
-[Money](#money).
+**Receipts are not in Supabase Storage.** They live in the company's Google Drive
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)): Catat
+transaksi and a line's own "Unggah bukti" both upload there, and the database holds each file's
+Drive id ([Money](#money)). The Drive side is the connection below and the `drive_*` columns.
 
-**Migrating the legacy receipts** is a local, resumable script,
-`pnpm --filter @sugt/internal drive:migrate-receipts --as <administrator email>`
-(`apps/internal/scripts/drive-migrate-receipts.ts`). It reads only the shell's environment, so
-export the target's variables first. It opens by printing which database and Supabase project it is
-pointed at. Run `--dry-run` first, which writes nothing anywhere. Then run it for real; it appends
-to a report named for the database host, the old key beside each new Drive id. Then run `--verify`,
-which checks every object left in the bucket against that report before the bucket may be deleted.
-`--replace <evidenceId>=<file>` supplies a converted file for one the script could not take.
+One bucket:
 
-Two buckets, and the split is doing real work:
+| Bucket         | Visibility | Holds                                                        |
+| -------------- | ---------- | ------------------------------------------------------------ |
+| `public-media` | Public     | Published Story photographs. Keys: `story/{story_id}/{uuid}` |
 
-| Bucket         | Visibility | Holds                                                            |
-| -------------- | ---------- | ---------------------------------------------------------------- |
-| `receipts`     | Private    | Transaction evidence. Keys: an opaque `{uuid}`, and nothing else |
-| `public-media` | Public     | Published Story photographs. Keys: `story/{story_id}/{uuid}`     |
+**A receipt is reached by a public link, and that is the decision, not a leak.** The external
+audit needs a spreadsheet with an "anyone with the link can view" link per transaction, so each
+transaction's folder in Drive is shared that way (ADR-0040), and the acquittal links straight to
+it and to each file. The app renders and signs nothing. What stays private is everything above a
+transaction folder: the root, `_staging` and each Perjadin's folder.
 
-**A receipt key spells nothing out, and that is a change from what this table said.** It read
-`perjadin/{perjadin_id}/{transaction_id}/{uuid}` until the acquittal was built. A private bucket
-is read through a signed URL, and a signed URL carries its object path inside the JWT it is
-signed with, so a structured key puts the trip's identifiers into every link the acquittal screen
-renders. A bare UUID names nothing.
-
-What that gives up is the prefix check `story_photo` relies on — a Story photograph is trusted
-only under `story/{story_id}/`, which is what stops one Story's photograph being attached to
-another. Here it costs nothing: `receipts` holds receipts only, every one is readable by every
-Staff member already, and `storage_path` is `unique`, so there is no object a Staff caller could
-reach by forging a key that they could not reach by asking honestly. The boundary that does the
-work instead is the pair — a line item is checked against its Perjadin before evidence attaches
-to it.
+**Historical: the `receipts` bucket.** Until #379 a second, private bucket held receipts, under
+opaque `{uuid}` keys, read through short-lived URLs the app signed after checking Staff. A key
+spelled nothing out because a signed URL carries its object path inside its JWT. Those receipts
+were moved to Drive (#377, #378) and the bucket is deleted by hand (#380).
 
 **`public-media` is needed at provisioning time, not at some later one.** This row read
 _"Published photographs (a later release)"_ until
@@ -1734,15 +1719,15 @@ the same way the package split holds it in code: a bucket boundary is not a poli
 get wrong.
 
 Because sign-in is Better Auth rather than Supabase Auth, storage policies cannot see who is
-asking. Receipt access is therefore a signed URL minted by the internal app **after** it has
-checked the caller is Staff. That check is the only thing standing between Teaching Team and a
-receipt, so it belongs at one choke point, not at each call site.
+asking. A Story photograph is therefore uploaded through a signed upload URL the internal app
+mints **after** it has checked the caller is Staff, with the service-role key, which stays on the
+server.
 
 ### The company Google Drive connection
 
-Receipts are moving to the company's Google Drive
-([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Nothing
-uploads there yet; what exists is the connection an Administrator makes on `/pengaturan` (#372).
+Every receipt is uploaded to the company's Google Drive
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)) through the
+connection an Administrator makes on `/pengaturan` (#372).
 
 ```sql
 create table drive_connection (
@@ -2082,8 +2067,7 @@ exists at all.
 
 `group_member` cascades. `transaction` cascades, and `transaction_evidence` cascades from
 that — so deleting a Perjadin destroys its acquittal rows, and nothing warns you. The files are
-not removed: neither the legacy objects in the `receipts` bucket nor the Perjadin's folder in the
-company Google Drive (ADR-0040), which outlive their rows. No path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
+not removed: the Perjadin's folder in the company Google Drive (ADR-0040) outlives its rows. No path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
 trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive nothing — and
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
 links go with the names.

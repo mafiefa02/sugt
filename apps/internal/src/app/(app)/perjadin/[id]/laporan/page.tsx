@@ -4,7 +4,6 @@ import { driveFileUrl, driveFolderUrl } from "-/lib/drive/receipt-files";
 import { receiptUploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
-import { signedReceiptUrl } from "-/lib/receipt-media";
 import { perjadinAcquittal, type AcquittalTransaction } from "@sugt/db/queries";
 import { formatRupiah } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
@@ -59,10 +58,8 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
   const acquittal = await perjadinAcquittal(person, id);
   if (!acquittal) notFound();
 
-  const [transactions, uploadGate] = await Promise.all([
-    Promise.all(acquittal.transactions.map(viewable)),
-    receiptUploadGate(person),
-  ]);
+  const transactions = acquittal.transactions.map(withLinks);
+  const uploadGate = await receiptUploadGate(person);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -163,32 +160,23 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
 /**
  * One line item with a link per receipt, and to its Drive folder when it has one.
  *
- * **A Drive receipt** (ADR-0040) is a plain link to Drive, built from its id; the app renders nothing
- * of the file itself. **A legacy receipt** in the private `receipts` bucket renders only through a
- * signed URL, and signing is a network call per object; a `null` URL is an object whose bytes are
- * gone, which renders as a missing file rather than a broken page. Both happen here for any
- * signed-in reader, since `perjadinAcquittal` is an open money read (ADR-0026, #180).
+ * **Every receipt is a plain link to Drive** (ADR-0040), built from its id; the app renders nothing
+ * of the file itself and signs nothing. The links reach any signed-in reader, since
+ * `perjadinAcquittal` is an open money read (ADR-0026, #180).
  */
-async function viewable(line: AcquittalTransaction): Promise<ViewableTransaction> {
+function withLinks(line: AcquittalTransaction): ViewableTransaction {
   const { driveFolderId, driveSyncedAt, ...rest } = line;
-  const evidence = await Promise.all(
-    line.evidence.map(async (file) => ({
+  return {
+    ...rest,
+    evidence: line.evidence.map((file) => ({
       id: file.id,
       contentType: file.contentType,
       byteSize: file.byteSize,
-      url: file.driveFileId
-        ? driveFileUrl(file.driveFileId)
-        : file.storagePath
-          ? await signedReceiptUrl(file.storagePath)
-          : null,
+      url: driveFileUrl(file.driveFileId),
     })),
-  );
-  return {
-    ...rest,
-    evidence,
     folderUrl: driveFolderId ? driveFolderUrl(driveFolderId) : null,
-    // Unsynced: never finished, and holding a Drive receipt — a legacy or empty line never is.
-    unsynced: driveSyncedAt === null && line.evidence.some((file) => file.driveFileId !== null),
+    // Unsynced: never finished, and holding a receipt — an empty line never is.
+    unsynced: driveSyncedAt === null && line.evidence.length > 0,
   };
 }
 

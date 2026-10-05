@@ -52,7 +52,7 @@ vi.mock("next/headers", () => ({
 let drive: FakeDrive;
 let folders: ReadyFolders;
 
-/** A Staff PIC, a Pimpinan, a trip, and a line on it holding `held` legacy receipts and no folder. */
+/** A Staff PIC, a Pimpinan, a trip, and a line on it holding `held` receipts and no folder yet. */
 async function scene(
   options: { connection?: "connected" | "broken" | "none"; held?: number } = {},
 ) {

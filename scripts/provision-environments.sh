@@ -274,18 +274,16 @@ pause "Press Enter to continue."
 
 # ── 4 ─────────────────────────────────────────────────────────────────────
 stage "Buckets — on BOTH projects"
-say "Two buckets each, and the visibility split is doing real work."
+say "One bucket each. Receipts are not here: they live in the company Google Drive (ADR-0040)."
 open_url "https://supabase.com/dashboard/project/$SUPABASE_DEV_REF/storage/buckets"
-step "Create 'receipts'      — PRIVATE. Transaction evidence."
 step "Create 'public-media'  — PUBLIC.  Published Story photographs."
 say ""
-warn "Add NO bucket policies to either. Zero is correct, not an omission:"
+warn "Add NO bucket policies. Zero is correct, not an omission:"
 note "every access goes through the service role, which is never subject to RLS (#8)."
-note "A receipt is reached by a signed URL the internal app mints after checking Staff."
 say ""
-step "Now repeat both buckets on the PRODUCTION project."
+step "Now repeat the bucket on the PRODUCTION project."
 open_url "https://supabase.com/dashboard/project/$SUPABASE_PROD_REF/storage/buckets"
-pause "Both buckets created on both projects? Press Enter."
+pause "Bucket created on both projects? Press Enter."
 
 # ── 5 ─────────────────────────────────────────────────────────────────────
 stage "Google OAuth — the development client"

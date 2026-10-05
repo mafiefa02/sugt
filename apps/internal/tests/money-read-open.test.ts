@@ -79,7 +79,7 @@ describe("a Pimpinan cannot write money", () => {
       amountIdr: 50_000,
       category: "Transport Lokal Dalam Provinsi",
       participantType: "Siswa",
-      evidence: [{ storagePath: "a", contentType: "image/jpeg", byteSize: 10 }],
+      evidence: [{ driveFileId: "a", contentType: "image/jpeg", byteSize: 10 }],
     }).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);
@@ -94,7 +94,7 @@ describe("a Pimpinan cannot write money", () => {
     });
 
     const refusal = await attachTransactionEvidence(pimpinan, trip.id, line.id, [
-      { storagePath: "a", contentType: "image/jpeg", byteSize: 10 },
+      { driveFileId: "a", contentType: "image/jpeg", byteSize: 10 },
     ]).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);

@@ -431,28 +431,17 @@ function Receipts({
         <span className="text-muted-foreground">Belum ada bukti</span>
       ) : (
         <span className="flex items-center gap-2">
-          {line.evidence.map((file, index) =>
-            file.url === null ? (
-              // The row exists and its object does not. Said out loud, because a silently
-              // missing receipt is what the filing check will refuse without explaining.
-              <span
-                key={file.id}
-                className="text-destructive"
-              >
-                Bukti {index + 1} hilang
-              </span>
-            ) : (
-              <a
-                key={file.id}
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:no-underline"
-              >
-                Bukti {index + 1}
-              </a>
-            ),
-          )}
+          {line.evidence.map((file, index) => (
+            <a
+              key={file.id}
+              href={file.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:no-underline"
+            >
+              Bukti {index + 1}
+            </a>
+          ))}
         </span>
       )}
       {line.folderUrl !== null && (

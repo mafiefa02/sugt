@@ -202,10 +202,9 @@ describe("recording a line with its Drive receipts", () => {
       const evidence = await evidenceRows();
       expect(evidence).toHaveLength(count);
       for (const row of evidence) {
-        expect(row.storagePath).toBeNull();
         expect(ids).toContain(row.driveFileId);
         // From the sniff and from Drive, never from the browser.
-        const sent = files[ids.indexOf(row.driveFileId!)]!;
+        const sent = files[ids.indexOf(row.driveFileId)]!;
         expect(row.contentType).toBe(sent[0] === 0xff ? "image/jpeg" : "application/pdf");
         expect(row.byteSize).toBe(sent.length);
       }
@@ -233,7 +232,7 @@ describe("recording a line with its Drive receipts", () => {
       });
 
       for (const row of evidence) {
-        const file = (await drive.getFile(row.driveFileId!))!;
+        const file = (await drive.getFile(row.driveFileId))!;
         expect(file.parents).toEqual([folder.id]);
         const ext = row.contentType === "image/jpeg" ? "jpg" : "pdf";
         expect(file.name).toBe(`${folder.name} · ${row.id.slice(0, 8)}.${ext}`);
