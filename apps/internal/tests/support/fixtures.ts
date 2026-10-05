@@ -596,23 +596,23 @@ export async function addTransaction(fixture: TransactionFixture) {
 export type EvidenceFixture = {
   transactionId: string;
   uploadedByPersonId: string;
-  /** Opaque by construction, so a test supplies one only when it asserts on the value. */
-  storagePath?: string;
+  /** A test supplies one only when it asserts on the value. */
+  driveFileId?: string;
 };
 
 /**
  * One receipt against a line item.
  *
- * The bytes are not part of this: `storage_path` names an object in the private `receipts`
- * bucket and the row is the only thing the query layer reads, so a unique string is all a
- * test of the acquittal needs — the same shape `cerita.test.ts` uses for a Story photograph.
+ * The bytes are not part of this: `drive_file_id` names a file in the company Drive and the row is
+ * the only thing the query layer reads, so a unique string is all a test of the acquittal needs. A
+ * test that needs the file itself lands it in a `FakeDrive` first (`support/drive.ts`).
  */
 export async function addTransactionEvidence(fixture: EvidenceFixture) {
   const [evidence] = await db
     .insert(schema.transactionEvidence)
     .values({
       transactionId: fixture.transactionId,
-      storagePath: fixture.storagePath ?? randomUUID(),
+      driveFileId: fixture.driveFileId ?? randomUUID(),
       contentType: "image/jpeg",
       byteSize: 120_000,
       uploadedByPersonId: fixture.uploadedByPersonId,

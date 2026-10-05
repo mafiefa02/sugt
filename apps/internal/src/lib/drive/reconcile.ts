@@ -33,7 +33,7 @@ import {
  * 3. **Each receipt still in `_staging`** is renamed and moved into the transaction folder.
  * 4. **The transaction folder is shared** — anyone, reader — if it is not already. Last, so nothing
  *    is public before it is named and in place. Only transaction folders are ever shared.
- * 5. `drive_synced_at` is set — **only if** no Drive receipt on the line arrived after step 3 read
+ * 5. `drive_synced_at` is set — **only if** no receipt on the line arrived after step 3 read
  *    them (`markTransactionSynced`).
  *
  * **A trashed or missing folder — the Perjadin's or the line's — is never recreated**: the line stays

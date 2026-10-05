@@ -21,23 +21,18 @@ import {
   addPerjadin,
   addPerson,
   addTransaction,
-  addTransactionEvidence,
   resetDatabase,
 } from "./support/fixtures";
 
 /**
  * **Periksa koneksi, the sweep, the badge and the marker** (#375, ADR-0040) — against the real
- * database and the in-memory `FakeDrive`, faked as in `catat-transaksi-drive.test.ts`. Legacy
- * receipts' signed links are stubbed too: they would call Supabase, which no test reaches.
+ * database and the in-memory `FakeDrive`, faked as in `catat-transaksi-drive.test.ts`.
  */
 
 vi.mock("-/lib/person", () => ({ requirePerson: vi.fn() }));
 vi.mock("-/lib/drive/google", async (importOriginal) => ({
   ...(await importOriginal<typeof import("-/lib/drive/google")>()),
   openDrive: vi.fn(),
-}));
-vi.mock("-/lib/receipt-media", () => ({
-  signedReceiptUrl: vi.fn(async () => "https://storage.test/legacy"),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({
@@ -305,14 +300,13 @@ describe("the sweep", () => {
     });
   });
 
-  it("never counts a legacy or zero-receipt line as owed", async () => {
+  it("never counts a synced or zero-receipt line as owed", async () => {
     const { admin, trip } = await scene();
-    const legacy = await addTransaction({
-      perjadinId: trip.id,
-      amountIdr: 10_000,
-      createdByPersonId: admin.id,
-    });
-    await addTransactionEvidence({ transactionId: legacy.id, uploadedByPersonId: admin.id });
+    const synced = await anUnsyncedLine(trip.id, admin.id, "Sudah");
+    await db
+      .update(schema.transaction)
+      .set({ driveSyncedAt: new Date() })
+      .where(eq(schema.transaction.id, synced.id));
     await addTransaction({ perjadinId: trip.id, amountIdr: 5_000, createdByPersonId: admin.id });
 
     await expect(sweepUnsynced(admin, drive, folders)).resolves.toEqual({
@@ -388,13 +382,6 @@ describe("the belum tersinkron marker", () => {
       .update(schema.transaction)
       .set({ driveSyncedAt: new Date() })
       .where(eq(schema.transaction.id, synced.id));
-    const legacy = await addTransaction({
-      perjadinId: trip.id,
-      amountIdr: 10_000,
-      description: "Lama",
-      createdByPersonId: admin.id,
-    });
-    await addTransactionEvidence({ transactionId: legacy.id, uploadedByPersonId: admin.id });
     await addTransaction({
       perjadinId: trip.id,
       amountIdr: 5_000,
@@ -409,7 +396,7 @@ describe("the belum tersinkron marker", () => {
     const cards = html.split('data-slot="card"').slice(1);
     const marked = cards
       .filter((card) => card.includes(UNSYNCED_TOOLTIP))
-      .map((card) => /(Belum|Sudah|Lama|Kosong)/.exec(card)?.[1]);
+      .map((card) => /(Belum|Sudah|Kosong)/.exec(card)?.[1]);
     expect(marked).toEqual(["Belum"]);
   });
 });

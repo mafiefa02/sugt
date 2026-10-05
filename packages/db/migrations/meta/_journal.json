@@ -253,6 +253,13 @@
       "when": 1791140980234,
       "tag": "0035_drive_sync_failed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791181061848,
+      "tag": "0036_receipts_drive_only",
+      "breakpoints": true
     }
   ]
 }

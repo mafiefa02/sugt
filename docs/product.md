@@ -278,14 +278,14 @@ receipts can be added later from the line's own "Unggah bukti", up to five in to
 entered before this rule may have none; it is marked on the screen and fixed the same way.
 
 **Receipts open in Google Drive** (ADR-0040). The dialog, and each line's own "Unggah bukti", upload
-to the company Google Drive, and the app no longer shows a receipt itself. "Unggah bukti" adds to a
+to the company Google Drive, and the app never shows a receipt itself — every receipt, including
+those recorded before the move, is a link to Drive. "Unggah bukti" adds to a
 line already recorded, up to five receipts in total. A file that is not a real receipt is reported
 as failed, and the rest are kept.
 
 - Each line shows **Bukti 1…n**, links that open each receipt in Drive in a new tab.
 - A line also shows **Buka folder**, a link to its own Drive folder that anyone holding it can
   view — the link the external audit will use.
-- Receipts recorded before the move still open through the app's own short-lived links.
 
 What both controls take:
 
@@ -615,8 +615,7 @@ connected, broken, or its folders unresolved — the states in which nobody can 
 
 **On the acquittal**, a line whose receipts are recorded but not yet in place in Drive shows a small
 "belum tersinkron" mark. Its tooltip reads "Bukti belum tersinkron ke Google Drive — Administrator
-dapat menyelesaikannya lewat Periksa koneksi." A line from before Drive, or with no receipt, never
-shows it.
+dapat menyelesaikannya lewat Periksa koneksi." A line with no receipt never shows it.
 
 ---
 

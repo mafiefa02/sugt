@@ -1,16 +1,5 @@
 import type { TransactionCategory } from "@sugt/domain";
-import {
-  and,
-  asc,
-  count,
-  eq,
-  exists,
-  isNotNull,
-  isNull,
-  notExists,
-  notInArray,
-  sql,
-} from "drizzle-orm";
+import { and, asc, count, eq, exists, isNull, notExists, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { perjadin, transaction, transactionEvidence } from "../schema/travel";
@@ -58,7 +47,7 @@ export async function perjadinDriveFolder(
   return trip ?? null;
 }
 
-/** One Drive-backed receipt on the line, as the reconcile names and moves it. */
+/** One receipt on the line, as the reconcile names and moves it. */
 export type ReconcileEvidence = { id: string; driveFileId: string; contentType: string };
 
 /** Everything the reconcile needs to put one transaction in place. */
@@ -74,7 +63,7 @@ export type ReconcileTarget = {
   evidence: ReconcileEvidence[];
 };
 
-/** The transaction, its Perjadin and its Drive-backed receipts. `null` when there is no such line. */
+/** The transaction, its Perjadin and its receipts. `null` when there is no such line. */
 export async function reconcileTarget(
   caller: Person,
   transactionId: string,
@@ -97,24 +86,15 @@ export async function reconcileTarget(
     .where(eq(transaction.id, transactionId));
   if (!line) return null;
 
-  const rows = await db
+  const evidence = await db
     .select({
       id: transactionEvidence.id,
       driveFileId: transactionEvidence.driveFileId,
       contentType: transactionEvidence.contentType,
     })
     .from(transactionEvidence)
-    .where(
-      and(
-        eq(transactionEvidence.transactionId, transactionId),
-        isNotNull(transactionEvidence.driveFileId),
-      ),
-    )
+    .where(eq(transactionEvidence.transactionId, transactionId))
     .orderBy(asc(transactionEvidence.uploadedAt), asc(transactionEvidence.id));
-  // Legacy receipts in the Supabase bucket are not the reconcile's; the filter above dropped them.
-  const evidence = rows.flatMap((row) =>
-    row.driveFileId ? [{ ...row, driveFileId: row.driveFileId }] : [],
-  );
 
   return { ...line, evidence };
 }
@@ -176,7 +156,7 @@ export async function claimTransactionDriveFolder(
  * committed — and reset the line to unsynced — while that receipt's own reconcile failed. Marking the
  * line synced then would strand the new file in `_staging` under a line that claims to be done, and
  * the sweep only visits unsynced lines. So the mark is a compare-and-set: it lands only when no
- * Drive receipt on the line is outside `handledEvidenceIds`. If it does not land, the line is synced
+ * receipt on the line is outside `handledEvidenceIds`. If it does not land, the line is synced
  * only if some later reconcile already finished it.
  */
 export async function markTransactionSynced(
@@ -192,7 +172,6 @@ export async function markTransactionSynced(
     .where(
       and(
         eq(transactionEvidence.transactionId, transactionId),
-        isNotNull(transactionEvidence.driveFileId),
         handledEvidenceIds.length > 0
           ? notInArray(transactionEvidence.id, handledEvidenceIds)
           : undefined,
@@ -234,7 +213,7 @@ export type UnsyncedTransaction = { id: string; spentOn: string; description: st
 
 /**
  * **What the sweep owes**: every unsynced transaction — `drive_synced_at is null` and at least one
- * Drive-backed receipt; a legacy or zero-receipt line never is — at most `limit` of them, and how many
+ * receipt; a zero-receipt line never is — at most `limit` of them, and how many
  * there are in all. Periksa koneksi and a reconnect reconcile these in turn (#375), bounded so one
  * press fits a Vercel function's time limit.
  *
@@ -254,12 +233,7 @@ export async function unsyncedTransactions(
       db
         .select({ id: transactionEvidence.id })
         .from(transactionEvidence)
-        .where(
-          and(
-            eq(transactionEvidence.transactionId, transaction.id),
-            isNotNull(transactionEvidence.driveFileId),
-          ),
-        ),
+        .where(eq(transactionEvidence.transactionId, transaction.id)),
     ),
   );
   const [lines, [counted]] = await Promise.all([

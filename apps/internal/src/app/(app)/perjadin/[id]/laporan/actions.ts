@@ -59,14 +59,14 @@ import type {
  */
 
 /**
- * **The guard every receipt write runs before it touches Storage**: an explicit `requireStaff`, then
+ * **The guard every receipt write runs before it touches Drive**: an explicit `requireStaff`, then
  * a read of the Perjadin. Returns whether the Perjadin exists.
  *
- * The order is load-bearing. The mint hands out a write credential for the private `receipts`
- * bucket, and the read-back uses the service-role key, which bypasses every policy on it; doing
- * either first would give a non-Staff caller an upload URL, or tell them whether an object exists and
- * how big it is. The `requireStaff` is what closes this: `perjadinAcquittal` is an open money read
- * since #180 (ADR-0026), so the read alone no longer refuses a Pimpinan.
+ * The order is load-bearing. An upload session is a write credential on the company Drive, and the
+ * verify reads files with the company's own token; doing either first would give a non-Staff caller
+ * an upload URL, or tell them whether a file exists and how big it is. The `requireStaff` is what
+ * closes this: `perjadinAcquittal` is an open money read since #180 (ADR-0026), so the read alone
+ * no longer refuses a Pimpinan.
  */
 async function staffOnTrip(person: Person, perjadinId: string): Promise<boolean> {
   const acquittal = await staffSurface(() => {

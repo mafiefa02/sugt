@@ -73,25 +73,6 @@ export class FakeDrive implements DriveClient {
     };
   }
 
-  async uploadFile(input: {
-    name: string;
-    parentId: string;
-    mimeType: string;
-    bytes: Uint8Array;
-    appProperties?: Record<string, string>;
-  }) {
-    this.calls += 1;
-    return {
-      id: this.store({
-        name: input.name,
-        mimeType: input.mimeType,
-        parents: [input.parentId],
-        appProperties: input.appProperties,
-        content: input.bytes,
-      }),
-    };
-  }
-
   async getFile(id: string): Promise<DriveFile | null> {
     this.calls += 1;
     return this.view(id);

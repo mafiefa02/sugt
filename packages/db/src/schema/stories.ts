@@ -78,10 +78,9 @@ export const story = pgTable(
 );
 
 /**
- * A Story's photographs, in the public `public-media` bucket. **Mirrors `transaction_evidence`**
- * column for column — same `storage_path unique`, `content_type`/`byte_size`, uploader and
- * timestamp — so there is one upload pattern to build and one to learn. The only column it adds
- * is `caption`. Keys are `story/{story_id}/{uuid}`.
+ * A Story's photographs, in the public `public-media` bucket: `storage_path unique`,
+ * `content_type`/`byte_size`, uploader and timestamp, plus a `caption`. Keys are
+ * `story/{story_id}/{uuid}`.
  *
  * There is no `position`: the gallery orders by `uploaded_at` tie-broken by `id`, and the cover
  * is `story.cover_photo_id`, not "whichever is first". `uploaded_by_person_id` references
