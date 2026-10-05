@@ -17,13 +17,10 @@ import Link from "next/link";
 function DashboardStaff({
   dashboard,
   upcoming,
-  today,
   uploadGate,
 }: {
   dashboard: StaffDashboard;
   upcoming: MyUpcomingPerjadin[];
-  /** WIB `YYYY-MM-DD`, computed on the server — the trip timeline's legs are done before it. */
-  today: string;
   /** Whether receipts can go to Drive right now — Catat Transaksi is closed with the reason if not. */
   uploadGate: ReceiptUploadGate;
 }) {
@@ -40,7 +37,6 @@ function DashboardStaff({
           server component stays a server component around it. Absent entirely when they have none. */}
       <MyPerjadinSection
         trips={upcoming}
-        today={today}
         uploadGate={uploadGate}
       />
 

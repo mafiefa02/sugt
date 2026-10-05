@@ -54,12 +54,8 @@ describe("PerjadinPlanForm's required markers", () => {
       "Kelompok Sekolah",
       "PIC",
       "Uang Perjalanan (Rp)",
-      "Tanggal",
-      "Jam",
-      "Moda",
-      "Tanggal",
-      "Jam",
-      "Moda",
+      "Tanggal mulai",
+      "Tanggal selesai",
     ]);
   });
 

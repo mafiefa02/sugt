@@ -38,15 +38,10 @@ export default async function Page() {
     // Each trip card's Catat Transaksi is closed, with the reason, while Drive is (ADR-0040).
     receiptUploadGate(person),
   ]);
-  // `en-CA` formats as `YYYY-MM-DD`; `Asia/Jakarta` pins it to WIB. Read here, on the server, and
-  // passed down so the trip timeline's done legs never depend on a clock read during client render
-  // — a server/client disagreement there is a hydration mismatch (#302).
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
   return (
     <DashboardStaff
       dashboard={dashboard}
       upcoming={upcoming}
-      today={today}
       uploadGate={uploadGate}
     />
   );

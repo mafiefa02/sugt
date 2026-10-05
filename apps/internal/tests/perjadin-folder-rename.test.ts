@@ -1,11 +1,11 @@
-import { updatePerjadinLogisticsAction } from "-/app/(app)/perjadin/[id]/actions";
+import { updatePerjadinDatesAction } from "-/app/(app)/perjadin/[id]/actions";
 import { FakeDrive } from "-/lib/drive/fake-drive";
 import type { ReadyFolders } from "-/lib/drive/fixed-folders";
 import { DriveRequestError, openDrive } from "-/lib/drive/google";
 import { reconcileTransaction } from "-/lib/drive/reconcile";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
-import type { PerjadinLogisticsInput } from "@sugt/db/queries";
+import type { PerjadinDatesInput } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -42,16 +42,8 @@ let drive: FakeDrive;
 let folders: ReadyFolders;
 let tokenCalls: number;
 
-function logistics(departureDate: string, returnDate: string): PerjadinLogisticsInput {
-  return {
-    departureDate,
-    departureTime: "07:30",
-    departureMode: "Pesawat",
-    returnDate,
-    returnTime: "18:00",
-    returnMode: "Pesawat",
-    returnZone: "WIB",
-  };
+function dates(startsOn: string, endsOn: string): PerjadinDatesInput {
+  return { startsOn, endsOn };
 }
 
 /**
@@ -110,7 +102,7 @@ describe("a start-date correction", () => {
     const { trip, folderId } = await scene();
 
     await expect(
-      updatePerjadinLogisticsAction(trip.id, logistics("2026-10-13", "2026-10-16")),
+      updatePerjadinDatesAction(trip.id, dates("2026-10-13", "2026-10-16")),
     ).resolves.toEqual({ outcome: "updated", startsOnMoved: true });
 
     await expect(drive.getFile(folderId!)).resolves.toMatchObject({
@@ -122,7 +114,7 @@ describe("a start-date correction", () => {
     const { trip } = await scene();
 
     await expect(
-      updatePerjadinLogisticsAction(trip.id, logistics("2026-10-12", "2026-10-15")),
+      updatePerjadinDatesAction(trip.id, dates("2026-10-12", "2026-10-15")),
     ).resolves.toEqual({ outcome: "updated", startsOnMoved: false });
 
     expect(drive.calls).toBe(0);
@@ -137,7 +129,7 @@ describe("a start-date correction", () => {
     const { trip } = await scene(options);
 
     await expect(
-      updatePerjadinLogisticsAction(trip.id, logistics("2026-10-13", "2026-10-16")),
+      updatePerjadinDatesAction(trip.id, dates("2026-10-13", "2026-10-16")),
     ).resolves.toMatchObject({ outcome: "updated" });
 
     expect(drive.calls).toBe(0);
@@ -149,7 +141,7 @@ describe("a start-date correction", () => {
     const { trip, folderId } = await scene();
     await db.update(schema.driveConnection).set({ folderProblem: "root-trashed" });
 
-    await updatePerjadinLogisticsAction(trip.id, logistics("2026-10-13", "2026-10-16"));
+    await updatePerjadinDatesAction(trip.id, dates("2026-10-13", "2026-10-16"));
 
     await expect(drive.getFile(folderId!)).resolves.toMatchObject({
       name: "Kelompok 3 · Garut · 2026-10-13",
@@ -162,7 +154,7 @@ describe("a start-date correction", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     await expect(
-      updatePerjadinLogisticsAction(trip.id, logistics("2026-10-13", "2026-10-16")),
+      updatePerjadinDatesAction(trip.id, dates("2026-10-13", "2026-10-16")),
     ).resolves.toEqual({ outcome: "updated", startsOnMoved: true });
 
     await expect(startsOnOf(trip.id)).resolves.toBe("2026-10-13");
@@ -181,7 +173,7 @@ describe("a start-date correction", () => {
     await addOfflineSession({ schoolId: school.id, heldOn: "2026-10-12", perjadinId: trip.id });
 
     await expect(
-      updatePerjadinLogisticsAction(trip.id, logistics("2026-10-13", "2026-10-16")),
+      updatePerjadinDatesAction(trip.id, dates("2026-10-13", "2026-10-16")),
     ).resolves.toMatchObject({ outcome: "would-strand" });
 
     expect(drive.calls).toBe(0);
@@ -241,7 +233,7 @@ describe("the reconcile", () => {
     vi.spyOn(drive, "getFile").mockImplementation(async (id) => {
       if (id === folderId) {
         vi.mocked(drive.getFile).mockImplementation(getFile);
-        await updatePerjadinLogisticsAction(trip.id, logistics("2026-10-13", "2026-10-16"));
+        await updatePerjadinDatesAction(trip.id, dates("2026-10-13", "2026-10-16"));
       }
       return getFile(id);
     });

@@ -1,11 +1,4 @@
-import type {
-  Role,
-  Stream,
-  TimeZone,
-  TransactionCategory,
-  TransactionParticipantType,
-  TransportMode,
-} from "@sugt/domain";
+import type { Role, Stream, TransactionCategory, TransactionParticipantType } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -63,31 +56,12 @@ export const perjadin = pgTable(
     // already-issued Surat Tugas. See `planPerjadin` in `queries/perjadin-planning.ts` and
     // `docs/data-model.md`'s Travel section.
     destination: text("destination").notNull(),
+    // Tanggal mulai / Tanggal selesai, typed and written directly (ADR-0041). A Perjadin carries
+    // no travel legs — many trips are PP — so there is no departure or return to derive them from.
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
 
     advanceIdr: bigint("advance_idr", { mode: "number" }).notNull(),
-
-    // **How the Group travels, on each leg.** Six nullable columns: nullable so the Perjadins
-    // that predate them stay valid with nothing to backfill — the form requires all six on a new
-    // plan, but the column cannot, because existing rows have none.
-    //
-    // Each `*_at` is a wall-clock date **and** time with **no instant** — a `timestamp` without a
-    // time zone — carrying its zone in a separate `*_zone` tag, exactly as `session.starts_at` is
-    // a wall-clock time meaningful only beside its Time Zone. Storing an instant would bake in a
-    // conversion nobody asked for; the Surat Tugas says "07:30 WIB", not a UTC moment.
-    //
-    // `departure_zone` is always `WIB` (the origin is Bandung) and `return_zone` is derived at
-    // insert from the Province of the last School visited — both snapshots, set server-side. The
-    // zone columns still CHECK all three `TIME_ZONES`, because the edit surface may correct a
-    // return zone. `*_mode` CHECKs `TRANSPORT_MODES`. Both lists are written out character for
-    // character rather than composed, for the reason `transaction_category_check` gives.
-    departureAt: timestamp("departure_at", { mode: "string" }),
-    departureZone: text("departure_zone").$type<TimeZone>(),
-    departureMode: text("departure_mode").$type<TransportMode>(),
-    returnAt: timestamp("return_at", { mode: "string" }),
-    returnZone: text("return_zone").$type<TimeZone>(),
-    returnMode: text("return_mode").$type<TransportMode>(),
 
     picPersonId: uuid("pic_person_id").notNull(),
     picRole: text("pic_role").$type<"Staff">().notNull().default("Staff"),
@@ -105,17 +79,6 @@ export const perjadin = pgTable(
     check("perjadin_advance_check", sql`${t.advanceIdr} >= 0`),
     check("perjadin_pic_role_check", sql`${t.picRole} = 'Staff'`),
     check("perjadin_dates_check", sql`${t.endsOn} >= ${t.startsOn}`),
-    // A null zone/mode passes (the columns are nullable); a present one must be in the set.
-    check("perjadin_departure_zone_check", sql`${t.departureZone} in ('WIB', 'WITA', 'WIT')`),
-    check("perjadin_return_zone_check", sql`${t.returnZone} in ('WIB', 'WITA', 'WIT')`),
-    check(
-      "perjadin_departure_mode_check",
-      sql`${t.departureMode} in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')`,
-    ),
-    check(
-      "perjadin_return_mode_check",
-      sql`${t.returnMode} in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')`,
-    ),
     check(
       "perjadin_returned_check",
       sql`(${t.returnedAt} is null) = (${t.returnedToTreasurerIdr} is null)`,
@@ -302,16 +265,18 @@ export const transaction = pgTable(
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
  * The *set of items that exists* is not stored: since the amendment to ADR-0018 it is a **flat
- * fixed seven** — `sk_perjalanan`, the two tickets, lodging, local transport, `staff`, and
+ * fixed six** — `sk_perjalanan`, `tiket_pp`, lodging, local transport, `staff`, and
  * `pengajar_lengkap` — derived at read time in the query layer with no per-member part. This table
  * holds only which of those a Staff member has hand-ticked, so an un-tick is a `DELETE` and there is
  * no "unchecked" row to keep in sync.
  *
- * `itemKey` is one of those seven fixed keys. `pengajar_lengkap` is the one box the tool clears by
+ * `itemKey` is one of those six fixed keys. `pengajar_lengkap` is the one box the tool clears by
  * itself: the Teaching-Team mutation queries (`./queries/perjadin-teachers.ts`) delete its tick on
  * any add/rename/remove, so each change forces a fresh manual confirmation the team is complete.
  * `dosen:{personId}` ticks the **old** per-teacher model left behind are orphans — no item derives
- * them, so they are silently ignored and never cleaned up. See ADR-0018 and `docs/data-model.md`.
+ * them, so they are silently ignored and never cleaned up; so are ticks on `tiket_keberangkatan`
+ * and `tiket_kepulangan`, the two ticket boxes ADR-0041 folded into `tiket_pp`. See ADR-0018 and
+ * `docs/data-model.md`.
  *
  * The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent: the
  * write upserts on it, so ticking twice is one row. `checked_by`/`checked_at` record who and when

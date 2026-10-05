@@ -17,7 +17,7 @@ import { type ReactElement, useId, useOptimistic, useTransition } from "react";
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
  * **An internal-monitoring aid, and nothing more**: no money, no deadline, not a record, and
- * nothing ever ticks a box automatically. The seven fixed items are derived server-side
+ * nothing ever ticks a box automatically. The six fixed items are derived server-side
  * (`perjadinDetail`); this only flips them.
  *
  * Each box is **optimistic**: it flips on click, fires the toggle action, and reconciles when the

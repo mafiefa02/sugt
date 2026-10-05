@@ -33,9 +33,6 @@ import { useState } from "react";
  * trip's timeline carries its own Tandai confirmation (#349). Each trip is a card in one single-open
  * accordion (#348), all collapsed to start, with the Anggota roster shown inline.
  *
- * `today` is the WIB date the page computed on the server; the timeline reads its done legs off it
- * rather than off a clock here, so the server render and the hydration agree.
- *
  * A client component for two reasons that have nothing to do with the data: the "show more" paging is
  * local state, and every dialog it mounts is itself a client component. The data is fetched on the
  * server and passed down whole, so this never refetches — paging only widens the slice already here.
@@ -45,11 +42,9 @@ import { useState } from "react";
  */
 function MyPerjadinSection({
   trips,
-  today,
   uploadGate,
 }: {
   trips: MyUpcomingPerjadin[];
-  today: string;
   uploadGate: ReceiptUploadGate;
 }) {
   // Reveal three at a time from the client, never a refetch — the full list is already in hand, and
@@ -74,7 +69,6 @@ function MyPerjadinSection({
           <TripCard
             key={trip.id}
             trip={trip}
-            today={today}
             uploadGate={uploadGate}
           />
         ))}
@@ -111,15 +105,13 @@ function MyPerjadinSection({
  */
 function TripCard({
   trip,
-  today,
   uploadGate,
 }: {
   trip: MyUpcomingPerjadin;
-  today: string;
   uploadGate: ReceiptUploadGate;
 }) {
   // The pill's `x/N` is read straight off the checklist the card also hands the dialog — one payload
-  // for both, so the pill and the boxes can never disagree. `N` is always seven (amendment to ADR-0018).
+  // for both, so the pill and the boxes can never disagree. `N` is always six (amendment to ADR-0018).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
   const preparationTotal = trip.preparation.length;
   // The shared three-way progress tone `/perjadin`'s pill wears too — neutral before anything is
@@ -231,7 +223,7 @@ function TripCard({
               <p className="-mt-2 text-xs text-muted-foreground">{uploadGate.reason}</p>
             )}
 
-            <TripTimeline nodes={tripTimeline(trip, today)} />
+            <TripTimeline nodes={tripTimeline(trip)} />
           </div>
 
           <AnggotaRoster anggota={trip.anggota} />
@@ -279,8 +271,8 @@ function AnggotaRoster({ anggota }: { anggota: MyUpcomingPerjadin["anggota"] }) 
 }
 
 /**
- * The trip as it happens, top to bottom (#349): departure, each live Session across the Schools in
- * date-then-time order, return — the order and the done state already decided by `tripTimeline`.
+ * The trip as it happens, top to bottom (#349): each live Session across the Schools in
+ * date-then-time order — the order and the done state already decided by `tripTimeline`.
  * Left out entirely when there is nothing on it. An ordered list, so assistive tech reads it as a
  * sequence.
  *
@@ -311,7 +303,7 @@ function TripTimeline({ nodes }: { nodes: TimelineNode[] }) {
             className={`flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 ${index < nodes.length - 1 ? "pb-4" : ""}`}
           >
             <span className="sr-only">{node.done ? "Selesai: " : "Belum: "}</span>
-            {node.kind === "leg" ? <LegNode node={node} /> : <SessionNode node={node} />}
+            <SessionNode node={node} />
           </div>
         </li>
       ))}
@@ -338,22 +330,12 @@ function TimelineMarker({ done }: { done: boolean }) {
   );
 }
 
-/** `{date} · {HH:MM} {zone} · {mode}` — the leg's own zone, with no WIB equivalent added. */
-function LegNode({ node }: { node: Extract<TimelineNode, { kind: "leg" }> }) {
-  return (
-    <span>
-      <span className="tabular-nums">{node.date}</span> ·{" "}
-      <span className="tabular-nums">{node.time}</span> {node.zone} · {node.mode}
-    </span>
-  );
-}
-
 /**
  * `{heldOn} · {start time} · {School}`, then the Session's own controls: **Tandai** only while it is
  * `arranged` (a delivered Session has no transition left, so the pill goes once it lands), and
  * **Feedback** — the Participant-Feedback QR — which stays after delivery.
  */
-function SessionNode({ node }: { node: Extract<TimelineNode, { kind: "session" }> }) {
+function SessionNode({ node }: { node: TimelineNode }) {
   const { school, session } = node;
   const text = `${session.heldOn} · ${formatSessionStartTimeWithWib(session.startsAt, school.timeZone)} · ${school.name}`;
 

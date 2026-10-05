@@ -533,18 +533,6 @@ export const TRANSACTION_PARTICIPANT_TYPES = ["Siswa", "GTK-MS"] as const;
 export type TransactionParticipantType = (typeof TRANSACTION_PARTICIPANT_TYPES)[number];
 
 /**
- * How a Group travels to and from a Perjadin — the mode on the Keberangkatan and Kepulangan
- * legs. A closed set of four, in Indonesian because that is what goes on the Surat Tugas, the
- * same reasoning as `TRANSACTION_CATEGORIES` above.
- *
- * Like the categories, these are **values a column may hold, not terms `CONTEXT.md` defines** —
- * so they live here and not in the glossary. Both `departure_mode` and `return_mode` on
- * `perjadin` CHECK this list character for character; see `packages/db/src/schema/travel.ts`.
- */
-export const TRANSPORT_MODES = ["Pesawat", "Kereta", "Travel", "Mobil Dalam Kota"] as const;
-export type TransportMode = (typeof TRANSPORT_MODES)[number];
-
-/**
  * The **Jenis** a Preparation **Checklist Item** carries — the kind of preparation that item tracks,
  * on the Dashboard (`/`) Persiapan tab. Moved down from the Card to each item (#292). A closed set of
  * four, mirrored by `preparation_checklist_item_jenis_check` character for character (see
@@ -552,9 +540,9 @@ export type TransportMode = (typeof TRANSPORT_MODES)[number];
  *
  * **`Pimpinan` here is a category label, not the Person Role.** It names a kind of preparation
  * (leadership-facing), and has nothing to do with the signed-in read-only `Pimpinan` role in `ROLES`
- * or with `requireGrant`/Grants — an item's Jenis never gates access. Like `TRANSACTION_CATEGORIES`
- * and `TRANSPORT_MODES`, these are **values a column may hold, not terms `CONTEXT.md` defines**, so
- * they live here without a glossary entry; only the Monitoring Preparation *concepts* are glossed.
+ * or with `requireGrant`/Grants — an item's Jenis never gates access. Like `TRANSACTION_CATEGORIES`,
+ * these are **values a column may hold, not terms `CONTEXT.md` defines**, so they live here
+ * without a glossary entry; only the Monitoring Preparation *concepts* are glossed.
  */
 export const PREPARATION_JENIS = ["Teknis", "Kurikulum", "LAPI", "Pimpinan"] as const;
 export type PreparationJenis = (typeof PREPARATION_JENIS)[number];

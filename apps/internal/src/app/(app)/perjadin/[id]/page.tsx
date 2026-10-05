@@ -2,7 +2,6 @@ import { EditAdvance } from "-/components/perjadin-advance";
 import { PerjadinDates } from "-/components/perjadin-dates";
 import { PerjadinFeedbackTokenDialog } from "-/components/perjadin-feedback-token";
 import { PerjadinGroup } from "-/components/perjadin-group";
-import { PerjadinLogistics } from "-/components/perjadin-logistics";
 import { PerjadinPimpinan } from "-/components/perjadin-pimpinan";
 import { PerjadinPreparation } from "-/components/perjadin-preparation";
 import { PerjadinSessions } from "-/components/perjadin-sessions";
@@ -68,13 +67,15 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
           {shortenKabupaten(trip.destination)}
         </h1>
         {/*
-          The date range, read-only: it is the departure→return span now (ADR-0021), so it is
-          corrected by editing the legs in the Perjalanan section below, not here.
+          The date range, typed (ADR-0041): Staff correct it here with Ubah tanggal; a Pimpinan
+          reads it.
         */}
         <div className="mt-0.5">
           <PerjadinDates
+            perjadinId={trip.id}
             startsOn={trip.startsOn}
             endsOn={trip.endsOn}
+            canEdit={person.role === "Staff"}
           />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
@@ -159,13 +160,6 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         perjadinId={trip.id}
         pimpinan={trip.pimpinan}
         roster={trip.pimpinanRoster}
-        canEdit={person.role === "Staff"}
-      />
-
-      <PerjadinLogistics
-        perjadinId={trip.id}
-        departure={trip.departure}
-        returnLeg={trip.return}
         canEdit={person.role === "Staff"}
       />
 

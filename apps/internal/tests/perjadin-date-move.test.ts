@@ -1,9 +1,5 @@
 import { db, schema } from "@sugt/db";
-import {
-  planPerjadin,
-  updatePerjadinLogistics,
-  type PerjadinLogisticsInput,
-} from "@sugt/db/queries";
+import { planPerjadin, updatePerjadinDates, type PerjadinDatesInput } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -19,12 +15,11 @@ import {
 } from "./support/fixtures";
 
 /**
- * **A Perjadin's range is its departure and return dates** (ADR-0021), and the write side of #28's
- * invariant now lives on the logistics edit. The range is no longer typed: planning derives it from
- * the leg dates, and `updatePerjadinLogistics` resizes it when a leg date moves — clamping, never
- * shifting. An edit that would leave an **arranged** Session outside the new `[departure … return]`
- * window is refused whole (`would-strand`) and moves nothing; delivered and cancelled Sessions may
- * sit outside the window their trip now claims and do not block it.
+ * **A Perjadin's range is two typed dates** (ADR-0041), and the write side of #28's invariant lives
+ * on the **Ubah tanggal** edit. Planning writes the range as given, and `updatePerjadinDates` resizes
+ * it — clamping, never shifting (ADR-0021's rule, kept). An edit that would leave an **arranged**
+ * Session outside the new window is refused whole (`would-strand`) and moves nothing; delivered and
+ * cancelled Sessions may sit outside the window their trip now claims and do not block it.
  */
 
 /** The Staff Person who is PIC of the trip. */
@@ -57,27 +52,15 @@ async function windowOf(perjadinId: string) {
   return row ?? null;
 }
 
-/**
- * A whole `PerjadinLogisticsInput` around one pair of leg **dates** — the times, modes and return
- * zone are fixed, because these tests are about the dates that become the range. Departure is always
- * WIB and the write fixes it there regardless of what is passed.
- */
-function logistics(departureDate: string, returnDate: string): PerjadinLogisticsInput {
-  return {
-    departureDate,
-    departureTime: "07:30",
-    departureMode: "Pesawat",
-    returnDate,
-    returnTime: "18:00",
-    returnMode: "Pesawat",
-    returnZone: "WIB",
-  };
+/** A `PerjadinDatesInput` from Tanggal mulai and Tanggal selesai. */
+function dates(startsOn: string, endsOn: string): PerjadinDatesInput {
+  return { startsOn, endsOn };
 }
 
-describe("Planning derives the range from the leg dates", () => {
+describe("Planning writes the typed range", () => {
   beforeEach(resetDatabase);
 
-  it("writes starts_on/ends_on equal to the departure and return dates", async () => {
+  it("writes starts_on/ends_on as typed", async () => {
     const pic = await staff();
     await addProvince("JB", "Jawa Barat");
     const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
@@ -108,12 +91,11 @@ describe("Planning derives the range from the leg dates", () => {
           taughtByTeacherIndexes: [],
         },
       ],
-      departure: { date: "2026-09-01", time: "07:30", mode: "Pesawat" },
-      return: { date: "2026-09-04", time: "18:00", mode: "Pesawat" },
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-04",
     });
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
-    // The range is the leg dates, not a typed field — no input carried it.
     expect(await windowOf(planned.perjadinId)).toEqual({
       startsOn: "2026-09-01",
       endsOn: "2026-09-04",
@@ -121,10 +103,10 @@ describe("Planning derives the range from the leg dates", () => {
   });
 });
 
-describe("Editing a leg date resizes the range", () => {
+describe("Ubah tanggal resizes the range", () => {
   beforeEach(resetDatabase);
 
-  it("recomputes starts_on/ends_on from the new leg dates", async () => {
+  it("writes the new starts_on/ends_on", async () => {
     const pic = await staff();
     const school = await oneSchool();
     const perjadin = await addPerjadin({
@@ -140,18 +122,13 @@ describe("Editing a leg date resizes the range", () => {
       perjadinId: perjadin.id,
     });
 
-    const result = await updatePerjadinLogistics(
-      pic,
-      perjadin.id,
-      logistics("2026-09-01", "2026-09-08"),
-    );
+    const result = await updatePerjadinDates(pic, perjadin.id, dates("2026-09-01", "2026-09-08"));
 
     expect(result).toEqual({ outcome: "updated", startsOnMoved: false });
-    // The range followed the return date; no separate field was touched.
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-08" });
   });
 
-  it("refuses a leg-date change that would strand an arranged Session, moving nothing", async () => {
+  it("refuses a date change that would strand an arranged Session, moving nothing", async () => {
     const pic = await staff();
     const school = await oneSchool();
     const perjadin = await addPerjadin({
@@ -166,13 +143,9 @@ describe("Editing a leg date resizes the range", () => {
       perjadinId: perjadin.id,
     });
 
-    // The return date pulls in to the 5th: the arranged Session on the 9th would fall outside the new
+    // Tanggal selesai pulls in to the 5th: the arranged Session on the 9th would fall outside the new
     // window. Clamp, not shift — the whole edit is refused and the Session is left where it is.
-    const result = await updatePerjadinLogistics(
-      pic,
-      perjadin.id,
-      logistics("2026-09-01", "2026-09-05"),
-    );
+    const result = await updatePerjadinDates(pic, perjadin.id, dates("2026-09-01", "2026-09-05"));
 
     expect(result).toEqual({
       outcome: "would-strand",
@@ -214,11 +187,7 @@ describe("Editing a leg date resizes the range", () => {
       perjadinId: perjadin.id,
     });
 
-    const result = await updatePerjadinLogistics(
-      pic,
-      perjadin.id,
-      logistics("2026-09-01", "2026-09-05"),
-    );
+    const result = await updatePerjadinDates(pic, perjadin.id, dates("2026-09-01", "2026-09-05"));
 
     expect(result).toEqual({ outcome: "updated", startsOnMoved: false });
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-05" });
@@ -227,7 +196,7 @@ describe("Editing a leg date resizes the range", () => {
     expect(await heldOnOf(cancelledSession.id)).toBe("2026-09-09");
   });
 
-  it("accepts a same-day trip — departure date equal to return date", async () => {
+  it("accepts a same-day trip — Tanggal mulai equal to Tanggal selesai", async () => {
     const pic = await staff();
     const school = await oneSchool();
     const perjadin = await addPerjadin({
@@ -242,17 +211,13 @@ describe("Editing a leg date resizes the range", () => {
       perjadinId: perjadin.id,
     });
 
-    const result = await updatePerjadinLogistics(
-      pic,
-      perjadin.id,
-      logistics("2026-09-02", "2026-09-02"),
-    );
+    const result = await updatePerjadinDates(pic, perjadin.id, dates("2026-09-02", "2026-09-02"));
 
     expect(result).toEqual({ outcome: "updated", startsOnMoved: true });
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-02", endsOn: "2026-09-02" });
   });
 
-  it("refuses a return date earlier than the departure date, before opening the transaction", async () => {
+  it("refuses a Tanggal selesai earlier than the Tanggal mulai, before opening the transaction", async () => {
     const pic = await staff();
     await oneSchool();
     const perjadin = await addPerjadin({
@@ -262,13 +227,9 @@ describe("Editing a leg date resizes the range", () => {
       endsOn: "2026-09-05",
     });
 
-    const result = await updatePerjadinLogistics(
-      pic,
-      perjadin.id,
-      logistics("2026-09-05", "2026-09-01"),
-    );
+    const result = await updatePerjadinDates(pic, perjadin.id, dates("2026-09-05", "2026-09-01"));
 
-    expect(result).toEqual({ outcome: "return-before-departure" });
+    expect(result).toEqual({ outcome: "ends-before-starts" });
     // The range is untouched: the refusal comes before any write.
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-05" });
   });
@@ -276,10 +237,10 @@ describe("Editing a leg date resizes the range", () => {
   it("reports no-such-perjadin for an id that names no trip", async () => {
     const pic = await staff();
 
-    const result = await updatePerjadinLogistics(
+    const result = await updatePerjadinDates(
       pic,
       "00000000-0000-0000-0000-000000000000",
-      logistics("2026-09-01", "2026-09-03"),
+      dates("2026-09-01", "2026-09-03"),
     );
 
     expect(result).toEqual({ outcome: "no-such-perjadin" });

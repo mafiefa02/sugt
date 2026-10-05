@@ -20,7 +20,7 @@ import { requireStaff } from "./staff-only";
  *
  * **Each of the three clears the "Pengajar sudah lengkap" Preparation tick** so that changing the
  * team forces a fresh manual confirmation it is complete (the amendment to ADR-0018). The Item is
- * now defined and derived as one of the fixed seven (T4/#139, `./preparation-checklist.ts`); this is
+ * now defined and derived as one of the fixed six (T4/#139, `./preparation-checklist.ts`); this is
  * the one place in the system that clears a tick automatically. A `DELETE` matching no row is not an
  * error, so clearing an already-unticked box is a harmless no-op.
  */
