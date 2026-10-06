@@ -33,7 +33,7 @@ import {
  * 3. **Each receipt still in `_staging`** is renamed and moved into the transaction folder.
  * 4. **The transaction folder is shared** — anyone, reader — if it is not already. Last, so nothing
  *    is public before it is named and in place. Only transaction folders are ever shared.
- * 5. `drive_synced_at` is set — **only if** no Drive receipt on the line arrived after step 3 read
+ * 5. `drive_synced_at` is set — **only if** no receipt on the line arrived after step 3 read
  *    them (`markTransactionSynced`).
  *
  * **A trashed or missing folder — the Perjadin's or the line's — is never recreated**: the line stays
@@ -48,14 +48,15 @@ import {
 /** Why a line is still owed after a reconcile. */
 /**
  * Names are app-owned: a stale Perjadin folder name — a start date corrected while its rename failed,
- * or a rename by hand — is set back to what the database says (#376).
+ * or a rename by hand — is set back to what the database says (#376). Its receipts folder and its
+ * Dokumen folder (ADR-0042) carry the same name, and both reconciles re-assert it through here.
  *
  * **The name is read fresh, right before the rename**, not taken from what this reconcile read at its
  * start: a correction committed meanwhile has already renamed the folder to its new date, and
  * comparing against the older one would undo it. A failed rename is logged and left — it is
  * cosmetic, and it must not hold up the receipts this reconcile is putting in place.
  */
-async function reassertPerjadinFolderName(
+export async function reassertPerjadinFolderName(
   person: Person,
   drive: DriveClient,
   perjadinId: string,
@@ -66,7 +67,10 @@ async function reassertPerjadinFolderName(
   const name = perjadinFolderName(trip.destination, trip.startsOn);
   if (folder.name === name) return;
   await drive.updateFile(folder.id, { name }).catch((error: unknown) => {
-    console.error(`Re-asserting the name of Perjadin ${perjadinId}'s Drive folder failed.`, error);
+    console.error(
+      `Re-asserting the name of Perjadin ${perjadinId}'s folder ${folder.id} failed.`,
+      error,
+    );
   });
 }
 

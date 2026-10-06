@@ -1,27 +1,32 @@
 import type {
+  ActivityLogAction,
+  PerjadinDocumentKind,
+  PerjadinDocumentParticipantType,
   Role,
   Stream,
-  TimeZone,
   TransactionCategory,
   TransactionParticipantType,
-  TransportMode,
 } from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   check,
   date,
   foreignKey,
   index,
+  integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
+  time,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 
 import { person } from "./people";
-import { subCluster } from "./reference";
+import { school, subCluster } from "./reference";
 
 /**
  * Travel: the Perjadin, its Group, and the acquittal state.
@@ -63,31 +68,12 @@ export const perjadin = pgTable(
     // already-issued Surat Tugas. See `planPerjadin` in `queries/perjadin-planning.ts` and
     // `docs/data-model.md`'s Travel section.
     destination: text("destination").notNull(),
+    // Tanggal mulai / Tanggal selesai, typed and written directly (ADR-0041). A Perjadin carries
+    // no travel legs — many trips are PP — so there is no departure or return to derive them from.
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
 
     advanceIdr: bigint("advance_idr", { mode: "number" }).notNull(),
-
-    // **How the Group travels, on each leg.** Six nullable columns: nullable so the Perjadins
-    // that predate them stay valid with nothing to backfill — the form requires all six on a new
-    // plan, but the column cannot, because existing rows have none.
-    //
-    // Each `*_at` is a wall-clock date **and** time with **no instant** — a `timestamp` without a
-    // time zone — carrying its zone in a separate `*_zone` tag, exactly as `session.starts_at` is
-    // a wall-clock time meaningful only beside its Time Zone. Storing an instant would bake in a
-    // conversion nobody asked for; the Surat Tugas says "07:30 WIB", not a UTC moment.
-    //
-    // `departure_zone` is always `WIB` (the origin is Bandung) and `return_zone` is derived at
-    // insert from the Province of the last School visited — both snapshots, set server-side. The
-    // zone columns still CHECK all three `TIME_ZONES`, because the edit surface may correct a
-    // return zone. `*_mode` CHECKs `TRANSPORT_MODES`. Both lists are written out character for
-    // character rather than composed, for the reason `transaction_category_check` gives.
-    departureAt: timestamp("departure_at", { mode: "string" }),
-    departureZone: text("departure_zone").$type<TimeZone>(),
-    departureMode: text("departure_mode").$type<TransportMode>(),
-    returnAt: timestamp("return_at", { mode: "string" }),
-    returnZone: text("return_zone").$type<TimeZone>(),
-    returnMode: text("return_mode").$type<TransportMode>(),
 
     picPersonId: uuid("pic_person_id").notNull(),
     picRole: text("pic_role").$type<"Staff">().notNull().default("Staff"),
@@ -99,23 +85,15 @@ export const perjadin = pgTable(
     // first time a transaction on it is reconciled — never under a row lock held across a call
     // to Google. Null until then. An id, never a path, so a rename or move by hand breaks nothing.
     driveFolderId: text("drive_folder_id"),
+    // The Perjadin's folder under `Dokumen/Pelaksanaan Offline` (ADR-0042), claimed by the same
+    // compare-and-set the first time one of its Perjadin Documents is reconciled. Null until then.
+    driveDokumenFolderId: text("drive_dokumen_folder_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("perjadin_advance_check", sql`${t.advanceIdr} >= 0`),
     check("perjadin_pic_role_check", sql`${t.picRole} = 'Staff'`),
     check("perjadin_dates_check", sql`${t.endsOn} >= ${t.startsOn}`),
-    // A null zone/mode passes (the columns are nullable); a present one must be in the set.
-    check("perjadin_departure_zone_check", sql`${t.departureZone} in ('WIB', 'WITA', 'WIT')`),
-    check("perjadin_return_zone_check", sql`${t.returnZone} in ('WIB', 'WITA', 'WIT')`),
-    check(
-      "perjadin_departure_mode_check",
-      sql`${t.departureMode} in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')`,
-    ),
-    check(
-      "perjadin_return_mode_check",
-      sql`${t.returnMode} in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')`,
-    ),
     check(
       "perjadin_returned_check",
       sql`(${t.returnedAt} is null) = (${t.returnedToTreasurerIdr} is null)`,
@@ -177,8 +155,8 @@ export const groupMember = pgTable(
       foreignColumns: [person.id, person.role],
     }),
     // The primary key `(perjadin_id, person_id)` leads with `perjadin_id`, so it cannot serve a
-    // lookup keyed on `person_id` alone. `my-perjadin.ts` joins Groups by `person_id` — "Perjalanan
-    // Saya", the Staff home strip — so that path needs its own index (#270).
+    // lookup keyed on `person_id` alone. `my-perjadin.ts` joins Groups by `person_id` — a Staff
+    // member's own trips on `/pendamping` — so that path needs its own index (#270).
     index("group_member_person_id_idx").on(t.personId),
   ],
 );
@@ -273,11 +251,11 @@ export const transaction = pgTable(
       .references(() => person.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // The line's own Drive folder, shared "anyone with the link" once reconciled (ADR-0040). Null on
-    // a line recorded before Drive, until a receipt is first added to it there.
+    // a line with no receipt yet, until a receipt is first added to it.
     driveFolderId: text("drive_folder_id"),
     // When the reconcile last finished this line: folder in place, files named and inside it,
     // folder shared. Null while that is still owed. "Unsynced" is null **and** at least one
-    // Drive-backed receipt — a legacy or zero-receipt line is never unsynced.
+    // receipt — a zero-receipt line is never unsynced.
     driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
     // When a reconcile last failed to finish this line (#375). The sweep takes lines never failed
     // first, then the longest-failed, so a line that fails every time — its folder trashed by hand —
@@ -302,16 +280,18 @@ export const transaction = pgTable(
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
  * The *set of items that exists* is not stored: since the amendment to ADR-0018 it is a **flat
- * fixed seven** — `sk_perjalanan`, the two tickets, lodging, local transport, `staff`, and
+ * fixed six** — `sk_perjalanan`, `tiket_pp`, lodging, local transport, `staff`, and
  * `pengajar_lengkap` — derived at read time in the query layer with no per-member part. This table
  * holds only which of those a Staff member has hand-ticked, so an un-tick is a `DELETE` and there is
  * no "unchecked" row to keep in sync.
  *
- * `itemKey` is one of those seven fixed keys. `pengajar_lengkap` is the one box the tool clears by
+ * `itemKey` is one of those six fixed keys. `pengajar_lengkap` is the one box the tool clears by
  * itself: the Teaching-Team mutation queries (`./queries/perjadin-teachers.ts`) delete its tick on
  * any add/rename/remove, so each change forces a fresh manual confirmation the team is complete.
  * `dosen:{personId}` ticks the **old** per-teacher model left behind are orphans — no item derives
- * them, so they are silently ignored and never cleaned up. See ADR-0018 and `docs/data-model.md`.
+ * them, so they are silently ignored and never cleaned up; so are ticks on `tiket_keberangkatan`
+ * and `tiket_kepulangan`, the two ticket boxes ADR-0041 folded into `tiket_pp`. See ADR-0018 and
+ * `docs/data-model.md`.
  *
  * The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent: the
  * write upserts on it, so ticking twice is one row. `checked_by`/`checked_at` record who and when
@@ -336,16 +316,11 @@ export const perjadinPreparationItem = pgTable(
  * One to five per transaction (ADR-0039), held by the application rather than here — lines from
  * before that rule may hold none or more.
  *
- * **A receipt lives in exactly one of two places** while receipts move to Google Drive (ADR-0040),
- * and `transaction_evidence_one_store_check` holds it:
- * - `driveFileId` — the file's id in the company Drive, for every receipt recorded since. Its
- *   `content_type` is one of the four types the server sniffed from the first bytes, which
- *   `transaction_evidence_drive_content_type_check` pins.
- * - `storagePath` — a legacy object key in the private Supabase `receipts` bucket, **opaque** (a
- *   bare UUID naming nothing, since a signed URL carries its path inside its JWT). These are
- *   migrated to Drive and the column dropped later (#377, #379).
- *
- * `unique` on each means one uploaded file can be attached exactly once.
+ * **Every receipt is a file in the company Google Drive** (ADR-0040): `driveFileId` is its id
+ * there, `unique` so one uploaded file is attached exactly once. Its `content_type` is one of the
+ * four types the server sniffed from the first bytes, which `transaction_evidence_content_type_check`
+ * pins. Receipts once lived in a private Supabase bucket under a `storage_path`; they were moved
+ * to Drive (#377) and the column dropped (#379).
  */
 export const transactionEvidence = pgTable(
   "transaction_evidence",
@@ -354,8 +329,7 @@ export const transactionEvidence = pgTable(
     transactionId: uuid("transaction_id")
       .notNull()
       .references(() => transaction.id, { onDelete: "cascade" }),
-    storagePath: text("storage_path").unique(),
-    driveFileId: text("drive_file_id").unique(),
+    driveFileId: text("drive_file_id").notNull().unique(),
     contentType: text("content_type").notNull(),
     byteSize: bigint("byte_size", { mode: "number" }).notNull(),
     uploadedByPersonId: uuid("uploaded_by_person_id")
@@ -364,17 +338,144 @@ export const transactionEvidence = pgTable(
     uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
   },
   // Evidence is fetched per transaction on the Laporan (`perjadin-report.ts`), and the FK is not
-  // auto-indexed. `storage_path`'s unique index does not help — it keys the object path, not the FK
+  // auto-indexed. `drive_file_id`'s unique index does not help — it keys the file, not the FK
   // (#270).
   (t) => [
     index("transaction_evidence_transaction_id_idx").on(t.transactionId),
     check(
-      "transaction_evidence_one_store_check",
-      sql`(${t.storagePath} is null) <> (${t.driveFileId} is null)`,
+      "transaction_evidence_content_type_check",
+      sql`${t.contentType} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`,
+    ),
+  ],
+);
+
+/**
+ * **The Activity Log** (#395): one row per act on a Perjadin's money, receipts, documents or
+ * report — who, when, which trip, what. **Append-only**: each write in `queries/activity-log.ts`'s
+ * callers inserts its entry in the same database transaction as the change, so a refused or
+ * failed write logs nothing, and nothing in the app updates or deletes a row. Read only by an Administrator,
+ * on `/log`.
+ *
+ * `actor_email` is a **copy** of the actor's email at that moment, so the row stays true if the
+ * email later changes. `search_text` is the lower-cased Aksi and Rincian text, rendered once at
+ * write time so `/log`'s search runs in SQL over what the screen shows. `details` has one shape per
+ * `action`, typed in `queries/activity-log.ts`.
+ *
+ * `backfilled` marks the rows migration 0039 derived from `transaction` and `transaction_evidence`
+ * — the only rows that already recorded who and when. `on delete cascade` from `perjadin`
+ * mirrors `transaction`; no app path deletes a Perjadin.
+ */
+export const activityLog = pgTable(
+  "activity_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    actorPersonId: uuid("actor_person_id")
+      .notNull()
+      .references(() => person.id),
+    actorEmail: text("actor_email").notNull(),
+    perjadinId: uuid("perjadin_id")
+      .notNull()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    action: text("action").$type<ActivityLogAction>().notNull(),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull(),
+    searchText: text("search_text").notNull(),
+    backfilled: boolean("backfilled").notNull().default(false),
+  },
+  (t) => [
+    check(
+      "activity_log_action_check",
+      sql`${t.action} in ('advance_set', 'advance_changed', 'transaction_recorded', 'evidence_uploaded', 'report_filed', 'document_uploaded', 'document_deleted')`,
+    ),
+    // `/log` reads newest first, 50 at a time; this serves that order without a sort.
+    index("activity_log_occurred_at_id_idx").on(t.occurredAt.desc(), t.id.desc()),
+  ],
+);
+
+/**
+ * **Perjadin Documents** (#397, ADR-0042): the trip's attendance sheets, one PDF each, in the
+ * company Google Drive under `Dokumen/`. Three kinds. A **Daftar Hadir Peserta** is one School's
+ * attendance at one session, for one cohort, so it alone carries a School, a cohort and the
+ * session's local start and end; the other two are one day's sheet and carry none of the four. Two
+ * CHECKs hold that both ways round, so a row can neither lack a Peserta field nor carry one it
+ * should not.
+ *
+ * **The School must be in the Perjadin's Sub-Cluster** — held by the application
+ * (`recordPerjadinDocument`), not here, for the reason offline Sessions give: Sub-Clusters are
+ * editable, so a foreign key into the grouping would forbid regrouping (ADR-0016).
+ *
+ * `id` is generated before the insert, because the file's name carries it (`D-{doc8}`). There is no
+ * duplicate rule: two sheets of one kind and date are allowed, and the marker tells them apart.
+ * `drive_synced_at` and `drive_sync_failed_at` mean what they mean on `transaction`.
+ */
+export const perjadinDocument = pgTable(
+  "perjadin_document",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    perjadinId: uuid("perjadin_id")
+      .notNull()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<PerjadinDocumentKind>().notNull(),
+    // Tanggal Sesi on a Peserta sheet, Tanggal Dokumen on the other two.
+    documentDate: date("document_date").notNull(),
+    schoolId: uuid("school_id").references(() => school.id),
+    participantType: text("participant_type").$type<PerjadinDocumentParticipantType>(),
+    // Wall-clock times local to the School, read beside its Province's Time Zone.
+    startsAt: time("starts_at"),
+    endsAt: time("ends_at"),
+    driveFileId: text("drive_file_id").notNull().unique(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    uploadedByPersonId: uuid("uploaded_by_person_id")
+      .notNull()
+      .references(() => person.id),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+    driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
+    driveSyncFailedAt: timestamp("drive_sync_failed_at", { withTimezone: true }),
+  },
+  (t) => [
+    check(
+      "perjadin_document_kind_check",
+      sql`${t.kind} in ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber', 'Daftar Hadir Pendamping')`,
     ),
     check(
-      "transaction_evidence_drive_content_type_check",
-      sql`${t.driveFileId} is null or ${t.contentType} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`,
+      "perjadin_document_participant_type_check",
+      sql`${t.participantType} in ('Siswa', 'GTK-MS')`,
+    ),
+    check("perjadin_document_content_type_check", sql`${t.contentType} = 'application/pdf'`),
+    check(
+      "perjadin_document_peserta_fields_check",
+      sql`(${t.kind} = 'Daftar Hadir Peserta') = (${t.schoolId} is not null and ${t.participantType} is not null and ${t.startsAt} is not null and ${t.endsAt} is not null)`,
+    ),
+    check(
+      "perjadin_document_other_fields_null_check",
+      sql`${t.kind} = 'Daftar Hadir Peserta' or (${t.schoolId} is null and ${t.participantType} is null and ${t.startsAt} is null and ${t.endsAt} is null)`,
+    ),
+    check("perjadin_document_times_check", sql`${t.endsAt} > ${t.startsAt}`),
+    // The dialog lists a trip's documents; Postgres does not index the FK on its own (#270).
+    index("perjadin_document_perjadin_id_idx").on(t.perjadinId),
+  ],
+);
+
+/**
+ * **A Perjadin's three kind folders** under its Dokumen folder (ADR-0042), each made the first time
+ * a document of that kind is reconciled. The primary key is the compare-and-set: the insert does
+ * nothing on conflict, and a caller that lost reads back the winner's id and trashes its own.
+ */
+export const perjadinDocumentFolder = pgTable(
+  "perjadin_document_folder",
+  {
+    perjadinId: uuid("perjadin_id")
+      .notNull()
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<PerjadinDocumentKind>().notNull(),
+    driveFolderId: text("drive_folder_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.perjadinId, t.kind] }),
+    check(
+      "perjadin_document_folder_kind_check",
+      sql`${t.kind} in ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber', 'Daftar Hadir Pendamping')`,
     ),
   ],
 );

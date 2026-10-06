@@ -71,7 +71,7 @@ function trip(id: string, patch: Partial<SortablePerjadin> = {}): SortablePerjad
 const ids = (rows: SortablePerjadin[]) => rows.map((row) => row.id);
 
 describe("sortPerjadinDirectory", () => {
-  it("defaults to Keberangkatan, newest first", () => {
+  it("defaults to Mulai, newest first", () => {
     const rows = [
       trip("a", { startsOn: "2026-09-01" }),
       trip("b", { startsOn: "2026-10-01" }),
@@ -95,19 +95,16 @@ describe("sortPerjadinDirectory", () => {
     ]);
   });
 
-  it("sorts Sekolah by count, Kepulangan by date, PIC by name and Persiapan by done count", () => {
+  it("sorts Sekolah by count, Selesai by date, PIC by name and Persiapan by done count", () => {
     const rows = [
       trip("a", { schoolCount: 3, endsOn: "2026-09-05", picFullName: "Budi", preparationDone: 1 }),
-      trip("b", { schoolCount: 1, endsOn: "2026-09-09", picFullName: "Andi", preparationDone: 7 }),
+      trip("b", { schoolCount: 1, endsOn: "2026-09-09", picFullName: "Andi", preparationDone: 6 }),
     ];
     expect(ids(sortPerjadinDirectory(rows, { key: "schools", direction: "desc" }))).toEqual([
       "a",
       "b",
     ]);
-    expect(ids(sortPerjadinDirectory(rows, { key: "return", direction: "desc" }))).toEqual([
-      "b",
-      "a",
-    ]);
+    expect(ids(sortPerjadinDirectory(rows, { key: "end", direction: "desc" }))).toEqual(["b", "a"]);
     expect(ids(sortPerjadinDirectory(rows, { key: "pic", direction: "asc" }))).toEqual(["b", "a"]);
     expect(ids(sortPerjadinDirectory(rows, { key: "preparation", direction: "desc" }))).toEqual([
       "b",
@@ -130,7 +127,7 @@ describe("sortPerjadinDirectory", () => {
     ]);
   });
 
-  it("breaks ties by Keberangkatan descending, then id — whatever the direction", () => {
+  it("breaks ties by Mulai descending, then id — whatever the direction", () => {
     const rows = [
       trip("a", { schoolCount: 2, startsOn: "2026-09-01" }),
       trip("c", { schoolCount: 2, startsOn: "2026-10-01" }),

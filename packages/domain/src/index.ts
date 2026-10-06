@@ -152,6 +152,16 @@ export function formatSessionStartTimeWithWib(time: string, zone: TimeZone): str
 }
 
 /**
+ * A wall-clock span in its zone, the Indonesian way — `"08.00–11.30 WITA"` — as a Perjadin
+ * Document's Waktu Mulai and Waktu Selesai read (#397). Both are Postgres `time` values local to
+ * the School.
+ */
+export function formatTimeRange(startsAt: string, endsAt: string, zone: TimeZone): string {
+  const dotted = (time: string) => formatWallClockTime(time).replace(":", ".");
+  return `${dotted(startsAt)}–${dotted(endsAt)} ${zone}`;
+}
+
+/**
  * The parenthesised Time Zone tag a time-of-day input label carries so a Staffer knows which
  * zone they are entering — `" (WITA)"`, or `""` when no zone is in scope yet (a Session with
  * no School picked, a legacy Perjadin before its return zone is chosen). Prepend it to a label:
@@ -384,14 +394,15 @@ export type PerjadinAspect = (typeof PERJADIN_ASPECTS)[number];
  * on the unauthenticated `/ep/{token}` form (ADR-0024). It is not validated against the Group or
  * the Pimpinan roster: the identity is untrusted by design, exactly as `participant_feedback.name`
  * is (ADR-0012). The three cover everyone the evaluation wants to hear from — the name-based
- * **Pengajar** (Teaching Team), the signed-in DITSAMA **Pendamping** who travel, and the
- * record-only **Pimpinan** — none of whom the old signed-in-Group gate could all admit.
+ * **Narasumber** (the Teaching Team's UI label; `Pengajar` until #393), the signed-in DITSAMA
+ * **Pendamping** who travel, and the record-only **Pimpinan** — none of whom the old
+ * signed-in-Group gate could all admit.
  *
  * These are **values a column may hold**, so `perjadin_evaluation.filed_by_role` CHECKs this list
  * character for character (see `packages/db/src/schema/evaluations.ts`), and the form's Role
  * selector is driven off it — one list behind the schema, the query and the form.
  */
-export const PERJADIN_EVALUATION_ROLES = ["Pengajar", "Pendamping", "Pimpinan"] as const;
+export const PERJADIN_EVALUATION_ROLES = ["Narasumber", "Pendamping", "Pimpinan"] as const;
 export type PerjadinEvaluationRole = (typeof PERJADIN_EVALUATION_ROLES)[number];
 
 /**
@@ -426,7 +437,7 @@ export const FEEDBACK_TOKEN_LIFETIME_HOURS = 24;
 /**
  * How long a Perjadin's Evaluation link stays open — **14 days**, far longer than the Session
  * feedback token's 24 hours. A Participant Feedback QR is held up in the room and scanned on the
- * spot, so a day is generous; a Perjadin link is shared by hand to the Pengajar, Pendamping and
+ * spot, so a day is generous; a Perjadin link is shared by hand to the Narasumber, Pendamping and
  * Pimpinan after a trip that may have run over a week, and they file when they get to it. Counted
  * from issue, like `FEEDBACK_TOKEN_LIFETIME_HOURS`, and expressed in hours so both tokens set
  * their `expires_at` the same way (`now() + make_interval(hours => …)`).
@@ -533,18 +544,6 @@ export const TRANSACTION_PARTICIPANT_TYPES = ["Siswa", "GTK-MS"] as const;
 export type TransactionParticipantType = (typeof TRANSACTION_PARTICIPANT_TYPES)[number];
 
 /**
- * How a Group travels to and from a Perjadin — the mode on the Keberangkatan and Kepulangan
- * legs. A closed set of four, in Indonesian because that is what goes on the Surat Tugas, the
- * same reasoning as `TRANSACTION_CATEGORIES` above.
- *
- * Like the categories, these are **values a column may hold, not terms `CONTEXT.md` defines** —
- * so they live here and not in the glossary. Both `departure_mode` and `return_mode` on
- * `perjadin` CHECK this list character for character; see `packages/db/src/schema/travel.ts`.
- */
-export const TRANSPORT_MODES = ["Pesawat", "Kereta", "Travel", "Mobil Dalam Kota"] as const;
-export type TransportMode = (typeof TRANSPORT_MODES)[number];
-
-/**
  * The **Jenis** a Preparation **Checklist Item** carries — the kind of preparation that item tracks,
  * on the Dashboard (`/`) Persiapan tab. Moved down from the Card to each item (#292). A closed set of
  * four, mirrored by `preparation_checklist_item_jenis_check` character for character (see
@@ -552,9 +551,9 @@ export type TransportMode = (typeof TRANSPORT_MODES)[number];
  *
  * **`Pimpinan` here is a category label, not the Person Role.** It names a kind of preparation
  * (leadership-facing), and has nothing to do with the signed-in read-only `Pimpinan` role in `ROLES`
- * or with `requireGrant`/Grants — an item's Jenis never gates access. Like `TRANSACTION_CATEGORIES`
- * and `TRANSPORT_MODES`, these are **values a column may hold, not terms `CONTEXT.md` defines**, so
- * they live here without a glossary entry; only the Monitoring Preparation *concepts* are glossed.
+ * or with `requireGrant`/Grants — an item's Jenis never gates access. Like `TRANSACTION_CATEGORIES`,
+ * these are **values a column may hold, not terms `CONTEXT.md` defines**, so they live here
+ * without a glossary entry; only the Monitoring Preparation *concepts* are glossed.
  */
 export const PREPARATION_JENIS = ["Teknis", "Kurikulum", "LAPI", "Pimpinan"] as const;
 export type PreparationJenis = (typeof PREPARATION_JENIS)[number];
@@ -593,9 +592,67 @@ export const MAX_EXTRA_STAFF_PER_GROUP = 10;
 export const MAX_RECEIPTS_PER_TRANSACTION = 5;
 
 /**
- * **The largest one receipt file may be: 20 MB** ([ADR-0040](../../../docs/adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)).
- * A product rule beside the count above, read by the browser — which refuses a bigger file after
- * compressing it — and by the server, which declares it to Drive when opening the upload session and
- * checks it again on the file Drive holds.
+ * **The largest one uploaded file may be: 50 MB**, meaning 50 × 1024 × 1024 bytes
+ * ([ADR-0040](../../../docs/adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
+ * amended by [#394](https://github.com/sugt-itb/sugt-itb-26/issues/394)). One cap for every upload to
+ * Drive — receipts now, and the attendance-sheet uploads [#397](https://github.com/sugt-itb/sugt-itb-26/issues/397)
+ * is to add — so it is named for the upload, not the receipt. A product rule beside the count above, read by the
+ * browser — which refuses a bigger file after compressing it — and by the server, which declares it
+ * to Drive when opening the upload session and checks it again on the file Drive holds.
  */
-export const MAX_RECEIPT_BYTES = 20 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/**
+ * **What an Activity Log entry records**
+ * ([#395](https://github.com/sugt-itb/sugt-itb-26/issues/395)): one act on a Perjadin's money,
+ * receipts, documents or report. A closed set, mirrored character for character by
+ * `activity_log_action_check` (see `packages/db/src/schema/travel.ts`).
+ *
+ * The two `document_*` values went into the set with the rest, so the Dokumen uploads
+ * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397)) and Hapus
+ * ([#398](https://github.com/sugt-itb/sugt-itb-26/issues/398)) needed no CHECK migration.
+ */
+export const ACTIVITY_LOG_ACTIONS = [
+  "advance_set",
+  "advance_changed",
+  "transaction_recorded",
+  "evidence_uploaded",
+  "report_filed",
+  "document_uploaded",
+  "document_deleted",
+] as const;
+export type ActivityLogAction = (typeof ACTIVITY_LOG_ACTIONS)[number];
+
+/** The Aksi column of `/log`: what each action reads as on screen. */
+export const ACTIVITY_LOG_ACTION_LABELS: Record<ActivityLogAction, string> = {
+  advance_set: "Uang Perjalanan ditetapkan",
+  advance_changed: "Uang Perjalanan diubah",
+  transaction_recorded: "Catat transaksi",
+  evidence_uploaded: "Unggah bukti",
+  report_filed: "Laporan dikirim",
+  document_uploaded: "Dokumen diunggah",
+  document_deleted: "Dokumen dihapus",
+};
+
+/**
+ * **The three kinds of Perjadin Document**
+ * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042): attendance sheets, one
+ * PDF each. Indonesian because they are the names of paperwork, on the same footing as
+ * `TRANSACTION_CATEGORIES`, and mirrored character for character by
+ * `perjadin_document_kind_check` (see `packages/db/src/schema/travel.ts`).
+ */
+export const PERJADIN_DOCUMENT_KINDS = [
+  "Daftar Hadir Peserta",
+  "Daftar Hadir Narasumber",
+  "Daftar Hadir Pendamping",
+] as const;
+export type PerjadinDocumentKind = (typeof PERJADIN_DOCUMENT_KINDS)[number];
+
+/**
+ * Which cohort a Daftar Hadir Peserta is for. The same two values as
+ * `TRANSACTION_PARTICIPANT_TYPES` today, but a **dedicated** const, following
+ * `PRETEST_PARTICIPANT_TYPES`: a document's cohort and a transaction's are separate columns that
+ * may yet diverge. Mirrored by `perjadin_document_participant_type_check`.
+ */
+export const PERJADIN_DOCUMENT_PARTICIPANT_TYPES = ["Siswa", "GTK-MS"] as const;
+export type PerjadinDocumentParticipantType = (typeof PERJADIN_DOCUMENT_PARTICIPANT_TYPES)[number];

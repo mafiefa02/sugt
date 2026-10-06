@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { db, schema } from "@sugt/db";
 import type {
+  ActivityLogAction,
   ClassKind,
   Grant,
   ParticipantFeedbackAspect,
@@ -596,29 +597,61 @@ export async function addTransaction(fixture: TransactionFixture) {
 export type EvidenceFixture = {
   transactionId: string;
   uploadedByPersonId: string;
-  /** Opaque by construction, so a test supplies one only when it asserts on the value. */
-  storagePath?: string;
+  /** A test supplies one only when it asserts on the value. */
+  driveFileId?: string;
 };
 
 /**
  * One receipt against a line item.
  *
- * The bytes are not part of this: `storage_path` names an object in the private `receipts`
- * bucket and the row is the only thing the query layer reads, so a unique string is all a
- * test of the acquittal needs — the same shape `cerita.test.ts` uses for a Story photograph.
+ * The bytes are not part of this: `drive_file_id` names a file in the company Drive and the row is
+ * the only thing the query layer reads, so a unique string is all a test of the acquittal needs. A
+ * test that needs the file itself lands it in a `FakeDrive` first (`support/drive.ts`).
  */
 export async function addTransactionEvidence(fixture: EvidenceFixture) {
   const [evidence] = await db
     .insert(schema.transactionEvidence)
     .values({
       transactionId: fixture.transactionId,
-      storagePath: fixture.storagePath ?? randomUUID(),
+      driveFileId: fixture.driveFileId ?? randomUUID(),
       contentType: "image/jpeg",
       byteSize: 120_000,
       uploadedByPersonId: fixture.uploadedByPersonId,
     })
     .returning();
   return evidence!;
+}
+
+export type ActivityLogFixture = {
+  perjadinId: string;
+  actorPersonId: string;
+  actorEmail: string;
+  action: ActivityLogAction;
+  details: Record<string, unknown>;
+  searchText?: string;
+  occurredAt?: Date;
+  backfilled?: boolean;
+};
+
+/**
+ * One Activity Log entry, written directly so a test of `/log`'s read can choose when it happened.
+ * A test of what a write logs calls the write instead.
+ */
+export async function addActivityLogEntry(fixture: ActivityLogFixture) {
+  const [entry] = await db
+    .insert(schema.activityLog)
+    .values({
+      perjadinId: fixture.perjadinId,
+      actorPersonId: fixture.actorPersonId,
+      actorEmail: fixture.actorEmail,
+      action: fixture.action,
+      details: fixture.details,
+      searchText: fixture.searchText ?? "",
+      backfilled: fixture.backfilled ?? false,
+      ...(fixture.occurredAt ? { occurredAt: fixture.occurredAt } : {}),
+    })
+    .returning();
+  return entry!;
 }
 
 /**
@@ -643,6 +676,8 @@ export async function addTransactionEvidence(fixture: EvidenceFixture) {
  * T3 (#153).) `perjadin_evaluation` is named even though no fixture writes one: the Perjadin
  * Evaluation write-path tests file them directly, and `cascade` from `public."perjadin"` reaches it,
  * so naming it is for that reason and not for a fixture.
+ * `perjadin_document` and `perjadin_document_folder` are named for `perjadin_evaluation`'s reason:
+ * the document tests write them directly, though `cascade` from `public."perjadin"` reaches both.
  * `perjadin_feedback_token` is named for the fixture reason `session_feedback_token` is:
  * `addPerjadinFeedbackToken` writes it (ADR-0024), even though `cascade` from `public."perjadin"`
  * already reaches it.
@@ -678,7 +713,10 @@ export async function resetDatabase() {
       public."assessment_completion",
       public."preparation_card",
       public."preparation_checklist_item",
-      public."drive_connection"
+      public."drive_connection",
+      public."activity_log",
+      public."perjadin_document",
+      public."perjadin_document_folder"
     restart identity cascade
   `);
 }

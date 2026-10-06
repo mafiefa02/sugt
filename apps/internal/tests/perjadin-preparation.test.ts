@@ -33,9 +33,9 @@ function nonStaff() {
 /**
  * **The Preparation Checklist** ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
- * Since the amendment to ADR-0018 the *set of items* is a **flat fixed seven** — the six original
- * boxes plus `pengajar_lengkap` — derived at read time with no per-member part, so `N = 7` for every
- * Perjadin and the derivation never reads the Group. Only the ticks are stored. The interesting
+ * Since the amendment to ADR-0018 the *set of items* is a **flat fixed six** — five boxes, the two
+ * ticket boxes folded into one `tiket_pp` by ADR-0041, plus `pengajar_lengkap` — derived at read time
+ * with no per-member part, so `N = 6` for every Perjadin and the derivation never reads the Group. Only the ticks are stored. The interesting
  * behaviour is therefore the one automatic un-tick in the whole system: any Teaching-Team change
  * clears `pengajar_lengkap`, and that is not reachable through a test that only reads back what it
  * wrote. Each block drives the query functions against a real Postgres.
@@ -68,11 +68,10 @@ async function pillOf(caller: Parameters<typeof perjadinDirectory>[0], perjadinI
   return trips.find((row) => row.id === perjadinId);
 }
 
-/** The seven fixed keys, in render order — `pengajar_lengkap` last. */
+/** The six fixed keys, in render order — `pengajar_lengkap` last. */
 const FIXED_KEYS = [
   "sk_perjalanan",
-  "tiket_keberangkatan",
-  "tiket_kepulangan",
+  "tiket_pp",
   "booking_penginapan",
   "transportasi_lokal",
   "staff",
@@ -82,7 +81,7 @@ const FIXED_KEYS = [
 describe("the derived checklist", () => {
   beforeEach(resetDatabase);
 
-  it("is the seven fixed items, in order, none ticked at first — regardless of team size", async () => {
+  it("is the six fixed items, in order, none ticked at first — regardless of team size", async () => {
     const { pic, perjadinId } = await trip();
     // A team of any size adds no boxes: the derivation no longer reads the Teaching Team.
     await addPerjadinTeacher(pic, perjadinId, "Prof. Satu");
@@ -92,13 +91,16 @@ describe("the derived checklist", () => {
 
     expect(items.map((item) => item.itemKey)).toEqual(FIXED_KEYS);
     expect(items.find((item) => item.itemKey === "pengajar_lengkap")?.label).toBe(
-      "Pengajar sudah lengkap",
+      "Narasumber sudah lengkap",
     );
-    expect(items).toHaveLength(7);
+    expect(items.find((item) => item.itemKey === "tiket_pp")?.label).toBe(
+      "Tiket / transportasi PP",
+    );
+    expect(items).toHaveLength(6);
     expect(items.every((item) => !item.checked)).toBe(true);
   });
 
-  it("counts N as 7 and x as the fixed ticks, ignoring an orphan `dosen:` tick from the old model", async () => {
+  it("counts N as 6 and x as the fixed ticks, ignoring an orphan `dosen:` tick from the old model", async () => {
     const { pic, perjadinId } = await trip();
 
     await togglePreparationItem(pic, { perjadinId, itemKey: "staff", checked: true });
@@ -112,7 +114,7 @@ describe("the derived checklist", () => {
     });
 
     const pill = await pillOf(pic, perjadinId);
-    expect(pill?.preparationTotal).toBe(7);
+    expect(pill?.preparationTotal).toBe(6);
     expect(pill?.preparationDone).toBe(2);
 
     const detail = await perjadinDetail(pic, perjadinId);
@@ -124,9 +126,34 @@ describe("the derived checklist", () => {
     // And the orphan row is left in the table, not cleaned up (ADR-0018) — nothing ever deletes it.
     expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).toContain(`dosen:${pic.id}`);
   });
+
+  it("reads x/6 with every fixed box ticked and a retired `tiket_keberangkatan` tick stored", async () => {
+    const { pic, perjadinId } = await trip();
+
+    for (const itemKey of FIXED_KEYS) {
+      await togglePreparationItem(pic, { perjadinId, itemKey, checked: true });
+    }
+    // A tick on a key ADR-0041 retired, stored before the two ticket boxes became `tiket_pp`. It
+    // stays in the table as an ignored orphan, so the pill can never read 7/6.
+    await db.insert(schema.perjadinPreparationItem).values({
+      perjadinId,
+      itemKey: "tiket_keberangkatan",
+      checkedBy: pic.id,
+    });
+
+    const pill = await pillOf(pic, perjadinId);
+    expect(pill?.preparationTotal).toBe(6);
+    expect(pill?.preparationDone).toBe(6);
+
+    const detail = await perjadinDetail(pic, perjadinId);
+    expect(detail?.preparation.map((item) => item.itemKey)).toEqual(FIXED_KEYS);
+    expect((await ticksOf(perjadinId)).map((tick) => tick.itemKey)).toContain(
+      "tiket_keberangkatan",
+    );
+  });
 });
 
-describe("the one automatic un-tick — Pengajar sudah lengkap", () => {
+describe("the one automatic un-tick — Narasumber sudah lengkap", () => {
   beforeEach(resetDatabase);
 
   async function tickPengajarLengkap(

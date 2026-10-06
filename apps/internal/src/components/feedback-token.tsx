@@ -17,11 +17,11 @@ import { type ReactElement, useState, useTransition } from "react";
 
 /**
  * Two ways in, one behaviour. The Session detail page hands the whole `SessionDetail` it already
- * loaded; a card elsewhere (e.g. the Staff dashboard) has only an id and a status and passes those
- * bare, plus its own labelled `trigger`. The prop is a union so neither caller carries what it does
- * not have, and both are normalized to `sessionId`/`status` at the top so the body reads the same.
- * With no `trigger`, the default button renders and the existing `session={session}` mount behaves
- * exactly as before.
+ * loaded; a card elsewhere (e.g. a `/pendamping` trip card) has only an id and a status and passes
+ * those bare, plus its own labelled `trigger`. The prop is a union so neither caller carries what
+ * it does not have, and both are normalized to `sessionId`/`status` at the top so the body reads
+ * the same. With no `trigger`, the default button renders and the existing `session={session}`
+ * mount behaves exactly as before.
  */
 type FeedbackTokenDialogProps = (
   | { session: SessionDetail }

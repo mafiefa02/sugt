@@ -17,7 +17,7 @@ import { type ReactElement, useId, useOptimistic, useTransition } from "react";
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
  * **An internal-monitoring aid, and nothing more**: no money, no deadline, not a record, and
- * nothing ever ticks a box automatically. The seven fixed items are derived server-side
+ * nothing ever ticks a box automatically. The six fixed items are derived server-side
  * (`perjadinDetail`); this only flips them.
  *
  * Each box is **optimistic**: it flips on click, fires the toggle action, and reconciles when the
@@ -25,7 +25,7 @@ import { type ReactElement, useId, useOptimistic, useTransition } from "react";
  * role, so a professor's page renders the boxes read-only rather than trusting the client.
  *
  * **The optimistic state and the toggle live in one hook, `usePreparationChecklist`**, so the two
- * surfaces that show the checklist — the inline section on the edit page and the dashboard-card
+ * surfaces that show the checklist — the inline section on the edit page and the trip-card
  * dialog — run the identical toggle rather than forking it, and each surface's own count and boxes
  * read the *same* optimistic state (which is why the inline `n/N` pill flips the instant a box does,
  * not only after a revalidate). The two surfaces are never on screen together, so each mount holding
@@ -132,8 +132,8 @@ function PerjadinPreparation({
 }
 
 /**
- * The same checklist as a dialog, opened from a caller's own control — the dashboard card's
- * "Persiapan n/7" pill. `trigger` is required because there is no default surface for it here; the
+ * The same checklist as a dialog, opened from a caller's own control — a trip card's
+ * "Persiapan n/6" pill. `trigger` is required because there is no default surface for it here; the
  * pill is the whole reason this variant exists. Live check/uncheck runs through the same
  * `usePreparationChecklist` hook as the inline section, so the toggle is not forked.
  */

@@ -1,6 +1,5 @@
 import {
   MAX_RECEIPTS_PER_TRANSACTION,
-  REPORT_DEADLINE_DAYS_AFTER_RETURN,
   sumAdvanceDrawdownIdr,
   type TransactionCategory,
   type TransactionParticipantType,
@@ -10,8 +9,9 @@ import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../client";
 import { person } from "../schema/people";
 import { perjadin, perjadinPimpinan, transaction, transactionEvidence } from "../schema/travel";
+import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
-import { todayInDeadlineZone } from "./deadline";
+import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -30,15 +30,10 @@ import { requireStaff } from "./staff-only";
  * stricter than the process it serves.
  */
 
-/**
- * One uploaded receipt, in exactly one of two places (ADR-0040): `driveFileId` in the company
- * Google Drive, or — for a receipt from before Drive — `storagePath`, an opaque key in the private
- * Supabase `receipts` bucket that the page signs a short-lived URL for.
- */
+/** One uploaded receipt: `driveFileId` is its file in the company Google Drive (ADR-0040). */
 export type AcquittalEvidence = {
   id: string;
-  storagePath: string | null;
-  driveFileId: string | null;
+  driveFileId: string;
   contentType: string;
   byteSize: number;
   uploadedAt: Date;
@@ -57,9 +52,9 @@ export type AcquittalTransaction = {
   amountIdr: number;
   category: TransactionCategory;
   participantType: TransactionParticipantType;
-  /** The line's Drive folder, link-shared once synced. Null on a line with no Drive receipt yet. */
+  /** The line's Drive folder, link-shared once synced. Null on a line with no receipt yet. */
   driveFolderId: string | null;
-  /** When the reconcile last finished the line; null while a Drive receipt is still owed. */
+  /** When the reconcile last finished the line; null while a receipt is still owed. */
   driveSyncedAt: Date | null;
   evidence: AcquittalEvidence[];
 };
@@ -166,16 +161,13 @@ export async function perjadinAcquittal(
       // Computed in Postgres rather than in JavaScript, so the arithmetic happens in the
       // same calendar the dates are stored in. A `Date` here would introduce a time zone the
       // domain does not have — a Session is a calendar day, and so is a deadline.
-      reportDueOn: sql<string>`to_char(
-        ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}, 'YYYY-MM-DD'
-      )`,
+      reportDueOn: sql<string>`to_char(${perjadinReportDeadline}, 'YYYY-MM-DD')`,
       // The deadline less today, both in the office's zone: `todayInDeadlineZone` is the shared
       // `(now() at time zone …)::date` fragment (`./deadline.ts`), the calendar day in Bandung's
       // zone rather than the session's default, which nothing in this repository sets.
-      daysRemaining: sql<number>`(
-        ${perjadin.endsOn} + ${sql.raw(String(REPORT_DEADLINE_DAYS_AFTER_RETURN))}
-        - ${todayInDeadlineZone}
-      )`.mapWith(Number),
+      daysRemaining: sql<number>`(${perjadinReportDeadline} - ${todayInDeadlineZone})`.mapWith(
+        Number,
+      ),
       returnedToTreasurerIdr: perjadin.returnedToTreasurerIdr,
       returnedAt: perjadin.returnedAt,
       reportFiledAt: perjadin.reportFiledAt,
@@ -247,7 +239,6 @@ async function transactionsOf(perjadinId: string): Promise<AcquittalTransaction[
     .select({
       id: transactionEvidence.id,
       transactionId: transactionEvidence.transactionId,
-      storagePath: transactionEvidence.storagePath,
       driveFileId: transactionEvidence.driveFileId,
       contentType: transactionEvidence.contentType,
       byteSize: transactionEvidence.byteSize,
@@ -381,13 +372,24 @@ export async function recordTransaction(
       input.evidence.map((file) => ({
         ...(file.id ? { id: file.id } : {}),
         transactionId: line!.id,
-        storagePath: file.storagePath ?? null,
-        driveFileId: file.driveFileId ?? null,
+        driveFileId: file.driveFileId,
         contentType: file.contentType,
         byteSize: file.byteSize,
         uploadedByPersonId: caller.id,
       })),
     );
+
+    await logActivity(tx, caller, input.perjadinId, {
+      action: "transaction_recorded",
+      details: {
+        transactionId: line!.id,
+        category: input.category,
+        amountIdr: input.amountIdr,
+        participantType: input.participantType,
+        spentOn: input.spentOn,
+        receiptCount: input.evidence.length,
+      },
+    });
 
     return { outcome: "recorded", transactionId: line!.id };
   });
@@ -395,22 +397,16 @@ export async function recordTransaction(
 
 /**
  * A receipt whose bytes have already landed in the company Google Drive (`driveFileId`, ADR-0040).
- * Every receipt the app writes is one of these. The `storagePath` arm describes a legacy row in the
- * Supabase `receipts` bucket; nothing in the app writes one any more, and it stays only so tests can
- * stand up the legacy rows the acquittal still renders, until #379 drops the column. Exactly one of
- * the two, which `transaction_evidence_one_store_check` holds too. The content
- * type and size are read back by the app — sniffed from the first bytes, for Drive — rather than
+ * The content type and size are read back by the app — sniffed from the first bytes — rather than
  * taken from the browser, which never had to tell the truth about either.
  */
 export type NewEvidence = {
   /** The row's id, when the caller needed it first — a Drive file is named after it. */
   id?: string;
+  driveFileId: string;
   contentType: string;
   byteSize: number;
-} & (
-  | { driveFileId: string; storagePath?: undefined }
-  | { storagePath: string; driveFileId?: undefined }
-);
+};
 
 export type AttachEvidenceResult =
   | { outcome: "attached"; count: number }
@@ -435,7 +431,7 @@ export type AttachEvidenceResult =
  * both pass the count. A line already over five from before the rule is grandfathered: it keeps
  * what it has and gains nothing.
  *
- * **A Drive receipt makes the line unsynced** (ADR-0040): `drive_synced_at` goes back to null in
+ * **A new receipt makes the line unsynced** (ADR-0040): `drive_synced_at` goes back to null in
  * the same write, so the reconcile that follows — or the next sweep, if that one fails — knows a
  * file is still waiting in `_staging` to be named and moved into the line's folder.
  */
@@ -449,7 +445,12 @@ export async function attachTransactionEvidence(
 
   return db.transaction(async (tx) => {
     const [line] = await tx
-      .select({ id: transaction.id })
+      .select({
+        id: transaction.id,
+        category: transaction.category,
+        amountIdr: transaction.amountIdr,
+        spentOn: transaction.spentOn,
+      })
       .from(transaction)
       .where(and(eq(transaction.id, transactionId), eq(transaction.perjadinId, perjadinId)))
       .for("update");
@@ -470,19 +471,28 @@ export async function attachTransactionEvidence(
       evidence.map((file) => ({
         ...(file.id ? { id: file.id } : {}),
         transactionId,
-        storagePath: file.storagePath ?? null,
-        driveFileId: file.driveFileId ?? null,
+        driveFileId: file.driveFileId,
         contentType: file.contentType,
         byteSize: file.byteSize,
         uploadedByPersonId: caller.id,
       })),
     );
-    if (evidence.some((file) => file.driveFileId)) {
-      await tx
-        .update(transaction)
-        .set({ driveSyncedAt: null })
-        .where(eq(transaction.id, transactionId));
-    }
+    await tx
+      .update(transaction)
+      .set({ driveSyncedAt: null })
+      .where(eq(transaction.id, transactionId));
+
+    await logActivity(tx, caller, perjadinId, {
+      action: "evidence_uploaded",
+      details: {
+        transactionId,
+        category: line.category,
+        amountIdr: line.amountIdr,
+        spentOn: line.spentOn,
+        added: evidence.length,
+        total: existing + evidence.length,
+      },
+    });
 
     return { outcome: "attached", count: evidence.length };
   });
@@ -569,6 +579,19 @@ export async function filePerjadinReport(
 
     const filedAt = new Date();
     await tx.update(perjadin).set({ reportFiledAt: filedAt }).where(eq(perjadin.id, perjadinId));
+
+    // Every category, as the acquittal's totals count them — not only the float draw-down.
+    const [lines] = await tx
+      .select({
+        transactionCount: count(),
+        totalIdr: sql<number>`coalesce(sum(${transaction.amountIdr}), 0)`.mapWith(Number),
+      })
+      .from(transaction)
+      .where(eq(transaction.perjadinId, perjadinId));
+    await logActivity(tx, caller, perjadinId, {
+      action: "report_filed",
+      details: { transactionCount: lines?.transactionCount ?? 0, totalIdr: lines?.totalIdr ?? 0 },
+    });
 
     return { outcome: "filed", filedAt };
   });

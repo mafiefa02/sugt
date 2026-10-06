@@ -3,9 +3,9 @@
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
  * `perjadin_preparation_item` holds only the ticks; the *set of items that exists* is this
- * **flat, fixed seven**, assembled here. Since the amendment to ADR-0018 there is no per-member
+ * **flat, fixed six**, assembled here. Since the amendment to ADR-0018 there is no per-member
  * derivation — the Teaching Team stopped being People (ADR-0020), so the old one-box-per-professor
- * became a single `pengajar_lengkap` box. `N = 7` for every Perjadin, and this no longer reads the
+ * became a single `pengajar_lengkap` box. `N = 6` for every Perjadin, and this no longer reads the
  * Group at all. Shared beneath the three modules that need it — the detail read, the directory
  * and the toggle write — the way `./group-rules.ts` is, and not on the package's public
  * surface for the same reason: no screen renders these constants, only the payloads built from them.
@@ -14,7 +14,7 @@
 /** One derived checklist item, in render order. */
 export type PreparationItem = {
   itemKey: string;
-  /** The Indonesian label, fixed for all seven. */
+  /** The Indonesian label, fixed for all six. */
   label: string;
   checked: boolean;
   /** Who last ticked it, and when — recorded for later use; nothing renders these yet. */
@@ -23,23 +23,25 @@ export type PreparationItem = {
 };
 
 /**
- * The seven fixed items, in order, with their stable keys. **Written out here, character for
+ * The six fixed items, in order, with their stable keys. **Written out here, character for
  * character**, the same way the CHECK lists are: these keys are stored in `item_key` and a composed
  * list would drift from the strings the rows already hold. `staff` is a **single** box — "confirmed
  * with the Pendamping" (the on-Perjadin label for the DITSAMA role, #141), not one per member; the
- * stored key stays `staff`. `pengajar_lengkap` is the seventh, replacing the old
+ * stored key stays `staff`. `pengajar_lengkap` is the sixth, replacing the old
  * per-teacher boxes (the amendment to ADR-0018): it is ticked by hand like the rest, but is the one
  * box the tool clears by itself — the teacher-mutation queries delete its tick whenever the Teaching
  * Team changes, so each change forces a fresh manual confirmation that the team is complete.
  */
 export const PREPARATION_FIXED_ITEMS = [
   { itemKey: "sk_perjalanan", label: "SK Perjalanan" },
-  { itemKey: "tiket_keberangkatan", label: "Tiket keberangkatan" },
-  { itemKey: "tiket_kepulangan", label: "Tiket kepulangan" },
+  // One box for the trip's travel since ADR-0041: a Perjadin carries no Keberangkatan/Kepulangan
+  // legs, and many trips are PP. Ticks on the retired `tiket_keberangkatan` and `tiket_kepulangan`
+  // keys stay in the table as ignored orphans, like the old `dosen:` ones.
+  { itemKey: "tiket_pp", label: "Tiket / transportasi PP" },
   { itemKey: "booking_penginapan", label: "Booking penginapan" },
   { itemKey: "transportasi_lokal", label: "Konfirmasi dengan pihak transportasi lokal" },
   { itemKey: "staff", label: "Konfirmasi dengan para Pendamping" },
-  { itemKey: "pengajar_lengkap", label: "Pengajar sudah lengkap" },
+  { itemKey: "pengajar_lengkap", label: "Narasumber sudah lengkap" },
 ] as const;
 
 /** The item key the teacher-mutation queries clear on any Teaching-Team change (amendment to ADR-0018). */
@@ -53,10 +55,11 @@ export type PreparationTick = {
 };
 
 /**
- * The derived checklist for one Perjadin: the seven fixed items, each carrying its current tick
- * state. No longer reads the Group — `N` is always seven, and `x` is how many of the seven are
- * ticked. Any `dosen:` ticks the old model left in the table have no item here, so they never
- * count — orphans are ignored, no cleanup needed (ADR-0018).
+ * The derived checklist for one Perjadin: the six fixed items, each carrying its current tick
+ * state. No longer reads the Group — `N` is always six, and `x` is how many of the six are
+ * ticked. Any `dosen:` ticks the old model left in the table, and any on the two ticket keys
+ * ADR-0041 retired, have no item here, so they never count — orphans are ignored, no cleanup
+ * needed (ADR-0018).
  */
 export function derivePreparationChecklist(ticks: PreparationTick[]): PreparationItem[] {
   const byKey = new Map(ticks.map((tick) => [tick.itemKey, tick]));

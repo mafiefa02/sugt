@@ -1,5 +1,5 @@
-import type { SessionStatus, TimeZone, TransportMode } from "@sugt/domain";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import type { SessionStatus, TimeZone } from "@sugt/domain";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
@@ -15,7 +15,7 @@ import {
 } from "../schema/travel";
 import { advanceDrawdownCategoryList } from "./advance-drawdown";
 import type { Person } from "./caller";
-import { todayInDeadlineZone } from "./deadline";
+import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
 import {
   derivePreparationChecklist,
   type PreparationItem,
@@ -23,7 +23,9 @@ import {
 } from "./preparation-checklist";
 
 /**
- * **Perjalanan Saya** — the caller's own upcoming trips, for the Staff home strip (#197).
+ * **The caller's own trips**, for `/pendamping` (#197, #396): Perjalanan Dinas Anda — the trips not
+ * yet over — and Perjalanan Dinas Sebelumnya — the ones that are, still fully workable, since the
+ * Laporan and the attendance sheets are often finished after the trip.
  *
  * A read scoped **by** the caller rather than gated by their role: it takes a `Person` and returns
  * only the trips that Person is a working member of, so there is no Staff choke point (every
@@ -77,22 +79,28 @@ export type MyPerjadinSchool = {
 };
 
 /**
- * One upcoming trip the caller is on, everything the home strip renders.
+ * One trip the caller is on, everything its `/pendamping` card renders.
  *
- * The six leg fields are straight off `perjadin` and all nullable — a trip planned before the
- * logistics columns existed (#106) carries none. `preparation` is the flat fixed seven (amendment
- * to ADR-0018), each item carrying its tick state — the same `derivePreparationChecklist` the detail
- * read runs. It carries the whole checklist rather than a bare `x`/`N` because the card's pill *and*
- * its Persiapan dialog read from one payload: the pill is `preparation.filter(i => i.checked).length`
- * out of `preparation.length` (always seven), and the dialog toggles the very items shown here.
+ * `preparation` is the flat fixed six (amendment to ADR-0018), each item carrying its tick state —
+ * the same `derivePreparationChecklist` the detail read runs. It carries the whole checklist rather
+ * than a bare `x`/`N` because the card's pill *and* its Persiapan dialog read from one payload: the
+ * pill is `preparation.filter(i => i.checked).length` out of `preparation.length` (always six), and
+ * the dialog toggles the very items shown here.
  */
-export type MyUpcomingPerjadin = {
+export type MyPerjadinTrip = {
   id: string;
   destination: string;
   startsOn: string;
   endsOn: string;
   picPersonId: string;
   picFullName: string;
+  /**
+   * The Perjadin Report's state, for the line on the card — **null unless the caller is the
+   * PIC**, so there is no line to draw. `dueOn` is the acquittal's own deadline
+   * (`perjadinReportDeadline`), and `overdue` compares it with today in the office's zone, as
+   * `daysRemaining` does there. `filedAt` is null until the Report is filed.
+   */
+  report: { dueOn: string; overdue: boolean; filedAt: Date | null } | null;
   /** Fixed at planning and transferred before departure, so never null and never absent. */
   advanceIdr: number;
   /**
@@ -104,15 +112,7 @@ export type MyUpcomingPerjadin = {
    * domain constant, where the acquittal reduces its loaded rows through `sumAdvanceDrawdownIdr`.
    */
   drawnDownIdr: number;
-  /** Departure from Bandung's date and time; null when this trip predates the logistics columns. */
-  departureAt: string | null;
-  departureZone: TimeZone | null;
-  departureMode: TransportMode | null;
-  /** Return; null when this trip predates the logistics columns. */
-  returnAt: string | null;
-  returnZone: TimeZone | null;
-  returnMode: TransportMode | null;
-  /** The fixed seven, each with its current tick state — the pill's `x`/`N` and the dialog's boxes. */
+  /** The fixed six, each with its current tick state — the pill's `x`/`N` and the dialog's boxes. */
   preparation: PreparationItem[];
   /**
    * Who is on the trip, in three lists the way `docs/data-model.md` splits them: the Staff Group,
@@ -129,20 +129,29 @@ export type MyUpcomingPerjadin = {
   schools: MyPerjadinSchool[];
 };
 
+/** The caller's trips, split at today: `current` soonest first, `previous` most recent first. */
+export type MyPerjadin = { current: MyPerjadinTrip[]; previous: MyPerjadinTrip[] };
+
 /**
- * The caller's own upcoming trips, soonest first.
+ * **The caller's own trips, in one read**, split at today in the office's zone: a trip ending today
+ * is still current.
  *
  * Shaped like `perjadinAcquittal`/`perjadinDetail`: the base trip rows come back first — filtered to
- * the caller's memberships and to trips not yet over, sorted for a total order — then each hanging
- * list is one batched select keyed by `inArray(tripIds)` and stitched on with a Map, rather than one
- * join that would multiply each list by the others'. When the caller is on no upcoming trip the base
- * query returns nothing and the extra round trips are skipped entirely.
+ * the caller's memberships and sorted for a total order — then each hanging list is one batched
+ * select keyed by `inArray(tripIds)` and stitched on with a Map, rather than one join that would
+ * multiply each list by the others'. When the caller is on no trip the base query returns nothing
+ * and the extra round trips are skipped entirely.
  */
-export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerjadin[]> {
-  // The base rows: every trip the caller is a `group_member` of that is not yet over. The
-  // `group_member` inner join both filters (only the caller's trips) and cannot fan out — its
-  // primary key is `(perjadin_id, person_id)`, so at most one row matches for a given caller.
-  const trips = await db
+export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
+  // Not yet over: `ends_on` on or after today, reckoned in the office's zone via the shared
+  // `todayInDeadlineZone` fragment (`./deadline.ts`) — the same calendar the acquittal's
+  // `daysRemaining` counts in, not the database session's default zone.
+  const isCurrent = sql<boolean>`${perjadin.endsOn} >= ${todayInDeadlineZone}`;
+
+  // The base rows: every trip the caller is a `group_member` of. The `group_member` inner join both
+  // filters (only the caller's trips) and cannot fan out — its primary key is
+  // `(perjadin_id, person_id)`, so at most one row matches for a given caller.
+  const rows = await db
     .select({
       id: perjadin.id,
       destination: perjadin.destination,
@@ -151,12 +160,10 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
       picPersonId: perjadin.picPersonId,
       picFullName: person.fullName,
       advanceIdr: perjadin.advanceIdr,
-      departureAt: perjadin.departureAt,
-      departureZone: perjadin.departureZone,
-      departureMode: perjadin.departureMode,
-      returnAt: perjadin.returnAt,
-      returnZone: perjadin.returnZone,
-      returnMode: perjadin.returnMode,
+      isCurrent,
+      reportDueOn: sql<string>`to_char(${perjadinReportDeadline}, 'YYYY-MM-DD')`,
+      reportOverdue: sql<boolean>`${perjadinReportDeadline} < ${todayInDeadlineZone}`,
+      reportFiledAt: perjadin.reportFiledAt,
     })
     .from(perjadin)
     .innerJoin(
@@ -164,14 +171,25 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
       and(eq(groupMember.perjadinId, perjadin.id), eq(groupMember.personId, caller.id)),
     )
     .innerJoin(person, eq(person.id, perjadin.picPersonId))
-    // Not yet over: `ends_on` on or after today, reckoned in the office's zone via the shared
-    // `todayInDeadlineZone` fragment (`./deadline.ts`) — the same calendar the acquittal's
-    // `daysRemaining` counts in, not the database session's default zone.
-    .where(sql`${perjadin.endsOn} >= ${todayInDeadlineZone}`)
-    // A trip is remembered by when it happens; `id` breaks the tie so the order is total.
-    .orderBy(asc(perjadin.startsOn), asc(perjadin.id));
+    // Current trips first, soonest first — a trip is remembered by when it happens. Then the
+    // previous ones, the most recently ended first. `id` breaks the tie so the order is total.
+    .orderBy(
+      desc(isCurrent),
+      sql`case when ${isCurrent} then ${perjadin.startsOn} end asc`,
+      sql`case when ${isCurrent} then null else ${perjadin.endsOn} end desc`,
+      sql`case when ${isCurrent} then null else ${perjadin.startsOn} end desc`,
+      asc(perjadin.id),
+    );
 
-  if (trips.length === 0) return [];
+  if (rows.length === 0) return { current: [], previous: [] };
+
+  const trips = rows.map(({ reportDueOn, reportOverdue, reportFiledAt, ...trip }) => ({
+    ...trip,
+    report:
+      trip.picPersonId === caller.id
+        ? { dueOn: reportDueOn, overdue: reportOverdue, filedAt: reportFiledAt }
+        : null,
+  }));
 
   const tripIds = trips.map((trip) => trip.id);
 
@@ -251,7 +269,7 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
         .orderBy(asc(school.name), asc(session.heldOn), asc(session.startsAt), asc(session.id)),
       // Every fixed-item tick on these trips. Not a count like `perjadinDirectory`'s pill: the card's
       // Persiapan dialog toggles the boxes, so it needs the whole tick per item (who and when), which
-      // `derivePreparationChecklist` folds into the fixed seven below — the same derivation the detail
+      // `derivePreparationChecklist` folds into the fixed six below — the same derivation the detail
       // read runs. A `dosen:` orphan the old model left behind matches no fixed key, so it drops out.
       db
         .select({
@@ -288,8 +306,8 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
   }
 
   // Preparation ticks bucketed by trip; `derivePreparationChecklist` folds each bucket into the
-  // fixed seven below. A trip absent here has no ticks, and `derivePreparationChecklist([])` gives
-  // the same seven all unchecked — so the pill reads `0/7` rather than the trip dropping its pill.
+  // fixed six below. A trip absent here has no ticks, and `derivePreparationChecklist([])` gives
+  // the same six all unchecked — so the pill reads `0/6` rather than the trip dropping its pill.
   const preparationTicksByTrip = new Map<string, PreparationTick[]>();
   for (const row of preparationRows) {
     const list = preparationTicksByTrip.get(row.perjadinId) ?? [];
@@ -328,14 +346,14 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
     });
   }
 
-  return trips.map((trip) => {
+  const built = trips.map(({ isCurrent, ...trip }) => {
     const staff = (staffByTrip.get(trip.id) ?? []).map((member) => ({
       ...member,
       isPic: member.personId === trip.picPersonId,
     }));
     const pengajar = pengajarByTrip.get(trip.id) ?? [];
     const pimpinan = pimpinanByTrip.get(trip.id) ?? [];
-    return {
+    const card: MyPerjadinTrip = {
       ...trip,
       drawnDownIdr: drawnDownByTrip.get(trip.id) ?? 0,
       preparation: derivePreparationChecklist(preparationTicksByTrip.get(trip.id) ?? []),
@@ -347,5 +365,12 @@ export async function myUpcomingPerjadin(caller: Person): Promise<MyUpcomingPerj
       },
       schools: schoolsByTrip.get(trip.id) ?? [],
     };
+    return { isCurrent, trip: card };
   });
+
+  // The rows are already in section order, so splitting keeps each section's order.
+  return {
+    current: built.filter((entry) => entry.isCurrent).map((entry) => entry.trip),
+    previous: built.filter((entry) => !entry.isCurrent).map((entry) => entry.trip),
+  };
 }

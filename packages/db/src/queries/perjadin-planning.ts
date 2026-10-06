@@ -2,8 +2,6 @@ import {
   MAX_EXTRA_STAFF_PER_GROUP,
   MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN,
   MAX_TEACHING_TEAM_PER_PERJADIN,
-  type TimeZone,
-  type TransportMode,
 } from "@sugt/domain";
 import { asc, eq, inArray } from "drizzle-orm";
 
@@ -11,6 +9,7 @@ import { db } from "../client";
 import { session, sessionTeachingTeam } from "../schema/delivery";
 import { cluster, province, school, subCluster } from "../schema/reference";
 import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
+import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
 import { duplicatedStaff } from "./group-rules";
 import {
@@ -85,19 +84,6 @@ export type PlannedSession = {
  * Sub-Cluster and its Schools' Kabupaten/Kota at insert ([#105](https://github.com/mafiefa02/sugt/issues/105)),
  * so the form has no Tujuan box to drift from what it already shows.
  */
-/**
- * One leg of the trip's travel, as the form submits it: a wall-clock date and time and a mode.
- * The zone is not here — `departure_zone` is fixed to WIB (the origin is Bandung) and
- * `return_zone` is derived from the last School visited, both server-side (#106).
- */
-export type PlannedTravelLeg = {
-  /** `YYYY-MM-DD`. */
-  date: string;
-  /** `HH:MM`, wall-clock in the leg's zone. */
-  time: string;
-  mode: TransportMode;
-};
-
 export type PlanPerjadinInput = {
   subClusterId: string;
   advanceIdr: number;
@@ -126,17 +112,16 @@ export type PlanPerjadinInput = {
   pimpinan: string[];
   sessions: PlannedSession[];
   /**
-   * Departure from Bandung. Its zone is always WIB. Its **date is the trip's `starts_on`**: the
-   * range is no longer typed in but derived from the legs (ADR-0021), so this date is what the
-   * `session-outside-perjadin` window opens on and what every reader renders as the trip's start.
+   * **Tanggal mulai**, `YYYY-MM-DD` — typed, written straight to `starts_on` (ADR-0041). A Perjadin
+   * carries no travel legs: many trips are PP, so one departure and one return describe nothing.
+   * This is what the `session-outside-perjadin` window opens on.
    */
-  departure: PlannedTravelLeg;
+  startsOn: string;
   /**
-   * Return. Its zone is derived from the last School visited. Its **date is the trip's `ends_on`**
-   * (ADR-0021) — the mirror of `departure.date` above — so `return.date < departure.date` is what
-   * the `return-before-departure` refusal guards, same-day allowed.
+   * **Tanggal selesai**, `YYYY-MM-DD`, written to `ends_on`. `endsOn < startsOn` is the
+   * `ends-before-starts` refusal; the same day is allowed.
    */
-  return: PlannedTravelLeg;
+  endsOn: string;
 };
 
 /** Two Schools planned for the same date and the same time — physically impossible on one trip. */
@@ -158,11 +143,11 @@ export type SessionTimeClash = {
 export type PlanPerjadinResult =
   | { outcome: "planned"; perjadinId: string }
   /**
-   * The return date lands before the departure date, so the derived `[starts_on … ends_on]` range
-   * would be inverted (ADR-0021). Same-day is allowed. `perjadin_dates_check` holds `ends_on >=
-   * starts_on` at the database too; this repeats it so the form can point at the return date.
+   * Tanggal selesai before Tanggal mulai, so the `[starts_on … ends_on]` range would be inverted
+   * (ADR-0041). Same-day is allowed. `perjadin_dates_check` holds `ends_on >= starts_on` at the
+   * database too; this repeats it so the form can point at Tanggal selesai.
    */
-  | { outcome: "return-before-departure" }
+  | { outcome: "ends-before-starts" }
   /**
    * An extra Staff member repeated, or the same as the PIC. A Group holds each person once by
    * `(perjadin_id, person_id)`, so this is refused up front rather than left to a PK violation
@@ -258,11 +243,10 @@ export async function planPerjadin(
 ): Promise<PlanPerjadinResult> {
   requireStaff(caller);
 
-  // The range is the departure→return span now (ADR-0021), not two typed fields, so the guard is on
-  // the leg dates: `return.date` before `departure.date` would derive an inverted range. Same-day is
-  // allowed. `perjadin_dates_check` holds `ends_on >= starts_on` too; this is repeated here so the
-  // form can point at the return date rather than showing the page a constraint violation produces.
-  if (input.return.date < input.departure.date) return { outcome: "return-before-departure" };
+  // The range is two typed dates (ADR-0041). Same-day is allowed. `perjadin_dates_check` holds
+  // `ends_on >= starts_on` too; this is repeated here so the form can point at Tanggal selesai
+  // rather than showing the page a constraint violation produces.
+  if (input.endsOn < input.startsOn) return { outcome: "ends-before-starts" };
 
   if (input.sessions.length === 0) return { outcome: "no-schools" };
 
@@ -332,9 +316,8 @@ export async function planPerjadin(
   // The second of the three places a Session's date is written, and the invariant
   // [#28](https://github.com/mafiefa02/sugt/issues/28) stated: an arranged offline Session
   // lies inside its Perjadin. No CHECK can carry it, because the range is on this row and
-  // the date is on another table's. The window is the derived range — the departure and return
-  // dates (ADR-0021) — not two typed fields.
-  const window = { startsOn: input.departure.date, endsOn: input.return.date };
+  // the date is on another table's. The window is the typed range (ADR-0041).
+  const window = { startsOn: input.startsOn, endsOn: input.endsOn };
   const offending = input.sessions.filter(
     (planned) => !heldOnWithinPerjadin(planned.heldOn, window),
   );
@@ -408,29 +391,18 @@ export async function planPerjadin(
   // when Schools are later regrouped or the Sub-Cluster is renamed.
   const destination = await derivePerjadinDestination(input.subClusterId);
 
-  // The return zone is the last-visited School's — the Group returns from that city, so its
-  // wall-clock time means that city's zone, not Bandung's. Snapshot at insert, like the
-  // destination, for the same ADR-0016 reason. Departure is always WIB (the origin is Bandung).
-  const returnZone = await deriveReturnZone(input.sessions);
-
   const perjadinId = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(perjadin)
       .values({
         subClusterId: input.subClusterId,
         destination,
-        // The range is stored-but-derived (ADR-0021): its source is the leg dates, not a typed
-        // field. `perjadin_dates_check` still holds `ends_on >= starts_on`, guarded above.
-        startsOn: input.departure.date,
-        endsOn: input.return.date,
+        // Typed, written directly (ADR-0041). `perjadin_dates_check` still holds
+        // `ends_on >= starts_on`, guarded above.
+        startsOn: input.startsOn,
+        endsOn: input.endsOn,
         advanceIdr: input.advanceIdr,
         picPersonId: input.picPersonId,
-        departureAt: `${input.departure.date} ${input.departure.time}`,
-        departureZone: "WIB",
-        departureMode: input.departure.mode,
-        returnAt: `${input.return.date} ${input.return.time}`,
-        returnZone,
-        returnMode: input.return.mode,
       })
       .returning({ id: perjadin.id });
 
@@ -503,6 +475,12 @@ export async function planPerjadin(
         .values(uniquePimpinan.map((personId) => ({ perjadinId: id, personId })));
     }
 
+    // The Activity Log (#395): the planned Advance, in this transaction, committing with the trip.
+    await logActivity(tx, caller, id, {
+      action: "advance_set",
+      details: { amountIdr: input.advanceIdr },
+    });
+
     return id;
   });
 
@@ -541,29 +519,6 @@ async function derivePerjadinDestination(subClusterId: string): Promise<string> 
 function joinWithDan(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   return `${items.slice(0, -1).join(", ")} dan ${items[items.length - 1]}`;
-}
-
-/**
- * The Time Zone of the **last School visited** — the Session with the greatest `(held_on,
- * starts_at)`. The Group returns from that School's city, so `return_at`'s wall-clock time is
- * meaningful only in that Province's zone, which is why the return zone is not fixed to Bandung's.
- *
- * `sessions` is non-empty here (the `no-schools` refusal ran first) and each `schoolId` is real
- * and in the Sub-Cluster (the `school-outside-sub-cluster` refusal ran too), so the join returns a
- * row.
- */
-async function deriveReturnZone(sessions: PlannedSession[]): Promise<TimeZone> {
-  const last = [...sessions].sort((a, b) => {
-    const byDate = b.heldOn.localeCompare(a.heldOn);
-    return byDate !== 0 ? byDate : b.startsAt.localeCompare(a.startsAt);
-  })[0]!;
-
-  const [row] = await db
-    .select({ timeZone: province.timeZone })
-    .from(school)
-    .innerJoin(province, eq(province.code, school.provinceCode))
-    .where(eq(school.id, last.schoolId));
-  return row!.timeZone;
 }
 
 /**

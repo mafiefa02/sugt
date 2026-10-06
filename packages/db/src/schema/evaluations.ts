@@ -276,7 +276,7 @@ export const participantFeedback = pgTable(
  * **Filed without signing in, through a short-lived token link (ADR-0024).** The filer
  * is not a `person` any more — the old `filed_by_person_id` foreign key and the
  * `perjadin_evaluation_one_per_filer` unique are both gone. The people best placed to
- * say how a trip went include the name-based Pengajar and the record-only Pimpinan,
+ * say how a trip went include the name-based Narasumber and the record-only Pimpinan,
  * neither of whom has a login, so identity is now **self-declared and untrusted**,
  * exactly as `participant_feedback.name` is: `filed_by_role` is one of three values a
  * CHECK admits, and `filed_by_name` is typed by the filer and referenced by nothing.
@@ -292,7 +292,7 @@ export const perjadinEvaluation = pgTable(
       .references(() => perjadin.id, { onDelete: "cascade" }),
     // The self-declared filer. `filed_by_role` CHECKs `PERJADIN_EVALUATION_ROLES` character for
     // character below (the same list the form's selector and the query are driven off), and
-    // `filed_by_name` is the name they type — neither is a foreign key, because a Pengajar or a
+    // `filed_by_name` is the name they type — neither is a foreign key, because a Narasumber or a
     // Pimpinan has no `person` row to point at. This is the ADR-0012 identity model applied here.
     filedByRole: text("filed_by_role").$type<PerjadinEvaluationRole>().notNull(),
     filedByName: text("filed_by_name").notNull(),
@@ -330,7 +330,7 @@ export const perjadinEvaluation = pgTable(
     // stored values rather than composing them from the domain array — the values `PERJADIN_EVALUATION_ROLES` holds.
     check(
       "perjadin_evaluation_filed_by_role_check",
-      sql`${t.filedByRole} in ('Pengajar', 'Pendamping', 'Pimpinan')`,
+      sql`${t.filedByRole} in ('Narasumber', 'Pendamping', 'Pimpinan')`,
     ),
     ...ratingBounds("perjadin_evaluation", {
       lodging: t.lodging,
@@ -367,9 +367,9 @@ export const perjadinEvaluation = pgTable(
  *
  * `expiresAt` defaults 14 days out — the `PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS` window — and is
  * stored rather than derived, as the Session token's is: the link is shared after the trip and the
- * filers (Pengajar, Pendamping, Pimpinan) file when they get to it, so it outlives the trip's dates
- * by design. There is no cancelled-trip bar the Session token needs: a Perjadin is a real trip once
- * it exists and is never cancelled, so a token always has a live trip behind it.
+ * filers (Narasumber, Pendamping, Pimpinan) file when they get to it, so it outlives the trip's
+ * dates by design. There is no cancelled-trip bar the Session token needs: a Perjadin is a real
+ * trip once it exists and is never cancelled, so a token always has a live trip behind it.
  */
 export const perjadinFeedbackToken = pgTable(
   "perjadin_feedback_token",

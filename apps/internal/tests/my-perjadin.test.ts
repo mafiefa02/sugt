@@ -1,6 +1,8 @@
+import { formatWibDate } from "-/lib/format-wib";
 import { db, schema } from "@sugt/db";
-import { myUpcomingPerjadin, perjadinAcquittal } from "@sugt/db/queries";
+import { myPerjadin, perjadinAcquittal } from "@sugt/db/queries";
 import type { Person } from "@sugt/db/queries";
+import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -16,9 +18,10 @@ import {
 } from "./support/fixtures";
 
 /**
- * **Perjalanan Saya** (#197): the caller's own upcoming trips. The read is scoped *by* the caller —
- * only trips they are a `group_member` of, and only trips not yet over (WIB "today") — soonest
- * first, each carrying its money, its Group/teachers/Pimpinan and its visited Schools.
+ * **The caller's own trips** (#197, #396). The read is scoped *by* the caller — only trips they are
+ * a `group_member` of — and split at WIB "today" into the current trips, soonest first, and the
+ * previous ones, most recently ended first. Each carries its money, its Group/teachers/Pimpinan, its
+ * visited Schools and, for the PIC, its Laporan state.
  */
 
 /** A `Person` shaped the way the query layer takes one, from an inserted `person` row. */
@@ -45,15 +48,22 @@ function wibToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
 }
 
+/** `offset` days from today in WIB, `YYYY-MM-DD` — exact, for a fixture on a boundary. */
+function wibDaysFromToday(offset: number): string {
+  const d = new Date(`${wibToday()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Put the caller on a trip whose PIC is someone else — the membership this read filters by. */
 async function addGroupMember(perjadinId: string, personId: string) {
   await db.insert(schema.groupMember).values({ perjadinId, personId, role: "Staff", stream: null });
 }
 
-describe("myUpcomingPerjadin returns only the caller's own trips", () => {
+describe("myPerjadin returns only the caller's own trips", () => {
   beforeEach(resetDatabase);
 
-  it("keeps a trip the caller leads and a trip they merely joined, drops one they are not on", async () => {
+  it("keeps trips the caller leads or merely joined, in both sections, and drops the rest", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -70,7 +80,7 @@ describe("myUpcomingPerjadin returns only the caller's own trips", () => {
       startsOn: daysFromToday(2),
       endsOn: daysFromToday(6),
     });
-    // Led by someone else, but the caller is added to the Group.
+    // Led by someone else, but the caller is added to the Group — one current, one past.
     const joined = await addPerjadin({
       picPersonId: other.id,
       advanceIdr: 1_000_000,
@@ -78,77 +88,173 @@ describe("myUpcomingPerjadin returns only the caller's own trips", () => {
       endsOn: daysFromToday(7),
     });
     await addGroupMember(joined.id, caller.id);
-    // Led by someone else and the caller is nowhere on it — excluded.
+    const joinedPast = await addPerjadin({
+      picPersonId: other.id,
+      advanceIdr: 1_000_000,
+      startsOn: daysFromToday(-20),
+      endsOn: daysFromToday(-15),
+    });
+    await addGroupMember(joinedPast.id, caller.id);
+    // Led by someone else and the caller is nowhere on them — excluded, current and past alike.
     await addPerjadin({
       picPersonId: other.id,
       advanceIdr: 1_000_000,
       startsOn: daysFromToday(4),
       endsOn: daysFromToday(8),
     });
+    await addPerjadin({
+      picPersonId: other.id,
+      advanceIdr: 1_000_000,
+      startsOn: daysFromToday(-30),
+      endsOn: daysFromToday(-25),
+    });
 
-    const trips = await myUpcomingPerjadin(caller);
+    const trips = await myPerjadin(caller);
 
-    expect(trips.map((t) => t.id).sort()).toEqual([led.id, joined.id].sort());
+    expect(trips.current.map((t) => t.id).sort()).toEqual([led.id, joined.id].sort());
+    expect(trips.previous.map((t) => t.id)).toEqual([joinedPast.id]);
   });
-});
 
-describe("myUpcomingPerjadin filters on ends_on >= today and sorts soonest first", () => {
-  beforeEach(resetDatabase);
-
-  it("drops a finished trip, keeps an in-progress and a future one, sorted by starts_on", async () => {
+  it("returns two empty sections for a caller on no trip", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
+    await expect(myPerjadin(caller)).resolves.toEqual({ current: [], previous: [] });
+  });
+});
 
-    // Already over — excluded.
-    await addPerjadin({
-      picPersonId: caller.id,
-      advanceIdr: 1_000_000,
-      startsOn: daysFromToday(-40),
-      endsOn: daysFromToday(-30),
-    });
-    // In progress: started in the past, ends in the future — kept.
-    const inProgress = await addPerjadin({
-      picPersonId: caller.id,
-      advanceIdr: 1_000_000,
-      startsOn: daysFromToday(-5),
-      endsOn: daysFromToday(5),
-    });
-    // Entirely in the future — kept, and sorts after the in-progress one.
-    const future = await addPerjadin({
-      picPersonId: caller.id,
-      advanceIdr: 1_000_000,
-      startsOn: daysFromToday(20),
-      endsOn: daysFromToday(25),
-    });
+describe("myPerjadin splits at today (WIB) and orders each section", () => {
+  beforeEach(resetDatabase);
 
-    const trips = await myUpcomingPerjadin(caller);
+  it("puts current trips soonest first and previous trips most recently ended first", async () => {
+    const caller = asPerson(
+      await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
+    );
+    const trip = (startsOn: number, endsOn: number) =>
+      addPerjadin({
+        picPersonId: caller.id,
+        advanceIdr: 1_000_000,
+        startsOn: daysFromToday(startsOn),
+        endsOn: daysFromToday(endsOn),
+      });
 
-    // Sorted by starts_on ascending: the in-progress trip (earlier start) before the future one.
-    expect(trips.map((t) => t.id)).toEqual([inProgress.id, future.id]);
+    const future = await trip(20, 25);
+    const inProgress = await trip(-5, 5);
+    const longAgo = await trip(-40, -30);
+    // Two that ended the same day: the one that started later comes first.
+    const recentShort = await trip(-8, -6);
+    const recentLong = await trip(-12, -6);
+
+    const trips = await myPerjadin(caller);
+
+    expect(trips.current.map((t) => t.id)).toEqual([inProgress.id, future.id]);
+    expect(trips.previous.map((t) => t.id)).toEqual([recentShort.id, recentLong.id, longAgo.id]);
   });
 
-  it("keeps a trip ending exactly today — the cutoff is inclusive (ends_on >= today)", async () => {
+  it("keeps a trip ending exactly today current, and one that ended yesterday previous", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
     // ends_on is today in the query's own WIB zone, so the trip sits on the inclusive boundary: a
-    // `> today` cutoff would drop it, `>= today` keeps it. Starts a few days back so it is otherwise
-    // a plain in-progress trip.
+    // `> today` cutoff would drop it, `>= today` keeps it.
     const endsToday = await addPerjadin({
       picPersonId: caller.id,
       advanceIdr: 1_000_000,
       startsOn: daysFromToday(-3),
       endsOn: wibToday(),
     });
+    const endedYesterday = await addPerjadin({
+      picPersonId: caller.id,
+      advanceIdr: 1_000_000,
+      startsOn: daysFromToday(-10),
+      endsOn: wibDaysFromToday(-1),
+    });
 
-    const trips = await myUpcomingPerjadin(caller);
+    const trips = await myPerjadin(caller);
 
-    expect(trips.map((t) => t.id)).toEqual([endsToday.id]);
+    expect(trips.current.map((t) => t.id)).toEqual([endsToday.id]);
+    expect(trips.previous.map((t) => t.id)).toEqual([endedYesterday.id]);
   });
 });
 
-describe("myUpcomingPerjadin carries the same money as the acquittal", () => {
+describe("myPerjadin carries the PIC's Laporan line", () => {
+  beforeEach(resetDatabase);
+
+  it("is unfiled with the acquittal's deadline, overdue once it has passed, or filed", async () => {
+    const caller = asPerson(
+      await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
+    );
+    // Ended yesterday: due tomorrow, not yet overdue.
+    const due = await addPerjadin({
+      picPersonId: caller.id,
+      advanceIdr: 1_000_000,
+      startsOn: wibDaysFromToday(-4),
+      endsOn: wibDaysFromToday(-1),
+    });
+    // Ended three days ago: due yesterday, overdue.
+    const overdue = await addPerjadin({
+      picPersonId: caller.id,
+      advanceIdr: 1_000_000,
+      startsOn: wibDaysFromToday(-6),
+      endsOn: wibDaysFromToday(-3),
+    });
+    // Filed at 20:00 UTC, which is the next day in WIB.
+    const filed = await addPerjadin({
+      picPersonId: caller.id,
+      advanceIdr: 1_000_000,
+      startsOn: "2026-01-05",
+      endsOn: "2026-01-08",
+    });
+    await db
+      .update(schema.perjadin)
+      .set({ reportFiledAt: new Date("2026-01-09T20:00:00Z") })
+      .where(eq(schema.perjadin.id, filed.id));
+
+    const { previous } = await myPerjadin(caller);
+    const reportOf = (id: string) => previous.find((trip) => trip.id === id)?.report;
+
+    expect(reportOf(due.id)).toEqual({ dueOn: wibDaysFromToday(1), overdue: false, filedAt: null });
+    expect(reportOf(overdue.id)).toEqual({
+      dueOn: wibDaysFromToday(-1),
+      overdue: true,
+      filedAt: null,
+    });
+    expect(reportOf(filed.id)).toEqual({
+      dueOn: "2026-01-10",
+      overdue: true,
+      filedAt: new Date("2026-01-09T20:00:00Z"),
+    });
+    // The card and the Laporan both read the filed day in WIB, where 20:00 UTC is the next day.
+    expect(formatWibDate(new Date("2026-01-09T20:00:00Z"))).toBe("2026-01-10");
+
+    // The same deadline the acquittal shows — one rule, read from one place.
+    const acquittal = await perjadinAcquittal(caller, overdue.id);
+    expect(acquittal?.reportDueOn).toBe(reportOf(overdue.id)?.dueOn);
+  });
+
+  it("marks only the PIC's own trips, so a member who is not PIC gets no line", async () => {
+    const caller = asPerson(
+      await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
+    );
+    const other = await addPerson({
+      fullName: "Budi",
+      email: "budi@ditsama.itb.ac.id",
+      role: "Staff",
+    });
+    const joined = await addPerjadin({
+      picPersonId: other.id,
+      advanceIdr: 1_000_000,
+      startsOn: daysFromToday(2),
+      endsOn: daysFromToday(6),
+    });
+    await addGroupMember(joined.id, caller.id);
+
+    const { current } = await myPerjadin(caller);
+    expect(current[0]?.report).toBeNull();
+  });
+});
+
+describe("myPerjadin carries the same money as the acquittal", () => {
   beforeEach(resetDatabase);
 
   it("draws the float down only for drawdown categories and agrees with the acquittal's remainder", async () => {
@@ -176,7 +282,9 @@ describe("myUpcomingPerjadin carries the same money as the acquittal", () => {
       createdByPersonId: caller.id,
     });
 
-    const [mine] = await myUpcomingPerjadin(caller);
+    const {
+      current: [mine],
+    } = await myPerjadin(caller);
     const acquittal = await perjadinAcquittal(caller, trip.id);
     if (!mine || !acquittal) throw new Error("expected the trip on both reads");
 
@@ -198,13 +306,15 @@ describe("myUpcomingPerjadin carries the same money as the acquittal", () => {
       endsOn: daysFromToday(4),
     });
 
-    const [mine] = await myUpcomingPerjadin(caller);
+    const {
+      current: [mine],
+    } = await myPerjadin(caller);
     expect(mine?.id).toBe(trip.id);
     expect(mine?.drawnDownIdr).toBe(0);
   });
 });
 
-describe("myUpcomingPerjadin lists the trip's members", () => {
+describe("myPerjadin lists the trip's members", () => {
   beforeEach(resetDatabase);
 
   it("returns staff, pengajar and pimpinan in name order with a combined total", async () => {
@@ -238,7 +348,9 @@ describe("myUpcomingPerjadin lists the trip's members", () => {
       { perjadinId: trip.id, name: "Dr. Agus" },
     ]);
 
-    const [mine] = await myUpcomingPerjadin(caller);
+    const {
+      current: [mine],
+    } = await myPerjadin(caller);
     if (!mine) throw new Error("expected the trip");
 
     // Staff in name order; the caller is flagged PIC, the extra Staff is not.
@@ -253,7 +365,7 @@ describe("myUpcomingPerjadin lists the trip's members", () => {
   });
 });
 
-describe("myUpcomingPerjadin builds the visited-Schools tree", () => {
+describe("myPerjadin builds the visited-Schools tree", () => {
   beforeEach(resetDatabase);
 
   it("groups offline Sessions by School and includes a cancelled one", async () => {
@@ -314,7 +426,9 @@ describe("myUpcomingPerjadin builds the visited-Schools tree", () => {
       perjadinId: trip.id,
     });
 
-    const [mine] = await myUpcomingPerjadin(caller);
+    const {
+      current: [mine],
+    } = await myPerjadin(caller);
     if (!mine) throw new Error("expected the trip");
 
     expect(mine.schools).toEqual([
@@ -339,10 +453,10 @@ describe("myUpcomingPerjadin builds the visited-Schools tree", () => {
   });
 });
 
-describe("myUpcomingPerjadin derives the Preparation Checklist", () => {
+describe("myPerjadin derives the Preparation Checklist", () => {
   beforeEach(resetDatabase);
 
-  it("returns the fixed seven, marking only the ticked ones and dropping orphans", async () => {
+  it("returns the fixed six, marking only the ticked ones and dropping orphans", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -352,27 +466,31 @@ describe("myUpcomingPerjadin derives the Preparation Checklist", () => {
       startsOn: daysFromToday(1),
       endsOn: daysFromToday(4),
     });
-    // Two fixed items ticked, plus a `dosen:` orphan the old model left behind — the orphan matches
-    // no fixed key, so it has no item here and never shows as checked.
+    // Two fixed items ticked, plus two orphans older models left behind — a `dosen:` tick and one on
+    // the ticket key ADR-0041 retired. Neither matches a fixed key, so neither has an item here.
     await db.insert(schema.perjadinPreparationItem).values([
       { perjadinId: trip.id, itemKey: "sk_perjalanan", checkedBy: caller.id },
+      { perjadinId: trip.id, itemKey: "tiket_pp", checkedBy: caller.id },
       { perjadinId: trip.id, itemKey: "tiket_keberangkatan", checkedBy: caller.id },
       { perjadinId: trip.id, itemKey: "dosen:someone", checkedBy: caller.id },
     ]);
 
-    const [mine] = await myUpcomingPerjadin(caller);
+    const {
+      current: [mine],
+    } = await myPerjadin(caller);
     if (!mine) throw new Error("expected the trip");
 
-    // The card derives its `x/N` pill from this: N is the length (always seven), x the checked count.
-    expect(mine.preparation).toHaveLength(7);
+    // The card derives its `x/N` pill from this: N is the length (always six), x the checked count.
+    expect(mine.preparation).toHaveLength(6);
     const checked = mine.preparation.filter((item) => item.checked).map((item) => item.itemKey);
-    expect(checked.sort()).toEqual(["sk_perjalanan", "tiket_keberangkatan"]);
-    // Every other fixed item comes back unchecked; the `dosen:` orphan never appears at all.
-    expect(mine.preparation.filter((item) => !item.checked)).toHaveLength(5);
+    expect(checked.sort()).toEqual(["sk_perjalanan", "tiket_pp"]);
+    // Every other fixed item comes back unchecked; the orphans never appear at all.
+    expect(mine.preparation.filter((item) => !item.checked)).toHaveLength(4);
     expect(mine.preparation.some((item) => item.itemKey.startsWith("dosen:"))).toBe(false);
+    expect(mine.preparation.some((item) => item.itemKey === "tiket_keberangkatan")).toBe(false);
   });
 
-  it("gives a trip with no ticks all seven items unchecked", async () => {
+  it("gives a trip with no ticks all six items unchecked", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -383,9 +501,11 @@ describe("myUpcomingPerjadin derives the Preparation Checklist", () => {
       endsOn: daysFromToday(4),
     });
 
-    const [mine] = await myUpcomingPerjadin(caller);
+    const {
+      current: [mine],
+    } = await myPerjadin(caller);
     expect(mine?.id).toBe(trip.id);
-    expect(mine?.preparation).toHaveLength(7);
+    expect(mine?.preparation).toHaveLength(6);
     expect(mine?.preparation.every((item) => !item.checked)).toBe(true);
   });
 });

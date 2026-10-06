@@ -1,15 +1,15 @@
 import { EditAdvance } from "-/components/perjadin-advance";
 import { PerjadinDates } from "-/components/perjadin-dates";
+import { PerjadinDokumenList } from "-/components/perjadin-dokumen-list";
 import { PerjadinFeedbackTokenDialog } from "-/components/perjadin-feedback-token";
 import { PerjadinGroup } from "-/components/perjadin-group";
-import { PerjadinLogistics } from "-/components/perjadin-logistics";
 import { PerjadinPimpinan } from "-/components/perjadin-pimpinan";
 import { PerjadinPreparation } from "-/components/perjadin-preparation";
 import { PerjadinSessions } from "-/components/perjadin-sessions";
 import { PerjadinTeachingTeam } from "-/components/perjadin-teaching-team";
 import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
-import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
+import { perjadinAcquittal, perjadinDetail, perjadinDokumen } from "@sugt/db/queries";
 import { formatRupiah } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import type { Metadata } from "next";
@@ -54,6 +54,9 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
   // Fetched for any signed-in Person: money reads are open now (ADR-0026, #180), so a Pimpinan
   // sees the money strip too. Writing money stays Staff-only, enforced in each Server Action.
   const acquittal = await perjadinAcquittal(person, id);
+  // The trip's attendance sheets (#398): read-only here, for everyone who can see the page. Upload
+  // and Hapus live on the `/pendamping` card's Dokumen dialog.
+  const dokumen = await perjadinDokumen(person, id);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -68,13 +71,15 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
           {shortenKabupaten(trip.destination)}
         </h1>
         {/*
-          The date range, read-only: it is the departure→return span now (ADR-0021), so it is
-          corrected by editing the legs in the Perjalanan section below, not here.
+          The date range, typed (ADR-0041): Staff correct it here with Ubah tanggal; a Pimpinan
+          reads it.
         */}
         <div className="mt-0.5">
           <PerjadinDates
+            perjadinId={trip.id}
             startsOn={trip.startsOn}
             endsOn={trip.endsOn}
+            canEdit={person.role === "Staff"}
           />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
@@ -162,13 +167,6 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         canEdit={person.role === "Staff"}
       />
 
-      <PerjadinLogistics
-        perjadinId={trip.id}
-        departure={trip.departure}
-        returnLeg={trip.return}
-        canEdit={person.role === "Staff"}
-      />
-
       {/*
         The Preparation Checklist — an internal Staff monitoring aid. Shown to everyone (it carries
         no money), interactive for Staff, whom `togglePreparationItem` re-checks.
@@ -181,7 +179,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
 
       {/*
         The Evaluation is now filed through a shared link, not a signed-in dialog (ADR-0024): the
-        people best placed to judge the trip include the name-based Pengajar and the record-only
+        people best placed to judge the trip include the name-based Narasumber and the record-only
         Pimpinan, neither of whom can sign in. Any signed-in Person issues the QR/link here and hands
         it out; the filer self-declares a Role and Name on `/ep/{token}`. So the old Group-member
         gate is gone — this block shows for everyone who can see the page.
@@ -189,7 +187,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
       <div className="border-b border-border px-7 py-5">
         <h2 className="font-heading text-sm font-medium">Evaluasi Perjadin</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Bagikan tautan agar Pengajar, Pendamping dan Pimpinan dapat menilai perjalanannya —
+          Bagikan tautan agar Narasumber, Pendamping dan Pimpinan dapat menilai perjalanannya —
           penginapan, transportasi, konsumsi dan ketepatan waktu — tanpa perlu masuk.
         </p>
         <div className="mt-3">
@@ -206,6 +204,14 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         endsOn={trip.endsOn}
         canEdit={person.role === "Staff"}
       />
+
+      <section className="border-t border-border px-7 py-5">
+        <h2 className="font-heading text-sm font-medium">Dokumen</h2>
+        <p className="mt-1 mb-3 text-sm text-muted-foreground">
+          Daftar hadir perjalanan ini. Unggah dan hapus dari kartu perjalanan di Pendamping.
+        </p>
+        <PerjadinDokumenList documents={dokumen?.documents ?? []} />
+      </section>
     </div>
   );
 }

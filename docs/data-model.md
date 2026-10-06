@@ -542,7 +542,7 @@ backfill. So it is nullable with only a range CHECK (`ends_at is null or ends_at
 `starts_at`. Offline rows leave it null and pass the CHECK.
 
 **The two `pengajar_*` columns are online-required, enforced both ways (#318).** An online Session
-carries `pengajar_siswa_name` and `pengajar_gtk_ms_name` — one Pengajar for the Siswa cohort and one
+carries `pengajar_siswa_name` and `pengajar_gtk_ms_name` — one Narasumber for the Siswa cohort and one
 for GTK-MS, one free-text name each ([ADR-0036](./adr/0036-online-sessions-carry-two-cohort-named-pengajar-and-are-recorded-delivered.md),
 superseding ADR-0022's `session_teacher_name` list). They are nullable in the column type so an
 _offline_ row leaves them null, but — unlike `ends_at` — the presence rule is a **NOT-NULL-for-online
@@ -550,7 +550,7 @@ CHECK**, `mode <> 'online' or (pengajar_siswa_name is not null and pengajar_gtk_
 because #318 wiped the (empty) online data, so the clean implication holds with nothing to migrate
 against. The old `participant_type` column and its `session_participant_type_check` are **dropped**:
 an online Session no longer carries a single-cohort "Peserta" — both cohorts are always taught, one
-Pengajar each. (`transaction` and `assessment_completion` keep their own `participant_type`; only the
+Narasumber each. (`transaction` and `assessment_completion` keep their own `participant_type`; only the
 Session's is gone.)
 
 **An online Session is recorded `delivered` in one step (#318).** A third-party LMS runs online
@@ -570,8 +570,8 @@ stopped joining `province` for the zone and treat it as the constant WIB.
 
 **An arranged offline Session's `held_on` lies inside its Perjadin's `starts_on`–`ends_on`.**
 Nothing holds that — not this schema, and until now not any document either. It is scoped to
-_arranged_ deliberately: a trip's range is correctable (it is the departure→return span now,
-[ADR-0021](./adr/0021-perjadin-date-range-is-departure-and-return.md)), and a resize that would
+_arranged_ deliberately: a trip's range is correctable (two typed dates,
+[ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md)), and a resize that would
 strand an arranged Session is refused rather than allowed, while delivered and cancelled ones stay
 where they are and may legitimately sit outside the window their Perjadin now claims. A CHECK cannot
 carry it, because a CHECK sees only the row it is written on and the date range sits on `perjadin`;
@@ -587,7 +587,7 @@ against `TOTAL_SESSIONS_PER_SCHOOL`, a constant that already lives in `@sugt/dom
 **Marking a Session delivered is status only, for both modes** (#140, #152, #153) — and for online it
 is now **legacy** (#318). An online Session is born `delivered` (above), so it never passes through
 "Tandai terlaksana"; that path survives for offline Sessions and any pre-#318 online row. When it does
-run it writes nothing but `session.status = 'delivered'` and names nobody. Online Pengajar are the two
+run it writes nothing but `session.status = 'delivered'` and names nobody. Online Narasumber are the two
 cohort-named columns on the Session, edited through the Session's own field dialog on
 `/sesi-daring/[id]`, and a mis-recorded online Session is **hard-deleted** (`deleteOnlineSession`)
 rather than corrected name by name or cancelled — the correction path that replaced the old
@@ -616,7 +616,7 @@ offline through `session_teaching_team` (below).
 **`session_teacher_name` was in turn dropped in #318.** ADR-0022's online model was a variable-length
 side table of session-scoped names; [ADR-0036](./adr/0036-online-sessions-carry-two-cohort-named-pengajar-and-are-recorded-delivered.md)
 replaced it with **two cohort-named columns on the `session` row** — `pengajar_siswa_name` and
-`pengajar_gtk_ms_name`, one Pengajar for the Siswa cohort and one for GTK-MS, one free-text name each,
+`pengajar_gtk_ms_name`, one Narasumber for the Siswa cohort and one for GTK-MS, one free-text name each,
 both required for an online row (the NOT-NULL-for-online CHECK above). An online Session is taught by
 exactly one professor per cohort, so the row-per-name shape held nothing the columns do not, and the
 app-layer `MAX_TEACHING_TEAM_PER_ONLINE_SESSION` cap that bounded the list is **gone** — the number is
@@ -956,7 +956,7 @@ create table perjadin_feedback_token (
 create table perjadin_evaluation (
   id             uuid primary key default gen_random_uuid(),
   perjadin_id    uuid not null references perjadin (id) on delete cascade,
-  filed_by_role  text not null check (filed_by_role in ('Pengajar', 'Pendamping', 'Pimpinan')),
+  filed_by_role  text not null check (filed_by_role in ('Narasumber', 'Pendamping', 'Pimpinan')),
   filed_by_name  text not null,
 
   lodging      smallint          check (lodging     between 1 and 10),   -- nullable; see below
@@ -995,7 +995,7 @@ room. Any signed-in Person may issue it; a Perjadin is a real trip once it exist
 cancelled state to bar (as the Session token has).
 
 **`filed_by_role` and `filed_by_name` are self-declared and untrusted.** There is no
-`filed_by_person_id` and no foreign key: the filer may be a name-based Pengajar or a record-only
+`filed_by_person_id` and no foreign key: the filer may be a name-based Narasumber or a record-only
 Pimpinan, neither of whom has a `person` row to point at, so identity is a Role from a fixed three
 (CHECKed character for character, `PERJADIN_EVALUATION_ROLES`) plus a free-text name referenced by
 nothing — exactly as `participant_feedback.name` is. The one-per-filer `unique` is gone with the
@@ -1046,7 +1046,7 @@ explain why the gate lived in the application rather than in a composite foreign
 evaluation on the trip. Both were tested and both were wrong.
 
 That reasoning is now moot, because the filer is not a `person` any more. The people best placed
-to judge a trip include the name-based **Pengajar** and the record-only **Pimpinan**, neither of
+to judge a trip include the name-based **Narasumber** and the record-only **Pimpinan**, neither of
 whom signs in — so the signed-in gate excluded exactly the voices the form wanted. Identity is now
 **self-declared and untrusted** (ADR-0024): `filed_by_role` is one of three CHECKed values and
 `filed_by_name` is free text, the same model as `participant_feedback.name`. There is nothing to
@@ -1161,13 +1161,6 @@ create table perjadin (
 
   advance_idr                 bigint not null check (advance_idr >= 0),
 
-  departure_at                timestamp,
-  departure_zone              text check (departure_zone in ('WIB', 'WITA', 'WIT')),
-  departure_mode              text check (departure_mode in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')),
-  return_at                   timestamp,
-  return_zone                 text check (return_zone in ('WIB', 'WITA', 'WIT')),
-  return_mode                 text check (return_mode in ('Pesawat', 'Kereta', 'Travel', 'Mobil Dalam Kota')),
-
   pic_person_id               uuid not null,
   pic_role                    text not null default 'Staff' check (pic_role = 'Staff'),
 
@@ -1184,18 +1177,15 @@ create table perjadin (
 );
 ```
 
-**The six travel-logistics columns are nullable and store wall-clock, not instants**
-([#106](https://github.com/mafiefa02/sugt/issues/106)). Nullable so the Perjadins that predate
-them stay valid — no backfill, no invented travel — while the plan form requires all six on a new
-trip. Each `*_at` is a `timestamp` **without** a time zone: a date and a wall-clock time, carrying
-its zone in a separate `*_zone` tag exactly as `session.starts_at` does, because the Surat Tugas
-says "07:30 WIB", not a UTC moment. `departure_zone` is always `WIB` (the origin is Bandung) and
-`return_zone` is derived at insert from the Province of the last School visited — both snapshots
-set server-side, never recomputed on read, so an edited Sub-Cluster cannot rewrite an issued Surat
-Tugas. The zone columns still admit all three `TIME_ZONES` because the detail page's edit surface
-can correct a return zone; `*_mode` CHECKs `TRANSPORT_MODES`. Both value lists live in
-`@sugt/domain` and are written out character for character here, for the reason
-`transaction_category_check` gives.
+**`starts_on` and `ends_on` are typed — Tanggal mulai and Tanggal selesai — and a Perjadin carries
+no travel legs** ([ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md),
+superseding [ADR-0021](./adr/0021-perjadin-date-range-is-departure-and-return.md)). The six leg
+columns (`departure_at`/`_zone`/`_mode`, `return_at`/`_zone`/`_mode`) and their four CHECKs were
+dropped, with their data: many trips are done PP, out to a nearby Sub-Cluster and back, sometimes
+daily, so one departure and one return with a time and a mode described a journey that did not
+happen. The plan form writes both dates directly; `ends_on >= starts_on` is the one rule the
+database holds about them, and planning and the date edit both refuse an inverted range
+(`ends-before-starts`) before it gets that far, same day allowed.
 
 A Group also carries **extra Staff beyond the PIC** — a coordinator, a treasurer, a documentarian —
 as ordinary `group_member` rows (`role = 'Staff'`, `stream = null`), the same shape the PIC's row
@@ -1361,8 +1351,8 @@ create table perjadin_preparation_item (
 Preparation Checklist is an internal-monitoring aid — Staff hand-tick a pre-departure to-do list,
 and it gates nothing. The _set of items that exists_ is **not** a table: since the amendment to
 [ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md) it is a **flat
-fixed seven** — `sk_perjalanan`, `tiket_keberangkatan`, `tiket_kepulangan`, `booking_penginapan`,
-`transportasi_lokal`, `staff`, and `pengajar_lengkap` ("Pengajar sudah lengkap") — assembled in the
+fixed six** — `sk_perjalanan`, `tiket_pp` ("Tiket / transportasi PP"), `booking_penginapan`,
+`transportasi_lokal`, `staff`, and `pengajar_lengkap` ("Narasumber sudah lengkap") — assembled in the
 query layer at read time with **no per-member part**, so it no longer reads the Group at all. A row
 here means one of those is ticked; un-ticking is a `DELETE`, so there is no "unchecked" row to keep.
 
@@ -1375,6 +1365,9 @@ team is complete. That `DELETE` lives inside the teacher-mutation queries
 (`queries/perjadin-teachers.ts`), which is what makes it impossible to change the team without
 clearing the box. No other item is ever touched automatically. `dosen:` ticks the old model left in
 the table are **orphans**: no item derives them, so they are silently ignored and never cleaned up.
+So are ticks on `tiket_keberangkatan` and `tiket_kepulangan`, the two ticket boxes
+[ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md) folded into
+`tiket_pp` when the travel legs went — no data migration.
 
 The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent — the write
 upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than duplicating a row.
@@ -1382,10 +1375,82 @@ upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than d
 is a single box** — "confirmed with the Pendamping" (the on-Perjadin label for the DITSAMA role,
 [#141](https://github.com/mafiefa02/sugt/issues/141)), not one row per member; the stored key stays
 `staff`. `N` is therefore the
-constant **7**, and the Perjadin list's Persiapan `x/N` pill counts the ticks whose key is one of
-the seven fixed items.
+constant **6**, and every count — the Perjadin list's Persiapan `x/N` pill, the trip card's, the
+dialog's — is taken off the derived six, so an orphan can never make one read 7/6.
 
 ---
+
+### Perjadin Documents
+
+```sql
+create table perjadin_document (
+  id                     uuid primary key default gen_random_uuid(),
+  perjadin_id            uuid not null references perjadin (id) on delete cascade,
+  kind                   text not null check (kind in
+                           ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber',
+                            'Daftar Hadir Pendamping')),
+  document_date          date not null,
+  school_id              uuid references school (id),
+  participant_type       text check (participant_type in ('Siswa', 'GTK-MS')),
+  starts_at              time,
+  ends_at                time,
+  drive_file_id          text not null unique,
+  content_type           text not null check (content_type = 'application/pdf'),
+  byte_size              integer not null,
+  uploaded_by_person_id  uuid not null references person (id),
+  uploaded_at            timestamptz not null default now(),
+  drive_synced_at        timestamptz,
+  drive_sync_failed_at   timestamptz,
+  check ((kind = 'Daftar Hadir Peserta') = (school_id is not null and participant_type is not null
+                                            and starts_at is not null and ends_at is not null)),
+  check (kind = 'Daftar Hadir Peserta' or (school_id is null and participant_type is null
+                                           and starts_at is null and ends_at is null)),
+  check (ends_at > starts_at)
+);
+
+create table perjadin_document_folder (
+  perjadin_id      uuid not null references perjadin (id) on delete cascade,
+  kind             text not null check (kind in (…the three…)),
+  drive_folder_id  text not null,
+  primary key (perjadin_id, kind)
+);
+
+alter table perjadin add column drive_dokumen_folder_id text;
+```
+
+**A Perjadin's attendance sheets, one PDF each** (#397,
+[ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)). `kind` is
+character for character `PERJADIN_DOCUMENT_KINDS`, and `participant_type` is
+`PERJADIN_DOCUMENT_PARTICIPANT_TYPES`, a const of its own as `PRETEST_PARTICIPANT_TYPES` is.
+
+**The database holds which fields a sheet carries.** A Daftar Hadir Peserta, and only it, has a
+School, a cohort and a session's local start and end; the other two kinds have none of the four.
+The two CHECKs hold that both ways round, and a third holds `ends_at` after `starts_at`. The
+content type is pinned to PDF.
+
+**The application holds the rest**, in `recordPerjadinDocument`: `document_date` lies inside the
+trip, and a Peserta sheet's School is in the Perjadin's Sub-Cluster, refused as
+`school-outside-sub-cluster` the way offline Sessions refuse it. That second rule cannot be a foreign
+key, for the reason Sessions give: Sub-Clusters are editable (ADR-0016). There is **no duplicate
+rule**: two sheets of one kind and date are two rows, told apart in Drive by `D-{doc8}`.
+
+**The row and its Activity Log entry are written in one transaction**, and the row lands with
+`drive_synced_at` null; the reconcile sets it once the file is named, filed and shared. `id` is
+generated before the insert, because the file's name carries it.
+
+**Folders.** `perjadin.drive_dokumen_folder_id` is the trip's folder under `Dokumen/Pelaksanaan
+Offline`, and `perjadin_document_folder` holds its three kind folders, each made on first use. Both
+are claimed by compare-and-set: the first by `where drive_dokumen_folder_id is null`, the second by
+the primary key, `on conflict do nothing`. A caller that lost trashes its own folder and uses the
+winner's.
+
+**Hapus trashes the file first, then deletes the row** (#398). Its file is public by link, so a row
+must never vanish while the file stays live: the file goes to the Drive trash, and only then are the
+row deleted and a `document_deleted` Log entry written, in one transaction. The entry is a snapshot
+of the row's fields, since the row is gone after it. A file already in the trash, or gone, counts as
+trashed, so if the delete fails after the trash, the row stays, pointing at a trashed file, and
+Hapus again finishes it. Hapus is refused while the connection is not usable. An emptied kind folder
+is left in place, and nothing is ever edited: a wrong upload is a Hapus and a new upload.
 
 ## Money
 
@@ -1417,15 +1482,13 @@ create table transaction (
 create table transaction_evidence (
   id                    uuid primary key default gen_random_uuid(),
   transaction_id        uuid not null references transaction (id) on delete cascade,
-  storage_path          text unique,
-  drive_file_id         text unique,
-  content_type          text not null,
+  drive_file_id         text not null unique,
+  content_type          text not null
+                        check (content_type in
+                          ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')),
   byte_size             bigint not null,
   uploaded_by_person_id uuid not null references person (id),
-  uploaded_at           timestamptz not null default now(),
-  check ((storage_path is null) <> (drive_file_id is null)),
-  check (drive_file_id is null
-         or content_type in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp'))
+  uploaded_at           timestamptz not null default now()
 );
 ```
 
@@ -1486,14 +1549,16 @@ more than five, and `attachTransactionEvidence` refuses a batch that would take 
 counting under a lock on the parent row. There is no CHECK, because the shared database may
 already hold lines with none or more, and those are grandfathered.
 
-**A receipt lives in exactly one place, and the database holds that** (ADR-0040). Receipts are
-moving to the company's Google Drive. `drive_file_id` is the file's Drive id, for every receipt
-recorded since — by Catat transaksi or by a line's own "Unggah bukti". `storage_path` is a legacy
-object key in the private Supabase bucket, for receipts from before Drive. One
-CHECK makes exactly one of the two set; another pins a Drive receipt's `content_type` to the four
-types the server sniffs from its first bytes. `unique` on each means a file cannot be attached
-twice. Both are ids or keys, never paths, so a folder renamed or moved by hand in Drive breaks
-nothing.
+**Every receipt is a file in the company's Google Drive** (ADR-0040). `drive_file_id` is the
+file's Drive id, written by Catat transaksi or by a line's own "Unggah bukti", and `not null`. A
+CHECK pins `content_type` to the four types the server sniffs from the first bytes. `unique` means
+a file cannot be attached twice. It is an id, never a path, so a folder renamed or moved by hand in
+Drive breaks nothing.
+
+**Receipts were once in a private Supabase bucket**, under a `storage_path` column. They were
+moved to Drive by a one-off script (#377, run in #378), and migration 0036 dropped the column
+(#379). That migration refuses to run while any row still lacks a `drive_file_id`, so it can never
+drop the only pointer to a receipt the script had not moved.
 
 **`drive_folder_id` on `transaction` and on `perjadin` name the line's and the trip's Drive
 folders**, and `transaction.drive_synced_at` records when the reconcile last finished the line.
@@ -1505,9 +1570,9 @@ is reconciled. No row lock is ever held across a call to Google; a caller that l
 trashes its own folder and uses the winner's.
 
 **"Unsynced" means `drive_synced_at is null` and at least one evidence row with a
-`drive_file_id`.** It is derived, not stored. A legacy line, or a line with no receipt, is never
-unsynced. A reconcile that fails after the commit leaves the line recorded and unsynced, and its
-files wait in private `_staging` until the next reconcile finishes it. A reconcile marks a line
+`drive_file_id`** — that is, at least one receipt. It is derived, not stored. A line with no
+receipt is never unsynced. A reconcile that fails after the commit leaves the line recorded and
+unsynced, and its files wait in private `_staging` until the next reconcile finishes it. A reconcile marks a line
 synced only for the receipts it read. If a newer receipt was committed while it ran, the mark does
 not land, so that receipt stays owed rather than stranded under a line that claims to be done.
 
@@ -1526,6 +1591,70 @@ folder: a new line's folder is private until it is shared last, but an existing 
 usually **already public**. A file moved in before the count was settled could become a sixth
 receipt anyone can open that no row records. So the count and the rows come first, under the lock,
 and the files follow.
+
+### The Activity Log
+
+```sql
+create table activity_log (
+  id               uuid primary key default gen_random_uuid(),
+  occurred_at      timestamptz not null default now(),
+  actor_person_id  uuid not null references person (id),
+  actor_email      text not null,
+  perjadin_id      uuid not null references perjadin (id) on delete cascade,
+  action           text not null check (action in (
+                     'advance_set', 'advance_changed', 'transaction_recorded',
+                     'evidence_uploaded', 'report_filed',
+                     'document_uploaded', 'document_deleted')),
+  details          jsonb not null,
+  search_text      text not null,
+  backfilled       boolean not null default false
+);
+
+create index activity_log_occurred_at_id_idx on activity_log (occurred_at desc, id desc);
+```
+
+**One row per act on a Perjadin's money, receipts, documents or report** (#395), read only by an
+Administrator on `/log`. The `action` values are character for character `ACTIVITY_LOG_ACTIONS` in
+`packages/domain/src/index.ts`. The two `document_*` values went into the CHECK with the rest, so the
+Dokumen uploads and Hapus needed no CHECK migration.
+
+**Each entry is written in the same database transaction as the change it records**, so a refused
+or failed write logs nothing. Five writes log today, each through `logActivity` in
+`queries/activity-log.ts`:
+
+| Write                       | `action`               | `details`                                                                         |
+| --------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| `planPerjadin`              | `advance_set`          | `{ amountIdr }`                                                                   |
+| `updatePerjadinAdvance`     | `advance_changed`      | `{ fromIdr, toIdr }`; the old value is read under `for update`; no change, no row |
+| `recordTransaction`         | `transaction_recorded` | `{ transactionId, category, amountIdr, participantType, spentOn, receiptCount }`  |
+| `attachTransactionEvidence` | `evidence_uploaded`    | `{ transactionId, category, amountIdr, spentOn, added, total }`                   |
+| `filePerjadinReport`        | `report_filed`         | `{ transactionCount, totalIdr }`, every category, as the acquittal totals         |
+
+**`actor_email` is a copy**, taken when the act happens, so the row stays true if the Person's email
+later changes. **`search_text`** is the Aksi and Rincian text `/log` shows, lower-cased once at
+write time, so the page's search runs in SQL over what the screen says. Nothing in the app updates
+or deletes a row.
+
+**Migration 0039 backfills what the existing rows can tell.** `transaction` records who created a
+line and when, and `transaction_evidence` who uploaded each receipt and when, so the migration
+derives, with `backfilled = true`:
+
+- one `transaction_recorded` per existing line, at its `created_at`, by its creator. Its
+  `receiptCount` is the receipts uploaded with it — those whose `uploaded_at` equals the line's
+  `created_at`, since `recordTransaction` inserts both in one database transaction and so with one
+  `now()`;
+- one `evidence_uploaded` per later batch: the remaining receipts grouped by line, uploader and
+  `uploaded_at`, for the same reason.
+
+The backfilled `actor_email` is the Person's email at migration time, the best available. **Uang
+Perjalanan and Laporan history cannot be recovered**: no column records who set an Advance or filed
+a report, so those start at the migration. `/log` marks a backfilled row "(dari data lama)".
+
+**The Log stays small** — a few thousand rows over the whole Programme — so `/log` reads one page of
+50 plus one `count(*)`, and the index above serves "newest 50". Its search is a plain substring
+match with no index: `ilike` on the email, the destination and the PIC's name, `like` on the
+already lower-cased `search_text`. If search over a much larger table ever becomes slow, a `pg_trgm` trigram index on the
+searched text is the known fix.
 
 ---
 
@@ -1627,14 +1756,14 @@ says publishing is Staff-only; without this it would be the one such rule held b
 It also means a Story's author inherits write-once `role`, which is the correct behaviour: the
 person who wrote it was Staff when they wrote it.
 
-**`story_photo` mirrors `transaction_evidence`** column for column, deliberately: same
-`storage_path unique`, same `content_type`/`byte_size`, same uploader and timestamp. One
-upload pattern to build and one to learn. `uploaded_by_person_id` references `person` alone
-rather than the pair, exactly as `transaction_evidence` does — uploading is not a role-gated
-act, and the Story it hangs off already carries the Staff constraint. Keys are
-`story/{story_id}/{uuid}` in `public-media`, mirroring the `receipts` convention. **Dropping
-`position` makes that mirror tighter**, and the mirror is worth keeping true: a caption is now
-the only column one table has and the other does not.
+**`story_photo` was built to mirror `transaction_evidence`** column for column: `storage_path
+unique`, `content_type`/`byte_size`, uploader and timestamp, so there was one upload pattern to
+build and one to learn. Receipts have since moved to Google Drive (ADR-0040), so the two now
+differ in where the file lives — a Drive id there, a `storage_path` here — and a Story photograph
+is the app's only upload to Supabase Storage. `uploaded_by_person_id` references `person` alone
+rather than the pair, exactly as `transaction_evidence` does — uploading is not a role-gated act,
+and the Story it hangs off already carries the Staff constraint. Keys are
+`story/{story_id}/{uuid}` in `public-media`.
 
 **There is no ordering.** The gallery renders by `uploaded_at`, tie-broken by `id`, and Staff
 cannot rearrange it without deleting and re-uploading — a cost named and accepted rather than
@@ -1677,47 +1806,49 @@ the line being written, not a separate record the action waits on. Filing gains 
 condition: `filePerjadinReport`'s evidence check is unchanged, and now only ever fires on a line
 recorded before the rule.
 
-The two buckets stay exactly as split below. A Story's photographs are public by intent, which
-is the whole difference from a receipt.
+A Story's photographs are public by intent, which is the whole difference from a receipt — see
+[Object storage](#object-storage).
 
 ## Object storage
 
-**Receipts are moving out of Supabase Storage to the company's Google Drive**
-([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Catat
-transaksi and a line's own "Unggah bukti" both upload to Drive, and nothing writes to the
-`receipts` bucket any more. It holds legacy receipts alone, until they are migrated and the bucket
-is deleted (#377, #379). The Drive side is the connection below and the `drive_*` columns in
-[Money](#money).
+**Receipts and Perjadin Documents are not in Supabase Storage.** Receipts live in the company's
+Google Drive
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)): Catat
+transaksi and a line's own "Unggah bukti" both upload there, and the database holds each file's
+Drive id ([Money](#money)). Perjadin Documents are beside them, under `Dokumen/`
+([ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md),
+[Perjadin Documents](#perjadin-documents)):
 
-**Migrating the legacy receipts** is a local, resumable script,
-`pnpm --filter @sugt/internal drive:migrate-receipts --as <administrator email>`
-(`apps/internal/scripts/drive-migrate-receipts.ts`). It reads only the shell's environment, so
-export the target's variables first. It opens by printing which database and Supabase project it is
-pointed at. Run `--dry-run` first, which writes nothing anywhere. Then run it for real; it appends
-to a report named for the database host, the old key beside each new Drive id. Then run `--verify`,
-which checks every object left in the bucket against that report before the bucket may be deleted.
-`--replace <evidenceId>=<file>` supplies a converted file for one the script could not take.
+```
+SUGT ITB 2026 Internal App Object Storage/
+├── Bukti Transaksi/Pelaksanaan Offline/{destination} · {starts_on}/…
+└── Dokumen/Pelaksanaan Offline/{destination} · {starts_on}/
+    ├── Daftar Hadir Peserta/{date} · {school} · {Siswa|GTK-MS} · Daftar Hadir Peserta · D-{doc8}.pdf
+    ├── Daftar Hadir Pendamping/{date} · Daftar Hadir Pendamping · D-{doc8}.pdf
+    └── Daftar Hadir Narasumber/{date} · Daftar Hadir Narasumber · D-{doc8}.pdf
+```
 
-Two buckets, and the split is doing real work:
+The Drive side is the connection below and the `drive_*` columns. Every
+upload is at most **50 MB** per file (`MAX_UPLOAD_BYTES`, ADR-0040 as amended by #394), checked as
+the declared size when the upload session opens and again on the size Drive reports back.
 
-| Bucket         | Visibility | Holds                                                            |
-| -------------- | ---------- | ---------------------------------------------------------------- |
-| `receipts`     | Private    | Transaction evidence. Keys: an opaque `{uuid}`, and nothing else |
-| `public-media` | Public     | Published Story photographs. Keys: `story/{story_id}/{uuid}`     |
+One bucket:
 
-**A receipt key spells nothing out, and that is a change from what this table said.** It read
-`perjadin/{perjadin_id}/{transaction_id}/{uuid}` until the acquittal was built. A private bucket
-is read through a signed URL, and a signed URL carries its object path inside the JWT it is
-signed with, so a structured key puts the trip's identifiers into every link the acquittal screen
-renders. A bare UUID names nothing.
+| Bucket         | Visibility | Holds                                                        |
+| -------------- | ---------- | ------------------------------------------------------------ |
+| `public-media` | Public     | Published Story photographs. Keys: `story/{story_id}/{uuid}` |
 
-What that gives up is the prefix check `story_photo` relies on — a Story photograph is trusted
-only under `story/{story_id}/`, which is what stops one Story's photograph being attached to
-another. Here it costs nothing: `receipts` holds receipts only, every one is readable by every
-Staff member already, and `storage_path` is `unique`, so there is no object a Staff caller could
-reach by forging a key that they could not reach by asking honestly. The boundary that does the
-work instead is the pair — a line item is checked against its Perjadin before evidence attaches
-to it.
+**A receipt is reached by a public link, and that is the decision, not a leak.** The external
+audit needs a spreadsheet with an "anyone with the link can view" link per transaction, so each
+transaction's folder in Drive is shared that way (ADR-0040), and the acquittal links straight to
+it and to each file. The app renders and signs nothing. What stays private is everything above a
+transaction folder: the root, `_staging` and each Perjadin's folder. **A Perjadin Document is shared
+file by file**, so all of `Dokumen/`'s folders stay private (ADR-0042).
+
+**Historical: the `receipts` bucket.** Until #379 a second, private bucket held receipts, under
+opaque `{uuid}` keys, read through short-lived URLs the app signed after checking Staff. A key
+spelled nothing out because a signed URL carries its object path inside its JWT. Those receipts
+were moved to Drive (#377, #378) and the bucket is deleted by hand (#380).
 
 **`public-media` is needed at provisioning time, not at some later one.** This row read
 _"Published photographs (a later release)"_ until
@@ -1734,15 +1865,15 @@ the same way the package split holds it in code: a bucket boundary is not a poli
 get wrong.
 
 Because sign-in is Better Auth rather than Supabase Auth, storage policies cannot see who is
-asking. Receipt access is therefore a signed URL minted by the internal app **after** it has
-checked the caller is Staff. That check is the only thing standing between Teaching Team and a
-receipt, so it belongs at one choke point, not at each call site.
+asking. A Story photograph is therefore uploaded through a signed upload URL the internal app
+mints **after** it has checked the caller is Staff, with the service-role key, which stays on the
+server.
 
 ### The company Google Drive connection
 
-Receipts are moving to the company's Google Drive
-([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)). Nothing
-uploads there yet; what exists is the connection an Administrator makes on `/pengaturan` (#372).
+Every receipt is uploaded to the company's Google Drive
+([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md)) through the
+connection an Administrator makes on `/pengaturan` (#372).
 
 ```sql
 create table drive_connection (
@@ -1756,6 +1887,8 @@ create table drive_connection (
   bukti_transaksi_folder_id      text,
   pelaksanaan_offline_folder_id  text,
   readme_file_id                 text,
+  dokumen_folder_id              text,
+  dokumen_pelaksanaan_offline_folder_id text,
   folder_problem                 text check (folder_problem in
                                    ('root-trashed', 'root-missing',
                                     'staging-trashed', 'staging-missing',
@@ -1779,13 +1912,23 @@ environment, never here, so the table alone yields no token. `@sugt/internal` en
 and talks to Google. It marks the row `broken` on the first `invalid_grant`, or on a token that
 will not decrypt. It also checks that the account connected is `GOOGLE_DRIVE_ACCOUNT_EMAIL`.
 
-**Drive ids, never paths.** The five ids name the fixed tree ADR-0040 draws: the root, `_staging`
-(a sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` and the README.
+**Drive ids, never paths.** The five ids name the fixed tree ADR-0040 draws: the root ("SUGT ITB
+2026 Internal App Object Storage"), `_staging` ("SUGT ITB 2026 _staging — jangan dibagikan", a
+sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` and the README. The
+names matter only when a first connect creates the folders; the root and `_staging` are found by
+stored id after that, so a rename by hand breaks nothing and nothing renames them back.
+
 They are nullable because the row is written before the folders are ensured, in a second write,
 since no transaction is held open across a call to Google. `folder_problem` is set when a reconnect
 finds the root or `_staging` trashed or gone, or when Drive failed partway through. The root and
 `_staging` are never quietly recreated, so the token stays stored while the card does not say
 Terhubung. Uploads and the card read one rule: usable means no `folder_problem` and every id set.
+
+**`dokumen_folder_id` and `dokumen_pelaksanaan_offline_folder_id`** are `Dokumen/` and its
+`Pelaksanaan Offline/` (ADR-0042), beside `Bukti Transaksi`. They are not part of the five: a
+connection made before them has neither, and a receipt must not wait on them. A connect, Periksa
+koneksi and the document reconcile each make whichever is unset, missing or trashed, and claim it by
+compare-and-set, so no Administrator has to reconnect for them.
 
 **Who reaches it.** The card's read and the connect writes need the Administrator Grant. The
 credential read, and the two writes a token refresh makes (`last_used_at`, broken), need Staff,
@@ -1881,7 +2024,7 @@ Stated plainly, because an absent constraint reads as an oversight otherwise.
 ([ADR-0020](./adr/0020-teaching-team-members-on-a-perjadin-are-trip-scoped-names.md)): the Group is
 Staff-only and its minimum at planning is just the PIC, so there is no per-Stream teaching-team rule
 left to hold. A Perjadin _should_ end with a teaching team, but nothing blocks it — completeness is
-the hand-ticked "Pengajar sudah lengkap" box, not a constraint.
+the hand-ticked "Narasumber sudah lengkap" box, not a constraint.
 
 **"Two _different_ Schools cannot share a date and time on one Perjadin."** The Group is one
 travelling party and cannot be in two places at once. This used to be the
@@ -1923,18 +2066,18 @@ places:
 2. **Arranging an offline Session** — Rencanakan Perjadin calls it against every Session on
    the trip, before the transaction opens, and refuses the whole plan naming the Schools
    whose dates fall outside.
-3. **Resizing the trip** — the trip's range is its departure and return dates now
-   ([ADR-0021](./adr/0021-perjadin-date-range-is-departure-and-return.md)), so it is edited by
-   editing the legs, and `updatePerjadinLogistics` in `@sugt/db` recomputes `starts_on`/`ends_on`
-   from the new leg dates. It **clamps, never shifts**: if the new `[departure … return]` window
-   would leave an **arranged** Session outside it, the whole edit is refused (`would-strand`) and no
-   Session moves; delivered and cancelled ones may sit outside the window their trip now claims and
-   do not block it. One transaction with the trip's own update. The retired `movePerjadinDates` and
-   its offset-shift ([#55](https://github.com/mafiefa02/sugt/issues/55)) belonged to the standalone
-   typed range and went with it. The edit surface is Detail Perjadin's Staff-only "Ubah perjalanan"
-   dialog; the resize and its refusal are held by the query, with tests.
+3. **Resizing the trip** — the trip's range is two typed dates
+   ([ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md)), and
+   `updatePerjadinDates` in `@sugt/db` writes the new `starts_on`/`ends_on`. It **clamps, never
+   shifts** (ADR-0021's rule, kept): it locks the trip and its arranged Sessions, and if the new
+   window would leave an **arranged** Session outside it, the whole edit is refused (`would-strand`)
+   and no Session moves; delivered and cancelled ones may sit outside the window their trip now
+   claims and do not block it. One transaction with the trip's own update. The retired
+   `movePerjadinDates` and its offset-shift ([#55](https://github.com/mafiefa02/sugt/issues/55)) are
+   not coming back. The edit surface is Detail Perjadin's Staff-only **Ubah tanggal** dialog; the
+   resize and its refusal are held by the query, with tests.
 
-   **It never touches `starts_at`.** A leg-date correction changes which days a trip spans, not the
+   **It never touches `starts_at`.** A date correction changes which days a trip spans, not the
    hour a School is expecting somebody — and it does not move any Session's `held_on` at all, since
    it clamps rather than shifting.
 
@@ -1948,7 +2091,7 @@ places:
 So an arranged offline Session can no longer be born outside its trip, nor moved outside it, nor
 stranded when the trip's range is resized — path 3 refuses the resize rather than moving Sessions.
 Both halves of #28's invariant now hold, at the data layer and at the surface that drives it:
-Detail Perjadin's Staff-only "Ubah perjalanan" dialog is what a person resizes a trip through, and
+Detail Perjadin's Staff-only "Ubah tanggal" dialog is what a person resizes a trip through, and
 it reaches the guard in path 3.
 
 **That a Perjadin's Sessions are at Schools of its Sub-Cluster.** `perjadin.sub_cluster_id` is
@@ -2082,11 +2225,12 @@ exists at all.
 
 `group_member` cascades. `transaction` cascades, and `transaction_evidence` cascades from
 that — so deleting a Perjadin destroys its acquittal rows, and nothing warns you. The files are
-not removed: neither the legacy objects in the `receipts` bucket nor the Perjadin's folder in the
-company Google Drive (ADR-0040), which outlive their rows. No path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
+not removed: the Perjadin's folder in the company Google Drive (ADR-0040) outlives its rows. No
+path in the app deletes a Perjadin. `perjadin_teacher` and `perjadin_pimpinan` cascade too — the
 trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive nothing — and
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
-links go with the names.
+links go with the names. `activity_log` cascades too, so the trip's Activity Log entries go with it.
+So do `perjadin_document` and `perjadin_document_folder`; the files and folders stay in Drive.
 
 `session.perjadin_id` deliberately does **not** cascade and has no `on delete` action at all,
 so an offline Session blocks the delete. A trip that produced teaching cannot be quietly

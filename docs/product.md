@@ -129,6 +129,57 @@ delivered counts rather than from memory. It is a real loss and it is accepted: 
 decide _which Sub-Cluster is next_, and that reading now happens before you leave this
 screen instead of inside the form you launched from it.
 
+### Pendamping — your own trips
+
+`/pendamping` is a Staff member's own trips and nothing else. A Pimpinan is sent to the Dashboard
+instead. A grant-less Staff member lands here, and so does every Staff member right after
+signing in.
+
+It opens with one small line, **"Selamat datang kembali, {nama}"**. Below it are two sections, each listing the trips the person is in the
+Group of:
+
+- **Perjalanan Dinas Anda**: the trips not yet over (ending today or later, in WIB), soonest
+  first.
+- **Perjalanan Dinas Sebelumnya**: the trips that are over, the most recently ended first, with
+  every action still on them.
+
+Each trip is a card that opens to show Uang Perjalanan, Catat Transaksi, Evaluasi Perjadin, Edit,
+the Persiapan pill, the timeline of Sessions and who is on the trip. Each section shows three
+cards with **Tampilkan lebih banyak** for the rest, and is left out when it has none. With neither,
+the page says "Anda belum tergabung dalam Perjalanan Dinas."
+
+**On a trip the person is PIC of**, the card carries one line about the Laporan, with a
+**Buka laporan** link to it:
+
+- "Laporan: belum dikirim · tenggat {tanggal}", in red once that deadline, the same one the
+  acquittal shows, has passed;
+- "Laporan: terkirim {tanggal}" once it is filed.
+
+**Dokumen**, beside Catat Transaksi on every card in both sections, opens **"Dokumen —
+{destination}"**: the trip's attendance sheets
+([ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)).
+
+- **The list**, under three headings: Daftar Hadir Peserta, Daftar Hadir Narasumber and Daftar
+  Hadir Pendamping. A Peserta sheet reads `2026-10-14 · SMA Y · Siswa · 08.00–11.30 WITA`; the
+  other two read their date. Each has a **Buka** link that opens the PDF in Drive in a new tab, and
+  "belum tersinkron" while it is not yet in place there. An empty heading says "Belum ada".
+- **Unggah dokumen**: pick the **Jenis dokumen**, then its fields.
+  - A Peserta sheet asks for **Tanggal Sesi**, **Waktu Mulai** and **Waktu Selesai** (with the
+    School's time zone beside them once it is picked), **Sekolah** (a plain list of the trip's
+    Sub-Cluster's Schools) and **Tipe Peserta** (`Siswa` or `GTK-MS`).
+  - A Narasumber or Pendamping sheet asks for **Tanggal Dokumen**.
+  - Both dates are limited to the trip's.
+  - **File**: one PDF, "1 file .pdf, maks. 50 MB". Anything else is refused with "Hanya file .pdf",
+    and a larger file with the 50 MB message, before anything is uploaded.
+- **Unggah** uploads the PDF straight to Drive and records it. Any refusal keeps every field and
+  the picked file, so pressing Unggah again retries. A sheet recorded while Drive could not finish
+  putting it in place says so, and Periksa koneksi finishes it.
+- **Hapus** on each sheet asks first — "Hapus dokumen ini? File akan dipindahkan ke Sampah Google
+  Drive." — then moves the file to the Drive trash and removes the sheet. There is no editing: a
+  wrong upload is fixed by Hapus and a new upload.
+- Any Staff member uploads and deletes. The button, and Hapus, are disabled with the reason while
+  Drive is not connected or broken, as Catat Transaksi is.
+
 ### Concerns list
 
 A plain list of **Aspects Rated 7 or below**, across all Schools and all trips, newest first,
@@ -196,13 +247,13 @@ on its own with a **searchable School combobox** (type a name or a Kabupaten/Kot
 action appears on a School's own page, which is where you already are when you are thinking about one
 School. Six of every eight Sessions are online, so this is not a secondary path.
 
-**It names two Pengajar, one per cohort.** One professor taught the Siswa cohort and one taught
+**It names two Narasumber, one per cohort.** One professor taught the Siswa cohort and one taught
 GTK-MS, so the form asks for exactly those two names, both required — not a variable list (ADR-0036).
 There is no separate "mark delivered" step and no who-taught prompt: the Session is recorded
-delivered with its two Pengajar in one act.
+delivered with its two Narasumber in one act.
 
 **Correcting an online Session is an edit; removing one is a delete.** Its fields — School, date,
-times and the two Pengajar — are editable from its detail page, and a Session recorded in error is
+times and the two Narasumber — are editable from its detail page, and a Session recorded in error is
 **hard-deleted** behind a confirm dialog rather than cancelled. (Cancellation, with a required
 reason, remains for offline Sessions, and only while one is still arranged — a Session that was
 delivered and then went wrong is a correction, not a cancellation.)
@@ -223,6 +274,15 @@ three Classes.
 
 Creation is a plain validated form — pick a **Sub-Cluster**, dates and people. It is not a
 planning aid: no ranking, no suggestions, no coverage data inside the form itself.
+
+**The dates are two typed fields, Tanggal mulai and Tanggal selesai**, both required, the same day
+allowed and an end before the start refused. The form asks nothing about getting there — no
+Keberangkatan, no Kepulangan, no time, no transport mode — because many trips are done PP, out to a
+nearby Sub-Cluster and back, sometimes daily
+([ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md)). Each
+Session's date picker is bounded by the two dates. On the trip's own screen Staff correct them with
+**Ubah tanggal** beside the range; the edit moves no Session, and is refused whole if a Session still
+to be delivered would fall outside the new range. A Pimpinan sees the dates read-only.
 
 **A trip goes to one Sub-Cluster.** That is what a journey is: a set of Schools near enough
 to reach on one trip. Choosing it is what decides which Schools may appear on the trip at
@@ -251,17 +311,22 @@ of every eight Sessions are invisible to anything trip-shaped.
 **A Perjadin's screen carries a Preparation Checklist** — a private, hand-ticked list of
 pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid and nothing more:
 no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Every trip has
-the same six fixed boxes — SK Perjalanan, the two tickets, lodging, local transport and one
-"confirmed with the Staff" — plus one per Teaching Team member of the Group. Any Staff member may
-tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
+the same six fixed boxes — SK Perjalanan, "Tiket / transportasi PP", lodging, local transport, one
+"confirmed with the Pendamping" and "Narasumber sudah lengkap" — and no per-member ones. Any Staff
+member may tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
 screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
-the Persiapan column of the Perjadin list, and on the trip cards of the Staff home strip. For Staff
+the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. For Staff
 the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
 
+**A Perjadin's screen ends with its Dokumen**: the attendance sheets uploaded from the
+`/pendamping` card, under the three kinds, each with a **Buka** link and "belum tersinkron" while it
+is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
+uploading and Hapus happen in the card's Dokumen dialog.
+
 **The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):
-Perjadin, Sekolah (Schools with a Session that was not cancelled), Keberangkatan, Kepulangan, PIC,
+Perjadin, Sekolah (Schools with a Session that was not cancelled), Mulai, Selesai, PIC,
 Persiapan and Terlaksana — delivered over not-cancelled Sessions, as an `x/N` badge in the same three
-tones, `0/0` grey. It opens newest Keberangkatan first; every column sorts, a new column descending
+tones, `0/0` grey. It opens newest Mulai first; every column sorts, a new column descending
 first. The header stays in view while the list scrolls, a row opens its trip, and the search box
 above narrows it.
 
@@ -278,20 +343,20 @@ receipts can be added later from the line's own "Unggah bukti", up to five in to
 entered before this rule may have none; it is marked on the screen and fixed the same way.
 
 **Receipts open in Google Drive** (ADR-0040). The dialog, and each line's own "Unggah bukti", upload
-to the company Google Drive, and the app no longer shows a receipt itself. "Unggah bukti" adds to a
+to the company Google Drive, and the app never shows a receipt itself — every receipt, including
+those recorded before the move, is a link to Drive. "Unggah bukti" adds to a
 line already recorded, up to five receipts in total. A file that is not a real receipt is reported
 as failed, and the rest are kept.
 
 - Each line shows **Bukti 1…n**, links that open each receipt in Drive in a new tab.
 - A line also shows **Buka folder**, a link to its own Drive folder that anyone holding it can
   view — the link the external audit will use.
-- Receipts recorded before the move still open through the app's own short-lived links.
 
 What both controls take:
 
 - JPG, PNG, WebP or PDF; anything else is refused before it uploads. An iPhone photo arrives as a
   JPG.
-- At most 20 MB per file.
+- At most 50 MB per file.
 - Every photo is shrunk before it uploads — longest side 2400 px — which also strips its location
   and camera data, since the link is public.
 
@@ -593,10 +658,12 @@ The card is in one of four states:
 **Connecting** goes to Google's consent screen for the company account and back. If the wrong
 account was picked, the Drive permission was unticked, or Google sent no long-lived token, the card
 says so in its own words and stores nothing. A first connect creates the app's folders in the
-company Drive. A reconnect reuses them. If it finds the main folder or `_staging` in the Drive trash
-or gone, the card shows Folder bermasalah; it does not recreate them. There is no disconnect
-button. A successful reconnect also finishes what was recorded while the connection was down, as
-Periksa koneksi does below.
+company Drive: the main folder, **SUGT ITB 2026 Internal App Object Storage**, and beside it, never
+inside it, **SUGT ITB 2026 \_staging — jangan dibagikan**. A reconnect reuses them. The app knows
+them by id, not by name, so renaming either by hand in Drive breaks nothing and is never undone. If
+it finds the main folder or `_staging` in the Drive trash or gone, the card shows Folder bermasalah;
+it does not recreate them. There is no disconnect button. A successful reconnect also finishes what
+was recorded while the connection was down, as Periksa koneksi does below.
 
 **Periksa koneksi**, on the Terhubung card, checks the connection and reports each step:
 
@@ -606,17 +673,53 @@ Periksa koneksi does below.
 - whether a "anyone with the link" share reaches the main folder or `_staging`. That happens when
   someone moves the main folder into a shared company folder. It is warned about prominently: "Folder
   utama dapat dibuka siapa saja yang punya link — pindahkan keluar dari folder yang dibagikan."
+- whether `Dokumen/` and its `Pelaksanaan Offline/` are there, making them if not: "Folder Dokumen:
+  ada." or "Folder Dokumen: dibuat." A connection made before Dokumen existed gets them here,
+  without reconnecting;
 - a **sweep** of the transactions whose receipts are not yet in place in Drive, oldest first, up to
   25 per press: "{n} transaksi disinkronkan, {m} masih menunggu", with the reason for any that could
-  not be finished, such as a folder in the Drive trash, which is never recreated.
+  not be finished, such as a folder in the Drive trash, which is never recreated. Then the same for
+  Perjadin Documents: "{n} dokumen disinkronkan, {m} masih menunggu".
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
-connected, broken, or its folders unresolved — the states in which nobody can upload a receipt.
+connected, broken, or its folders unresolved — the states in which nobody can upload a receipt or a Dokumen.
 
 **On the acquittal**, a line whose receipts are recorded but not yet in place in Drive shows a small
 "belum tersinkron" mark. Its tooltip reads "Bukti belum tersinkron ke Google Drive — Administrator
-dapat menyelesaikannya lewat Periksa koneksi." A line from before Drive, or with no receipt, never
-shows it.
+dapat menyelesaikannya lewat Periksa koneksi." A line with no receipt never shows it.
+
+### Log — Administrator only
+
+**Only an Administrator sees Log**, in the sidebar just above Pengaturan and at `/log`. Anyone else,
+Pimpinan included, gets the 403. It is the Activity Log: who did what to a Perjadin's money,
+receipts, documents and report, and when.
+
+A table, newest first, 50 rows a page:
+
+| Waktu (WIB)        | Oleh   | Perjadin                                                                              | Aksi                   | Rincian                                                                     |
+| ------------------ | ------ | ------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
+| 14 Okt 2026, 08.05 | rina@… | Kelompok 18: Samarinda, Bontang dan Balikpapan — 12–15 Okt 2026 — PIC: Rina Setiawati | Unggah bukti           | Konsumsi · Rp1.250.000 · tgl 2026-10-12 · +1 bukti (kini 3/5) · Buka folder |
+| 8 Okt 2026, 16.02  | budi@… | (the same)                                                                            | Uang Perjalanan diubah | Rp15.000.000 → Rp18.500.000                                                 |
+
+- **Waktu** is when the act happened in the app, in WIB. "tgl" in Rincian is the date the money
+  was spent, and the two differ.
+- **Oleh** is the email the person had at that moment.
+- **Perjadin** links to the trip, with its dates and its current PIC.
+- **Aksi** is one of Uang Perjalanan ditetapkan, Uang Perjalanan diubah, Catat transaksi, Unggah
+  bukti, Laporan dikirim, Dokumen diunggah and Dokumen dihapus. Entries derived from data recorded
+  before the Log existed read "(dari data lama)" after it.
+- **Rincian** says what changed. A transaction's row links to its folder in Drive, when it has one.
+
+**Above the table**, a search box, an Aksi filter and a Rentang tanggal:
+
+- the search matches, ignoring case, the email, the Perjadin's destination, its PIC's name, and the
+  Aksi and Rincian text;
+- Aksi is Semua, Uang Perjalanan, Catat transaksi, Unggah bukti, Dokumen or Laporan dikirim;
+- Rentang tanggal is two WIB dates, dari and sampai, both included.
+
+They combine, and **all of them are in the URL**, with the page number, so a view can be bookmarked.
+Below the table are the number of entries that match and the page links. The page does not update
+itself: new entries appear on the next load or filter change.
 
 ---
 

@@ -7,7 +7,7 @@ import { completeDriveConnection } from "-/lib/drive/connect";
 import { FakeDrive, MY_DRIVE } from "-/lib/drive/fake-drive";
 import type { ReadyFolders } from "-/lib/drive/fixed-folders";
 import { DRIVE_FILE_SCOPE, openDrive } from "-/lib/drive/google";
-import { receiptUploadGate } from "-/lib/drive/upload-gate";
+import { uploadGate } from "-/lib/drive/upload-gate";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
@@ -21,23 +21,18 @@ import {
   addPerjadin,
   addPerson,
   addTransaction,
-  addTransactionEvidence,
   resetDatabase,
 } from "./support/fixtures";
 
 /**
  * **Periksa koneksi, the sweep, the badge and the marker** (#375, ADR-0040) — against the real
- * database and the in-memory `FakeDrive`, faked as in `catat-transaksi-drive.test.ts`. Legacy
- * receipts' signed links are stubbed too: they would call Supabase, which no test reaches.
+ * database and the in-memory `FakeDrive`, faked as in `catat-transaksi-drive.test.ts`.
  */
 
 vi.mock("-/lib/person", () => ({ requirePerson: vi.fn() }));
 vi.mock("-/lib/drive/google", async (importOriginal) => ({
   ...(await importOriginal<typeof import("-/lib/drive/google")>()),
   openDrive: vi.fn(),
-}));
-vi.mock("-/lib/receipt-media", () => ({
-  signedReceiptUrl: vi.fn(async () => "https://storage.test/legacy"),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({
@@ -147,7 +142,14 @@ describe("the check, in order", () => {
         { folder: "pelaksanaan-offline", state: "ok" },
       ],
       exposed: [],
-      sweep: { ran: true, synced: 0, waiting: 0, failures: [] },
+      dokumen: "ok",
+      sweep: {
+        ran: true,
+        synced: 0,
+        waiting: 0,
+        failures: [],
+        documents: { synced: 0, waiting: 0, failures: [] },
+      },
     });
     expect(describeDriveCheck(report).warnings).toEqual([]);
     const [row] = await db.select().from(schema.driveConnection);
@@ -189,7 +191,7 @@ describe("the check, in order", () => {
     await expect(db.select().from(schema.driveConnection)).resolves.toMatchObject([
       { folderProblem: "root-trashed" },
     ]);
-    await expect(receiptUploadGate(admin)).resolves.toMatchObject({ open: false });
+    await expect(uploadGate(admin)).resolves.toMatchObject({ open: false });
 
     drive.restore(folders.rootFolderId);
     await checkDriveConnectionAction();
@@ -197,7 +199,7 @@ describe("the check, in order", () => {
     await expect(db.select().from(schema.driveConnection)).resolves.toMatchObject([
       { folderProblem: null },
     ]);
-    await expect(receiptUploadGate(admin)).resolves.toEqual({ open: true });
+    await expect(uploadGate(admin)).resolves.toEqual({ open: true });
   });
 
   it("reports a trashed folder, and skips the sweep while the tree is not usable", async () => {
@@ -210,10 +212,11 @@ describe("the check, in order", () => {
     expect(report).toMatchObject({
       token: "ok",
       folders: expect.arrayContaining([{ folder: "bukti-transaksi", state: "trashed" }]),
-      sweep: { ran: false, waiting: 1 },
+      dokumen: "skipped",
+      sweep: { ran: false, waiting: 1, documentsWaiting: 0 },
     });
     expect(describeDriveCheck(report).lines).toContain(
-      "Sinkronisasi dilewati sampai folder di atas beres; 1 transaksi masih menunggu.",
+      "Sinkronisasi dilewati sampai folder di atas beres; 1 transaksi dan 0 dokumen masih menunggu.",
     );
   });
 });
@@ -260,7 +263,7 @@ describe("the sweep", () => {
     const second = await anUnsyncedLine(trip.id, admin.id, "Kedua");
     const third = await anUnsyncedLine(trip.id, admin.id, "Ketiga");
 
-    await expect(sweepUnsynced(admin, drive, folders, { limit: 2 })).resolves.toEqual({
+    await expect(sweepUnsynced(admin, drive, folders, { limit: 2 })).resolves.toMatchObject({
       synced: 2,
       waiting: 1,
       failures: [],
@@ -289,7 +292,7 @@ describe("the sweep", () => {
     const second = await sweepUnsynced(admin, drive, folders, { limit: 1 });
 
     expect(first).toMatchObject({ synced: 0, failures: [{ transactionId: stuck.id }] });
-    expect(second).toEqual({ synced: 1, waiting: 1, failures: [] });
+    expect(second).toMatchObject({ synced: 1, waiting: 1, failures: [] });
     expect((await lineRow(healthy.id)).driveSyncedAt).toBeInstanceOf(Date);
   });
 
@@ -298,27 +301,27 @@ describe("the sweep", () => {
     await anUnsyncedLine(trip.id, admin.id, "Satu");
     await anUnsyncedLine(trip.id, admin.id, "Dua");
 
-    await expect(sweepUnsynced(admin, drive, folders, { budgetMs: -1 })).resolves.toEqual({
+    await expect(sweepUnsynced(admin, drive, folders, { budgetMs: -1 })).resolves.toMatchObject({
       synced: 0,
       waiting: 2,
       failures: [],
     });
   });
 
-  it("never counts a legacy or zero-receipt line as owed", async () => {
+  it("never counts a synced or zero-receipt line as owed", async () => {
     const { admin, trip } = await scene();
-    const legacy = await addTransaction({
-      perjadinId: trip.id,
-      amountIdr: 10_000,
-      createdByPersonId: admin.id,
-    });
-    await addTransactionEvidence({ transactionId: legacy.id, uploadedByPersonId: admin.id });
+    const synced = await anUnsyncedLine(trip.id, admin.id, "Sudah");
+    await db
+      .update(schema.transaction)
+      .set({ driveSyncedAt: new Date() })
+      .where(eq(schema.transaction.id, synced.id));
     await addTransaction({ perjadinId: trip.id, amountIdr: 5_000, createdByPersonId: admin.id });
 
     await expect(sweepUnsynced(admin, drive, folders)).resolves.toEqual({
       synced: 0,
       waiting: 0,
       failures: [],
+      documents: { synced: 0, waiting: 0, failures: [] },
     });
   });
 
@@ -388,13 +391,6 @@ describe("the belum tersinkron marker", () => {
       .update(schema.transaction)
       .set({ driveSyncedAt: new Date() })
       .where(eq(schema.transaction.id, synced.id));
-    const legacy = await addTransaction({
-      perjadinId: trip.id,
-      amountIdr: 10_000,
-      description: "Lama",
-      createdByPersonId: admin.id,
-    });
-    await addTransactionEvidence({ transactionId: legacy.id, uploadedByPersonId: admin.id });
     await addTransaction({
       perjadinId: trip.id,
       amountIdr: 5_000,
@@ -409,7 +405,7 @@ describe("the belum tersinkron marker", () => {
     const cards = html.split('data-slot="card"').slice(1);
     const marked = cards
       .filter((card) => card.includes(UNSYNCED_TOOLTIP))
-      .map((card) => /(Belum|Sudah|Lama|Kosong)/.exec(card)?.[1]);
+      .map((card) => /(Belum|Sudah|Kosong)/.exec(card)?.[1]);
     expect(marked).toEqual(["Belum"]);
   });
 });

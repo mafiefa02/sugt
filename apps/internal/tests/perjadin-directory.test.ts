@@ -99,7 +99,7 @@ describe("perjadinDirectory — the table's counts", () => {
     expect(trip?.sessionsTotal).toBe(0);
   });
 
-  it("carries the seven checklist items with their tick state, agreeing with the pill's count", async () => {
+  it("carries the six checklist items with their tick state, agreeing with the pill's count", async () => {
     const pic = await staff();
     const perjadin = await addPerjadin({ picPersonId: pic.id, advanceIdr: 5_000_000 });
     await db.insert(schema.perjadinPreparationItem).values([
@@ -109,22 +109,22 @@ describe("perjadinDirectory — the table's counts", () => {
 
     const [trip] = await perjadinDirectory(caller);
 
-    expect(trip?.preparation).toHaveLength(7);
+    expect(trip?.preparation).toHaveLength(6);
     expect(trip?.preparation.filter((item) => item.checked).map((item) => item.itemKey)).toEqual([
       "sk_perjalanan",
       "staff",
     ]);
     expect(trip?.preparationDone).toBe(2);
-    expect(trip?.preparationTotal).toBe(7);
+    expect(trip?.preparationTotal).toBe(6);
   });
 
-  it("gives a trip with no ticks seven unchecked items", async () => {
+  it("gives a trip with no ticks six unchecked items", async () => {
     const pic = await staff();
     await addPerjadin({ picPersonId: pic.id, advanceIdr: 5_000_000 });
 
     const [trip] = await perjadinDirectory(caller);
 
     expect(trip?.preparation.every((item) => !item.checked)).toBe(true);
-    expect(trip?.preparation).toHaveLength(7);
+    expect(trip?.preparation).toHaveLength(6);
   });
 });

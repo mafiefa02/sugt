@@ -33,7 +33,7 @@ export default async function Page() {
         <h1 className="font-heading text-lg font-medium">Catat Sesi daring</h1>
         <p className="text-sm text-muted-foreground">
           Catat satu Sesi daring yang sudah terlaksana — Sekolah, tanggalnya, jam mulai dan jam
-          selesainya, dan kedua Pengajar.
+          selesainya, dan kedua Narasumber.
         </p>
       </header>
 

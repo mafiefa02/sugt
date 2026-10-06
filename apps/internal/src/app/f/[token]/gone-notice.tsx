@@ -12,8 +12,8 @@ function GoneNotice() {
     <div className="text-center">
       <h1 className="font-heading text-lg font-medium">Tautan sudah tidak berlaku</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Tautan umpan balik ini sudah kedaluwarsa atau digantikan. Minta QR yang baru kepada pengajar
-        di ruangan.
+        Tautan umpan balik ini sudah kedaluwarsa atau digantikan. Minta QR yang baru kepada
+        narasumber di ruangan.
       </p>
     </div>
   );

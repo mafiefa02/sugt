@@ -574,7 +574,7 @@ describe("perjadinFeedbackPage", () => {
     });
     await addPerjadinEvaluation({
       perjadinId: trip.id,
-      role: "Pengajar",
+      role: "Narasumber",
       name: "Rendah",
       lodging: 2,
       ratings: { transport: 2, meals: 2, punctuality: 2 },
@@ -589,7 +589,7 @@ describe("perjadinFeedbackPage", () => {
     // Lowest average first.
     expect(page.rows.map((row) => row.filedByName)).toEqual(["Rendah", "Tinggi"]);
     // The stored role and name pass through verbatim — no derivation (ADR-0024, #167).
-    expect(page.rows[0]?.filedByRole).toBe("Pengajar");
+    expect(page.rows[0]?.filedByRole).toBe("Narasumber");
     expect(page.rows[1]?.filedByRole).toBe("Pimpinan");
     expect(page.rows[0]?.destination).toBe("Kelompok 3: Kabupaten Sleman");
     expect(page.rows[0]?.perjadinId).toBe(trip.id);

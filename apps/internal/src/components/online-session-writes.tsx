@@ -136,8 +136,8 @@ function MarkDelivered({ session }: { session: OnlineSessionDetail }) {
         <DialogHeader>
           <DialogTitle>Tandai Sesi terlaksana</DialogTitle>
           <DialogDescription>
-            Tandai Sesi daring ini sebagai terlaksana. Pengajarnya dicatat di bagian Pengajar, bukan
-            di sini.
+            Tandai Sesi daring ini sebagai terlaksana. Narasumbernya dicatat di bagian Narasumber,
+            bukan di sini.
           </DialogDescription>
         </DialogHeader>
 

@@ -113,9 +113,9 @@ const REVIEW_TYPE_OPTIONS: FilterOptions = {
 };
 
 const INSTRUCTOR_OPTIONS: FilterOptions = {
-  all: "Semua: Pengajar",
-  le7: "Pengajar ≤ 7",
-  gt7: "Pengajar > 7",
+  all: "Semua: Narasumber",
+  le7: "Narasumber ≤ 7",
+  gt7: "Narasumber > 7",
 };
 
 const MATERIALS_OPTIONS: FilterOptions = {
@@ -261,7 +261,7 @@ function ParticipantTab({
       {/* The overall standing — dataset-wide, and unmoved by the filters below. */}
       <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <AverageCard
-          label="Pengajar"
+          label="Narasumber"
           value={averages.instructor}
         />
         <AverageCard
@@ -308,7 +308,7 @@ function ParticipantTab({
           }}
         />
         <FilterSelect
-          ariaLabel="Nilai Pengajar"
+          ariaLabel="Nilai Narasumber"
           options={INSTRUCTOR_OPTIONS}
           value={filters.instructor}
           disabled={pending}
@@ -697,7 +697,7 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
       </CardHeader>
       <CardContent className="space-y-2.5">
         <AspectRow
-          label="Pengajar"
+          label="Narasumber"
           score={row.instructor}
           comment={row.instructorComment}
         />

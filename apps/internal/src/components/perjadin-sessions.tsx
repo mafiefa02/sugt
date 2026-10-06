@@ -298,8 +298,10 @@ function SessionDialog({
             <MultiSelectCombobox
               id={`${idPrefix}-taught`}
               aria-label="Diajar oleh"
-              placeholder={teacherOptions.length === 0 ? "Belum ada pengajar" : "Pilih pengajar…"}
-              emptyLabel="Tidak ada pengajar."
+              placeholder={
+                teacherOptions.length === 0 ? "Belum ada narasumber" : "Pilih narasumber…"
+              }
+              emptyLabel="Tidak ada narasumber."
               options={teacherOptions}
               value={taughtBy}
               onValueChange={(next) => {
@@ -439,7 +441,7 @@ function sessionRefusalMessage(
     case "session-time-clash":
       return "Dua Sekolah yang berbeda tidak bisa berada di tanggal dan jam yang sama.";
     case "unknown-teacher":
-      return "Ada pengajar yang sudah tidak ada. Muat ulang halaman.";
+      return "Ada narasumber yang sudah tidak ada. Muat ulang halaman.";
     default:
       return "Perubahan gagal. Muat ulang halaman.";
   }

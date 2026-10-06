@@ -1,7 +1,6 @@
 "use client";
 
 import type {
-  DriveRefusal,
   OpenReceiptSessionsResult,
   RecordTransactionActionResult,
   UploadedReceipt,
@@ -20,18 +19,19 @@ import {
   type SortDirection,
 } from "-/components/laporan-perjadin/acquittal-transactions-sort";
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
+import { UnsyncedMarker } from "-/components/unsynced-marker";
 import {
   isAcceptedReceipt,
-  MAX_RECEIPT_MEGABYTES,
+  MAX_UPLOAD_MEGABYTES,
   prepareReceipt,
   putToDriveSession,
   RECEIPT_ACCEPT,
-  RECEIPT_TOO_LARGE,
+  UPLOAD_TOO_LARGE,
   UNSUPPORTED_RECEIPT,
   type PreparedReceipt,
 } from "-/lib/drive/receipt-upload";
-import type { ReceiptUploadGate } from "-/lib/drive/upload-gate";
-import { DRIVE_UNREACHABLE } from "-/lib/drive/upload-messages";
+import type { UploadGate } from "-/lib/drive/upload-gate";
+import { driveRefusalText, STALE_PAGE } from "-/lib/drive/upload-messages";
 import {
   formatIdr,
   formatRupiah,
@@ -63,8 +63,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@sugt/ui/components/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@sugt/ui/components/tooltip";
-import { CloudOff } from "lucide-react";
 import { type ReactElement, useId, useMemo, useRef, useState, useTransition } from "react";
 
 /**
@@ -96,7 +94,7 @@ function AcquittalTransactions({
 }: {
   perjadinId: string;
   transactions: ViewableTransaction[];
-  uploadGate: ReceiptUploadGate;
+  uploadGate: UploadGate;
 }) {
   // Sort/filter is a lens on the rendered list only. The list is bounded and already fully loaded,
   // so this is in-memory (no server round-trip, unlike `/feedback`); the Laporan money figures and
@@ -211,7 +209,7 @@ function TransactionCard({
 }: {
   perjadinId: string;
   line: ViewableTransaction;
-  uploadGate: ReceiptUploadGate;
+  uploadGate: UploadGate;
 }) {
   return (
     <Card size="sm">
@@ -223,7 +221,7 @@ function TransactionCard({
           <span className="text-muted-foreground">·</span>
           <span className="text-muted-foreground">{line.category}</span>
           <Badge variant="secondary">{line.participantType}</Badge>
-          {line.unsynced && <UnsyncedMarker />}
+          {line.unsynced && <UnsyncedMarker explanation={UNSYNCED_TOOLTIP} />}
           <div className="ml-auto flex items-center gap-4">
             <span className="tabular-nums">{formatRupiah(line.amountIdr)}</span>
             <Receipts
@@ -241,36 +239,6 @@ function TransactionCard({
 /** What the "belum tersinkron" marker says, in full, on hover or focus. */
 const UNSYNCED_TOOLTIP =
   "Bukti belum tersinkron ke Google Drive — Administrator dapat menyelesaikannya lewat Periksa koneksi.";
-
-/**
- * **A quiet mark on a line whose Drive receipts are not yet in place** (ADR-0040, #375): recorded,
- * but the reconcile has not finished moving them into the line's folder. Small and muted — nothing is
- * wrong with the line, and nothing is asked of whoever reads it; an Administrator's Periksa koneksi
- * finishes it. The sentence is in the tooltip for a pointer, and spoken in full from an `sr-only`
- * span for a screen reader. The trigger is a real button, so the tooltip opens on keyboard focus.
- */
-function UnsyncedMarker() {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-          />
-        }
-      >
-        <CloudOff
-          aria-hidden
-          className="size-3.5"
-        />
-        <span aria-hidden>belum tersinkron</span>
-        <span className="sr-only">{UNSYNCED_TOOLTIP}</span>
-      </TooltipTrigger>
-      <TooltipContent>{UNSYNCED_TOOLTIP}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 /** The label maps for the four controls. Sort keys are the direction; each filter carries "Semua". */
 const AMOUNT_SORT_OPTIONS = { desc: "Termahal", asc: "Termurah" } satisfies Record<
@@ -345,9 +313,8 @@ function ControlSelect<T extends string>({
 /**
  * The receipts on one line item, and the upload that adds to them.
  *
- * Each receipt is a **Bukti n** link that opens it in a new tab — in Google Drive for one recorded
- * since ADR-0040, through a signed URL for one from before — and a line with a Drive folder adds
- * **Buka folder**, the link anyone can open once the folder is shared.
+ * Each receipt is a **Bukti n** link that opens it in Google Drive in a new tab (ADR-0040), and a
+ * line with a Drive folder adds **Buka folder**, the link anyone can open once the folder is shared.
  *
  * The upload goes to Drive the same way Catat transaksi's does (ADR-0040): each file prepared in the
  * browser, a session opened per file, the bytes `PUT` straight to Drive. Then `finalizeReceiptsAction`
@@ -365,7 +332,7 @@ function Receipts({
 }: {
   perjadinId: string;
   line: ViewableTransaction;
-  uploadGate: ReceiptUploadGate;
+  uploadGate: UploadGate;
 }) {
   const [note, setNote] = useState<string | null>(null);
   const [uploading, startUploading] = useTransition();
@@ -385,7 +352,7 @@ function Receipts({
       if (batch.length > 0) {
         const { prepared, unsupported, tooLarge } = await prepareAll(batch);
         if (unsupported > 0) notes.push(`${unsupported} berkas: ${UNSUPPORTED_RECEIPT}`);
-        if (tooLarge > 0) notes.push(`${tooLarge} berkas: ${RECEIPT_TOO_LARGE}`);
+        if (tooLarge > 0) notes.push(`${tooLarge} berkas: ${UPLOAD_TOO_LARGE}`);
 
         if (prepared.length > 0) {
           const sent = await uploadToDrive(perjadinId, prepared, line.id);
@@ -409,7 +376,7 @@ function Receipts({
               return;
             }
             if (result.outcome !== "attached") {
-              setNote([...notes, driveRefusalFor(result)].join(" "));
+              setNote([...notes, driveRefusalText(result)].join(" "));
               return;
             }
             failed += result.failed;
@@ -431,28 +398,17 @@ function Receipts({
         <span className="text-muted-foreground">Belum ada bukti</span>
       ) : (
         <span className="flex items-center gap-2">
-          {line.evidence.map((file, index) =>
-            file.url === null ? (
-              // The row exists and its object does not. Said out loud, because a silently
-              // missing receipt is what the filing check will refuse without explaining.
-              <span
-                key={file.id}
-                className="text-destructive"
-              >
-                Bukti {index + 1} hilang
-              </span>
-            ) : (
-              <a
-                key={file.id}
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:no-underline"
-              >
-                Bukti {index + 1}
-              </a>
-            ),
-          )}
+          {line.evidence.map((file, index) => (
+            <a
+              key={file.id}
+              href={file.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:no-underline"
+            >
+              Bukti {index + 1}
+            </a>
+          ))}
         </span>
       )}
       {line.folderUrl !== null && (
@@ -500,8 +456,8 @@ function RecordTransaction({
   trigger,
 }: {
   perjadinId: string;
-  /** Closed while Drive cannot take an upload: the trigger renders disabled, titled with the reason. */
-  uploadGate: ReceiptUploadGate;
+  /** Closed while Drive cannot take an upload: the trigger is disabled, titled with the reason. */
+  uploadGate: UploadGate;
   // An optional custom trigger so a card elsewhere can open this exact entry form from its own
   // control. Omitted, the default "Catat transaksi" button renders.
   trigger?: ReactElement;
@@ -548,7 +504,7 @@ function RecordTransaction({
 
   /**
    * Upload every staged receipt to Drive, then record the line with them — all or nothing (ADR-0039,
-   * ADR-0040). Each file is prepared first (images re-encoded, EXIF stripped; the 20 MB cap), then
+   * ADR-0040). Each file is prepared first (images re-encoded, EXIF stripped; the 50 MB cap), then
    * the server opens a session per file and the bytes go straight to Drive. A failed upload records
    * nothing and keeps every value and every staged file, so "Catat" again retries the whole of it
    * against fresh sessions. Files that did land stay in private `_staging`, which ADR-0040 accepts.
@@ -561,7 +517,7 @@ function RecordTransaction({
       // A new line is all or nothing: any file that cannot be sent refuses the whole of it.
       const { prepared, unsupported, tooLarge } = await prepareAll(staged);
       if (unsupported > 0) return setRefusal(UNSUPPORTED_RECEIPT);
-      if (tooLarge > 0) return setRefusal(RECEIPT_TOO_LARGE);
+      if (tooLarge > 0) return setRefusal(UPLOAD_TOO_LARGE);
 
       const sent = await uploadToDrive(perjadinId, prepared);
       if ("refusal" in sent) {
@@ -796,7 +752,7 @@ function RecordTransaction({
             </Label>
             <p className="-mt-0.5 text-xs text-muted-foreground">
               1–{MAX_RECEIPTS_PER_TRANSACTION} berkas JPG, PNG, WebP atau PDF, masing-masing paling
-              besar {MAX_RECEIPT_MEGABYTES} MB. Foto diperkecil sebelum diunggah.
+              besar {MAX_UPLOAD_MEGABYTES} MB. Foto diperkecil sebelum diunggah.
             </p>
             {/*
               Required and staged, not uploaded on pick: `submit` PUTs them all before it records the
@@ -929,14 +885,6 @@ async function uploadToDrive(
   return { landed, failed: ids.length - landed.length };
 }
 
-/**
- * What a page that has gone stale under the reader says. Reached from several places — upload
- * sessions against a deleted trip or line, a record that finds no such trip, and a row upload that
- * finds no such trip or line item — because all of them mean the same thing to a PIC: what is on
- * screen is no longer what is stored, and no field they could edit will fix it.
- */
-const STALE_PAGE = "Halaman ini sudah tidak sesuai. Muat ulang untuk melihat keadaannya.";
-
 /** The five-receipt ceiling, as each place that meets it says it: a row upload or a dialog pick cut short, or a refused line. */
 const CAP_NOTE = `Maksimal ${MAX_RECEIPTS_PER_TRANSACTION} bukti per transaksi.`;
 
@@ -949,11 +897,6 @@ function retryNote(failed: number) {
 const UNSYNCED_NOTE =
   "Bukti belum tersinkron ke Google Drive. Sinkronisasi akan diselesaikan kemudian; tidak ada yang perlu diulang.";
 
-/** Why Drive cannot take an upload right now: the gate's own sentence, or "try again". */
-function driveRefusalFor(result: DriveRefusal) {
-  return "reason" in result ? result.reason : DRIVE_UNREACHABLE;
-}
-
 /** What each refusal to open upload sessions says. Nothing has been uploaded yet. */
 function sessionRefusalFor(result: Exclude<OpenReceiptSessionsResult, { outcome: "ready" }>) {
   switch (result.outcome) {
@@ -965,11 +908,11 @@ function sessionRefusalFor(result: Exclude<OpenReceiptSessionsResult, { outcome:
     case "too-many-receipts":
       return CAP_NOTE;
     case "too-large":
-      return RECEIPT_TOO_LARGE;
+      return UPLOAD_TOO_LARGE;
     case "unsupported-type":
       return UNSUPPORTED_RECEIPT;
     default:
-      return driveRefusalFor(result);
+      return driveRefusalText(result);
   }
 }
 
@@ -994,7 +937,7 @@ function refusalFor(result: Exclude<RecordTransactionActionResult, { outcome: "r
     case "unsupported-type":
       return UNSUPPORTED_RECEIPT;
     default:
-      return driveRefusalFor(result);
+      return driveRefusalText(result);
   }
 }
 

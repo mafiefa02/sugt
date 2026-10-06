@@ -97,7 +97,7 @@ function OfflineMarkDelivered({ session }: { session: SessionDetail }) {
         <DialogHeader>
           <DialogTitle>Tandai Sesi terlaksana</DialogTitle>
           <DialogDescription>
-            Tandai Sesi luring ini sebagai terlaksana. Pengajarnya dicatat lewat &ldquo;Diajar
+            Tandai Sesi luring ini sebagai terlaksana. Narasumbernya dicatat lewat &ldquo;Diajar
             oleh&rdquo; di halaman Perjadin, bukan di sini.
           </DialogDescription>
         </DialogHeader>

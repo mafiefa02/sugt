@@ -1,3 +1,4 @@
+import type { DriveRefusal } from "-/lib/drive/upload-messages";
 import type {
   AcquittalEvidence,
   AcquittalTransaction,
@@ -23,15 +24,6 @@ export type UploadedReceipt = { driveFileId: string };
  * so Drive refuses anything longer, and re-checks both on the file Drive ends up holding.
  */
 export type ReceiptToOpen = { size: number; contentType: string };
-
-/**
- * Why receipts cannot go to Drive right now. The first two carry the same sentence the page's gate
- * shows — the date a connection broke included — so a stale page's dialog says what the fresh one
- * would have.
- */
-export type DriveRefusal =
-  | { outcome: "drive-disconnected" | "drive-folders-unresolved"; reason: string }
-  | { outcome: "drive-unreachable" };
 
 /** What `openReceiptSessionsAction` did: a session URI per file, in order, or why none. */
 export type OpenReceiptSessionsResult =
@@ -97,36 +89,28 @@ export type FinalizeReceiptsResult =
   | DriveRefusal;
 
 /**
- * One receipt as the screen renders it: the row, minus where it is stored, plus the link that opens
- * it.
- *
- * - **A Drive receipt** (ADR-0040) links to Drive itself, in a new tab; the app renders nothing of
- *   the file. The link opens for anyone once its transaction folder is shared.
- * - **A legacy receipt** in the private Supabase bucket links through a short-lived signed URL
- *   minted on the page, and `url` is `null` when its object is gone. The `storagePath` is dropped
- *   on purpose — of no use to a browser, and the URL is what renders it.
+ * One receipt as the screen renders it: the row, minus its Drive id, plus the link to the file in
+ * Drive (ADR-0040), opened in a new tab — the app renders nothing of the file. The link opens for
+ * anyone once its transaction folder is shared.
  *
  * The acquittal is an open money read (ADR-0026, #180), so any signed-in Person who reads it gets
  * these links. Reading is open; the money *writes* on this surface stay Staff-only in their own
  * Server Actions.
  */
-export type ViewableEvidence = Omit<
-  AcquittalEvidence,
-  "storagePath" | "driveFileId" | "uploadedAt"
-> & {
-  url: string | null;
+export type ReceiptLink = Omit<AcquittalEvidence, "driveFileId" | "uploadedAt"> & {
+  url: string;
 };
 
 /**
  * One line item as the screen renders it, with its Drive folder as a link when it has one, and
- * `unsynced` when a Drive receipt on it is still waiting to be put in place (ADR-0040) — never for a
- * legacy or zero-receipt line.
+ * `unsynced` when a receipt on it is still waiting to be put in place (ADR-0040) — never for a
+ * zero-receipt line.
  */
 export type ViewableTransaction = Omit<
   AcquittalTransaction,
   "evidence" | "driveFolderId" | "driveSyncedAt"
 > & {
-  evidence: ViewableEvidence[];
+  evidence: ReceiptLink[];
   folderUrl: string | null;
   unsynced: boolean;
 };

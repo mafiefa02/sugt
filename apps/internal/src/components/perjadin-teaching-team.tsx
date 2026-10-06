@@ -13,7 +13,7 @@ import { useId, useState, useTransition } from "react";
 
 /**
  * A Perjadin's Teaching Team as trip-scoped names (ADR-0020), edited one at a time — added, renamed
- * and removed. Each write clears the "Pengajar sudah lengkap" Preparation tick, so the team's
+ * and removed. Each write clears the "Narasumber sudah lengkap" Preparation tick, so the team's
  * completeness must be re-confirmed by hand after any change (the amendment to ADR-0018).
  *
  * Read-only for a professor; the controls appear only for Staff, whom the write re-checks.
@@ -73,9 +73,9 @@ function PerjadinTeachingTeam({
 
   return (
     <div className="border-b border-border px-7 py-5">
-      <h2 className="font-heading text-sm font-medium">Teaching Team</h2>
+      <h2 className="font-heading text-sm font-medium">Narasumber</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Nama pengajar untuk Perjadin ini. Mengubah daftar ini menghapus centang “Pengajar sudah
+        Nama narasumber untuk Perjadin ini. Mengubah daftar ini menghapus centang “Narasumber sudah
         lengkap”.
       </p>
 
@@ -164,8 +164,8 @@ function PerjadinTeachingTeam({
         <div className="mt-3 flex max-w-md gap-2">
           <Input
             id={addFieldId}
-            aria-label="Nama pengajar"
-            placeholder="Nama pengajar"
+            aria-label="Nama narasumber"
+            placeholder="Nama narasumber"
             value={draft}
             disabled={busy || atCap}
             onChange={(event) => {
@@ -184,7 +184,7 @@ function PerjadinTeachingTeam({
             disabled={busy || atCap || draft.trim() === ""}
             onClick={add}
           >
-            Tambah pengajar
+            Tambah narasumber
           </Button>
         </div>
       )}
@@ -195,8 +195,8 @@ function PerjadinTeachingTeam({
 const GONE = "Perubahan gagal. Muat ulang halaman untuk melihat keadaannya.";
 
 const ADD_REFUSALS = {
-  "name-required": "Nama pengajar tidak boleh kosong.",
-  "too-many-teachers": `Nama pengajar terlalu banyak: maksimal ${MAX_TEACHING_TEAM_PER_PERJADIN}.`,
+  "name-required": "Nama narasumber tidak boleh kosong.",
+  "too-many-teachers": `Nama narasumber terlalu banyak: maksimal ${MAX_TEACHING_TEAM_PER_PERJADIN}.`,
   "no-such-perjadin": GONE,
 } as const;
 
