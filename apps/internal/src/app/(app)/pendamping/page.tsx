@@ -10,8 +10,8 @@ export const metadata: Metadata = { title: "Pendamping" };
 /**
  * **Pendamping** — a Staff member's own trips, and nothing else (#396): a one-line greeting,
  * **Perjalanan Dinas Anda** (the trips not yet over) and **Perjalanan Dinas Sebelumnya** (the ones
- * that are). A past trip keeps every action, because the Laporan and the attendance sheets are often
- * finished after it. A PIC's Laporan state is a line on each of their trip cards.
+ * that are). A past trip keeps every action, because the transactions and the attendance sheets are
+ * often finished after it. The cards carry no Laporan line (#419); the Laporan is reached through Edit.
  *
  * **"Pendamping" here is a route/label and collides in name only** with the Perjadin role label
  * (`PERJADIN_ROLE_LABELS.Staff` → "Pendamping"): this is the Staff landing screen, not that trip role.
@@ -32,7 +32,7 @@ export default async function Page() {
   ]);
 
   return (
-    <div className="flex min-h-full flex-col gap-6 p-5 sm:p-7">
+    <div className="flex min-h-full flex-col gap-6 px-4 py-5 sm:p-7">
       <h1 className="font-heading text-lg font-semibold">
         Selamat datang kembali, {person.fullName}
       </h1>
@@ -51,7 +51,7 @@ export default async function Page() {
           />
           <MyPerjadinSection
             title="Perjalanan Dinas Sebelumnya"
-            description="Perjalanan yang sudah selesai, yang terbaru di atas. Laporan dan dokumennya masih bisa dikerjakan."
+            description="Perjalanan yang sudah selesai, yang terbaru di atas. Transaksi dan dokumennya masih bisa dikerjakan."
             trips={trips.previous}
             uploadGate={gate}
           />
