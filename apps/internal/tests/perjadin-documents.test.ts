@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { db, schema } from "@sugt/db";
 import {
+  deletePerjadinDocument,
   isNotStaffError,
   perjadinDokumen,
   recordPerjadinDocument,
@@ -354,7 +355,7 @@ describe("perjadinDokumen — the dialog's read", () => {
     await expect(perjadinDokumen(staff, randomUUID())).resolves.toBeNull();
   });
 
-  it("keeps listing a sheet for a School that has since left the trip, but offers it no more", async () => {
+  it("keeps a sheet for a School that has since left the trip — listed and deletable — but offers it no more", async () => {
     const { staff, trip, inside, live } = await scene();
     const sheet = peserta(trip.id, inside.id);
     await expect(recordPerjadinDocument(staff, sheet)).resolves.toEqual({ outcome: "recorded" });
@@ -370,5 +371,10 @@ describe("perjadinDokumen — the dialog's read", () => {
     expect(read?.documents).toEqual([
       expect.objectContaining({ id: sheet.documentId, schoolName: "SMAN 1 Bontang" }),
     ]);
+    // Hapus does not re-check the School: the rule is for new uploads only.
+    await expect(deletePerjadinDocument(staff, sheet.documentId)).resolves.toMatchObject({
+      outcome: "deleted",
+    });
+    await expect(documents()).resolves.toHaveLength(0);
   });
 });

@@ -7,7 +7,9 @@ import { perjadin } from "../schema/travel";
 
 /**
  * **What a Perjadin is named from** (ADR-0044) — SQL shared by every read that names a trip, kept
- * here beneath them and unexported from `@sugt/db/queries` (convention 3). `tripSchoolNames` alone
+ * here beneath them and unexported from `@sugt/db/queries` (convention 3). Its rule for **the trip's
+ * Schools** (`isTripSchool`) lives here too, because the name's School part is built from it, and the
+ * Daftar Hadir Peserta picker and its server check use the same rule (#410) rather than a copy. `tripSchoolNames` alone
  * is re-exported from the package root, for the Perjadin token resolver in `@sugt/internal`. The
  * name itself is put together in `@sugt/internal` (`perjadin-name.ts`); this module only reads its
  * parts, live: a Perjadin's name is never stored.
@@ -20,9 +22,12 @@ import { perjadin } from "../schema/travel";
  * names through it, and the Daftar Hadir Peserta picker and its server check filter by it (#410).
  *
  * A correlated `exists` on the **`school` table of the enclosing query**, referenced by name — so the
- * enclosing query must select from `school` unaliased. Written against `"school"` explicitly rather
- * than through a column, because drizzle leaves a column unqualified in a select over one table, and
- * inside this subquery a bare `"id"` would silently mean the Session's.
+ * enclosing query must select from `school` unaliased. Written against `"school"` explicitly so the
+ * correlation never depends on how drizzle renders a column: in a selected field of a select over
+ * one table it leaves the column unqualified, and inside this subquery a bare `"id"` would silently
+ * mean the Session's. The same holds for `perjadinId`: pass a bound value (`sql\`${id}::uuid\``) or
+ * a column of a query that joins more than one table, never `perjadin.id` as a selected field of a
+ * select over `perjadin` alone.
  */
 export function isTripSchool(perjadinId: AnyColumn | SQL) {
   return sql<boolean>`exists (
