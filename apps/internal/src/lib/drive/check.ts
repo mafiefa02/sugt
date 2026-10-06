@@ -1,6 +1,7 @@
 import {
   driveCredentials,
   driveFolderIds,
+  perjadinDriveFolders,
   recordDriveFolders,
   unsyncedDocuments,
   unsyncedTransactions,
@@ -8,6 +9,7 @@ import {
   type Person,
 } from "@sugt/db/queries";
 
+import { perjadinFolderName } from "../perjadin-name";
 import { refreshDriveToken } from "./access-token";
 import { ensureDokumenFolders } from "./dokumen-folders";
 import { readyFolders, type ReadyFolders } from "./fixed-folders";
@@ -27,9 +29,13 @@ export const SWEEP_LIMIT = 25;
 /**
  * How long one sweep keeps starting reconciles: past this it stops, and what is left is reported as
  * waiting. Well inside the 60 seconds `/pengaturan` and the callback declare as `maxDuration`, so a
- * slow Drive cannot turn a press — or a reconnect that already succeeded — into a timeout.
+ * slow Drive cannot turn a press — or a reconnect that already succeeded — into a timeout. On a
+ * press, the folder-name pass after the sweep gets what is left of it (#407).
  */
 export const SWEEP_BUDGET_MS = 40_000;
+
+/** How many Perjadin folders one press of Periksa koneksi renames (#407). */
+export const RENAME_LIMIT = 25;
 
 export type SweepFailure = {
   transactionId: string;
@@ -114,6 +120,73 @@ export async function sweepUnsynced(
   };
 }
 
+/** A Perjadin folder whose name the pass could not re-assert (#407). */
+export type FolderNameFailure = {
+  perjadinId: string;
+  /** The name it should carry — the one Periksa koneksi tells the Administrator about. */
+  name: string;
+  folder: "bukti-transaksi" | "dokumen";
+  reason: "folder-trashed" | "folder-missing" | "drive-failed";
+};
+
+export type FolderNameReport = {
+  renamed: number;
+  /** Folders this press did not reach — past the bound or the budget. Zero means every one was checked. */
+  remaining: number;
+  failures: FolderNameFailure[];
+};
+
+/**
+ * **Re-assert every Perjadin folder's name** (#407): both Drive folders of every Perjadin that has
+ * one, receipts then Dokumen, in trip-id order. Each folder is read and renamed only when its name
+ * is not `perjadinFolderName` — an out-of-date one from before ADR-0044, a Sub-Cluster renamed since,
+ * or a rename after a write that did not happen. A folder already right costs a read and no write.
+ *
+ * **Bounded per press, and re-runnable.** It stops after `limit` renames or once `budgetMs` has
+ * passed, and reports how many folders it did not reach; the next press re-reads the ones it already
+ * put right and carries on. A folder trashed or deleted by hand is reported and skipped, never
+ * recreated — the reconciles' own rule — and never renamed in the trash.
+ */
+export async function reassertPerjadinFolderNames(
+  person: Person,
+  drive: DriveClient,
+  { limit = RENAME_LIMIT, budgetMs = SWEEP_BUDGET_MS }: { limit?: number; budgetMs?: number } = {},
+): Promise<FolderNameReport> {
+  const folders = (await perjadinDriveFolders(person)).flatMap((trip) => {
+    const name = perjadinFolderName(trip.naming);
+    const owned = [
+      ["bukti-transaksi", trip.driveFolderId],
+      ["dokumen", trip.driveDokumenFolderId],
+    ] as const;
+    return owned.flatMap(([folder, id]) =>
+      id ? [{ perjadinId: trip.naming.id, folder, id, name }] : [],
+    );
+  });
+
+  const failures: FolderNameFailure[] = [];
+  const startedAt = Date.now();
+  let renamed = 0;
+  let checked = 0;
+  for (const { id, ...folder } of folders) {
+    if (renamed >= limit || Date.now() - startedAt > budgetMs) break;
+    checked += 1;
+    try {
+      const file = await drive.getFile(id);
+      if (!file || file.trashed) {
+        failures.push({ ...folder, reason: file ? "folder-trashed" : "folder-missing" });
+      } else if (file.name !== folder.name) {
+        await drive.updateFile(id, { name: folder.name });
+        renamed += 1;
+      }
+    } catch (error) {
+      if (!isDriveFailure(error)) throw error;
+      failures.push({ ...folder, reason: "drive-failed" });
+    }
+  }
+
+  return { renamed, remaining: folders.length - checked, failures };
+}
+
 /** One of the four fixed folders, as Periksa koneksi found it. */
 export type FolderCheck = {
   folder: "root" | "staging" | "bukti-transaksi" | "pelaksanaan-offline";
@@ -147,6 +220,8 @@ export type DriveCheckReport =
       sweep:
         | ({ ran: true } & SweepReport)
         | { ran: false; waiting: number; documentsWaiting: number };
+      /** The Perjadin folder names re-asserted (#407) — skipped, like the sweep, while the tree is not usable. */
+      names: ({ ran: true } & FolderNameReport) | { ran: false };
     };
 
 /**
@@ -163,6 +238,9 @@ export type DriveCheckReport =
  *    shared by hand, and files nobody should see can be opened by link.
  * 4. **The Dokumen folders** (`ensureDokumenFolders`), made if missing, when the tree is usable.
  * 5. **The sweep** (`sweepUnsynced`), only when the tree is usable; otherwise how much waits.
+ * 6. **The folder names** (`reassertPerjadinFolderNames`, #407), only when the tree is usable, within
+ *    what the sweep left of `SWEEP_BUDGET_MS`. This is how folders made before ADR-0044 take the new
+ *    name: the Administrator presses again until none is left.
  *
  * The caller has already checked the Administrator Grant.
  */
@@ -212,6 +290,7 @@ export async function checkDriveConnection(person: Person): Promise<DriveCheckRe
         : ensured.created
           ? ("created" as const)
           : ("ok" as const);
+    const sweptFrom = Date.now();
     const sweep = ready
       ? { ran: true as const, ...(await sweepUnsynced(person, drive, ready)) }
       : {
@@ -219,7 +298,15 @@ export async function checkDriveConnection(person: Person): Promise<DriveCheckRe
           waiting: (await unsyncedTransactions(person, 0)).total,
           documentsWaiting: (await unsyncedDocuments(person, 0)).total,
         };
-    return { token: "ok", folders, exposed, dokumen, sweep };
+    const names = ready
+      ? {
+          ran: true as const,
+          ...(await reassertPerjadinFolderNames(person, drive, {
+            budgetMs: SWEEP_BUDGET_MS - (Date.now() - sweptFrom),
+          })),
+        }
+      : { ran: false as const };
+    return { token: "ok", folders, exposed, dokumen, sweep, names };
   } catch (error) {
     if (isDriveFailure(error)) return { token: "unreachable" };
     throw error;

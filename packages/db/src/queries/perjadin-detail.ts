@@ -458,10 +458,10 @@ export type PerjadinDatesInput = {
 
 export type UpdatePerjadinDatesResult =
   /**
-   * `startsOnMoved`: the correction changed `starts_on` — the date the trip's Drive folder is named
-   * after (ADR-0040), so the caller renames it (#376).
+   * `datesMoved`: the correction changed `starts_on` or `ends_on` — both are in the trip's name and
+   * so in its Drive folder name (ADR-0044), so the caller renames the folders (#376, #407).
    */
-  | { outcome: "updated"; startsOnMoved: boolean }
+  | { outcome: "updated"; datesMoved: boolean }
   /**
    * Tanggal selesai before Tanggal mulai, so the `[starts_on … ends_on]` range would be inverted.
    * Same-day is allowed. Refused before the transaction opens.
@@ -500,7 +500,7 @@ export async function updatePerjadinDates(
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
-      .select({ id: perjadin.id, startsOn: perjadin.startsOn })
+      .select({ id: perjadin.id, startsOn: perjadin.startsOn, endsOn: perjadin.endsOn })
       .from(perjadin)
       .where(eq(perjadin.id, perjadinId))
       .for("update");
@@ -532,7 +532,10 @@ export async function updatePerjadinDates(
       .set({ startsOn: input.startsOn, endsOn: input.endsOn })
       .where(eq(perjadin.id, perjadinId));
 
-    return { outcome: "updated", startsOnMoved: trip.startsOn !== input.startsOn };
+    return {
+      outcome: "updated",
+      datesMoved: trip.startsOn !== input.startsOn || trip.endsOn !== input.endsOn,
+    };
   });
 }
 

@@ -1059,7 +1059,7 @@ describe("extra Staff and the date edit", () => {
     expect(await perjadinRows()).toEqual([]);
   });
 
-  it("updates the typed dates and reports whether the start moved", async () => {
+  it("updates the typed dates and reports whether the dates moved", async () => {
     const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
@@ -1069,7 +1069,7 @@ describe("extra Staff and the date edit", () => {
       endsOn: "2026-09-04",
     });
 
-    expect(result).toEqual({ outcome: "updated", startsOnMoved: true });
+    expect(result).toEqual({ outcome: "updated", datesMoved: true });
     expect(await datesOf(planned.perjadinId)).toEqual({
       startsOn: "2026-08-31",
       endsOn: "2026-09-04",

@@ -6,6 +6,7 @@ import { session, sessionTeachingTeam } from "../schema/delivery";
 import { school } from "../schema/reference";
 import { perjadin, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
+import { snapshotTripSchools } from "./perjadin-naming";
 import { heldOnWithinPerjadin, type PastArranged } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -159,7 +160,11 @@ async function replaceTeachingTeam(tx: Tx, sessionId: string, teacherIds: string
 }
 
 export type AddPerjadinSessionResult =
-  | { outcome: "added"; sessionId: string }
+  /**
+   * `schoolsChanged`: the Session's School was not yet on the trip, so the trip's Schools — and its
+   * Drive folder name — changed, and the caller renames the folders (#407).
+   */
+  | { outcome: "added"; sessionId: string; schoolsChanged: boolean }
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" }
   /**
@@ -198,6 +203,7 @@ export async function addPerjadinSession(
       const refusal = await checkPlacement(tx, perjadinId, trip, input);
       if (refusal) return refusal;
 
+      const schoolsChanged = await snapshotTripSchools(tx, perjadinId);
       const [created] = await tx
         .insert(session)
         .values({
@@ -210,7 +216,7 @@ export async function addPerjadinSession(
         .returning({ id: session.id });
 
       await replaceTeachingTeam(tx, created!.id, input.taughtByTeacherIds);
-      return { outcome: "added", sessionId: created!.id };
+      return { outcome: "added", sessionId: created!.id, schoolsChanged: await schoolsChanged() };
     });
   } catch (error) {
     return duplicateOrRethrow(error);
@@ -218,7 +224,11 @@ export async function addPerjadinSession(
 }
 
 export type EditPerjadinSessionResult =
-  | { outcome: "edited" }
+  /**
+   * `schoolsChanged`: the Session moved to another School, and one joined the trip's Schools or one
+   * left them — so the caller renames the Drive folders (#407).
+   */
+  | { outcome: "edited"; schoolsChanged: boolean }
   /** A Session past `arranged` — its School, date and time are settled once it happened. */
   | { outcome: "not-arranged"; status: PastArranged }
   | { outcome: "duplicate-session" }
@@ -273,6 +283,7 @@ export async function editPerjadinSession(
       );
       if (refusal) return refusal;
 
+      const schoolsChanged = await snapshotTripSchools(tx, row.perjadinId);
       await tx
         .update(session)
         .set({
@@ -283,7 +294,7 @@ export async function editPerjadinSession(
         .where(eq(session.id, sessionId));
 
       await replaceTeachingTeam(tx, sessionId, input.taughtByTeacherIds);
-      return { outcome: "edited" };
+      return { outcome: "edited", schoolsChanged: await schoolsChanged() };
     });
   } catch (error) {
     return duplicateOrRethrow(error);

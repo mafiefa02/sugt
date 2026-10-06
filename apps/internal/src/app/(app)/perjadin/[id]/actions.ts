@@ -136,7 +136,10 @@ export async function removePerjadinTeacherAction(
   return result;
 }
 
-/** **Add one offline Session to the trip.** */
+/**
+ * **Add one offline Session to the trip.** A Session at a School not yet on the trip changes the
+ * trip's Schools, so it renames the trip's Drive folders (#407), after the commit and best effort.
+ */
 export async function addPerjadinSessionAction(
   perjadinId: string,
   input: PerjadinSessionInput,
@@ -144,11 +147,18 @@ export async function addPerjadinSessionAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => addPerjadinSession(person, perjadinId, input));
-  if (result.outcome === "added") revalidatePath(`/perjadin/${perjadinId}`);
+  if (result.outcome === "added") {
+    if (result.schoolsChanged) await renamePerjadinFolder(person, perjadinId);
+    revalidatePath(`/perjadin/${perjadinId}`);
+  }
   return result;
 }
 
-/** **Edit one arranged offline Session's School, date, time and "Diajar oleh".** */
+/**
+ * **Edit one arranged offline Session's School, date, time and "Diajar oleh".** Moving it to another
+ * School may add one to the trip's Schools and take one away, so it renames the trip's Drive folders
+ * when they changed (#407).
+ */
 export async function editPerjadinSessionAction(
   perjadinId: string,
   sessionId: string,
@@ -157,11 +167,18 @@ export async function editPerjadinSessionAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => editPerjadinSession(person, sessionId, input));
-  if (result.outcome === "edited") revalidatePath(`/perjadin/${perjadinId}`);
+  if (result.outcome === "edited") {
+    if (result.schoolsChanged) await renamePerjadinFolder(person, perjadinId);
+    revalidatePath(`/perjadin/${perjadinId}`);
+  }
   return result;
 }
 
-/** **Cancel one offline Session** — the way a Session is removed from the trip, kept visible. */
+/**
+ * **Cancel one offline Session** — the way a Session is removed from the trip, kept visible. When it
+ * was its School's last live Session on the trip, that School leaves the trip's Schools, so it
+ * renames the trip's Drive folders (#407).
+ */
 export async function cancelPerjadinSessionAction(
   perjadinId: string,
   sessionId: string,
@@ -170,7 +187,10 @@ export async function cancelPerjadinSessionAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => cancelSession(person, sessionId, reason));
-  if (result.outcome === "cancelled") revalidatePath(`/perjadin/${perjadinId}`);
+  if (result.outcome === "cancelled") {
+    if (result.schoolsChanged) await renamePerjadinFolder(person, perjadinId);
+    revalidatePath(`/perjadin/${perjadinId}`);
+  }
   return result;
 }
 
@@ -217,9 +237,10 @@ export async function issuePerjadinFeedbackTokenAction(
  * It clamps rather than shifting: an edit that would strand an arranged Session comes back as
  * `would-strand` and nothing moves; an inverted range comes back as `ends-before-starts`.
  *
- * **A correction that moves `starts_on` renames the trip's Drive folder** (#376), after the commit and
- * best effort: a failed rename never fails the correction, and the next reconcile on that trip
- * repairs it. Every refusal above comes back before anything reaches Drive.
+ * **A correction that moves either date renames the trip's Drive folders** (#376, #407) — both dates
+ * are in its name — after the commit and best effort: a failed rename never fails the correction,
+ * and the next reconcile on that trip repairs it. Every refusal above comes back before anything
+ * reaches Drive.
  */
 export async function updatePerjadinDatesAction(
   perjadinId: string,
@@ -229,7 +250,7 @@ export async function updatePerjadinDatesAction(
 
   const result = await staffSurface(() => updatePerjadinDates(person, perjadinId, input));
   if (result.outcome === "updated") {
-    if (result.startsOnMoved) await renamePerjadinFolder(person, perjadinId);
+    if (result.datesMoved) await renamePerjadinFolder(person, perjadinId);
     revalidatePath(`/perjadin/${perjadinId}`);
   }
   return result;

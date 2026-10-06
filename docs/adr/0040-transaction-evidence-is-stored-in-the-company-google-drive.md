@@ -284,3 +284,22 @@ is the first 8 hex characters of the Perjadin's uuid, which tells two trips of o
 when their names and Schools agree. The `:` → ` ·` rule goes: the name has no colon. One function,
 `perjadinFolderName`, builds it for both reconciles and the date-correction rename. The transaction
 folders and files below it are unchanged.
+
+## Amendment (2026-10-06): when a Perjadin folder is renamed
+
+[#407](https://github.com/sugt-itb/sugt-itb-26/issues/407). The Perjadin folder's name now carries
+both dates and the trip's Schools (the amendment above), so it is renamed whenever **any** of them
+changes, not only `starts_on` (#376):
+
+- **Right after the write commits, best effort**, when either date is corrected, or when a Session
+  write changes the trip's set of Schools: a Session added at a School not yet on the trip, one moved
+  to another School, or a School's last live Session cancelled. The write reports whether the set
+  changed, so a Session write that leaves it alone makes no call to Google. A failed rename never
+  fails the write.
+- **A Sub-Cluster rename makes no call.** The next reconcile on each of its trips re-asserts the
+  name, because names are app-owned.
+- **Periksa koneksi re-asserts every Perjadin folder name**: it reads each folder, renames those
+  whose name is out of date, at most 25 per press and within the sweep's time budget, and reports
+  how many it renamed and how many it did not reach. A folder in the Drive trash or gone is reported
+  and skipped, never recreated. This is how folders made before ADR-0044 take the new name: the
+  product owner presses it after deploy until none is left.

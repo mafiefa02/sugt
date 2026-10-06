@@ -3,6 +3,7 @@ import type {
   DriveCheckReport,
   ExposableFolder,
   FolderCheck,
+  FolderNameFailure,
   SweepFailure,
 } from "./check";
 
@@ -43,6 +44,17 @@ const DOCUMENT_FAILURE_REASONS: Record<DocumentSweepFailure["reason"], string> =
   "no-such-document": "dokumen sudah tidak ada",
 };
 
+const NAME_FAILURE_REASONS: Record<FolderNameFailure["reason"], string> = {
+  "folder-trashed": "folder ada di Sampah Google Drive",
+  "folder-missing": "folder tidak ditemukan",
+  "drive-failed": "Google Drive gagal menjawab",
+};
+
+const PERJADIN_FOLDER_LABELS: Record<FolderNameFailure["folder"], string> = {
+  "bukti-transaksi": "Bukti Transaksi",
+  dokumen: "Dokumen",
+};
+
 const DOKUMEN_LINES: Record<"ok" | "created" | "busy", string> = {
   ok: "Folder Dokumen: ada.",
   created: "Folder Dokumen: dibuat.",
@@ -59,7 +71,10 @@ export type DriveCheckSentences = {
   lines: string[];
   /** Said prominently: a folder anyone with a link can open. */
   warnings: string[];
-  /** Each line the sweep could not finish, and why. */
+  /**
+   * Each line the sweep could not finish, and each Perjadin folder whose name could not be put
+   * right, and why.
+   */
   failures: string[];
 };
 
@@ -86,7 +101,7 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
         failures: [],
       };
     case "ok": {
-      const { sweep } = report;
+      const { sweep, names } = report;
       const lines = [
         "Token Google Drive berfungsi.",
         ...report.folders.map(
@@ -101,6 +116,9 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
           : [
               `Sinkronisasi dilewati sampai folder di atas beres; ${sweep.waiting} transaksi dan ${sweep.documentsWaiting} dokumen masih menunggu.`,
             ]),
+        ...(names.ran
+          ? [`${names.renamed} folder Perjadin diganti namanya, ${names.remaining} tersisa.`]
+          : []),
       ];
       return {
         lines,
@@ -114,6 +132,10 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
               ...sweep.documents.failures.map(
                 (failure) =>
                   `${failure.documentDate} · ${failure.kind}: ${DOCUMENT_FAILURE_REASONS[failure.reason]}.`,
+              ),
+              ...(names.ran ? names.failures : []).map(
+                (failure) =>
+                  `${failure.name} (${PERJADIN_FOLDER_LABELS[failure.folder]}): ${NAME_FAILURE_REASONS[failure.reason]}.`,
               ),
             ]
           : [],

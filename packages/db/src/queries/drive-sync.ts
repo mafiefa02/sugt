@@ -1,5 +1,17 @@
 import type { TransactionCategory } from "@sugt/domain";
-import { and, asc, count, eq, exists, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  isNotNull,
+  isNull,
+  notExists,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { db } from "../client";
 import { subCluster } from "../schema/reference";
@@ -29,6 +41,19 @@ export type PerjadinDriveFolder = {
   naming: PerjadinFolderNaming;
 };
 
+/** The select both reads of `PerjadinDriveFolder` share: the trip, joined to its Sub-Cluster. */
+function selectPerjadinDriveFolders() {
+  return db
+    .select({
+      driveFolderId: perjadin.driveFolderId,
+      driveDokumenFolderId: perjadin.driveDokumenFolderId,
+      naming: perjadinFolderNaming,
+    })
+    .from(perjadin)
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
+    .$dynamic();
+}
+
 /**
  * What renaming a Perjadin's Drive folder reads (#376) — after a date correction, and again in the
  * reconcile, fresh, just before it re-asserts the name. `null` when there is no such trip.
@@ -39,16 +64,22 @@ export async function perjadinDriveFolder(
 ): Promise<PerjadinDriveFolder | null> {
   requireStaff(caller);
 
-  const [trip] = await db
-    .select({
-      driveFolderId: perjadin.driveFolderId,
-      driveDokumenFolderId: perjadin.driveDokumenFolderId,
-      naming: perjadinFolderNaming,
-    })
-    .from(perjadin)
-    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
-    .where(eq(perjadin.id, perjadinId));
+  const [trip] = await selectPerjadinDriveFolders().where(eq(perjadin.id, perjadinId));
   return trip ?? null;
+}
+
+/**
+ * **Every Perjadin that has a Drive folder** — receipts, Dokumen, or both — with what its folders are
+ * named from, for Periksa koneksi's pass that re-asserts every folder name (#407). Ordered by trip
+ * id, so a press that stops early stops at the same place each time, and the next one re-reads the
+ * folders it already checked — right, or reported trashed or gone — before carrying on.
+ */
+export async function perjadinDriveFolders(caller: Person): Promise<PerjadinDriveFolder[]> {
+  requireStaff(caller);
+
+  return selectPerjadinDriveFolders()
+    .where(or(isNotNull(perjadin.driveFolderId), isNotNull(perjadin.driveDokumenFolderId)))
+    .orderBy(asc(perjadin.id));
 }
 
 /** One receipt on the line, as the reconcile names and moves it. */

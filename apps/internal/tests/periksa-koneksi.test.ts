@@ -1,7 +1,12 @@
 import { checkDriveConnectionAction } from "-/app/(app)/pengaturan/actions";
 import LaporanPage from "-/app/(app)/perjadin/[id]/laporan/page";
 import { UNSYNCED_TOOLTIP } from "-/components/laporan-perjadin/acquittal-transactions";
-import { SWEEP_LIMIT, sweepUnsynced } from "-/lib/drive/check";
+import {
+  RENAME_LIMIT,
+  reassertPerjadinFolderNames,
+  SWEEP_LIMIT,
+  sweepUnsynced,
+} from "-/lib/drive/check";
 import { describeDriveCheck, exposureWarning } from "-/lib/drive/check-report";
 import { completeDriveConnection } from "-/lib/drive/connect";
 import { FakeDrive, MY_DRIVE } from "-/lib/drive/fake-drive";
@@ -150,6 +155,7 @@ describe("the check, in order", () => {
         failures: [],
         documents: { synced: 0, waiting: 0, failures: [] },
       },
+      names: { ran: true, renamed: 0, remaining: 0, failures: [] },
     });
     expect(describeDriveCheck(report).warnings).toEqual([]);
     const [row] = await db.select().from(schema.driveConnection);
@@ -214,6 +220,7 @@ describe("the check, in order", () => {
       folders: expect.arrayContaining([{ folder: "bukti-transaksi", state: "trashed" }]),
       dokumen: "skipped",
       sweep: { ran: false, waiting: 1, documentsWaiting: 0 },
+      names: { ran: false },
     });
     expect(describeDriveCheck(report).lines).toContain(
       "Sinkronisasi dilewati sampai folder di atas beres; 1 transaksi dan 0 dokumen masih menunggu.",
@@ -379,6 +386,142 @@ describe("the sweep", () => {
     ).resolves.toBe("connected");
 
     expect((await lineRow(line.id)).driveSyncedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("the folder names (#407)", () => {
+  /** A Drive folder named as before ADR-0044, recorded as `column` of the trip. */
+  async function staleFolder(
+    perjadinId: string,
+    column: "driveFolderId" | "driveDokumenFolderId" = "driveFolderId",
+  ) {
+    const { id } = await drive.createFolder({
+      name: "Kelompok 3: Kota Bandung",
+      parentId: folders.pelaksanaanOfflineFolderId,
+    });
+    await db
+      .update(schema.perjadin)
+      .set({ [column]: id })
+      .where(eq(schema.perjadin.id, perjadinId));
+    return id;
+  }
+
+  const nameOf = async (id: string) => (await drive.getFile(id))!.name;
+
+  /** A second trip, in another Kelompok, a week later. */
+  async function anotherTrip(staffId: string) {
+    return addPerjadin({
+      advanceIdr: 1_000_000,
+      picPersonId: staffId,
+      subClusterName: "Kelompok 4",
+      startsOn: "2026-10-19",
+      endsOn: "2026-10-20",
+    });
+  }
+
+  it("renames both of a trip's out-of-date folders, and says so", async () => {
+    const { trip } = await scene();
+    const receipts = await staleFolder(trip.id);
+    const dokumen = await staleFolder(trip.id, "driveDokumenFolderId");
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toMatchObject({ names: { ran: true, renamed: 2, remaining: 0, failures: [] } });
+    const name = `Kelompok 3 · 12–14 Okt 2026 · P-${trip.id.slice(0, 8)}`;
+    await expect(nameOf(receipts)).resolves.toBe(name);
+    await expect(nameOf(dokumen)).resolves.toBe(name);
+    expect(describeDriveCheck(report).lines).toContain(
+      "2 folder Perjadin diganti namanya, 0 tersisa.",
+    );
+  });
+
+  it("reads a folder already right and writes nothing, so a second press is safe", async () => {
+    const { admin, trip } = await scene();
+    await staleFolder(trip.id);
+    await reassertPerjadinFolderNames(admin, drive);
+    const updateFile = vi.spyOn(drive, "updateFile");
+
+    await expect(reassertPerjadinFolderNames(admin, drive)).resolves.toEqual({
+      renamed: 0,
+      remaining: 0,
+      failures: [],
+    });
+    expect(updateFile).not.toHaveBeenCalled();
+  });
+
+  it("stops at the bound, and the next press carries on past what it put right", async () => {
+    const { admin, staff, trip } = await scene();
+    const other = await anotherTrip(staff.id);
+    const first = await staleFolder(trip.id);
+    const second = await staleFolder(other.id);
+    const [earlier, later] = trip.id < other.id ? [first, second] : [second, first];
+
+    await expect(reassertPerjadinFolderNames(admin, drive, { limit: 1 })).resolves.toEqual({
+      renamed: 1,
+      remaining: 1,
+      failures: [],
+    });
+    await expect(nameOf(later)).resolves.toBe("Kelompok 3: Kota Bandung");
+
+    await expect(reassertPerjadinFolderNames(admin, drive, { limit: 1 })).resolves.toEqual({
+      renamed: 1,
+      remaining: 0,
+      failures: [],
+    });
+    await expect(nameOf(earlier)).resolves.not.toBe("Kelompok 3: Kota Bandung");
+    await expect(nameOf(later)).resolves.not.toBe("Kelompok 3: Kota Bandung");
+    expect(RENAME_LIMIT).toBe(25);
+  });
+
+  it("reads nothing past its time budget, and counts what it did not reach", async () => {
+    const { admin, trip } = await scene();
+    await staleFolder(trip.id);
+    await staleFolder(trip.id, "driveDokumenFolderId");
+
+    await expect(reassertPerjadinFolderNames(admin, drive, { budgetMs: -1 })).resolves.toEqual({
+      renamed: 0,
+      remaining: 2,
+      failures: [],
+    });
+  });
+
+  it("reports a trashed or deleted folder, and neither renames nor recreates it", async () => {
+    const { trip, staff } = await scene();
+    const trashed = await staleFolder(trip.id);
+    drive.trash(trashed);
+    const other = await anotherTrip(staff.id);
+    const deleted = await staleFolder(other.id, "driveDokumenFolderId");
+    drive.remove(deleted);
+    const before = drive.files.size;
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toMatchObject({ names: { ran: true, renamed: 0, remaining: 0 } });
+    const failures = report.token === "ok" && report.names.ran ? report.names.failures : [];
+    expect(failures).toEqual(
+      expect.arrayContaining([
+        {
+          perjadinId: trip.id,
+          name: `Kelompok 3 · 12–14 Okt 2026 · P-${trip.id.slice(0, 8)}`,
+          folder: "bukti-transaksi",
+          reason: "folder-trashed",
+        },
+        {
+          perjadinId: other.id,
+          name: `Kelompok 4 · 19–20 Okt 2026 · P-${other.id.slice(0, 8)}`,
+          folder: "dokumen",
+          reason: "folder-missing",
+        },
+      ]),
+    );
+    expect(describeDriveCheck(report).failures).toEqual(
+      expect.arrayContaining([
+        `Kelompok 3 · 12–14 Okt 2026 · P-${trip.id.slice(0, 8)} (Bukti Transaksi): folder ada di Sampah Google Drive.`,
+        `Kelompok 4 · 19–20 Okt 2026 · P-${other.id.slice(0, 8)} (Dokumen): folder tidak ditemukan.`,
+      ]),
+    );
+    expect(drive.files.size).toBe(before);
+    await expect(nameOf(trashed)).resolves.toBe("Kelompok 3: Kota Bandung");
   });
 });
 

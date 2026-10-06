@@ -700,7 +700,17 @@ was recorded while the connection was down, as Periksa koneksi does below.
 - a **sweep** of the transactions whose receipts are not yet in place in Drive, oldest first, up to
   25 per press: "{n} transaksi disinkronkan, {m} masih menunggu", with the reason for any that could
   not be finished, such as a folder in the Drive trash, which is never recreated. Then the same for
-  Perjadin Documents: "{n} dokumen disinkronkan, {m} masih menunggu".
+  Perjadin Documents: "{n} dokumen disinkronkan, {m} masih menunggu";
+- **every Perjadin folder's name**, receipts and Dokumen, brought to the trip's name
+  (`Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang · P-1a2b3c4d`): "{n} folder Perjadin diganti
+  namanya, {m} tersisa". It renames up to 25 per press; a folder already right is only read. A
+  folder in the Drive trash or gone is listed with the reason and left alone. Folders made before
+  the name changed, or whose Sub-Cluster was renamed since, take the new name here — press again
+  until nothing is left.
+
+A trip's folders are also renamed by themselves, right after the change is saved, when either of
+its dates changes or its Schools do: a Session added at a new School, moved to another School, or a
+School's last Session cancelled. If Drive fails then, the next Periksa koneksi catches it.
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
 connected, broken, or its folders unresolved — the states in which nobody can upload a receipt or a Dokumen.

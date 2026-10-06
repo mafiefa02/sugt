@@ -1,5 +1,6 @@
-import { type AnyColumn, sql } from "drizzle-orm";
+import { type AnyColumn, eq, type SQL, sql } from "drizzle-orm";
 
+import type { db } from "../client";
 import { session } from "../schema/delivery";
 import { school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
@@ -20,10 +21,12 @@ import { perjadin } from "../schema/travel";
  * so it drops out.
  *
  * A **correlated aggregate subquery** on the given `perjadin.id` column, so it stays a scalar and
- * never fans the outer row out — valid in a grouped select when that column is in the `groupBy`.
+ * never fans the outer row out — valid in a grouped select when that column is in the `groupBy`. Or
+ * on one trip's id as a bound value, which a select from `perjadin` alone needs: there drizzle writes
+ * the column unqualified, and inside the subquery a bare `"id"` is ambiguous.
  * `coalesce(…, '{}'::text[])` makes a trip with none an empty array rather than `null`.
  */
-export function tripSchoolNames(perjadinId: AnyColumn) {
+export function tripSchoolNames(perjadinId: AnyColumn | SQL) {
   return sql<string[]>`coalesce(
     (
       select array_agg(distinct sch.name order by sch.name)
@@ -55,3 +58,30 @@ export const perjadinFolderNaming = {
   endsOn: perjadin.endsOn,
   schoolNames: tripSchoolNames(perjadin.id),
 };
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * **Whether a write changed the trip's Schools** (#407) — and so its Drive folder name. Snapshot
+ * the trip's Schools now, inside the write's transaction, and hand back a check that reads them
+ * again once the write is done: `true` when the two differ. The writes that add, move or cancel an
+ * offline Session report it, so their callers rename the folders only when the name moved, never on
+ * every Session write.
+ *
+ * Compared by `tripSchoolNames`, the definition the folder name is built from, so "changed" means
+ * exactly "the folder name's School part changed".
+ */
+export async function snapshotTripSchools(
+  tx: Tx,
+  perjadinId: string,
+): Promise<() => Promise<boolean>> {
+  const read = async () => {
+    const [row] = await tx
+      .select({ names: tripSchoolNames(sql`${perjadinId}::uuid`) })
+      .from(perjadin)
+      .where(eq(perjadin.id, perjadinId));
+    return (row?.names ?? []).join("\n");
+  };
+  const before = await read();
+  return async () => (await read()) !== before;
+}
