@@ -37,7 +37,7 @@ surface for is a file to maintain and nothing more.
 | `card`         | `shadcn add`          | both Dashboards' count tiles; Program's two Streams                                                                                                                                                                                                                                                    |
 | `checkbox`     | `shadcn add`          | Coverage — selecting Schools for a Perjadin or a batch of online Sessions                                                                                                                                                                                                                              |
 | `combobox`     | `shadcn add`          | Rencanakan Perjadin — the extra-Staff and "Diajar oleh" multi-selects; a Base UI combobox with chips                                                                                                                                                                                                   |
-| `dialog`       | `shadcn add`          | Tandai terlaksana, Batalkan Sesi                                                                                                                                                                                                                                                                       |
+| `dialog`       | `shadcn add`          | Tandai terlaksana, Batalkan Sesi; every popup that takes data, as the `panel` size — see [The two Dialog sizes](#the-two-dialog-sizes)                                                                                                                                                                 |
 | `empty`        | `shadcn add`          | Concerns — the empty state is a named surface, not an absence                                                                                                                                                                                                                                          |
 | `field`        | `shadcn add`          | the four evaluation forms — label, description and error as one unit                                                                                                                                                                                                                                   |
 | `input`        | `shadcn add`          | Rencanakan Perjadin, Orang's add form, Pencarian                                                                                                                                                                                                                                                       |
@@ -105,6 +105,28 @@ Base UI's other button-based controls — `Dialog.Close` / `SheetClose`, and any
 them, because they also act on click (a `SheetClose` closes the sheet). That case is tracked
 separately.
 
+## The two Dialog sizes
+
+`DialogContent` takes a `size` ([#417](https://github.com/sugt-itb/sugt-itb-26/issues/417)).
+Staff work the internal app mostly from phones, and a popup that grew with its content jumped as
+each row was added, then cropped its own title and buttons once it outgrew the screen.
+
+- **`default`** — the small centred popup, as `shadcn add` wrote it. It grows with its content, so
+  it is for content that does not grow: confirmations (Hapus, Tandai terlaksana, Batalkan Sesi),
+  single-value edits (Ubah Uang Perjalanan, Ubah tanggal), the Story editor's link popup and the two
+  QR popups.
+- **`panel`** — for every popup where data is entered. A fixed panel about 900px wide and the
+  screen's height less a margin on desktop, the whole screen below `sm`; **the same size from
+  opening to closing** whatever is added to it. It is a column: `DialogHeader` pinned at the top,
+  `DialogFooter` at the bottom, and the fields inside **`DialogBody`**, the only part that scrolls.
+  Used by Catat Transaksi, Dokumen, the Dashboard's Persiapan card editor, the Persiapan checklist,
+  Catatan Sesi, Tambah/Ubah Sesi, Ubah Group and Ubah Sesi daring.
+
+Inside a panel, short fields may sit two to a row from `sm` up, and a row holding several controls
+wraps rather than spilling sideways. A panel never takes its own `max-h-*` or `overflow-*` — the
+body is what scrolls. `DialogHeader` keeps right padding in both sizes, so a long title never runs
+under the close button.
+
 ## The two Rating controls
 
 A **Rating** is the score one person gives one Aspect. It is the only thing in the
@@ -169,7 +191,8 @@ ramp gives .625 and .85).
 `RatingInput` fills the picked cell solid rather than tinting it — a filled cell states
 a choice, where the chip reports one. Its cells are 28px, or 23px at `size="sm"`
 for the Participant Feedback form, which is filled on a phone in a classroom rather than
-at a desk. That is a prop rather than a breakpoint because the surface is phone-first,
+at a desk. Those are the most a cell grows to: where the row has less room than that, the
+cells shrink to fit rather than spill sideways (#417). That is a prop rather than a breakpoint because the surface is phone-first,
 not a desktop form at a small viewport.
 
 It is built on native radios, so it needs no state of its own, arrow keys work, and a

@@ -21,6 +21,10 @@ import { cn } from "@sugt/ui/lib/utils";
  * phone-first, not a desktop form at a small viewport. It is a `size` and not a
  * `variant`, because `Rating`'s `variant="compact"` means something else entirely —
  * that one drops the meter, where this one shrinks the cell.
+ *
+ * The cells are grid columns that **grow to** that size and no further, from a minimum of zero
+ * (#417): wherever there is room the row looks exactly as fixed cells did, and where there is not
+ * — ten cells in a popup on a 360px phone — they shrink to fit rather than spill sideways.
  */
 function RatingInput({
   name,
@@ -48,7 +52,10 @@ function RatingInput({
       data-slot="rating-input"
       data-size={size}
       role="radiogroup"
-      className={cn("flex", size === "sm" ? "gap-[3px]" : "gap-1", className)}
+      className={cn("grid", size === "sm" ? "gap-[3px]" : "gap-1", className)}
+      style={{
+        gridTemplateColumns: `repeat(${max - min + 1}, minmax(0, ${size === "sm" ? "23px" : "1.75rem"}))`,
+      }}
       {...props}
     >
       {Array.from({ length: max - min + 1 }, (_, index) => {
@@ -75,7 +82,8 @@ function RatingInput({
             <span
               className={cn(
                 "flex items-center justify-center rounded-md border border-border bg-card font-medium text-muted-foreground tabular-nums transition-all select-none hover:bg-muted active:translate-y-px",
-                size === "sm" ? "size-[23px] text-[11px]" : "size-7 text-xs",
+                "aspect-square w-full",
+                size === "sm" ? "text-[11px]" : "text-xs",
                 "peer-focus-visible:border-ring peer-focus-visible:ring-3 peer-focus-visible:ring-ring/30",
                 "peer-disabled:pointer-events-none peer-disabled:opacity-50",
                 concern

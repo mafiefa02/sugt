@@ -32,6 +32,7 @@ import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -142,7 +143,7 @@ function PerjadinDokumenDialog({
         title={uploadGate.open ? undefined : uploadGate.reason}
         render={trigger}
       />
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent size="panel">
         <DialogHeader>
           <DialogTitle>Dokumen — {name}</DialogTitle>
           <DialogDescription>
@@ -150,241 +151,245 @@ function PerjadinDokumenDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {loadFailed && (
-          <p className="text-sm text-destructive">
-            Dokumen tidak dapat dimuat — tutup lalu buka lagi.
-          </p>
-        )}
-
-        {dokumen && (
-          <PerjadinDokumenList
-            documents={dokumen.documents}
-            hapus={{ gate: uploadGate, onDeleted: () => void load() }}
-          />
-        )}
-
-        <div className="grid gap-3.5 border-t border-border pt-4">
-          <div>
-            <h3 className="text-sm font-medium">Unggah dokumen</h3>
-            <RequiredLegend />
-          </div>
-
-          {refusal !== null && (
-            <Alert variant="destructive">
-              <AlertTitle>Dokumen belum tercatat.</AlertTitle>
-              <AlertDescription>{refusal}</AlertDescription>
-            </Alert>
-          )}
-          {unsynced && (
-            <Alert>
-              <AlertTitle>Dokumen tercatat.</AlertTitle>
-              <AlertDescription>{DOCUMENT_UNSYNCED_NOTE}</AlertDescription>
-            </Alert>
+        <DialogBody className="grid content-start gap-6">
+          {loadFailed && (
+            <p className="text-sm text-destructive">
+              Dokumen tidak dapat dimuat — tutup lalu buka lagi.
+            </p>
           )}
 
-          <div className="grid gap-1.5">
-            <Label
-              htmlFor={`${ids}-kind`}
-              className="gap-1"
-            >
-              Jenis dokumen
-              <RequiredMark />
-            </Label>
-            <Select
-              value={form.kind}
-              onValueChange={(value) => {
-                update({ kind: value as PerjadinDocumentKind });
-              }}
-            >
-              <SelectTrigger
-                id={`${ids}-kind`}
-                aria-required="true"
-              >
-                <SelectValue placeholder="Pilih jenis dokumen" />
-              </SelectTrigger>
-              <SelectContent>
-                {PERJADIN_DOCUMENT_KINDS.map((kind) => (
-                  <SelectItem
-                    key={kind}
-                    value={kind}
-                  >
-                    {kind}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {dokumen && (
+            <PerjadinDokumenList
+              documents={dokumen.documents}
+              hapus={{ gate: uploadGate, onDeleted: () => void load() }}
+            />
+          )}
 
-          {form.kind !== "" && (
+          <div className="grid gap-3.5 border-t border-border pt-4">
+            <div>
+              <h3 className="text-sm font-medium">Unggah dokumen</h3>
+              <RequiredLegend />
+            </div>
+
+            {refusal !== null && (
+              <Alert variant="destructive">
+                <AlertTitle>Dokumen belum tercatat.</AlertTitle>
+                <AlertDescription>{refusal}</AlertDescription>
+              </Alert>
+            )}
+            {unsynced && (
+              <Alert>
+                <AlertTitle>Dokumen tercatat.</AlertTitle>
+                <AlertDescription>{DOCUMENT_UNSYNCED_NOTE}</AlertDescription>
+              </Alert>
+            )}
+
             <div className="grid gap-1.5">
               <Label
-                htmlFor={`${ids}-date`}
+                htmlFor={`${ids}-kind`}
                 className="gap-1"
               >
-                {isPeserta ? "Tanggal Sesi" : "Tanggal Dokumen"}
+                Jenis dokumen
                 <RequiredMark />
               </Label>
-              <Input
-                id={`${ids}-date`}
-                aria-required="true"
-                type="date"
-                min={dokumen?.startsOn}
-                max={dokumen?.endsOn}
-                value={form.documentDate}
+              <Select
+                value={form.kind}
+                onValueChange={(value) => {
+                  update({ kind: value as PerjadinDocumentKind });
+                }}
+              >
+                <SelectTrigger
+                  id={`${ids}-kind`}
+                  aria-required="true"
+                >
+                  <SelectValue placeholder="Pilih jenis dokumen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PERJADIN_DOCUMENT_KINDS.map((kind) => (
+                    <SelectItem
+                      key={kind}
+                      value={kind}
+                    >
+                      {kind}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.kind !== "" && (
+              <div className="grid gap-1.5">
+                <Label
+                  htmlFor={`${ids}-date`}
+                  className="gap-1"
+                >
+                  {isPeserta ? "Tanggal Sesi" : "Tanggal Dokumen"}
+                  <RequiredMark />
+                </Label>
+                <Input
+                  id={`${ids}-date`}
+                  aria-required="true"
+                  type="date"
+                  min={dokumen?.startsOn}
+                  max={dokumen?.endsOn}
+                  value={form.documentDate}
+                  onChange={(event) => {
+                    update({ documentDate: event.target.value });
+                  }}
+                />
+              </div>
+            )}
+
+            {isPeserta && (
+              <>
+                <div className="grid gap-1.5">
+                  <Label
+                    htmlFor={`${ids}-school`}
+                    className="gap-1"
+                  >
+                    Sekolah
+                    <RequiredMark />
+                  </Label>
+                  {/* A plain select: a trip has few Schools, so nothing to search. */}
+                  <Select
+                    value={form.schoolId}
+                    onValueChange={(value) => {
+                      update({ schoolId: (value as string | null) ?? "" });
+                    }}
+                  >
+                    <SelectTrigger
+                      id={`${ids}-school`}
+                      aria-required="true"
+                    >
+                      <SelectValue placeholder="Pilih sekolah">{school?.name}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(dokumen?.schools ?? []).map((option) => (
+                        <SelectItem
+                          key={option.id}
+                          value={option.id}
+                        >
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5">
+                    <Label
+                      htmlFor={`${ids}-starts`}
+                      className="gap-1"
+                    >
+                      Waktu Mulai{timeZoneSuffix(school?.timeZone)}
+                      <RequiredMark />
+                    </Label>
+                    <TimeField
+                      id={`${ids}-starts`}
+                      aria-required="true"
+                      value={form.startsAt}
+                      onValueChange={(value) => {
+                        update({ startsAt: value });
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label
+                      htmlFor={`${ids}-ends`}
+                      className="gap-1"
+                    >
+                      Waktu Selesai{timeZoneSuffix(school?.timeZone)}
+                      <RequiredMark />
+                    </Label>
+                    <TimeField
+                      id={`${ids}-ends`}
+                      aria-required="true"
+                      value={form.endsAt}
+                      onValueChange={(value) => {
+                        update({ endsAt: value });
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label
+                    htmlFor={`${ids}-participant-type`}
+                    className="gap-1"
+                  >
+                    Tipe Peserta
+                    <RequiredMark />
+                  </Label>
+                  <Select
+                    value={form.participantType}
+                    onValueChange={(value) => {
+                      update({ participantType: value as PerjadinDocumentParticipantType });
+                    }}
+                  >
+                    <SelectTrigger
+                      id={`${ids}-participant-type`}
+                      aria-required="true"
+                    >
+                      <SelectValue placeholder="Pilih tipe peserta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PERJADIN_DOCUMENT_PARTICIPANT_TYPES.map((option) => (
+                        <SelectItem
+                          key={option}
+                          value={option}
+                        >
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
+            <div className="grid gap-1.5">
+              <Label className="gap-1">
+                File
+                <RequiredMark />
+              </Label>
+              <p className="-mt-0.5 text-xs text-muted-foreground">{DOCUMENT_HINT}</p>
+              <input
+                ref={picker}
+                type="file"
+                accept={DOCUMENT_ACCEPT}
+                className="hidden"
                 onChange={(event) => {
-                  update({ documentDate: event.target.value });
+                  const picked = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!picked) return;
+                  const checked = pickDocument(picked);
+                  if (typeof checked === "string") {
+                    setFileNote(checked);
+                    return;
+                  }
+                  setFile(checked);
+                  setFileNote(null);
                 }}
               />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => picker.current?.click()}
+                >
+                  Pilih file
+                </Button>
+                {file && (
+                  <span className="truncate text-sm text-muted-foreground">{file.name}</span>
+                )}
+              </div>
+              {fileNote !== null && <p className="text-sm text-destructive">{fileNote}</p>}
             </div>
-          )}
-
-          {isPeserta && (
-            <>
-              <div className="grid gap-1.5">
-                <Label
-                  htmlFor={`${ids}-school`}
-                  className="gap-1"
-                >
-                  Sekolah
-                  <RequiredMark />
-                </Label>
-                {/* A plain select: a trip has few Schools, so nothing to search. */}
-                <Select
-                  value={form.schoolId}
-                  onValueChange={(value) => {
-                    update({ schoolId: (value as string | null) ?? "" });
-                  }}
-                >
-                  <SelectTrigger
-                    id={`${ids}-school`}
-                    aria-required="true"
-                  >
-                    <SelectValue placeholder="Pilih sekolah">{school?.name}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(dokumen?.schools ?? []).map((option) => (
-                      <SelectItem
-                        key={option.id}
-                        value={option.id}
-                      >
-                        {option.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-1.5">
-                  <Label
-                    htmlFor={`${ids}-starts`}
-                    className="gap-1"
-                  >
-                    Waktu Mulai{timeZoneSuffix(school?.timeZone)}
-                    <RequiredMark />
-                  </Label>
-                  <TimeField
-                    id={`${ids}-starts`}
-                    aria-required="true"
-                    value={form.startsAt}
-                    onValueChange={(value) => {
-                      update({ startsAt: value });
-                    }}
-                  />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label
-                    htmlFor={`${ids}-ends`}
-                    className="gap-1"
-                  >
-                    Waktu Selesai{timeZoneSuffix(school?.timeZone)}
-                    <RequiredMark />
-                  </Label>
-                  <TimeField
-                    id={`${ids}-ends`}
-                    aria-required="true"
-                    value={form.endsAt}
-                    onValueChange={(value) => {
-                      update({ endsAt: value });
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label
-                  htmlFor={`${ids}-participant-type`}
-                  className="gap-1"
-                >
-                  Tipe Peserta
-                  <RequiredMark />
-                </Label>
-                <Select
-                  value={form.participantType}
-                  onValueChange={(value) => {
-                    update({ participantType: value as PerjadinDocumentParticipantType });
-                  }}
-                >
-                  <SelectTrigger
-                    id={`${ids}-participant-type`}
-                    aria-required="true"
-                  >
-                    <SelectValue placeholder="Pilih tipe peserta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PERJADIN_DOCUMENT_PARTICIPANT_TYPES.map((option) => (
-                      <SelectItem
-                        key={option}
-                        value={option}
-                      >
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          )}
-
-          <div className="grid gap-1.5">
-            <Label className="gap-1">
-              File
-              <RequiredMark />
-            </Label>
-            <p className="-mt-0.5 text-xs text-muted-foreground">{DOCUMENT_HINT}</p>
-            <input
-              ref={picker}
-              type="file"
-              accept={DOCUMENT_ACCEPT}
-              className="hidden"
-              onChange={(event) => {
-                const picked = event.target.files?.[0];
-                event.target.value = "";
-                if (!picked) return;
-                const checked = pickDocument(picked);
-                if (typeof checked === "string") {
-                  setFileNote(checked);
-                  return;
-                }
-                setFile(checked);
-                setFileNote(null);
-              }}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={saving}
-                onClick={() => picker.current?.click()}
-              >
-                Pilih file
-              </Button>
-              {file && <span className="truncate text-sm text-muted-foreground">{file.name}</span>}
-            </div>
-            {fileNote !== null && <p className="text-sm text-destructive">{fileNote}</p>}
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button
