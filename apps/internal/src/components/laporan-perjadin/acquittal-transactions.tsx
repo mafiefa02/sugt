@@ -355,10 +355,11 @@ function Receipts({
   function upload(files: File[]) {
     const batch = files.slice(0, Math.max(0, slotsLeft));
     // Set before the transition, not inside it: React holds an async transition's updates made
-    // before its first `await` until the whole action ends, so the status would never show.
+    // before its first `await` until the whole action ends, so the status would never show and the
+    // last attempt's note would stay beside it.
     setProgress({ phase: "uploading", done: 0, total: batch.length });
+    setNote(null);
     startUploading(async () => {
-      setNote(null);
       const notes: string[] = [];
       if (batch.length < files.length) {
         notes.push(`${files.length - batch.length} berkas tidak diunggah: ${CAP_NOTE}`);
@@ -543,12 +544,12 @@ function RecordTransaction({
    * against fresh sessions. Files that did land stay in private `_staging`, which ADR-0040 accepts.
    */
   function submit() {
-    // Before the transition, so it shows at once (see `Receipts`'s `upload`).
+    // Before the transition, so the status shows and the last attempt's alert clears at once (see
+    // `Receipts`'s `upload`).
     setProgress({ phase: "uploading", done: 0, total: staged.length });
+    setRefusal(null);
+    setUnsynced(false);
     startSaving(async () => {
-      setRefusal(null);
-      setUnsynced(false);
-
       // A new line is all or nothing: any file that cannot be sent refuses the whole of it.
       const { prepared, unsupported, tooLarge } = await prepareAll(staged);
       if (unsupported > 0) return setRefusal(UNSUPPORTED_RECEIPT);

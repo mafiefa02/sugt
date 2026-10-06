@@ -114,12 +114,12 @@ function PerjadinDokumenDialog({
   function submit() {
     if (!fields || !file) return;
     // Set before the transition, not inside it: React holds an async transition's updates made
-    // before its first `await` until the whole action ends, so the status would never show.
+    // before its first `await` until the whole action ends, so the status would never show and the
+    // last attempt's alert would stay beside it.
     setProgress({ phase: "uploading", done: 0, total: 1 });
+    setRefusal(null);
+    setUnsynced(false);
     startSaving(async () => {
-      setRefusal(null);
-      setUnsynced(false);
-
       const session = await openDocumentSessionAction(perjadinId, {
         size: file.size,
         contentType: file.type,
@@ -178,7 +178,11 @@ function PerjadinDokumenDialog({
           {dokumen && (
             <PerjadinDokumenList
               documents={dokumen.documents}
-              hapus={{ gate: uploadGate, onDeleted: () => void load() }}
+              hapus={{
+                // Closed too while a sheet uploads, so nothing else changes the list under it.
+                gate: saving ? { open: false, reason: UPLOAD_RUNNING } : uploadGate,
+                onDeleted: () => void load(),
+              }}
             />
           )}
 
@@ -428,5 +432,8 @@ function PerjadinDokumenDialog({
     </Dialog>
   );
 }
+
+/** Why Hapus waits while a sheet uploads. */
+const UPLOAD_RUNNING = "Tunggu sampai unggahan selesai.";
 
 export { PerjadinDokumenDialog };

@@ -89,9 +89,8 @@ function DialogContent({
   VariantProps<typeof dialogContentVariants> & {
     showCloseButton?: boolean;
     /**
-     * Shows the close button disabled, for while the popup refuses to close (an upload running).
-     * It only says so: the refusal itself is the caller's `onOpenChange` ignoring the close, which
-     * is what also stops Esc and an outside click.
+     * Disables the close button, for while the popup refuses to close (an upload running). Esc and
+     * an outside click are not buttons, so the caller's `onOpenChange` must ignore the close too.
      */
     closeDisabled?: boolean;
   }) {

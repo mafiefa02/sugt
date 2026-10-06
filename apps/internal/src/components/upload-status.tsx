@@ -10,9 +10,9 @@ import { useEffect } from "react";
  * progress events, and what is wanted is an unmistakable sign that something is running, not a
  * measurement of it.
  *
- * `uploading` while the bytes go to Drive — `done` of `total` files finished, whether they go in
- * parallel (receipts) or one after another (a later uploader) — then `saving` while the server records
- * and reconciles them.
+ * `uploading` while the files are readied and their bytes go to Drive — `done` of `total` finished,
+ * whether they go in parallel (receipts) or one after another (Foto & Video, #425, will) — then
+ * `saving` while the server records and reconciles them.
  */
 export type UploadProgress =
   | { phase: "uploading"; done: number; total: number }
@@ -88,8 +88,10 @@ export function holdOpenWhile(
 }
 
 /**
- * While `active`, leaving the page — a reload, closing the tab, following a link out — asks first,
- * with the browser's own prompt (it shows no custom text). Removed as soon as the upload is over.
+ * While `active`, unloading the page — a reload, closing the tab, typing another address — asks
+ * first, with the browser's own prompt (it shows no custom text). Removed as soon as the upload is
+ * over. An in-app link does not unload the page, so it is not caught; in a popup the overlay covers
+ * the links anyway.
  */
 export function useLeaveWarning(active: boolean) {
   useEffect(() => {

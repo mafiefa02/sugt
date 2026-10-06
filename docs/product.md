@@ -121,8 +121,8 @@ berkas ke Google Drive…" when several files go at once — and "Jangan tutup h
 selesai." under it. Once the files are in Drive it reads "Menyimpan…" while the app records them.
 There is no progress bar. In a popup it sits directly above the buttons; for Unggah bukti it sits
 under the line's receipts. Until it is over, the popup cannot be closed (its close button is
-disabled, and Esc and a click outside do nothing), its fields are disabled, and reloading or
-closing the tab asks first. Then everything unlocks and the usual result shows.
+disabled, and Esc and a click outside do nothing), its fields are disabled (so is Dokumen's Hapus),
+and reloading or closing the tab asks first. Then everything unlocks and the usual result shows.
 
 ### Coverage view — the landing screen
 
