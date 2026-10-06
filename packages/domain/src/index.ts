@@ -604,12 +604,13 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 /**
  * **What an Activity Log entry records**
- * ([#395](https://github.com/sugt-itb/sugt-itb-26/issues/395)): one act on a Perjadin's money, receipts, documents or report. A closed set, mirrored character
- * for character by `activity_log_action_check` (see `packages/db/src/schema/travel.ts`).
+ * ([#395](https://github.com/sugt-itb/sugt-itb-26/issues/395)): one act on a Perjadin's money,
+ * receipts, documents or report. A closed set, mirrored character for character by
+ * `activity_log_action_check` (see `packages/db/src/schema/travel.ts`).
  *
- * The two `document_*` values are in the set before anything writes them, so the Dokumen tickets
- * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397),
- * [#398](https://github.com/sugt-itb/sugt-itb-26/issues/398)) need no CHECK migration.
+ * The two `document_*` values went into the set with the rest, so the Dokumen uploads
+ * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397)) and Hapus
+ * ([#398](https://github.com/sugt-itb/sugt-itb-26/issues/398)) needed no CHECK migration.
  */
 export const ACTIVITY_LOG_ACTIONS = [
   "advance_set",

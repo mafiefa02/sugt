@@ -33,8 +33,8 @@ import type {
 
 /**
  * **The Dokumen dialog's Server Actions** (ADR-0042, #397, #398): the trip's sheets, uploading
- * one, and deleting one.
- * The write order is Catat transaksi's — check, verify, commit, reconcile — through the same guards
+ * one, and deleting one. An upload runs Catat transaksi's order — check, verify, commit,
+ * reconcile — and Hapus runs guard, trash, delete; both through the same guards
  * (`-/lib/drive/upload-guard`), because Google is reached before any query runs.
  */
 

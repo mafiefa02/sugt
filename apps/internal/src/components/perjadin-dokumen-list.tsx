@@ -147,6 +147,14 @@ function Hapus({
         {refusal !== null && <p className="text-sm text-destructive">{refusal}</p>}
         <DialogFooter>
           <Button
+            variant="ghost"
+            onClick={() => {
+              setOpen(false);
+            }}
+          >
+            Batal
+          </Button>
+          <Button
             variant="destructive"
             disabled={deleting}
             onClick={submit}

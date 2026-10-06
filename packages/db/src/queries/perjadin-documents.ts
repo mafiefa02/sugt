@@ -181,24 +181,36 @@ export async function recordPerjadinDocument(
       uploadedByPersonId: caller.id,
     });
 
-    const details: DocumentLogDetails = {
-      documentId: input.documentId,
-      kind: input.kind,
-      documentDate: input.documentDate,
-    };
-    if (peserta && checked.school) {
-      Object.assign(details, {
-        schoolName: checked.school.name,
-        participantType: peserta.participantType,
-        startsAt: peserta.startsAt,
-        endsAt: peserta.endsAt,
-        timeZone: checked.school.timeZone,
-      });
-    }
+    const details = documentLogDetails(
+      { documentId: input.documentId, kind: input.kind, documentDate: input.documentDate },
+      peserta,
+      checked.school,
+    );
     await logActivity(tx, caller, input.perjadinId, { action: "document_uploaded", details });
 
     return { outcome: "recorded" };
   });
+}
+
+/**
+ * What a `document_uploaded` or `document_deleted` entry records of one sheet: its kind and date,
+ * and for a Peserta sheet its School's name and zone, cohort and span — one shape for both, so the
+ * Log reads an upload and its deletion the same way.
+ */
+function documentLogDetails(
+  sheet: Pick<DocumentLogDetails, "documentId" | "kind" | "documentDate">,
+  peserta: PesertaFields | undefined,
+  school: { name: string; timeZone: TimeZone } | null,
+): DocumentLogDetails {
+  if (!peserta || !school) return { ...sheet };
+  return {
+    ...sheet,
+    schoolName: school.name,
+    participantType: peserta.participantType,
+    startsAt: peserta.startsAt,
+    endsAt: peserta.endsAt,
+    timeZone: school.timeZone,
+  };
 }
 
 export type DeletePerjadinDocumentResult =
@@ -228,26 +240,28 @@ export async function deletePerjadinDocument(
       .returning();
     if (!row) return { outcome: "no-such-document" };
 
-    const details: DocumentLogDetails = {
-      documentId: row.id,
-      kind: row.kind,
-      documentDate: row.documentDate,
-    };
-    if (row.schoolId && row.participantType && row.startsAt && row.endsAt) {
-      const [found] = await tx
-        .select({ name: school.name, timeZone: province.timeZone })
-        .from(school)
-        .innerJoin(province, eq(province.code, school.provinceCode))
-        .where(eq(school.id, row.schoolId));
-      Object.assign(details, {
-        schoolName: found?.name,
-        participantType: row.participantType,
-        // As the upload's entry wrote them: `HH:MM`.
-        startsAt: row.startsAt.slice(0, 5),
-        endsAt: row.endsAt.slice(0, 5),
-        timeZone: found?.timeZone,
-      });
-    }
+    const peserta =
+      row.schoolId && row.participantType && row.startsAt && row.endsAt
+        ? {
+            schoolId: row.schoolId,
+            participantType: row.participantType,
+            // As the upload's entry wrote them: `HH:MM`.
+            startsAt: row.startsAt.slice(0, 5),
+            endsAt: row.endsAt.slice(0, 5),
+          }
+        : undefined;
+    const [found] = peserta
+      ? await tx
+          .select({ name: school.name, timeZone: province.timeZone })
+          .from(school)
+          .innerJoin(province, eq(province.code, school.provinceCode))
+          .where(eq(school.id, peserta.schoolId))
+      : [];
+    const details = documentLogDetails(
+      { documentId: row.id, kind: row.kind, documentDate: row.documentDate },
+      peserta,
+      found ?? null,
+    );
     await logActivity(tx, caller, row.perjadinId, { action: "document_deleted", details });
 
     return { outcome: "deleted", perjadinId: row.perjadinId };

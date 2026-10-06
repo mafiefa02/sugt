@@ -540,8 +540,8 @@ describe("activityLogPage — /log's read", () => {
       ["transaction_recorded", {}],
       ["evidence_uploaded", {}],
       ["report_filed", { transactionCount: 0, totalIdr: 0 }],
-      ["document_uploaded", {}],
-      ["document_deleted", {}],
+      ["document_uploaded", { kind: "Daftar Hadir Pendamping", documentDate: "2026-10-13" }],
+      ["document_deleted", { kind: "Daftar Hadir Pendamping", documentDate: "2026-10-13" }],
     ];
     for (const [i, [action, details]] of each.entries()) {
       await addActivityLogEntry({

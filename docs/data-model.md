@@ -1615,8 +1615,8 @@ create index activity_log_occurred_at_id_idx on activity_log (occurred_at desc, 
 
 **One row per act on a Perjadin's money, receipts, documents or report** (#395), read only by an
 Administrator on `/log`. The `action` values are character for character `ACTIVITY_LOG_ACTIONS` in
-`packages/domain/src/index.ts`. The two `document_*` values are in the CHECK before anything writes
-them, so the Dokumen tickets need no CHECK migration.
+`packages/domain/src/index.ts`. The two `document_*` values went into the CHECK with the rest, so the
+Dokumen uploads and Hapus needed no CHECK migration.
 
 **Each entry is written in the same database transaction as the change it records**, so a refused
 or failed write logs nothing. Five writes log today, each through `logActivity` in

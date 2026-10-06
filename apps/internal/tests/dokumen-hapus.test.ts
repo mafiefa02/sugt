@@ -5,10 +5,11 @@ import {
 } from "-/app/(app)/perjadin/[id]/dokumen/actions";
 import PerjadinPage from "-/app/(app)/perjadin/[id]/page";
 import { FakeDrive } from "-/lib/drive/fake-drive";
-import { openDrive } from "-/lib/drive/google";
+import { DriveRequestError, openDrive } from "-/lib/drive/google";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import { deletePerjadinDocument, isNotStaffError, type Person } from "@sugt/db/queries";
+import { eq } from "drizzle-orm";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -46,8 +47,11 @@ vi.mock("next/headers", () => ({
 
 let drive: FakeDrive;
 
-/** A Staff PIC, a Pimpinan, a trip with one School, Drive connected, and one sheet uploaded. */
-async function scene() {
+/**
+ * A Staff PIC, a Pimpinan, a trip with one School, Drive connected, and one sheet uploaded —
+ * synced, unless `synced` is false: then moving it fails, and its file stays in `_staging`.
+ */
+async function scene({ synced = true }: { synced?: boolean } = {}) {
   const staff = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
   const pimpinan = await addPerson({ fullName: "Fa", email: "fa@itb.ac.id", role: "Pimpinan" });
   await addProvince("KT", "Kalimantan Timur", "WITA");
@@ -82,6 +86,9 @@ async function scene() {
   });
   if (opened.outcome !== "ready") throw new Error(opened.outcome);
   const fileId = drive.land(opened.sessionUri, bytes).id;
+  if (!synced) {
+    vi.spyOn(drive, "updateFile").mockRejectedValueOnce(new DriveRequestError("files.update", 500));
+  }
   const recorded = await recordDocumentAction({
     perjadinId: trip.id,
     driveFileId: fileId,
@@ -93,6 +100,12 @@ async function scene() {
   drive.calls = 0;
   return { staff, pimpinan, trip, fileId, documentId: recorded.documentId };
 }
+
+/** The scene's Staff PIC, as the query layer takes them. */
+scene.staff = async () => {
+  const [row] = await db.select().from(schema.person).where(eq(schema.person.role, "Staff"));
+  return { ...row!, grants: [] } as Person;
+};
 
 const documents = () => db.select().from(schema.perjadinDocument);
 const deletions = async () =>
@@ -147,6 +160,38 @@ describe("Hapus", () => {
       reason: expect.stringMatching(/^Koneksi Google Drive terputus sejak/),
     });
     expect(trashed(fileId)).toBe(false);
+    await expect(documents()).resolves.toHaveLength(1);
+    await expect(deletions()).resolves.toHaveLength(0);
+  });
+
+  it("is refused, with the reason, when Drive was never connected", async () => {
+    const { documentId } = await scene();
+    await db.delete(schema.driveConnection);
+
+    await expect(deleteDocumentAction(documentId)).resolves.toEqual({
+      outcome: "drive-disconnected",
+      reason: expect.stringMatching(/^Google Drive belum terhubung/),
+    });
+    await expect(documents()).resolves.toHaveLength(1);
+  });
+
+  it("deletes an unsynced sheet the same way, its file trashed from _staging", async () => {
+    const { documentId, fileId } = await scene({ synced: false });
+    const [unsynced] = await documents();
+    expect(unsynced!.driveSyncedAt).toBeNull();
+
+    await expect(deleteDocumentAction(documentId)).resolves.toEqual({ outcome: "deleted" });
+    expect(trashed(fileId)).toBe(true);
+    await expect(documents()).resolves.toEqual([]);
+  });
+
+  it("rolls the row back with the Log entry: one refused, neither written", async () => {
+    const { documentId } = await scene();
+    // A caller whose Person does not exist: the Log entry's foreign key refuses it, inside the
+    // transaction, after the row delete — so the delete must be undone with it.
+    const ghost = { ...(await scene.staff()), id: "00000000-0000-0000-0000-00000000dead" };
+
+    await expect(deletePerjadinDocument(ghost, documentId)).rejects.toThrow();
     await expect(documents()).resolves.toHaveLength(1);
     await expect(deletions()).resolves.toHaveLength(0);
   });
