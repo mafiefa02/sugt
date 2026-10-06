@@ -5,6 +5,7 @@ import { db } from "../client";
 import { session } from "../schema/delivery";
 import { province, school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
+import type { PerjadinNameRef } from "./perjadin-naming";
 
 /**
  * **One live offline Session per School per moment, across every Perjadin** (#408, ADR-0043) — the
@@ -34,7 +35,7 @@ export type SchoolBookedOnAnotherPerjadin = {
   heldOn: string;
   startsAt: string;
   timeZone: TimeZone;
-  perjadin: { id: string; subClusterName: string; startsOn: string; endsOn: string };
+  perjadin: PerjadinNameRef;
 };
 
 /** Which Session and trip a check is on behalf of, so neither counts as holding its own slot. */

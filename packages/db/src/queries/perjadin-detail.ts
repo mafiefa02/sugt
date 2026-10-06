@@ -133,7 +133,9 @@ export type PerjadinDetail = {
  *
  * A header with several independent lists hanging off it, gathered concurrently with `Promise.all`
  * rather than joined at once — joining every list into one statement would multiply each list's rows
- * by the others'. The screen still makes one call and assembles nothing.
+ * by the others'. What each eligible School already has on other trips (#409) is one more round
+ * trip after them, keyed on the Schools the eligible-School list found. The screen still makes one
+ * call and assembles nothing.
  */
 export async function perjadinDetail(
   _caller: Person,

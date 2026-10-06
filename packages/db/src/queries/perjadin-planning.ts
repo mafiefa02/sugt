@@ -510,10 +510,10 @@ export async function planPerjadin(
 }
 
 /**
- * A School the form is planning a Session for, as one row of its Sub-Cluster shows it. The same
- * three fields a form row has always rendered, so it **aliases** `SelectedSchool` rather than
- * restating the shape — the reuse `arrange-online-session.ts`'s `SchoolOption` also makes, which
- * keeps the two from drifting.
+ * A School the form is planning a Session for, as one row of its Sub-Cluster shows it: the fields of
+ * `SelectedSchool`, extended rather than restated — the reuse `arrange-online-session.ts`'s
+ * `SchoolOption` also makes, so the shared fields cannot drift — plus what the School already has
+ * on other trips (#409), which only this form shows.
  */
 export type PlannableSchool = SelectedSchool & {
   /**
@@ -606,7 +606,9 @@ async function plannableSubClusters(): Promise<SubClusterOfSchools[]> {
  *
  * **Staff-only, so the read is too** — a Teaching Team member reaching the URL directly would
  * otherwise be shown the whole form and refused only on submit. `Promise.all` keeps the
- * Sub-Cluster read and the roster read concurrent; the rosters come from `./rosters.ts`. Both the
+ * Sub-Cluster read and the roster read concurrent; the rosters come from `./rosters.ts`. What each
+ * School already has on other trips (#409) is a second round trip after them, since it is keyed on
+ * the Schools the first one found. Both the
  * `staff` and `pimpinan` halves are kept — Staff for the PIC/extra-Staff pickers, Pimpinan for the
  * record-only checkbox list (#181). The Teaching Team are trip-scoped names now, not a roster (ADR-0020).
  */

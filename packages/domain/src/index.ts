@@ -72,13 +72,13 @@ export type SessionMode = (typeof SESSION_MODES)[number];
 export const SESSION_STATUSES = ["arranged", "delivered", "cancelled"] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
-/** What a Session's Sesi is ranked by ([ADR-0027](../../../docs/adr/0027-a-sessions-sesi-is-its-per-school-date-rank.md)). */
+/** What a Session's Sesi is ranked by — see `rankBySchool`. */
 export type RankableSession = { id: string; schoolId: string; heldOn: string; startsAt: string };
 
 /**
- * Order two Sessions the way rank does: by held date, then start time, then id as a stable
- * tie-break. Plain string comparison is correct for both — `heldOn` is `YYYY-MM-DD` and `startsAt`
- * is `HH:MM[:SS]`, both of which sort lexically as they sort chronologically.
+ * The Sesi order: by held date, then start time, then id as a stable tie-break. Plain string
+ * comparison is correct for both — `heldOn` is `YYYY-MM-DD` and `startsAt` is `HH:MM[:SS]`, both
+ * of which sort lexically as they sort chronologically.
  */
 function bySesiRank(a: RankableSession, b: RankableSession): number {
   if (a.heldOn !== b.heldOn) return a.heldOn < b.heldOn ? -1 : 1;
@@ -88,8 +88,8 @@ function bySesiRank(a: RankableSession, b: RankableSession): number {
 
 /**
  * **A Session's Sesi** — its per-School, per-mode date rank
- * ([ADR-0027](../../../docs/adr/0027-a-sessions-sesi-is-its-per-school-date-rank.md)), computed on
- * the fly and never stored. Each School's Sessions in Sesi order: index 0 is Sesi 1, index 1 is
+ * (`docs/adr/0027-a-sessions-sesi-is-its-per-school-date-rank.md`), computed on the fly and never
+ * stored. Each School's Sessions in Sesi order: index 0 is Sesi 1, index 1 is
  * Sesi 2. The one ranking, shared by the `/monitoring` matrix and the planning note (#409).
  *
  * The caller passes **one mode's live Sessions** — cancelled ones are left out, so the next Session

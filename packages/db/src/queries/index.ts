@@ -184,6 +184,7 @@ export {
 } from "./perjadin-sessions";
 export { type SchoolBookedOnAnotherPerjadin } from "./school-slot";
 export { type CoveredSession } from "./covered-sessions";
+export { type PerjadinNameRef } from "./perjadin-naming";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
   myPerjadin,

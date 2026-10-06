@@ -1,10 +1,11 @@
 import { rankBySchool, type TimeZone } from "@sugt/domain";
-import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { province, school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
+import type { PerjadinNameRef } from "./perjadin-naming";
 
 /**
  * **What is already covered** (#409) — each School's live offline Sessions on other Perjadins, shown
@@ -23,21 +24,21 @@ export type CoveredSession = {
   startsAt: string;
   /** The School's Time Zone, for `startsAt`. */
   timeZone: TimeZone;
-  /** Its trip's id, for the link, and the parts of the trip's name (ADR-0044). */
-  perjadin: { id: string; subClusterName: string; startsOn: string; endsOn: string };
+  /** Its trip, for the link and the name. */
+  perjadin: PerjadinNameRef;
 };
 
 /**
  * Each of `schoolIds`' live offline Sessions, in Sesi order, with `excludePerjadinId`'s left out —
  * the trip being edited, whose own Sessions its page already lists. The Sesi is ranked **before**
  * the excluded trip is dropped, by `rankBySchool`, the one ranking, so a Session keeps the number it
- * has everywhere else. A School with none maps to an empty list.
+ * has everywhere else. A School with none has no entry.
  */
 export async function offlineSessionsElsewhere(
   schoolIds: string[],
   excludePerjadinId?: string,
 ): Promise<Map<string, CoveredSession[]>> {
-  const covered = new Map<string, CoveredSession[]>(schoolIds.map((id) => [id, []]));
+  const covered = new Map<string, CoveredSession[]>();
   if (schoolIds.length === 0) return covered;
 
   const rows = await db
@@ -63,7 +64,6 @@ export async function offlineSessionsElsewhere(
       and(
         inArray(session.schoolId, schoolIds),
         eq(session.mode, "offline"),
-        isNotNull(session.perjadinId),
         ne(session.status, "cancelled"),
       ),
     );
