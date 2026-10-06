@@ -1,5 +1,17 @@
 import type { TransactionCategory } from "@sugt/domain";
-import { and, asc, count, eq, exists, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  isNotNull,
+  isNull,
+  notExists,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { db } from "../client";
 import { subCluster } from "../schema/reference";
@@ -49,6 +61,27 @@ export async function perjadinDriveFolder(
     .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .where(eq(perjadin.id, perjadinId));
   return trip ?? null;
+}
+
+/**
+ * **Every Perjadin that has a Drive folder** — receipts, Dokumen, or both — with what its folders are
+ * named from, for Periksa koneksi's pass that re-asserts every folder name (#407). Ordered by trip
+ * id, so a press that stops early stops at the same place each time and the next one re-reads only
+ * folders it already put right.
+ */
+export async function perjadinDriveFolders(caller: Person): Promise<PerjadinDriveFolder[]> {
+  requireStaff(caller);
+
+  return db
+    .select({
+      driveFolderId: perjadin.driveFolderId,
+      driveDokumenFolderId: perjadin.driveDokumenFolderId,
+      naming: perjadinFolderNaming,
+    })
+    .from(perjadin)
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
+    .where(or(isNotNull(perjadin.driveFolderId), isNotNull(perjadin.driveDokumenFolderId)))
+    .orderBy(asc(perjadin.id));
 }
 
 /** One receipt on the line, as the reconcile names and moves it. */

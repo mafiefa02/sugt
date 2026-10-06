@@ -317,6 +317,7 @@ export {
   markTransactionSyncFailed,
   markTransactionSynced,
   perjadinDriveFolder,
+  perjadinDriveFolders,
   reconcileTarget,
   unsyncedTransactions,
   type PerjadinDriveFolder,

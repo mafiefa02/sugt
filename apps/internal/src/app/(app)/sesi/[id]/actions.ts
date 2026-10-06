@@ -1,5 +1,6 @@
 "use server";
 
+import { renamePerjadinFolder } from "-/lib/drive/rename-perjadin-folder";
 import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
@@ -59,7 +60,11 @@ export async function markSessionDeliveredAction(sessionId: string): Promise<Mar
   return result;
 }
 
-/** **Batalkan Sesi** — the reason travels in the same call, because the CHECK refuses it apart. */
+/**
+ * **Batalkan Sesi** — the reason travels in the same call, because the CHECK refuses it apart. When
+ * it was its School's last live Session on its trip, the trip's Schools changed, so it renames that
+ * trip's Drive folders (#407), after the commit and best effort.
+ */
 export async function cancelSessionAction(
   sessionId: string,
   reason: string,
@@ -67,7 +72,12 @@ export async function cancelSessionAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => cancelSession(person, sessionId, reason));
-  if (result.outcome === "cancelled") revalidatePath(`/sesi/${sessionId}`);
+  if (result.outcome === "cancelled") {
+    if (result.schoolsChanged && result.perjadinId) {
+      await renamePerjadinFolder(person, result.perjadinId);
+    }
+    revalidatePath(`/sesi/${sessionId}`);
+  }
   return result;
 }
 

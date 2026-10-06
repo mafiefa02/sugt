@@ -529,7 +529,7 @@ describe("editing a Perjadin's Sessions", () => {
       taughtByTeacherIds: [andi.teacherId],
     });
 
-    expect(result).toEqual({ outcome: "edited" });
+    expect(result).toEqual({ outcome: "edited", schoolsChanged: true });
     const [row] = await sessionsOf(perjadinId);
     expect(row).toMatchObject({
       schoolId: schools[1].id,
@@ -556,7 +556,7 @@ describe("editing a Perjadin's Sessions", () => {
       taughtByTeacherIds: [],
     });
 
-    expect(result).toEqual({ outcome: "edited" });
+    expect(result).toEqual({ outcome: "edited", schoolsChanged: false });
   });
 
   it("does not clash an edited Session with itself when it moves to another School at its own slot", async () => {
@@ -578,7 +578,7 @@ describe("editing a Perjadin's Sessions", () => {
       taughtByTeacherIds: [],
     });
 
-    expect(result).toEqual({ outcome: "edited" });
+    expect(result).toEqual({ outcome: "edited", schoolsChanged: true });
   });
 
   it("refuses an edit that clashes with another School's Session", async () => {
@@ -633,7 +633,11 @@ describe("editing a Perjadin's Sessions", () => {
       perjadinId,
     });
 
-    expect(await cancelSession(pic, session.id, "Sekolah libur")).toEqual({ outcome: "cancelled" });
+    expect(await cancelSession(pic, session.id, "Sekolah libur")).toEqual({
+      outcome: "cancelled",
+      perjadinId,
+      schoolsChanged: true,
+    });
     const [row] = await sessionsOf(perjadinId);
     expect(row?.status).toBe("cancelled");
   });

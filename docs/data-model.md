@@ -1586,6 +1586,19 @@ unsynced, and its files wait in private `_staging` until the next reconcile fini
 synced only for the receipts it read. If a newer receipt was committed while it ran, the mark does
 not land, so that receipt stays owed rather than stranded under a line that claims to be done.
 
+**A Perjadin's folder names are app-owned, and re-asserted.** Both of a trip's folders are named
+from its Sub-Cluster, both dates and the trip's Schools, read live
+([ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)); nothing stores the name
+the folder was last given. A write that changes one of those parts renames the folders after it
+commits, best effort (#407): Ubah tanggal on either date, and the three Session writes —
+`addPerjadinSession`, `editPerjadinSession`, `cancelSession` — when they change the trip's set of
+Schools, which each reports from inside its transaction by reading `tripSchoolNames` before and
+after. A Sub-Cluster rename renames nothing at once. The reconciles re-assert the name every time
+they touch a trip, and **Periksa koneksi** reads every Perjadin folder and renames those that are
+out of date — at most 25 per press, within the sweep's time budget, in trip-id order, so the next
+press re-reads only folders already right and carries on. A folder in the Drive trash or gone is
+reported, never recreated.
+
 **`drive_sync_failed_at` keeps the sweep moving.** It records when a reconcile last failed to finish
 the line, for example because its folder is in the Drive trash, which is never recreated, and it is
 cleared when the line syncs. Periksa koneksi's sweep is bounded per press. It takes lines that have
@@ -2092,13 +2105,15 @@ places:
    hour a School is expecting somebody — and it does not move any Session's `held_on` at all, since
    it clamps rather than shifting.
 
-   **A correction that moves `starts_on` also renames the trip's Drive folder**, which is named
-   `{name} · {the trip's Schools} · P-{perjadin8}` — the name carries the dates
-   ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
-   [ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md), #376). The rename runs after the commit and is best effort: a failed rename never fails or rolls
-   back the correction. The next reconcile that touches that Perjadin sets the name back to what the
-   database says, because folder names are app-owned. That is a Catat transaksi or Unggah bukti on
-   it, or a sweep reaching one of its unsynced lines. Until then the folder keeps the old date.
+   **A correction that moves either date also renames the trip's Drive folders**, receipts and
+   Dokumen, which are named `{name} · {the trip's Schools} · P-{perjadin8}` — the name carries both
+   dates ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
+   [ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md), #376, #407). The rename
+   runs after the commit and is best effort: a failed rename never fails or rolls back the
+   correction. The next reconcile that touches that Perjadin sets the name back to what the database
+   says, because folder names are app-owned. That is a Catat transaksi or Unggah bukti on it, a sweep
+   reaching one of its unsynced lines, or a press of Periksa koneksi. Until then the folder keeps the
+   old date.
 
 So an arranged offline Session can no longer be born outside its trip, nor moved outside it, nor
 stranded when the trip's range is resized — path 3 refuses the resize rather than moving Sessions.

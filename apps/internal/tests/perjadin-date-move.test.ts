@@ -124,7 +124,7 @@ describe("Ubah tanggal resizes the range", () => {
 
     const result = await updatePerjadinDates(pic, perjadin.id, dates("2026-09-01", "2026-09-08"));
 
-    expect(result).toEqual({ outcome: "updated", startsOnMoved: false });
+    expect(result).toEqual({ outcome: "updated", datesMoved: true });
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-08" });
   });
 
@@ -189,7 +189,7 @@ describe("Ubah tanggal resizes the range", () => {
 
     const result = await updatePerjadinDates(pic, perjadin.id, dates("2026-09-01", "2026-09-05"));
 
-    expect(result).toEqual({ outcome: "updated", startsOnMoved: false });
+    expect(result).toEqual({ outcome: "updated", datesMoved: true });
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-05" });
     // The two out-of-window Sessions are left exactly where they were.
     expect(await heldOnOf(deliveredSession.id)).toBe("2026-09-09");
@@ -213,7 +213,7 @@ describe("Ubah tanggal resizes the range", () => {
 
     const result = await updatePerjadinDates(pic, perjadin.id, dates("2026-09-02", "2026-09-02"));
 
-    expect(result).toEqual({ outcome: "updated", startsOnMoved: true });
+    expect(result).toEqual({ outcome: "updated", datesMoved: true });
     expect(await windowOf(perjadin.id)).toEqual({ startsOn: "2026-09-02", endsOn: "2026-09-02" });
   });
 

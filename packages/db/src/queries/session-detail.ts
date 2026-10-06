@@ -8,6 +8,7 @@ import { person } from "../schema/people";
 import { province, school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
 import type { Person } from "./caller";
+import { watchTripSchools } from "./perjadin-naming";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -234,7 +235,12 @@ export type MarkDeliveredResult =
   | { outcome: "not-arranged"; status: PastArranged };
 
 export type CancelSessionResult =
-  | { outcome: "cancelled" }
+  /**
+   * `perjadinId` is the trip an offline Session sits on (`null` for an online one), and
+   * `schoolsChanged` says this was its School's last live Session there, so the trip's Schools —
+   * and its Drive folder name — changed, and the caller renames the folders (#407).
+   */
+  | { outcome: "cancelled"; perjadinId: string | null; schoolsChanged: boolean }
   | { outcome: "reason-required" }
   | { outcome: "not-arranged"; status: PastArranged };
 
@@ -271,9 +277,9 @@ export type MoveSessionDateResult =
 async function lockedSession(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   sessionId: string,
-): Promise<{ status: SessionStatus }> {
+): Promise<{ status: SessionStatus; perjadinId: string | null }> {
   const [row] = await tx
-    .select({ status: session.status })
+    .select({ status: session.status, perjadinId: session.perjadinId })
     .from(session)
     .where(eq(session.id, sessionId))
     .for("update");
@@ -342,15 +348,20 @@ export async function cancelSession(
   if (cancelledReason === "") return { outcome: "reason-required" };
 
   return db.transaction(async (tx) => {
-    const { status } = await lockedSession(tx, sessionId);
+    const { status, perjadinId } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
+    const schoolsChanged = perjadinId ? await watchTripSchools(tx, perjadinId) : null;
     await tx
       .update(session)
       .set({ status: "cancelled", cancelledReason })
       .where(eq(session.id, sessionId));
 
-    return { outcome: "cancelled" };
+    return {
+      outcome: "cancelled",
+      perjadinId,
+      schoolsChanged: schoolsChanged ? await schoolsChanged() : false,
+    };
   });
 }
 

@@ -3,6 +3,7 @@ import type {
   DriveCheckReport,
   ExposableFolder,
   FolderCheck,
+  FolderNameFailure,
   SweepFailure,
 } from "./check";
 
@@ -41,6 +42,17 @@ const DOCUMENT_FAILURE_REASONS: Record<DocumentSweepFailure["reason"], string> =
   "dokumen-folders-busy": "folder Dokumen sedang disiapkan proses lain",
   "drive-failed": "Google Drive gagal menjawab",
   "no-such-document": "dokumen sudah tidak ada",
+};
+
+const NAME_FAILURE_REASONS: Record<FolderNameFailure["reason"], string> = {
+  "folder-trashed": "folder ada di Sampah Google Drive",
+  "folder-missing": "folder tidak ditemukan",
+  "drive-failed": "Google Drive gagal menjawab",
+};
+
+const NAMED_FOLDERS: Record<FolderNameFailure["folder"], string> = {
+  "bukti-transaksi": "Bukti Transaksi",
+  dokumen: "Dokumen",
 };
 
 const DOKUMEN_LINES: Record<"ok" | "created" | "busy", string> = {
@@ -86,7 +98,7 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
         failures: [],
       };
     case "ok": {
-      const { sweep } = report;
+      const { sweep, names } = report;
       const lines = [
         "Token Google Drive berfungsi.",
         ...report.folders.map(
@@ -101,6 +113,9 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
           : [
               `Sinkronisasi dilewati sampai folder di atas beres; ${sweep.waiting} transaksi dan ${sweep.documentsWaiting} dokumen masih menunggu.`,
             ]),
+        ...(names.ran
+          ? [`${names.renamed} folder Perjadin diganti namanya, ${names.remaining} tersisa.`]
+          : []),
       ];
       return {
         lines,
@@ -114,6 +129,10 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
               ...sweep.documents.failures.map(
                 (failure) =>
                   `${failure.documentDate} · ${failure.kind}: ${DOCUMENT_FAILURE_REASONS[failure.reason]}.`,
+              ),
+              ...(names.ran ? names.failures : []).map(
+                (failure) =>
+                  `${failure.name} (${NAMED_FOLDERS[failure.folder]}): ${NAME_FAILURE_REASONS[failure.reason]}.`,
               ),
             ]
           : [],
