@@ -62,7 +62,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <Link
           href={`/perjadin/${id}`}
           className="text-sm text-muted-foreground hover:underline"
@@ -72,7 +72,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
         <h1 className="mt-1 font-heading text-lg font-medium">Laporan Perjadin</h1>
       </header>
 
-      <div className="border-b border-border px-7 py-5">
+      <div className="border-b border-border px-4 py-5 sm:px-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-heading text-sm font-medium">Uang Perjalanan</h2>
@@ -134,7 +134,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
       </div>
 
       {acquittal.pimpinan.length > 0 && (
-        <section className="border-b border-border px-7 py-5">
+        <section className="border-b border-border px-4 py-5 sm:px-7">
           <h2 className="font-heading text-sm font-medium">Pimpinan yang turut serta</h2>
           <ul className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
             {acquittal.pimpinan.map((name) => (

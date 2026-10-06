@@ -132,7 +132,7 @@ function PersiapanTab({ cards, canEdit }: { cards: PreparationCard[]; canEdit: b
   }, [cards, sort]);
 
   return (
-    <div className="flex flex-col gap-5 px-7 py-6">
+    <div className="flex flex-col gap-5 px-4 py-6 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Select
           items={SORT_OPTIONS}

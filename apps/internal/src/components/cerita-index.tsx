@@ -44,7 +44,7 @@ function CeritaIndex({ entries }: { entries: CeritaCard[] }) {
   const published = shown.filter((entry) => entry.publishedAt !== null);
 
   return (
-    <div className="space-y-8 p-7">
+    <div className="space-y-8 p-4 sm:p-7">
       <div>
         <Input
           value={query}

@@ -48,14 +48,14 @@ export default async function Page({ searchParams }: PageProps<"/pengaturan">) {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">Pengaturan</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Hanya Administrator yang dapat membuka halaman ini.
         </p>
       </header>
 
-      <div className="flex max-w-2xl flex-col gap-4 px-7 py-6">
+      <div className="flex max-w-2xl flex-col gap-4 px-4 py-6 sm:px-7">
         {outcome && (
           <Alert variant={outcome === "connected" ? "default" : "destructive"}>
             <AlertDescription>{driveConnectMessage(outcome, accountEmail)}</AlertDescription>

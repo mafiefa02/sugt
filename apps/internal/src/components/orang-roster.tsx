@@ -83,7 +83,7 @@ function OrangRoster({
   const shownCount = active.length + revoked.length;
 
   return (
-    <div className="flex min-h-full flex-col p-7">
+    <div className="flex min-h-full flex-col p-4 sm:p-7">
       {canWrite && <AddPersonForm />}
 
       {/* The roster search, distinct from the add-person form above — this one filters the table,

@@ -72,7 +72,7 @@ function PerjadinTeachingTeam({
   }
 
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <h2 className="font-heading text-sm font-medium">Narasumber</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Nama narasumber untuk Perjadin ini. Mengubah daftar ini menghapus centang “Narasumber sudah

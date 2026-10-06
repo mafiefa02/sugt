@@ -43,7 +43,7 @@ export default async function Page() {
     // No page header — item 1 of #278 reclaims the vertical space. `lg:h-dvh` + `lg:overflow-hidden`
     // is the desktop fit-to-viewport anchor (`lg:min-h-0` neutralises the mobile `min-h-full` there);
     // below `lg` this stays a plain document-scrolling column.
-    <div className="flex min-h-full flex-col px-7 py-6 lg:h-dvh lg:min-h-0 lg:overflow-hidden">
+    <div className="flex min-h-full flex-col px-4 py-6 sm:px-7 lg:h-dvh lg:min-h-0 lg:overflow-hidden">
       <KalenderCalendar
         schedule={result.ok ? result.schedule : {}}
         error={result.ok ? null : result.error}

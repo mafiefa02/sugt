@@ -63,7 +63,7 @@ function PerjadinDirectoryList({
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="px-7 pt-5">
+      <div className="px-4 pt-5 sm:px-7">
         <Input
           value={query}
           onChange={(event) => {
@@ -79,11 +79,11 @@ function PerjadinDirectoryList({
       </div>
 
       {shown.length === 0 ? (
-        <p className="px-7 py-10 text-center text-sm text-muted-foreground">
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground sm:px-7">
           Tidak ada Perjadin yang cocok dengan pencarian ini.
         </p>
       ) : (
-        <div className="mt-3 px-5">
+        <div className="mt-3 px-2 sm:px-5">
           <StickyTable>
             <StickyTableHeader>
               <TableRow>

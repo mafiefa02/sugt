@@ -31,7 +31,7 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">Rencanakan Perjadin</h1>
         <p className="text-sm text-muted-foreground">
           Pilih Kelompok Sekolah, lalu tambahkan Sesi untuk tiap Sekolah yang dikunjungi —
@@ -41,7 +41,7 @@ export default async function Page() {
       </header>
 
       {plan.subClusters.length === 0 ? (
-        <div className="flex flex-col items-start gap-3.5 p-7">
+        <div className="flex flex-col items-start gap-3.5 p-4 sm:p-7">
           <p className="text-sm text-muted-foreground">
             Belum ada Kelompok Sekolah yang berisi Sekolah. Bentuk dan isi Kelompok Sekolah terlebih
             dahulu.

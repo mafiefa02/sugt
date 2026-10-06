@@ -126,7 +126,7 @@ function AcquittalTransactions({
   );
 
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Transaksi</h2>
         <RecordTransaction
@@ -223,7 +223,8 @@ function TransactionCard({
           <span className="text-muted-foreground">{line.category}</span>
           <Badge variant="secondary">{line.participantType}</Badge>
           {line.unsynced && <UnsyncedMarker explanation={UNSYNCED_TOOLTIP} />}
-          <div className="ml-auto flex items-center gap-4">
+          {/* Wraps under the line on a phone rather than pushing the card sideways (#418). */}
+          <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="tabular-nums">{formatRupiah(line.amountIdr)}</span>
             <Receipts
               perjadinId={perjadinId}
@@ -394,11 +395,11 @@ function Receipts({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {line.evidence.length === 0 ? (
         <span className="text-muted-foreground">Belum ada bukti</span>
       ) : (
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-2">
           {line.evidence.map((file, index) => (
             <a
               key={file.id}

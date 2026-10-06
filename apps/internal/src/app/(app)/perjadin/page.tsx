@@ -33,7 +33,7 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-7 py-5">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-5 sm:px-7">
         <div>
           <h1 className="font-heading text-lg font-medium">Perjadin</h1>
           <p className="text-sm text-muted-foreground">
@@ -52,7 +52,7 @@ export default async function Page() {
       </header>
 
       {trips.length === 0 ? (
-        <p className="p-7 text-sm text-muted-foreground">
+        <p className="p-4 text-sm text-muted-foreground sm:p-7">
           Belum ada Perjadin. Buka Rencanakan Perjadin untuk merencanakan yang pertama.
         </p>
       ) : (

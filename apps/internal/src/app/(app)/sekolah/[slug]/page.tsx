@@ -49,7 +49,7 @@ export default async function Page({ params }: PageProps<"/sekolah/[slug]">) {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">{school.name}</h1>
         <p className="text-sm text-muted-foreground">
           {school.clusterName} · {school.kabupatenKota}
@@ -77,7 +77,7 @@ export default async function Page({ params }: PageProps<"/sekolah/[slug]">) {
 
       {arrange !== null && (
         <section className="border-t border-border">
-          <h2 className="px-7 pt-5 font-heading text-sm font-medium">Catat Sesi daring</h2>
+          <h2 className="px-4 pt-5 font-heading text-sm font-medium sm:px-7">Catat Sesi daring</h2>
           <ArrangeOnlineSessionForm school={arrange.school} />
         </section>
       )}

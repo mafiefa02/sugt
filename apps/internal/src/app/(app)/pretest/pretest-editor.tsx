@@ -72,7 +72,7 @@ function PretestEditor({ clusters, schools, completions }: PretestEditorData) {
   }
 
   return (
-    <div className="flex min-h-full flex-col gap-4 p-7">
+    <div className="flex min-h-full flex-col gap-4 p-4 sm:p-7">
       <Input
         value={search}
         onChange={(event) => {

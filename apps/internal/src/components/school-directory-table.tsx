@@ -58,7 +58,7 @@ function SchoolDirectoryTable({ schools }: { schools: DirectorySchool[] }) {
   }, [schools, query, clusterId]);
 
   return (
-    <div className="flex min-h-full flex-col p-7">
+    <div className="flex min-h-full flex-col p-4 sm:p-7">
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         <Input
           value={query}

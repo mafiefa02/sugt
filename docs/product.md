@@ -109,6 +109,10 @@ twenty checklist items, five staged receipts — with the title pinned at the to
 bottom, and only the fields between them scrolling. Confirmations and single-value edits stay small
 popups.
 
+**On a phone, pages keep 16px side margins** (28px from 640px up) (#418), so the content gets the
+width; tables still scroll sideways inside their own frame, and the page itself never does. `/log`'s
+filters stack below 640px, and a Laporan line's receipts wrap under it.
+
 ### Coverage view — the landing screen
 
 Every School with its delivered count, grouped by Cluster. Answers "where are we
