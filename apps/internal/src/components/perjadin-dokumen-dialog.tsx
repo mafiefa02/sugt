@@ -151,7 +151,7 @@ function PerjadinDokumenDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="grid content-start gap-6">
+        <DialogBody>
           {loadFailed && (
             <p className="text-sm text-destructive">
               Dokumen tidak dapat dimuat — tutup lalu buka lagi.

@@ -199,7 +199,7 @@ function RecordDialog({
           <DialogDescription>{INSTRUCTION}</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="grid content-start gap-6">
+        <DialogBody>
           {stale !== null && (
             <Alert variant="destructive">
               <AlertTitle>Tidak jadi disimpan.</AlertTitle>

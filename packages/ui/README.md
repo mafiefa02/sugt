@@ -119,10 +119,11 @@ each row was added, then cropped its own title and buttons once it outgrew the s
   screen's height less a margin on desktop, the whole screen below `sm`; **the same size from
   opening to closing** whatever is added to it. It is a column: `DialogHeader` pinned at the top,
   `DialogFooter` at the bottom, and the fields inside **`DialogBody`**, the only part that scrolls.
+  `DialogBody` belongs to `panel` only — its edge-to-edge margins assume the panel's padding.
   Used by Catat Transaksi, Dokumen, the Dashboard's Persiapan card editor, the Persiapan checklist,
   Catatan Sesi, Tambah/Ubah Sesi, Ubah Group and Ubah Sesi daring.
 
-Inside a panel, short fields may sit two to a row from `sm` up, and a row holding several controls
+Inside a panel, short fields may sit two or three to a row from `sm` up, and a row holding several controls
 wraps rather than spilling sideways. A panel never takes its own `max-h-*` or `overflow-*` — the
 body is what scrolls. `DialogHeader` keeps right padding in both sizes, so a long title never runs
 under the close button.
@@ -191,9 +192,13 @@ ramp gives .625 and .85).
 `RatingInput` fills the picked cell solid rather than tinting it — a filled cell states
 a choice, where the chip reports one. Its cells are 28px, or 23px at `size="sm"`
 for the Participant Feedback form, which is filled on a phone in a classroom rather than
-at a desk. Those are the most a cell grows to: where the row has less room than that, the
-cells shrink to fit rather than spill sideways (#417). That is a prop rather than a breakpoint because the surface is phone-first,
+at a desk. That is a prop rather than a breakpoint because the surface is phone-first,
 not a desktop form at a small viewport.
+
+Those sizes are the most a cell grows to (#417). Beside a label in a flex row the control
+keeps its full width and the label wraps first, as fixed cells did; on a row of its own,
+label above, the cells shrink to fit a row narrower than they are rather than spill
+sideways.
 
 It is built on native radios, so it needs no state of its own, arrow keys work, and a
 `<form>` posts the value without JavaScript. Pass `value` and `onValueChange` to drive

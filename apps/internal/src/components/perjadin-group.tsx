@@ -151,7 +151,7 @@ function EditGroup({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="grid content-start gap-6">
+        <DialogBody>
           {refusal !== null && (
             <Alert variant="destructive">
               <AlertTitle>Group belum berubah.</AlertTitle>

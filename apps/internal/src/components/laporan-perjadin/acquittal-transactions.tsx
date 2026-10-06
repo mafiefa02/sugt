@@ -591,7 +591,7 @@ function RecordTransaction({
           <RequiredLegend />
         </DialogHeader>
 
-        <DialogBody className="grid content-start gap-6">
+        <DialogBody>
           {refusal !== null && (
             <Alert variant="destructive">
               <AlertTitle>Transaksi belum tercatat.</AlertTitle>
@@ -805,7 +805,7 @@ function RecordTransaction({
                       key={`${index}-${file.name}`}
                       className="flex items-center justify-between gap-2 text-sm"
                     >
-                      <span className="min-w-0 truncate text-muted-foreground">{file.name}</span>
+                      <span className="truncate text-muted-foreground">{file.name}</span>
                       <button
                         type="button"
                         className="text-muted-foreground underline hover:no-underline"

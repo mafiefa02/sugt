@@ -71,7 +71,7 @@ const dialogContentVariants = cva(
         default:
           "top-1/2 left-1/2 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-[min(var(--radius-4xl),24px)] p-6 sm:max-w-md",
         panel:
-          "inset-0 flex h-dvh w-full flex-col gap-4 p-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[calc(100dvh-4rem)] sm:w-[min(900px,calc(100vw-4rem))] sm:max-w-none sm:-translate-x-1/2 sm:-translate-y-1/2 sm:gap-6 sm:rounded-[min(var(--radius-4xl),24px)] sm:p-6",
+          "inset-0 flex h-dvh w-full flex-col gap-4 p-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[calc(100dvh-4rem)] sm:w-[min(900px,calc(100vw-4rem))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:gap-6 sm:rounded-[min(var(--radius-4xl),24px)] sm:p-6",
       },
     },
     defaultVariants: { size: "default" },
@@ -132,13 +132,18 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
 /**
  * The scrolling middle of a `panel` popup — the only part that moves, so the title and the buttons
  * stay in reach however much is added. The negative margin puts the scrollbar at the panel's edge
- * and leaves room for the fields' focus rings.
+ * and leaves room for the fields' focus rings; it matches the panel's `p-4 sm:p-6`, so this is for
+ * `size="panel"` only. Its children stack with the same gap the default dialog puts between its
+ * parts.
  */
 function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-body"
-      className={cn("-mx-4 min-h-0 flex-1 overflow-y-auto px-4 py-1 sm:-mx-6 sm:px-6", className)}
+      className={cn(
+        "-mx-4 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-4 py-1 sm:-mx-6 sm:px-6",
+        className,
+      )}
       {...props}
     />
   );

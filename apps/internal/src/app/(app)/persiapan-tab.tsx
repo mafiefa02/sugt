@@ -558,7 +558,7 @@ function CreateCardForm({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <DialogBody className="grid content-start gap-5">
+      <DialogBody className="gap-5">
         <CardFieldset
           fields={fields}
           onChange={(patch) => {
@@ -758,7 +758,7 @@ function EditCardForm({ card, onDone }: { card: PreparationCard; onDone: () => v
 
   return (
     <>
-      <DialogBody className="grid content-start gap-5">
+      <DialogBody className="gap-5">
         <CardFieldset
           fields={fields}
           onChange={(patch) => {
