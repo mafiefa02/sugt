@@ -79,6 +79,12 @@ describe("the form's fields", () => {
       }),
     ).toBe("Tanggal harus di antara 2026-10-12 dan 2026-10-16.");
   });
+
+  it("says why a School was refused: it has no Session on this trip (#410)", () => {
+    expect(recordRefusalText({ outcome: "school-not-on-perjadin" })).toBe(
+      "Sekolah ini tidak punya Sesi di Perjadin ini.",
+    );
+  });
 });
 
 describe("a sheet, as it reads", () => {

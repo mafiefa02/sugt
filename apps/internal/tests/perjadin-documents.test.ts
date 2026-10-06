@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   addCluster,
+  addOfflineSession,
   addPerjadin,
   addPerson,
   addProvince,
@@ -25,11 +26,15 @@ import {
 /**
  * **Perjadin Documents, the database half** (#397, ADR-0042): the CHECKs that keep a Peserta
  * sheet's four fields on Peserta sheets only, the rules the application holds — the date inside the
- * trip, the School inside its Sub-Cluster — and the record and its Activity Log entry, written
- * together.
+ * trip, the School one of the trip's Schools (#410) — and the record and its Activity Log entry,
+ * written together.
  */
 
-/** A trip to a Sub-Cluster in WITA with one School in it, and one School outside it. */
+/**
+ * A trip to a Sub-Cluster in WITA. SMAN 1 Bontang is on it, with a live Session; SMAN 3 Bontang is
+ * in the same Sub-Cluster but off it, its one Session there cancelled; SMAN 2 Samarinda is in
+ * another Sub-Cluster altogether.
+ */
 async function scene() {
   const staff = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
   await addProvince("KT", "Kalimantan Timur", "WITA");
@@ -61,7 +66,26 @@ async function scene() {
     startsOn: "2026-10-12",
     endsOn: "2026-10-15",
   });
-  return { staff: staff as Person, trip, inside, outside };
+  const offTrip = await addSchool({
+    slug: "sman-3-bontang",
+    name: "SMAN 3 Bontang",
+    clusterId: cluster.id,
+    subClusterId: subCluster.id,
+    provinceCode: "KT",
+    kabupatenKota: "Kota Bontang",
+  });
+  const live = await addOfflineSession({
+    schoolId: inside.id,
+    heldOn: "2026-10-13",
+    perjadinId: trip.id,
+  });
+  await addOfflineSession({
+    schoolId: offTrip.id,
+    heldOn: "2026-10-14",
+    perjadinId: trip.id,
+    status: "cancelled",
+  });
+  return { staff: staff as Person, trip, inside, outside, offTrip, live };
 }
 
 /** A Daftar Hadir Peserta for `schoolId`, valid unless the overrides spoil it. */
@@ -245,14 +269,18 @@ describe("recordPerjadinDocument", () => {
     await expect(logged()).resolves.toHaveLength(0);
   });
 
-  it("refuses a School outside the trip's Sub-Cluster, and writes and logs nothing", async () => {
-    const { staff, trip, outside } = await scene();
+  it("refuses a School that is not one of the trip's Schools, and writes and logs nothing", async () => {
+    const { staff, trip, outside, offTrip } = await scene();
 
+    // In the trip's Sub-Cluster, but its only Session on the trip was cancelled (#410).
+    await expect(recordPerjadinDocument(staff, peserta(trip.id, offTrip.id))).resolves.toEqual({
+      outcome: "school-not-on-perjadin",
+    });
     await expect(recordPerjadinDocument(staff, peserta(trip.id, outside.id))).resolves.toEqual({
-      outcome: "school-outside-sub-cluster",
+      outcome: "school-not-on-perjadin",
     });
     await expect(recordPerjadinDocument(staff, peserta(trip.id, "not-a-uuid"))).resolves.toEqual({
-      outcome: "school-outside-sub-cluster",
+      outcome: "school-not-on-perjadin",
     });
     await expect(documents()).resolves.toHaveLength(0);
     await expect(logged()).resolves.toHaveLength(0);
@@ -289,7 +317,7 @@ describe("recordPerjadinDocument", () => {
 });
 
 describe("perjadinDokumen — the dialog's read", () => {
-  it("lists the trip's window, its Sub-Cluster's Schools and its sheets, unsynced flagged", async () => {
+  it("lists the trip's window, the trip's Schools and its sheets, unsynced flagged", async () => {
     const { staff, trip, inside } = await scene();
     const first = peserta(trip.id, inside.id);
     const second = pendamping(trip.id, "2026-10-12");
@@ -324,5 +352,23 @@ describe("perjadinDokumen — the dialog's read", () => {
       }),
     ]);
     await expect(perjadinDokumen(staff, randomUUID())).resolves.toBeNull();
+  });
+
+  it("keeps listing a sheet for a School that has since left the trip, but offers it no more", async () => {
+    const { staff, trip, inside, live } = await scene();
+    const sheet = peserta(trip.id, inside.id);
+    await expect(recordPerjadinDocument(staff, sheet)).resolves.toEqual({ outcome: "recorded" });
+    // The School's last live Session on the trip is cancelled: it is no longer one of the trip's.
+    await db
+      .update(schema.session)
+      .set({ status: "cancelled", cancelledReason: "Sekolah libur" })
+      .where(eq(schema.session.id, live.id));
+
+    const read = await perjadinDokumen(staff, trip.id);
+
+    expect(read?.schools).toEqual([]);
+    expect(read?.documents).toEqual([
+      expect.objectContaining({ id: sheet.documentId, schoolName: "SMAN 1 Bontang" }),
+    ]);
   });
 });

@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { connectDrive, digestOf, FORBIDDEN, pdf, stubTokenEndpoint } from "./support/drive";
 import {
   addCluster,
+  addOfflineSession,
   addPerjadin,
   addPerson,
   addProvince,
@@ -75,6 +76,8 @@ async function scene({ synced = true }: { synced?: boolean } = {}) {
     startsOn: "2026-10-12",
     endsOn: "2026-10-16",
   });
+  // The School is one of the trip's Schools (#410), so a Peserta sheet may name it.
+  await addOfflineSession({ schoolId: school.id, heldOn: "2026-10-13", perjadinId: trip.id });
   await connectDrive(drive, staff.id);
   vi.mocked(requirePerson).mockResolvedValue(staff);
 

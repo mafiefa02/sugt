@@ -1459,9 +1459,14 @@ The two CHECKs hold that both ways round, and a third holds `ends_at` after `sta
 content type is pinned to PDF.
 
 **The application holds the rest**, in `recordPerjadinDocument`: `document_date` lies inside the
-trip, and a Peserta sheet's School is in the Perjadin's Sub-Cluster, refused as
-`school-outside-sub-cluster` the way offline Sessions refuse it. That second rule cannot be a foreign
-key, for the reason Sessions give: Sub-Clusters are editable (ADR-0016). There is **no duplicate
+trip, and a Peserta sheet's School is one of **the trip's Schools** — it has a non-cancelled
+Session on this Perjadin (`isTripSchool`, the same rule `tripSchoolNames` reads names through) —
+refused as `school-not-on-perjadin` ([#410](https://github.com/sugt-itb/sugt-itb-26/issues/410)).
+It used to be the trip's Sub-Cluster, but a Sub-Cluster may be covered by several trips (ADR-0043),
+so that offered Schools this trip never visits. The Dokumen dialog's picker offers exactly that set.
+The rule is checked on a new upload only: a sheet recorded for a School whose Sessions on the trip
+were all cancelled later stays listed and deletable. It cannot be a constraint: it reads the
+Sessions, which change after the sheet is written. There is **no duplicate
 rule**: two sheets of one kind and date are two rows, told apart in Drive by `D-{doc8}`.
 
 **The row and its Activity Log entry are written in one transaction**, and the row lands with

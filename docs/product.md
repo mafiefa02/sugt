@@ -169,7 +169,10 @@ the page says "Anda belum tergabung dalam Perjalanan Dinas."
 - **Unggah dokumen**: pick the **Jenis dokumen**, then its fields.
   - A Peserta sheet asks for **Tanggal Sesi**, **Waktu Mulai** and **Waktu Selesai** (with the
     School's time zone beside them once it is picked), **Sekolah** (a plain list of the trip's
-    Sub-Cluster's Schools) and **Tipe Peserta** (`Siswa` or `GTK-MS`).
+    Schools — those with a Session on this trip that was not cancelled, so a School of the Kelompok
+    this trip never visits is not offered; one that is refused says "Sekolah ini tidak punya Sesi di
+    Perjadin ini.") and **Tipe Peserta** (`Siswa` or `GTK-MS`). A sheet already uploaded for a
+    School that has since left the trip stays listed and can still be deleted.
   - A Narasumber or Pendamping sheet asks for **Tanggal Dokumen**.
   - Both dates are limited to the trip's.
   - **File**: one PDF, "1 file .pdf, maks. 50 MB". Anything else is refused with "Hanya file .pdf",

@@ -14,11 +14,27 @@ import { perjadin } from "../schema/travel";
  */
 
 /**
- * **The trip's Schools** (ADR-0044) — the one query-side definition, for every read that names a
- * Perjadin's Schools: the School line under its name, its Drive folder name, its CSV name and the
- * `/perjadin` search. The distinct Schools with at least one **non-cancelled** Session on the trip,
- * ordered by name, as stored. A School whose every Session there was cancelled is no longer visited,
- * so it drops out.
+ * **Whether a School is one of the trip's Schools** (ADR-0044) — the one query-side definition of
+ * the rule: it has at least one **non-cancelled** Session on the Perjadin. A School whose every
+ * Session there was cancelled is no longer visited, so it drops out. `tripSchoolNames` reads its
+ * names through it, and the Daftar Hadir Peserta picker and its server check filter by it (#410).
+ *
+ * A correlated `exists` on the **`school` table of the enclosing query**, referenced by name — so the
+ * enclosing query must select from `school` unaliased. Written against `"school"` explicitly rather
+ * than through a column, because drizzle leaves a column unqualified in a select over one table, and
+ * inside this subquery a bare `"id"` would silently mean the Session's.
+ */
+export function isTripSchool(perjadinId: AnyColumn | SQL) {
+  return sql<boolean>`exists (
+    select 1 from ${session} s
+    where s.school_id = ${school}.id and s.perjadin_id = ${perjadinId} and s.status <> 'cancelled'
+  )`;
+}
+
+/**
+ * **The trip's Schools** (ADR-0044), by name — for every read that names a Perjadin's Schools: the
+ * School line under its name, its Drive folder name, its CSV name and the `/perjadin` search. The
+ * distinct names of the Schools `isTripSchool` admits, ordered by name, as stored.
  *
  * A **correlated aggregate subquery** on the given `perjadin.id` column, so it stays a scalar and
  * never fans the outer row out — valid in a grouped select when that column is in the `groupBy`. Or
@@ -29,10 +45,9 @@ import { perjadin } from "../schema/travel";
 export function tripSchoolNames(perjadinId: AnyColumn | SQL) {
   return sql<string[]>`coalesce(
     (
-      select array_agg(distinct sch.name order by sch.name)
-      from ${session} s
-      join ${school} sch on sch.id = s.school_id
-      where s.perjadin_id = ${perjadinId} and s.status <> 'cancelled'
+      select array_agg(distinct ${school}.name order by ${school}.name)
+      from ${school}
+      where ${isTripSchool(perjadinId)}
     ),
     '{}'::text[]
   )`;

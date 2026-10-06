@@ -248,7 +248,7 @@ function PerjadinDokumenDialog({
                   Sekolah
                   <RequiredMark />
                 </Label>
-                {/* A plain select: a Sub-Cluster has few Schools, so nothing to search. */}
+                {/* A plain select: a trip has few Schools, so nothing to search. */}
                 <Select
                   value={form.schoolId}
                   onValueChange={(value) => {
