@@ -7,18 +7,39 @@ import { perjadin } from "../schema/travel";
 
 /**
  * **What a Perjadin is named from** (ADR-0044) — SQL shared by every read that names a trip, kept
- * here beneath them and unexported from `@sugt/db/queries` (convention 3). `tripSchoolNames` alone
+ * here beneath them and unexported from `@sugt/db/queries` (convention 3). Its rule for **the trip's
+ * Schools** (`isTripSchool`) lives here too, because the name's School part is built from it, and the
+ * Daftar Hadir Peserta picker and its server check use the same rule (#410) rather than a copy. `tripSchoolNames` alone
  * is re-exported from the package root, for the Perjadin token resolver in `@sugt/internal`. The
  * name itself is put together in `@sugt/internal` (`perjadin-name.ts`); this module only reads its
  * parts, live: a Perjadin's name is never stored.
  */
 
 /**
- * **The trip's Schools** (ADR-0044) — the one query-side definition, for every read that names a
- * Perjadin's Schools: the School line under its name, its Drive folder name, its CSV name and the
- * `/perjadin` search. The distinct Schools with at least one **non-cancelled** Session on the trip,
- * ordered by name, as stored. A School whose every Session there was cancelled is no longer visited,
- * so it drops out.
+ * **Whether a School is one of the trip's Schools** (ADR-0044) — the one query-side definition of
+ * the rule: it has at least one **non-cancelled** Session on the Perjadin. A School whose every
+ * Session there was cancelled is no longer visited, so it drops out. `tripSchoolNames` reads its
+ * names through it, and the Daftar Hadir Peserta picker and its server check filter by it (#410).
+ *
+ * A correlated `exists` on the **`school` table of the enclosing query**, referenced by name — so the
+ * enclosing query must select from `school` unaliased. Written against `"school"` explicitly so the
+ * correlation never depends on how drizzle renders a column: in a selected field of a select over
+ * one table it leaves the column unqualified, and inside this subquery a bare `"id"` would silently
+ * mean the Session's. The same holds for `perjadinId`: pass a bound value (`sql\`${id}::uuid\``) or
+ * a column of a query that joins more than one table, never `perjadin.id` as a selected field of a
+ * select over `perjadin` alone.
+ */
+export function isTripSchool(perjadinId: AnyColumn | SQL) {
+  return sql<boolean>`exists (
+    select 1 from ${session} s
+    where s.school_id = ${school}.id and s.perjadin_id = ${perjadinId} and s.status <> 'cancelled'
+  )`;
+}
+
+/**
+ * **The trip's Schools** (ADR-0044), by name — for every read that names a Perjadin's Schools: the
+ * School line under its name, its Drive folder name, its CSV name and the `/perjadin` search. The
+ * distinct names of the Schools `isTripSchool` admits, ordered by name, as stored.
  *
  * A **correlated aggregate subquery** on the given `perjadin.id` column, so it stays a scalar and
  * never fans the outer row out — valid in a grouped select when that column is in the `groupBy`. Or
@@ -29,10 +50,9 @@ import { perjadin } from "../schema/travel";
 export function tripSchoolNames(perjadinId: AnyColumn | SQL) {
   return sql<string[]>`coalesce(
     (
-      select array_agg(distinct sch.name order by sch.name)
-      from ${session} s
-      join ${school} sch on sch.id = s.school_id
-      where s.perjadin_id = ${perjadinId} and s.status <> 'cancelled'
+      select array_agg(distinct ${school}.name order by ${school}.name)
+      from ${school}
+      where ${isTripSchool(perjadinId)}
     ),
     '{}'::text[]
   )`;

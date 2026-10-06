@@ -129,8 +129,8 @@ export function recordRefusalText(
       return "Lengkapi isian sesuai jenis dokumen.";
     case "date-outside-perjadin":
       return `Tanggal harus di antara ${result.startsOn} dan ${result.endsOn}.`;
-    case "school-outside-sub-cluster":
-      return "Sekolah itu tidak termasuk Kelompok Sekolah perjalanan ini.";
+    case "school-not-on-perjadin":
+      return "Sekolah ini tidak punya Sesi di Perjadin ini.";
     case "times-out-of-order":
       return "Waktu Selesai harus setelah Waktu Mulai.";
     case "file-unverified":

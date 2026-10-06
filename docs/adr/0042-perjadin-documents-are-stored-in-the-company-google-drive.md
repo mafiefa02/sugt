@@ -139,3 +139,13 @@ together with its receipts folder, on the occasions ADR-0040's amendment _when a
 renamed_ lists: a
 change to either date or to the trip's Schools, right after the write commits and best effort; a
 Sub-Cluster rename lazily, at the next reconcile; and every name re-asserted by Periksa koneksi.
+
+## Amendment (2026-10-06): a Peserta sheet names one of the trip's Schools
+
+[#410](https://github.com/sugt-itb/sugt-itb-26/issues/410). A Daftar Hadir Peserta's School must now
+be one of **the trip's Schools** — those with a non-cancelled Session on the Perjadin
+([ADR-0044](./0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)) — not merely in its
+Sub-Cluster. One Sub-Cluster may be covered by several trips
+([ADR-0043](./0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)), so the Sub-Cluster rule
+offered Schools this trip never visits. The picker offers that set and the server refuses any other
+School with a sentence; a sheet already recorded for a School that later left the trip stays.
