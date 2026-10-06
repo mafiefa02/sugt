@@ -556,9 +556,10 @@ describe("moving a date", () => {
   });
 
   /**
-   * One live offline Session per School per moment on a trip (ADR-0038). Moving onto another live
-   * Session's School, date and time is refused by `session_no_duplicate_offline_per_school_per_perjadin`
-   * and comes back as a value naming that index, not as a raw violation.
+   * One live offline Session per School per moment (ADR-0038, #408). Moving onto another live
+   * Session's School, date and time on the same trip is refused by
+   * `session_no_duplicate_offline_per_school` and comes back as a value naming that index, not as a
+   * raw violation.
    */
   it("refuses to move an offline Session onto another live Session's School, date and time", async () => {
     const pic = await staff();
@@ -584,7 +585,7 @@ describe("moving a date", () => {
 
     expect(await moveSessionDate(pic, moving.id, "2026-09-03", "09:00")).toEqual({
       outcome: "collided",
-      constraint: "session_no_duplicate_offline_per_school_per_perjadin",
+      constraint: "session_no_duplicate_offline_per_school",
     });
     // A different time on that day is a different slot, and moves.
     expect((await moveSessionDate(pic, moving.id, "2026-09-03", "13:00")).outcome).toBe("moved");

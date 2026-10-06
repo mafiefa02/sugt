@@ -356,7 +356,7 @@ describe("editing a Perjadin's Sessions", () => {
   /**
    * ADR-0038, reversing ADR-0019: one live Session per School per date and start time. Parallel rooms
    * are one Session now, so a second at the same moment is refused by
-   * `session_no_duplicate_offline_per_school_per_perjadin` and comes back as a value.
+   * `session_no_duplicate_offline_per_school` and comes back as a value.
    */
   it("refuses a second Session at the same School, date and time as a duplicate", async () => {
     const { pic, perjadinId, schools } = await trip();

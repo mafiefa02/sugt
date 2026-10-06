@@ -412,9 +412,9 @@ create unique index session_one_online_per_school_per_day
   on session (school_id, held_on)
   where perjadin_id is null and status <> 'cancelled';
 
-create unique index session_no_duplicate_offline_per_school_per_perjadin
-  on session (perjadin_id, school_id, held_on, starts_at)
-  where status <> 'cancelled';
+create unique index session_no_duplicate_offline_per_school
+  on session (school_id, held_on, starts_at)
+  where status <> 'cancelled' and perjadin_id is not null;
 ```
 
 **No Session carries a Stream.** The STEM/Research split used to be a property of who taught — the
@@ -436,14 +436,16 @@ It dropped `stream` from the key when Stream was dropped from online delivery. I
 `perjadin_id` is not null. Partial the usual way besides: cancelled rows accumulate and must not
 collide with their replacements.
 
-**Two offline-Session indexes were dropped, and this one replaces them
+**Two offline-Session indexes were dropped, and a per-trip one replaced them — itself replaced by
+the cross-trip index below since #408
 ([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
 narrowed by [ADR-0038](./adr/0038-offline-sessions-carry-no-stream-and-parallel-rooms-are-one-session.md)).**
 `session_one_per_school_per_perjadin` — "one Session per School on the trip" — is gone, because a
 School now has _several_ offline Sessions per Perjadin, each on its own date and time.
 `session_one_school_at_a_time_per_perjadin`, on `(perjadin_id, held_on, starts_at)`, forbade _any_
 two Sessions sharing a moment on one trip, same School included, and had to go. What the database
-holds is **one live offline Session per School per date and start time on a trip**: parallel rooms
+held then was **one live offline Session per School per date and start time on a trip** (since
+#408, on any trip — see below): parallel rooms
 are recorded as one Session whose Teaching Team lists everyone who taught, so two live rows at the
 same School and moment are refused. ADR-0019 had allowed that pair when the key also carried
 `stream` (a STEM and a Research room at one hour); ADR-0038 dropped `stream` and reversed it.
@@ -456,8 +458,26 @@ party — stays the application's (enforced when a trip is planned, and when a S
 edited) and is listed in [what the database does not hold](#what-the-database-does-not-hold). Under
 ADR-0019 it could not be a plain unique index, because same-School pairs had to pass. Since
 ADR-0038 they no longer do, so the two rules together are one live offline Session per trip per
-moment, and the trip-wide `(perjadin_id, held_on, starts_at)` index could hold both. #342 kept the
-per-School key it specified; restoring the trip-wide index would be its own change.
+moment on one trip, and the trip-wide `(perjadin_id, held_on, starts_at)` index could hold both
+within a trip. #342 kept the per-School key it specified; restoring the trip-wide index would be its
+own change.
+
+**The per-School rule holds across trips
+([#408](https://github.com/sugt-itb/sugt-itb-26/issues/408),
+[ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)).** One Sub-Cluster may
+be covered by several Perjadins and the same School may sit on several, so a second live offline
+Session at one School, date and start time is a double-booking **whichever trip carries it**.
+Migration `0042` replaced `session_no_duplicate_offline_per_school_per_perjadin`, on
+`(perjadin_id, school_id, held_on, starts_at)`, with `session_no_duplicate_offline_per_school`, on
+`(school_id, held_on, starts_at)` — strictly wider, so the old one was dropped. It is partial on
+`status <> 'cancelled' and perjadin_id is not null`: a cancelled Session never blocks its slot, and
+online Sessions stay out, as the `perjadin_id` column in the old key kept them. Only an exact match
+on date and start time collides; overlapping start times do not, across trips as within one. The
+writes read the slot first (`slotHolder`), so a double-booking on another trip comes back as
+`school-booked-on-another-perjadin`, naming and linking that trip, and a race past the read is read
+again and named the same way. Like `0032`, migration `0042` first looks for live pairs the wider
+index would refuse and **aborts listing them**; nothing cancels a Session to make it fit. The different-Schools rule stays
+**per trip** — two Groups can be in two places at once.
 
 **There is no `sub_cluster_id` on a Session, and the reason is worth stating because the column
 is an obvious thing to reach for.** The rule it would enforce — every School a Perjadin teaches
@@ -2057,10 +2077,13 @@ two Sessions at the _same_ School and moment, which ADR-0019 allowed. ADR-0038 f
 through its own per-School index, not by restoring the trip-wide one (see the Delivery section) — so
 the different-Schools rule is still the application's, checked when a trip is planned (`planPerjadin` groups
 the planned Sessions by `(date, time)` and refuses any slot holding more than one distinct School,
-naming the pair) and when a Session is added or edited on the trip. The database does reject two
-live Sessions at the _same_ School, date and time — one Session per School per moment (ADR-0038) —
-through `session_no_duplicate_offline_per_school_per_perjadin`; `planPerjadin` checks that too, from
-the same grouping, so the form gets a `duplicate-session` value rather than a raw violation.
+naming the pair) and when a Session is added or edited on the trip. It is a rule **per trip**: two
+different trips may hold two different Schools at one moment, since two Groups can be in two places.
+The database does reject two live Sessions at the _same_ School, date and time — one Session per
+School per moment (ADR-0038), and since #408 **across every Perjadin** — through
+`session_no_duplicate_offline_per_school`; `planPerjadin` checks that too, from the same grouping
+within the payload and against the other trips, so the form gets a `duplicate-session` or
+`school-booked-on-another-perjadin` value rather than a raw violation.
 
 **Three app caps on the new Perjadin model.** None is a DB constraint, all live in the application in
 the same spirit as the Group rules: **ten** offline Sessions per School per Perjadin

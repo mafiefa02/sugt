@@ -143,28 +143,31 @@ export const session = pgTable(
     uniqueIndex("session_one_online_per_school_per_day")
       .on(t.schoolId, t.heldOn)
       .where(ONLINE_SESSION_STILL_STANDS),
-    // **One live offline Session per School per moment on a trip (#342, ADR-0038, reversing
-    // ADR-0019's "two at the same School and the same moment are allowed").** A School's participants
-    // are still too many for one room, so a period still splits into parallel rooms — but those rooms
-    // are now recorded as **one** Session whose Teaching Team lists everyone who taught. With Stream
-    // gone from the row, two Sessions at one School, date and start time would differ by nothing the
-    // row records, so the index keys on exactly those and forbids the pair. A School may still hold
-    // many Sessions on a trip at *different* moments; that count is an app-level cap
-    // (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule.
+    // **One live offline Session per School per moment, across every Perjadin (#408, ADR-0043;
+    // #342, ADR-0038).** A School's participants are still too many for one room, so a period still
+    // splits into parallel rooms — but those rooms are recorded as **one** Session whose Teaching
+    // Team lists everyone who taught. Two Sessions at one School, date and start time would differ by
+    // nothing the row records, so the index keys on exactly those and forbids the pair — **whichever
+    // trips carry them**. One Sub-Cluster may be covered by several Perjadins and the same School may
+    // sit on several (ADR-0043), so a second Session at that School and moment on another trip is a
+    // double-booking just as it would be on one trip. It replaced
+    // `session_no_duplicate_offline_per_school_per_perjadin`, whose key led with `perjadin_id` and so
+    // let two trips book one School at one moment unnoticed; this key is strictly wider. A School
+    // may still hold many Sessions at *different* moments; the per-trip count is an app-level cap
+    // (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule, and only an exact match on
+    // date and start time collides — overlapping start times do not.
     //
-    // The old `session_one_school_at_a_time_per_perjadin` — one that forbade two Sessions at
-    // one moment across the *whole* trip — was dropped by ADR-0019, because it also forbade the
-    // same-School pair ADR-0019 allowed. ADR-0038 forbids that pair again, so the two rules together
-    // now amount to one live offline Session per trip per moment, which that trip-wide index could
-    // hold once more. #342 specified this narrower per-School key instead, so "two DIFFERENT Schools
-    // cannot share a date and time" stays the application's (see T2) and is listed in
-    // `data-model.md`'s "what the database does not hold". Partial in the same way as the
-    // online index: cancelled rows accumulate and must not collide with their replacements —
-    // a cancelled Session never blocks its slot — and online Sessions are untouched because their
-    // `perjadin_id` is null, which alone keeps them distinct here.
-    uniqueIndex("session_no_duplicate_offline_per_school_per_perjadin")
-      .on(t.perjadinId, t.schoolId, t.heldOn, t.startsAt)
-      .where(sql`status <> 'cancelled'`),
+    // "Two DIFFERENT Schools cannot share a date and time" stays the application's, **per trip** —
+    // the Group cannot be in two places at once, but two Groups can — and is listed in
+    // `data-model.md`'s "what the database does not hold". The writes check this index's rule first
+    // (`slotHolder`), so a double-booking comes back as a sentence naming the other trip.
+    //
+    // Partial in two ways: cancelled rows accumulate and must not collide with their replacements —
+    // a cancelled Session never blocks its slot — and `perjadin_id is not null` keeps online
+    // Sessions out, as the `perjadin_id` column in the old key did (an online row's is null).
+    uniqueIndex("session_no_duplicate_offline_per_school")
+      .on(t.schoolId, t.heldOn, t.startsAt)
+      .where(sql`status <> 'cancelled' and perjadin_id is not null`),
     // The two partial-unique indexes above both carry a `WHERE` predicate, so the planner cannot use
     // either for a general equality lookup — a `perjadin_id =` or `school_id =` filter that must also
     // see cancelled rows falls through to a seq scan. These two plain indexes serve those paths:
