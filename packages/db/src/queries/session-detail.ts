@@ -8,7 +8,7 @@ import { person } from "../schema/people";
 import { province, school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
 import type { Person } from "./caller";
-import { watchTripSchools } from "./perjadin-naming";
+import { snapshotTripSchools } from "./perjadin-naming";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -351,7 +351,7 @@ export async function cancelSession(
     const { status, perjadinId } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
-    const schoolsChanged = perjadinId ? await watchTripSchools(tx, perjadinId) : null;
+    const schoolsChanged = perjadinId ? await snapshotTripSchools(tx, perjadinId) : null;
     await tx
       .update(session)
       .set({ status: "cancelled", cancelledReason })

@@ -6,7 +6,7 @@ import { session, sessionTeachingTeam } from "../schema/delivery";
 import { school } from "../schema/reference";
 import { perjadin, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
-import { watchTripSchools } from "./perjadin-naming";
+import { snapshotTripSchools } from "./perjadin-naming";
 import { heldOnWithinPerjadin, type PastArranged } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -203,7 +203,7 @@ export async function addPerjadinSession(
       const refusal = await checkPlacement(tx, perjadinId, trip, input);
       if (refusal) return refusal;
 
-      const schoolsChanged = await watchTripSchools(tx, perjadinId);
+      const schoolsChanged = await snapshotTripSchools(tx, perjadinId);
       const [created] = await tx
         .insert(session)
         .values({
@@ -283,7 +283,7 @@ export async function editPerjadinSession(
       );
       if (refusal) return refusal;
 
-      const schoolsChanged = await watchTripSchools(tx, row.perjadinId);
+      const schoolsChanged = await snapshotTripSchools(tx, row.perjadinId);
       await tx
         .update(session)
         .set({

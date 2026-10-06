@@ -62,16 +62,16 @@ export const perjadinFolderNaming = {
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * **Whether a write changed the trip's Schools** (#407) — and so its Drive folder name. Read the
- * trip's Schools now, inside the write's transaction, and hand back a check that reads them again
- * once the write is done: `true` when the two differ. The writes that add, move or cancel an
+ * **Whether a write changed the trip's Schools** (#407) — and so its Drive folder name. Snapshot
+ * the trip's Schools now, inside the write's transaction, and hand back a check that reads them
+ * again once the write is done: `true` when the two differ. The writes that add, move or cancel an
  * offline Session report it, so their callers rename the folders only when the name moved, never on
  * every Session write.
  *
  * Compared by `tripSchoolNames`, the definition the folder name is built from, so "changed" means
  * exactly "the folder name's School part changed".
  */
-export async function watchTripSchools(
+export async function snapshotTripSchools(
   tx: Tx,
   perjadinId: string,
 ): Promise<() => Promise<boolean>> {

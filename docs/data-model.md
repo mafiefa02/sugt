@@ -1596,7 +1596,7 @@ Schools, which each reports from inside its transaction by reading `tripSchoolNa
 after. A Sub-Cluster rename renames nothing at once. The reconciles re-assert the name every time
 they touch a trip, and **Periksa koneksi** reads every Perjadin folder and renames those that are
 out of date — at most 25 per press, within the sweep's time budget, in trip-id order, so the next
-press re-reads only folders already right and carries on. A folder in the Drive trash or gone is
+press re-reads the folders already checked and carries on. A folder in the Drive trash or gone is
 reported, never recreated.
 
 **`drive_sync_failed_at` keeps the sweep moving.** It records when a reconcile last failed to finish

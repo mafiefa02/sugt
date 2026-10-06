@@ -50,7 +50,7 @@ const NAME_FAILURE_REASONS: Record<FolderNameFailure["reason"], string> = {
   "drive-failed": "Google Drive gagal menjawab",
 };
 
-const NAMED_FOLDERS: Record<FolderNameFailure["folder"], string> = {
+const PERJADIN_FOLDER_LABELS: Record<FolderNameFailure["folder"], string> = {
   "bukti-transaksi": "Bukti Transaksi",
   dokumen: "Dokumen",
 };
@@ -71,7 +71,10 @@ export type DriveCheckSentences = {
   lines: string[];
   /** Said prominently: a folder anyone with a link can open. */
   warnings: string[];
-  /** Each line the sweep could not finish, and why. */
+  /**
+   * Each line the sweep could not finish, and each Perjadin folder whose name could not be put
+   * right, and why.
+   */
   failures: string[];
 };
 
@@ -132,7 +135,7 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
               ),
               ...(names.ran ? names.failures : []).map(
                 (failure) =>
-                  `${failure.name} (${NAMED_FOLDERS[failure.folder]}): ${NAME_FAILURE_REASONS[failure.reason]}.`,
+                  `${failure.name} (${PERJADIN_FOLDER_LABELS[failure.folder]}): ${NAME_FAILURE_REASONS[failure.reason]}.`,
               ),
             ]
           : [],

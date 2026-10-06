@@ -135,6 +135,7 @@ carries the same name as its receipts folder, which is now
 ## Amendment (2026-10-06): when the Dokumen folder is renamed
 
 [#407](https://github.com/sugt-itb/sugt-itb-26/issues/407). The Perjadin's Dokumen folder is renamed
-together with its receipts folder, on the occasions ADR-0040's second 2026-10-06 amendment lists: a
+together with its receipts folder, on the occasions ADR-0040's amendment _when a Perjadin folder is
+renamed_ lists: a
 change to either date or to the trip's Schools, right after the write commits and best effort; a
 Sub-Cluster rename lazily, at the next reconcile; and every name re-asserted by Periksa koneksi.
