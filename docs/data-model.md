@@ -1106,7 +1106,9 @@ select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
 
 union all
 
-select 'Perjadin Evaluation', sc.name, r.aspect, r.rating,   -- the trip's name's Kelompok (ADR-0044)
+select 'Perjadin Evaluation',
+       sc.name || ' · ' || pj.starts_on || ' – ' || pj.ends_on,   -- the trip's name (ADR-0044)
+       r.aspect, r.rating,
        e.filed_by_name, r.said, e.created_at
   from perjadin_evaluation e
   join perjadin pj on pj.id = e.perjadin_id

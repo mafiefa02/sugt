@@ -347,7 +347,7 @@ Persiapan and Terlaksana — delivered over not-cancelled Sessions, as an `x/N` 
 tones, `0/0` grey. It opens newest Mulai first; every column sorts, a new column descending
 first — Perjadin by name, Kelompok 2 before Kelompok 10, and two trips of one Kelompok by their
 dates. The header stays in view while the list scrolls, a row opens its trip, and the search box
-above narrows it by the trip's name, its Schools, its PIC, its Narasumber and its Group.
+above narrows it by the trip's Kelompok, its Schools, its PIC, its Narasumber and its Group.
 
 ### The acquittal — the most important screen
 

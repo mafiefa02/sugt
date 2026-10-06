@@ -2,7 +2,7 @@ import { SEPARATOR, short } from "./drive/receipt-files";
 
 /**
  * **What a Perjadin is called** (ADR-0044) — the one place its name is put together, for every
- * screen, both Drive folders and the CSV export. A copy anywhere else is a fix that does not reach it.
+ * screen, both Drive folders and the CSV export — a copy anywhere else is a fix that misses it.
  *
  * The name is `{Sub-Cluster name} · {dates}` and is **never stored**: it is read live from
  * `sub_cluster.name` and the trip's dates, so renaming a Sub-Cluster relabels its trips, past ones
@@ -43,12 +43,12 @@ export function perjadinName({ subClusterName, startsOn, endsOn }: PerjadinNameP
 }
 
 /**
- * `SMAN 1 Bontang, SMAN 2 Samarinda` — the trip's Schools, alphabetically, as stored. The query
- * already orders them (`tripSchoolNames` in `@sugt/db`); sorting again here keeps the line right
- * for any caller. Empty for a trip with no live Session.
+ * `SMAN 1 Bontang, SMAN 2 Samarinda` — the trip's Schools, joined, in the order given. The order is
+ * the query's (`tripSchoolNames` in `@sugt/db`, by name), the one place it is decided. Empty for a
+ * trip with no live Session.
  */
 export function perjadinSchoolsLine(schoolNames: readonly string[]): string {
-  return [...schoolNames].sort((a, b) => a.localeCompare(b, "id", { numeric: true })).join(", ");
+  return schoolNames.join(", ");
 }
 
 /** The name, then the School line when there is one: what the Drive folder and the CSV both name. */
@@ -59,9 +59,13 @@ function nameWithSchools(trip: PerjadinNameParts & { schoolNames: readonly strin
 
 /**
  * The Perjadin's folder in Drive — its Bukti Transaksi folder and its Dokumen folder alike
- * (ADR-0040, ADR-0042): `Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang, SMAN 2 Samarinda · P-1a2b3c4d`,
- * or `Kelompok 10 · 12–13 Okt 2026 · P-1a2b3c4d` with no live Session. The `P-` id tells apart two
- * trips whose names and Schools agree, and appears in Drive names only, never on screen.
+ * (ADR-0040, ADR-0042):
+ *
+ *     Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang, SMAN 2 Samarinda · P-1a2b3c4d
+ *     Kelompok 10 · 12–13 Okt 2026 · P-1a2b3c4d                 ← no live Session
+ *
+ * The `P-` id tells apart two trips whose names and Schools agree, and appears in Drive names only,
+ * never on screen.
  */
 export function perjadinFolderName(
   trip: PerjadinNameParts & { id: string; schoolNames: readonly string[] },

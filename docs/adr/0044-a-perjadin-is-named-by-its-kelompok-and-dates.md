@@ -71,7 +71,7 @@ or end date change is [#407](https://github.com/sugt-itb/sugt-itb-26/issues/407)
   paperwork for the old label to contradict.
 - **`shortenKabupaten` goes.** It abbreviated "Kabupaten" in the destination line, which no longer
   exists. `/log` search loses its `Kabupaten`→`Kab.` regexp and matches the Sub-Cluster name and the
-  trip's Schools instead; `/perjadin` search matches the name and the Schools.
+  trip's Schools instead; `/perjadin` search matches the same Kelompok and Schools.
 - **`/perjadin` sorts by name** numerically — Kelompok 2 before Kelompok 10 — and two trips of one
   Kelompok by their dates.
 - **The migration drops the column outright.** Nothing is backfilled: the name is derived.

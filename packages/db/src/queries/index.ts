@@ -324,7 +324,6 @@ export {
   type ReconcileTarget,
   type UnsyncedTransaction,
 } from "./drive-sync";
-export type { PerjadinFolderNaming } from "./perjadin-naming";
 export {
   claimDocumentKindFolder,
   claimDokumenFolder,

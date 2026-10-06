@@ -328,8 +328,9 @@ export async function planPerjadin(
   // A Perjadin goes to exactly one Sub-Cluster and every School it teaches at belongs to it
   // (CONTEXT.md, ADR-0016). Planning is one of the two writes that can break that rule —
   // `addPerjadinSession`, which adds a School to an existing trip, checks it too — so it is refused
-  // for the whole payload here rather than left to a foreign key that editability forbids. A School id that names no row, or one
-  // whose Sub-Cluster is null, is "outside" too, since neither equals the chosen Sub-Cluster.
+  // for the whole payload here rather than left to a foreign key that editability forbids. A School
+  // id that names no row, or one whose Sub-Cluster is null, is "outside" too, since neither equals
+  // the chosen Sub-Cluster.
   const schoolIds = input.sessions.map((planned) => planned.schoolId);
   const memberships = await db
     .select({ id: school.id, subClusterId: school.subClusterId })

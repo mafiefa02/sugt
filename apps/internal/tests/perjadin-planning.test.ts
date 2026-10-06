@@ -1,10 +1,13 @@
+import { perjadinFolderName, perjadinName } from "-/lib/perjadin-name";
 import { db, schema } from "@sugt/db";
 import {
   cancelSession,
   isNotStaffError,
+  myPerjadin,
   perjadinAcquittal,
   perjadinDetail,
   perjadinDirectory,
+  perjadinDriveFolder,
   perjadinPlan,
   planPerjadin,
   updatePerjadinDates,
@@ -830,12 +833,19 @@ describe("the Perjadin's name and its Schools (ADR-0044)", () => {
       .set({ name: "Kelompok 10" })
       .where(eq(schema.subCluster.id, subCluster.id));
 
+    // A trip in the past: renaming relabels history, by design.
+    const named = "Kelompok 10 · 1–3 Sep 2026";
     const [listed] = await perjadinDirectory(nonStaff());
-    expect(listed?.subClusterName).toBe("Kelompok 10");
-    expect((await perjadinDetail(nonStaff(), planned.perjadinId))?.subClusterName).toBe(
-      "Kelompok 10",
+    const detail = await perjadinDetail(nonStaff(), planned.perjadinId);
+    const acquittal = await perjadinAcquittal(pic, planned.perjadinId);
+    const { previous } = await myPerjadin(pic);
+    const folder = await perjadinDriveFolder(pic, planned.perjadinId);
+    for (const read of [listed, detail, acquittal, previous[0], folder?.naming]) {
+      expect(read && perjadinName(read)).toBe(named);
+    }
+    expect(folder && perjadinFolderName(folder.naming)).toBe(
+      `${named} · SMAN 1 Bandung, SMAN 2 Bandung · P-${planned.perjadinId.slice(0, 8)}`,
     );
-    expect((await perjadinAcquittal(pic, planned.perjadinId))?.subClusterName).toBe("Kelompok 10");
   });
 });
 

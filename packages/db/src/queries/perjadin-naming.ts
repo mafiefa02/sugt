@@ -7,9 +7,9 @@ import { perjadin } from "../schema/travel";
 /**
  * **What a Perjadin is named from** (ADR-0044) — SQL shared by every read that names a trip, kept
  * here beneath them and unexported from `@sugt/db/queries` (convention 3). `tripSchoolNames` alone
- * is re-exported from the package root, for the Perjadin token resolver in `@sugt/internal`. The name itself is put together
- * in `@sugt/internal` (`perjadin-name.ts`); this module only reads its parts, live: a Perjadin's name
- * is never stored.
+ * is re-exported from the package root, for the Perjadin token resolver in `@sugt/internal`. The
+ * name itself is put together in `@sugt/internal` (`perjadin-name.ts`); this module only reads its
+ * parts, live: a Perjadin's name is never stored.
  */
 
 /**

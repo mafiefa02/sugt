@@ -1,4 +1,3 @@
-import { perjadinCsvFileName } from "-/lib/perjadin-name";
 import type { PerjadinAcquittal } from "@sugt/db/queries";
 
 /**
@@ -63,12 +62,4 @@ export function csvOf(acquittal: PerjadinAcquittal): string {
  */
 function quoted(field: string): string {
   return `"${field.replaceAll('"', '""')}"`;
-}
-
-/**
- * `laporan-perjadin-kelompok-10-12-13-okt-2026-sman-1-bontang.csv` — the trip's name and Schools,
- * the Drive folder's rule without its id (`perjadinCsvFileName`, ADR-0044).
- */
-export function fileNameOf(acquittal: PerjadinAcquittal): string {
-  return perjadinCsvFileName(acquittal);
 }

@@ -37,8 +37,9 @@ describe("perjadinName", () => {
 });
 
 describe("perjadinSchoolsLine", () => {
-  it("lists the Schools alphabetically, joined with a comma", () => {
-    expect(perjadinSchoolsLine(["SMAN 2 Samarinda", "SMAN 1 Bontang"])).toBe(
+  it("joins the Schools with a comma, in the query's order", () => {
+    // `tripSchoolNames` orders them by name; the line keeps that order rather than deciding again.
+    expect(perjadinSchoolsLine(["SMAN 1 Bontang", "SMAN 2 Samarinda"])).toBe(
       "SMAN 1 Bontang, SMAN 2 Samarinda",
     );
   });
@@ -58,7 +59,7 @@ describe("perjadinFolderName", () => {
 
   it("carries the name, the trip's Schools and the P- id", () => {
     expect(
-      perjadinFolderName({ ...trip, schoolNames: ["SMAN 2 Samarinda", "SMAN 1 Bontang"] }),
+      perjadinFolderName({ ...trip, schoolNames: ["SMAN 1 Bontang", "SMAN 2 Samarinda"] }),
     ).toBe("Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang, SMAN 2 Samarinda · P-1a2b3c4d");
   });
 
@@ -74,7 +75,7 @@ describe("perjadinCsvFileName", () => {
 
   it("is the Drive folder's rule without the id, slugified", () => {
     expect(
-      perjadinCsvFileName({ ...trip, schoolNames: ["SMAN 2 Samarinda", "SMAN 1 Bontang"] }),
+      perjadinCsvFileName({ ...trip, schoolNames: ["SMAN 1 Bontang", "SMAN 2 Samarinda"] }),
     ).toBe("laporan-perjadin-kelompok-10-12-13-okt-2026-sman-1-bontang-sman-2-samarinda.csv");
   });
 
