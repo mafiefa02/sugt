@@ -47,7 +47,7 @@ it — the glossary called a Sub-Cluster one journey — and a way to tell the t
   [#409](https://github.com/sugt-itb/sugt-itb-26/issues/409)). The cap of two offline Sessions per
   School is still not enforced.
 
-## Amendment (2026-10-06): Consequence: the double-booking guard
+## Amendment (2026-10-06): the double-booking guard
 
 [#408](https://github.com/sugt-itb/sugt-itb-26/issues/408). "Never twice at the same date and start
 time" is now held by the database across every Perjadin. `session_no_duplicate_offline_per_school`,

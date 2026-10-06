@@ -13,6 +13,9 @@ import { perjadin } from "../schema/travel";
  * Shared by `planPerjadin`, `addPerjadinSession`, `editPerjadinSession` and `moveSessionDate`, and
  * kept here beneath them, unexported from `@sugt/db/queries` but for its refusal type
  * (convention 3).
+ *
+ * The check is a read before the write and the index is the backstop: a write that races past the
+ * read is refused by the index, and `slotViolationRefusal` turns that back into the same refusal.
  */
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -34,65 +37,85 @@ export type SchoolBookedOnAnotherPerjadin = {
   perjadin: { id: string; subClusterName: string; startsOn: string; endsOn: string };
 };
 
+/** Which Session and trip a check is on behalf of, so neither counts as holding its own slot. */
+export type SlotOwner = {
+  /** The trip being written — `null` while planning, when it does not exist yet. */
+  ownPerjadinId: string | null;
+  /** The Session being edited or moved, which never holds its own slot. */
+  excludeSessionId?: string;
+};
+
 /**
- * Who holds the slot: the live offline Session already at this School, date and start time, and
- * its trip — or `null` when it is free. `excludeSessionId` leaves out the Session being edited or
- * moved, so it never holds its own slot. The caller tells "on this trip" from "on another" by
- * `perjadinId`: the first is its own duplicate refusal, the second is
- * `school-booked-on-another-perjadin`.
+ * **The first of `slots` another trip already holds**, as the refusal naming that trip — or `null`
+ * when each is free, or held only on the caller's own trip, whose duplicate is its own refusal
+ * (`duplicate-session`, or `collided` on a move). Read before the write, so a double-booking is a
+ * sentence rather than a violation.
  *
  * `starts_at` is a `time`, so the `HH:MM` the forms send compares equal to the stored `HH:MM:SS`.
  */
-export async function slotHolder(
+export async function bookedOnAnotherPerjadin(
   reader: Tx | typeof db,
-  slot: SchoolSlot,
-  excludeSessionId?: string,
-): Promise<{ perjadinId: string; refusal: SchoolBookedOnAnotherPerjadin } | null> {
-  const [held] = await reader
-    .select({
-      schoolName: school.name,
-      timeZone: province.timeZone,
-      startsAt: session.startsAt,
-      perjadin: {
-        id: perjadin.id,
-        subClusterName: subCluster.name,
-        startsOn: perjadin.startsOn,
-        endsOn: perjadin.endsOn,
-      },
-    })
-    .from(session)
-    .innerJoin(school, eq(school.id, session.schoolId))
-    .innerJoin(province, eq(province.code, school.provinceCode))
-    .innerJoin(perjadin, eq(perjadin.id, session.perjadinId))
-    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
-    .where(
-      and(
-        eq(session.schoolId, slot.schoolId),
-        eq(session.heldOn, slot.heldOn),
-        sql`${session.startsAt} = ${slot.startsAt}::time`,
-        ne(session.status, "cancelled"),
-        isNotNull(session.perjadinId),
-        excludeSessionId ? ne(session.id, excludeSessionId) : undefined,
-      ),
-    )
-    .limit(1);
-  if (!held) return null;
-
-  return {
-    perjadinId: held.perjadin.id,
-    refusal: {
-      outcome: "school-booked-on-another-perjadin",
-      schoolName: held.schoolName,
-      heldOn: slot.heldOn,
-      startsAt: held.startsAt,
-      timeZone: held.timeZone,
-      perjadin: held.perjadin,
-    },
-  };
+  slots: SchoolSlot[],
+  { ownPerjadinId, excludeSessionId }: SlotOwner,
+): Promise<SchoolBookedOnAnotherPerjadin | null> {
+  for (const slot of slots) {
+    const [held] = await reader
+      .select({
+        schoolName: school.name,
+        timeZone: province.timeZone,
+        startsAt: session.startsAt,
+        perjadin: {
+          id: perjadin.id,
+          subClusterName: subCluster.name,
+          startsOn: perjadin.startsOn,
+          endsOn: perjadin.endsOn,
+        },
+      })
+      .from(session)
+      .innerJoin(school, eq(school.id, session.schoolId))
+      .innerJoin(province, eq(province.code, school.provinceCode))
+      .innerJoin(perjadin, eq(perjadin.id, session.perjadinId))
+      .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
+      .where(
+        and(
+          eq(session.schoolId, slot.schoolId),
+          eq(session.heldOn, slot.heldOn),
+          sql`${session.startsAt} = ${slot.startsAt}::time`,
+          ne(session.status, "cancelled"),
+          isNotNull(session.perjadinId),
+          ownPerjadinId ? ne(session.perjadinId, ownPerjadinId) : undefined,
+          excludeSessionId ? ne(session.id, excludeSessionId) : undefined,
+        ),
+      )
+      .limit(1);
+    if (held) {
+      return {
+        outcome: "school-booked-on-another-perjadin",
+        schoolName: held.schoolName,
+        heldOn: slot.heldOn,
+        startsAt: held.startsAt,
+        timeZone: held.timeZone,
+        perjadin: held.perjadin,
+      };
+    }
+  }
+  return null;
 }
 
-/** Whether a write failed on the double-booking index, so the caller can name who holds the slot. */
-export function isSlotTaken(error: unknown): boolean {
-  const constraint = (error as { cause?: { constraint_name?: string } }).cause?.constraint_name;
-  return constraint === "session_no_duplicate_offline_per_school";
+/**
+ * **A write refused by `session_no_duplicate_offline_per_school`, named** — the race past
+ * `bookedOnAnotherPerjadin`'s read, which the index closes. The index cannot say whose Session
+ * holds the slot, so it is read again, outside the failed transaction: the refusal naming the other
+ * trip, or `null` when the holder is on the caller's own trip. Anything else the write failed on is
+ * rethrown, named rather than caught wholesale, so a bug is never reported as a user state.
+ */
+export async function slotViolationRefusal(
+  error: unknown,
+  slots: SchoolSlot[],
+  owner: SlotOwner,
+): Promise<SchoolBookedOnAnotherPerjadin | null> {
+  const wrapped = error as { cause?: { constraint_name?: string }; constraint_name?: string };
+  const constraint = wrapped.cause?.constraint_name ?? wrapped.constraint_name;
+  if (constraint !== "session_no_duplicate_offline_per_school") throw error;
+  return bookedOnAnotherPerjadin(db, slots, owner);
 }

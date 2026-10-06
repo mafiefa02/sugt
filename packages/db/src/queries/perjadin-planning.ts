@@ -18,7 +18,11 @@ import {
   type RosterPerson,
   type SelectedSchool,
 } from "./rosters";
-import { isSlotTaken, type SchoolBookedOnAnotherPerjadin, slotHolder } from "./school-slot";
+import {
+  bookedOnAnotherPerjadin,
+  type SchoolBookedOnAnotherPerjadin,
+  slotViolationRefusal,
+} from "./school-slot";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -230,9 +234,11 @@ export type DuplicateSessionSlot = {
  * second step. The writes are one act and commit together.
  *
  * Everything the application has to check is checked **before** the transaction opens.
- * That is not an optimisation: each of these is a rule the database cannot hold, so
+ * That is not an optimisation: all but one of these are rules the database cannot hold, so
  * finding out inside the transaction would mean rolling back a trip somebody typed rather
- * than telling them which field is wrong.
+ * than telling them which field is wrong. The one it does hold — a School already booked at that
+ * moment on another trip (#408) — is read first too, for the sentence naming that trip, and a race
+ * past the read is caught on the index and named the same way.
  *
  * What is **not** checked here is checked at the database and left there. The PIC being
  * Staff is `perjadin_pic_is_staff`; a Session being offline and carrying its Perjadin is
@@ -395,10 +401,8 @@ export async function planPerjadin(
 
   // The same School at the same moment on another trip (#408). Every live offline Session is on
   // another trip — this one does not exist yet — so any holder is a double-booking.
-  for (const planned of input.sessions) {
-    const holder = await slotHolder(db, planned);
-    if (holder) return holder.refusal;
-  }
+  const booked = await bookedOnAnotherPerjadin(db, input.sessions, { ownPerjadinId: null });
+  if (booked) return booked;
 
   let perjadinId: string;
   try {
@@ -496,11 +500,8 @@ export async function planPerjadin(
   } catch (error) {
     // A race past the read above: another trip took a slot between the check and the insert. The
     // index refused it; read again who holds it, so the form still gets the sentence.
-    if (!isSlotTaken(error)) throw error;
-    for (const planned of input.sessions) {
-      const holder = await slotHolder(db, planned);
-      if (holder) return holder.refusal;
-    }
+    const raced = await slotViolationRefusal(error, input.sessions, { ownPerjadinId: null });
+    if (raced) return raced;
     throw error;
   }
 

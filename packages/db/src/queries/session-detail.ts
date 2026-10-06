@@ -9,7 +9,11 @@ import { province, school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 import { snapshotTripSchools } from "./perjadin-naming";
-import { isSlotTaken, type SchoolBookedOnAnotherPerjadin, slotHolder } from "./school-slot";
+import {
+  bookedOnAnotherPerjadin,
+  type SchoolBookedOnAnotherPerjadin,
+  slotViolationRefusal,
+} from "./school-slot";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -404,7 +408,8 @@ function shiftTime(end: string, newStart: string, oldStart: string): string {
  *   new date and time must not land on another live Session at the same School — on the trip,
  *   `session_no_duplicate_offline_per_school` (ADR-0038) is left to refuse the write for the same
  *   race-free reason as the online index; on **another** trip it is read first (#408,
- *   `slotHolder`), so the refusal can name that trip, and a race past the read is named the same way.
+ *   `bookedOnAnotherPerjadin`), so the refusal can name that trip, and a race past the read is named
+ *   the same way.
  *
  * **The start time moves with the date, in the same write** ([#72](https://github.com/mafiefa02/sugt/issues/72)):
  * moving a Session is one act, and a dialog that changed the date while silently keeping a
@@ -463,12 +468,12 @@ export async function moveSessionDate(
         if (!heldOnWithinPerjadin(heldOn, window)) {
           return { outcome: "outside-perjadin", ...window };
         }
-        const holder = await slotHolder(
+        const booked = await bookedOnAnotherPerjadin(
           tx,
-          { schoolId: row.schoolId, heldOn, startsAt },
-          sessionId,
+          [{ schoolId: row.schoolId, heldOn, startsAt }],
+          { ownPerjadinId: row.perjadinId, excludeSessionId: sessionId },
         );
-        if (holder && holder.perjadinId !== row.perjadinId) return holder.refusal;
+        if (booked) return booked;
       }
       moving = { schoolId: row.schoolId, perjadinId: row.perjadinId };
 
@@ -487,17 +492,13 @@ export async function moveSessionDate(
     if (constraint === "session_one_online_per_school_per_day") {
       return { outcome: "collided", constraint };
     }
-    if (isSlotTaken(error) && moving) {
-      // The index cannot say whose Session holds the slot; read it again, outside the failed
-      // transaction, so a race past the read above still names the other trip.
-      const holder = await slotHolder(
-        db,
-        { schoolId: moving.schoolId, heldOn, startsAt },
-        sessionId,
-      );
-      if (holder && holder.perjadinId !== moving.perjadinId) return holder.refusal;
-      return { outcome: "collided", constraint: "session_no_duplicate_offline_per_school" };
-    }
-    throw error;
+    if (!moving) throw error;
+    // A race past the read above is named the same way; on this same trip it is `collided`.
+    const raced = await slotViolationRefusal(
+      error,
+      [{ schoolId: moving.schoolId, heldOn, startsAt }],
+      { ownPerjadinId: moving.perjadinId, excludeSessionId: sessionId },
+    );
+    return raced ?? { outcome: "collided", constraint: "session_no_duplicate_offline_per_school" };
   }
 }

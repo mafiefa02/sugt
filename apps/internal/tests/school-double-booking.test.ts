@@ -31,23 +31,30 @@ import {
  * at the database; planning, adding, editing and moving a Session check it first, so the refusal
  * names the other trip. Against the real database.
  *
- * `slotHolder` is wrapped so a test can make the writes' own read miss — the check-then-insert race
- * the index exists to close — and see the refusal still come back as a value.
+ * The writes' read, `bookedOnAnotherPerjadin`, is wrapped so a test can see which path refused:
+ * the read itself (`refusedByRead`), or the index after the read was made to miss
+ * (`missedReads`) — the check-then-insert race the index exists to close.
+ *
+ * Mocked by its path, not through `@sugt/db/queries`: the writes import it from inside the package
+ * (`./school-slot`), which is the module a mock must replace to reach them, and the package exports
+ * only its refusal type. The index's own re-read, inside the same module, is never wrapped.
  */
 
-const race = vi.hoisted(() => ({ missedReads: 0 }));
+const race = vi.hoisted(() => ({ missedReads: 0, refusedByRead: 0 }));
 
 vi.mock("../../../packages/db/src/queries/school-slot", async (importOriginal) => {
   const real =
     await importOriginal<typeof import("../../../packages/db/src/queries/school-slot")>();
   return {
     ...real,
-    slotHolder: async (...args: Parameters<typeof real.slotHolder>) => {
+    bookedOnAnotherPerjadin: async (...args: Parameters<typeof real.bookedOnAnotherPerjadin>) => {
       if (race.missedReads > 0) {
         race.missedReads -= 1;
         return null;
       }
-      return real.slotHolder(...args);
+      const refusal = await real.bookedOnAnotherPerjadin(...args);
+      if (refusal) race.refusedByRead += 1;
+      return refusal;
     },
   };
 });
@@ -129,7 +136,11 @@ const sessionsOn = (perjadinId: string) =>
 beforeEach(async () => {
   await resetDatabase();
   race.missedReads = 0;
+  race.refusedByRead = 0;
 });
+
+/** The write's own read refused, before anything reached the index. */
+const refusedBeforeTheIndex = () => expect(race.refusedByRead).toBe(1);
 
 describe("the same School at the same moment on another trip", () => {
   it("is refused at planning, naming the other trip, and no trip is made", async () => {
@@ -146,7 +157,28 @@ describe("the same School at the same moment on another trip", () => {
     };
 
     await expect(planPerjadin(pic, input)).resolves.toEqual(bookedOnA(a));
+    refusedBeforeTheIndex();
     await expect(db.select().from(schema.perjadin)).resolves.toHaveLength(2);
+  });
+
+  it("allows planning a different start time, or a different School", async () => {
+    const { pic, subCluster, bontang, samarinda } = await scene();
+
+    await expect(
+      planPerjadin(pic, {
+        subClusterId: subCluster.id,
+        advanceIdr: 1_000_000,
+        picPersonId: pic.id,
+        teacherNames: [],
+        pimpinan: [],
+        sessions: [
+          { ...at(bontang.id, "2026-10-12", "10:00"), taughtByTeacherIndexes: [] },
+          { ...at(samarinda.id, "2026-10-12", "08:00"), taughtByTeacherIndexes: [] },
+        ],
+        startsOn: "2026-10-12",
+        endsOn: "2026-10-12",
+      }),
+    ).resolves.toMatchObject({ outcome: "planned" });
   });
 
   it("is refused when a Session is added", async () => {
@@ -155,6 +187,7 @@ describe("the same School at the same moment on another trip", () => {
     await expect(
       addPerjadinSession(pic, b.id, at(bontang.id, "2026-10-12", "08:00")),
     ).resolves.toEqual(bookedOnA(a));
+    refusedBeforeTheIndex();
     await expect(sessionsOn(b.id)).resolves.toHaveLength(0);
   });
 
@@ -170,6 +203,7 @@ describe("the same School at the same moment on another trip", () => {
     await expect(
       editPerjadinSession(pic, moving.id, at(bontang.id, "2026-10-12", "08:00")),
     ).resolves.toEqual(bookedOnA(a));
+    refusedBeforeTheIndex();
   });
 
   it("is refused when a Session's date and time are moved onto it", async () => {
@@ -184,6 +218,7 @@ describe("the same School at the same moment on another trip", () => {
     await expect(moveSessionDate(pic, moving.id, "2026-10-12", "08:00")).resolves.toEqual(
       bookedOnA(a),
     );
+    refusedBeforeTheIndex();
   });
 
   it("allows a different start time, or a different School", async () => {
@@ -238,6 +273,23 @@ describe("the database holds it on its own", () => {
 
     await expect(
       addPerjadinSession(pic, b.id, at(bontang.id, "2026-10-12", "08:00")),
+    ).resolves.toEqual(bookedOnA(a));
+    // The write's own read did miss: the refusal came from the index, read again.
+    expect(race.missedReads).toBe(0);
+  });
+
+  it("answers a race past the check with the same refusal, when editing", async () => {
+    const { pic, bontang, a, b } = await scene();
+    const moving = await addOfflineSession({
+      schoolId: bontang.id,
+      heldOn: "2026-10-12",
+      startsAt: "13:00",
+      perjadinId: b.id,
+    });
+    race.missedReads = 1;
+
+    await expect(
+      editPerjadinSession(pic, moving.id, at(bontang.id, "2026-10-12", "08:00")),
     ).resolves.toEqual(bookedOnA(a));
     // The write's own read did miss: the refusal came from the index, read again.
     expect(race.missedReads).toBe(0);

@@ -8,10 +8,9 @@ import { perjadin, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
 import { snapshotTripSchools } from "./perjadin-naming";
 import {
-  isSlotTaken,
+  bookedOnAnotherPerjadin,
   type SchoolBookedOnAnotherPerjadin,
-  type SchoolSlot,
-  slotHolder,
+  slotViolationRefusal,
 } from "./school-slot";
 import { heldOnWithinPerjadin, type PastArranged } from "./session-detail";
 import { requireStaff } from "./staff-only";
@@ -32,7 +31,7 @@ import { requireStaff } from "./staff-only";
  * pair illegal again, but refuses it through its own per-School index rather than restoring the
  * trip-wide one: the *same* School twice at one moment on this trip is the database's to refuse,
  * reported as `duplicate-session`, and is not pre-checked here. On **another** trip it is checked
- * first (#408, `slotHolder`), so the refusal can name that trip.
+ * first (#408, `bookedOnAnotherPerjadin`), so the refusal can name that trip.
  *
  * "Diajar oleh" is the set of the trip's `perjadin_teacher` names who staffed the Session's parallel
  * rooms, written as `session_teaching_team` links. It is replaced whole on each write — a name the
@@ -155,11 +154,8 @@ async function checkPlacement(
   }
 
   // The same School at the same moment on another trip (#408). On this trip it is left to the
-  // index, which `slotTakenOrRethrow` reports as `duplicate-session`.
-  const holder = await slotHolder(tx, input, excludeSessionId);
-  if (holder && holder.perjadinId !== perjadinId) return holder.refusal;
-
-  return null;
+  // index, which the writes' catch reports as `duplicate-session`.
+  return bookedOnAnotherPerjadin(tx, [input], { ownPerjadinId: perjadinId, excludeSessionId });
 }
 
 /** Replace a Session's `session_teaching_team` links with the (deduped) set named. */
@@ -233,7 +229,11 @@ export async function addPerjadinSession(
       return { outcome: "added", sessionId: created!.id, schoolsChanged: await schoolsChanged() };
     });
   } catch (error) {
-    return slotTakenOrRethrow(error, input, perjadinId);
+    return (
+      (await slotViolationRefusal(error, [input], { ownPerjadinId: perjadinId })) ?? {
+        outcome: "duplicate-session",
+      }
+    );
   }
 }
 
@@ -266,8 +266,9 @@ export async function editPerjadinSession(
   requireStaff(caller);
 
   // The trip the Session is on, kept for the catch: a race on the index is a duplicate when the
-  // slot's holder is on this same trip.
-  let tripId: string | null = null;
+  // slot's holder is on this same trip. Asserted rather than annotated, so the assignment inside the
+  // transaction's callback is not narrowed away to `null`.
+  let tripId = null as string | null;
   try {
     return await db.transaction(async (tx) => {
       const [row] = await tx
@@ -315,27 +316,11 @@ export async function editPerjadinSession(
       return { outcome: "edited", schoolsChanged: await schoolsChanged() };
     });
   } catch (error) {
-    return slotTakenOrRethrow(error, input, tripId, sessionId);
+    return (
+      (await slotViolationRefusal(error, [input], {
+        ownPerjadinId: tripId,
+        excludeSessionId: sessionId,
+      })) ?? { outcome: "duplicate-session" }
+    );
   }
-}
-
-/**
- * Turn the one-per-School-per-moment index violation into a refusal value; rethrow everything else.
- * The index cannot say whose Session holds the slot, so it is read again, outside the failed
- * transaction: on this trip it is `duplicate-session`, on another `school-booked-on-another-perjadin`
- * — the sentence a race past `checkPlacement`'s own read still gets (#408).
- *
- * Named rather than caught wholesale: this row satisfies several CHECKs and a foreign key, and
- * swallowing any of those as "that Session already exists" would report a bug as a user state.
- */
-async function slotTakenOrRethrow(
-  error: unknown,
-  slot: SchoolSlot,
-  perjadinId: string | null,
-  excludeSessionId?: string,
-): Promise<{ outcome: "duplicate-session" } | SchoolBookedOnAnotherPerjadin> {
-  if (!isSlotTaken(error)) throw error;
-  const holder = await slotHolder(db, slot, excludeSessionId);
-  if (holder && holder.perjadinId !== perjadinId) return holder.refusal;
-  return { outcome: "duplicate-session" };
 }

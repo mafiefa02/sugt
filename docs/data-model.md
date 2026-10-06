@@ -436,14 +436,16 @@ It dropped `stream` from the key when Stream was dropped from online delivery. I
 `perjadin_id` is not null. Partial the usual way besides: cancelled rows accumulate and must not
 collide with their replacements.
 
-**Two offline-Session indexes were dropped, and this one replaces them
+**Two offline-Session indexes were dropped, and a per-trip one replaced them — itself replaced by
+the cross-trip index below since #408
 ([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
 narrowed by [ADR-0038](./adr/0038-offline-sessions-carry-no-stream-and-parallel-rooms-are-one-session.md)).**
 `session_one_per_school_per_perjadin` — "one Session per School on the trip" — is gone, because a
 School now has _several_ offline Sessions per Perjadin, each on its own date and time.
 `session_one_school_at_a_time_per_perjadin`, on `(perjadin_id, held_on, starts_at)`, forbade _any_
 two Sessions sharing a moment on one trip, same School included, and had to go. What the database
-holds is **one live offline Session per School per date and start time on a trip**: parallel rooms
+held then was **one live offline Session per School per date and start time on a trip** (since
+#408, on any trip — see below): parallel rooms
 are recorded as one Session whose Teaching Team lists everyone who taught, so two live rows at the
 same School and moment are refused. ADR-0019 had allowed that pair when the key also carried
 `stream` (a STEM and a Research room at one hour); ADR-0038 dropped `stream` and reversed it.
@@ -456,8 +458,9 @@ party — stays the application's (enforced when a trip is planned, and when a S
 edited) and is listed in [what the database does not hold](#what-the-database-does-not-hold). Under
 ADR-0019 it could not be a plain unique index, because same-School pairs had to pass. Since
 ADR-0038 they no longer do, so the two rules together are one live offline Session per trip per
-moment, and the trip-wide `(perjadin_id, held_on, starts_at)` index could hold both. #342 kept the
-per-School key it specified; restoring the trip-wide index would be its own change.
+moment on one trip, and the trip-wide `(perjadin_id, held_on, starts_at)` index could hold both
+within a trip. #342 kept the per-School key it specified; restoring the trip-wide index would be its
+own change.
 
 **The per-School rule holds across trips
 ([#408](https://github.com/sugt-itb/sugt-itb-26/issues/408),
@@ -472,8 +475,8 @@ online Sessions stay out, as the `perjadin_id` column in the old key kept them. 
 on date and start time collides; overlapping start times do not, across trips as within one. The
 writes read the slot first (`slotHolder`), so a double-booking on another trip comes back as
 `school-booked-on-another-perjadin`, naming and linking that trip, and a race past the read is read
-again and named the same way. The live data must hold no such pair before the migration ships, or
-the index will not build; nothing cancels a Session to make it fit. The different-Schools rule stays
+again and named the same way. Like `0032`, migration `0042` first looks for live pairs the wider
+index would refuse and **aborts listing them**; nothing cancels a Session to make it fit. The different-Schools rule stays
 **per trip** — two Groups can be in two places at once.
 
 **There is no `sub_cluster_id` on a Session, and the reason is worth stating because the column
