@@ -47,8 +47,8 @@ function dates(startsOn: string, endsOn: string): PerjadinDatesInput {
 }
 
 /**
- * A Staff PIC and a trip `Kelompok 3: Garut` from the 12th to the 16th — with Drive connected and the
- * trip's folder made, unless told otherwise.
+ * A Staff PIC and a Kelompok 3 trip from the 12th to the 16th — with Drive connected and the trip's
+ * folder made, under a name from before ADR-0044, unless told otherwise.
  */
 async function scene(
   options: { connected?: boolean; folder?: boolean; status?: "connected" | "broken" } = {},
@@ -57,7 +57,7 @@ async function scene(
   const trip = await addPerjadin({
     advanceIdr: 5_000_000,
     picPersonId: pic.id,
-    destination: "Kelompok 3: Garut",
+    subClusterName: "Kelompok 3",
     startsOn: "2026-10-12",
     endsOn: "2026-10-16",
   });
@@ -106,7 +106,7 @@ describe("a start-date correction", () => {
     ).resolves.toEqual({ outcome: "updated", startsOnMoved: true });
 
     await expect(drive.getFile(folderId!)).resolves.toMatchObject({
-      name: "Kelompok 3 · Garut · 2026-10-13",
+      name: `Kelompok 3 · 13–16 Okt 2026 · P-${trip.id.slice(0, 8)}`,
     });
   });
 
@@ -144,7 +144,7 @@ describe("a start-date correction", () => {
     await updatePerjadinDatesAction(trip.id, dates("2026-10-13", "2026-10-16"));
 
     await expect(drive.getFile(folderId!)).resolves.toMatchObject({
-      name: "Kelompok 3 · Garut · 2026-10-13",
+      name: `Kelompok 3 · 13–16 Okt 2026 · P-${trip.id.slice(0, 8)}`,
     });
   });
 
@@ -208,7 +208,7 @@ describe("the reconcile", () => {
     });
 
     await expect(drive.getFile(folderId!)).resolves.toMatchObject({
-      name: "Kelompok 3 · Garut · 2026-10-13",
+      name: `Kelompok 3 · 13–16 Okt 2026 · P-${trip.id.slice(0, 8)}`,
     });
   });
 
@@ -241,7 +241,7 @@ describe("the reconcile", () => {
     await reconcileTransaction(pic, drive, folders, line.id);
 
     await expect(getFile(folderId!)).resolves.toMatchObject({
-      name: "Kelompok 3 · Garut · 2026-10-13",
+      name: `Kelompok 3 · 13–16 Okt 2026 · P-${trip.id.slice(0, 8)}`,
     });
   });
 });

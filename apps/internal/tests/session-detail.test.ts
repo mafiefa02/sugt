@@ -126,6 +126,7 @@ describe("Detail Sesi", () => {
     expect(detail?.picFullName).toBe("Rina Nurhayati");
     expect(detail?.perjadin).toEqual({
       id: perjadin.id,
+      subClusterName: "Kelompok Sekolah Bandung",
       startsOn: "2026-09-01",
       endsOn: "2026-09-03",
     });

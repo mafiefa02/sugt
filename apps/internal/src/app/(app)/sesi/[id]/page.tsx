@@ -2,6 +2,7 @@ import { FeedbackTokenDialog } from "-/components/feedback-token";
 import { MODE_LABELS, SessionStatusBadge } from "-/components/session-labels";
 import { SessionRecords } from "-/components/session-records";
 import { SessionWrites } from "-/components/session-writes";
+import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
 import { sessionDetail } from "@sugt/db/queries";
 import { formatSessionStartTimeWithWib } from "@sugt/domain";
@@ -86,7 +87,7 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
           {session.perjadin !== null && (
             <>
               {" · "}
-              Perjadin {session.perjadin.startsOn} – {session.perjadin.endsOn}
+              Perjadin {perjadinName(session.perjadin)}
             </>
           )}
         </p>

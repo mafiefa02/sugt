@@ -20,7 +20,6 @@ import { PerjadinDokumenList } from "-/components/perjadin-dokumen-list";
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
 import { putToDriveSession } from "-/lib/drive/receipt-upload";
 import type { UploadGate } from "-/lib/drive/upload-gate";
-import { shortenKabupaten } from "-/lib/format-destination";
 import type { PerjadinDokumen } from "@sugt/db/queries";
 import {
   PERJADIN_DOCUMENT_KINDS,
@@ -64,12 +63,13 @@ import { type ReactElement, useId, useRef, useState, useTransition } from "react
  */
 function PerjadinDokumenDialog({
   perjadinId,
-  destination,
+  name,
   uploadGate,
   trigger,
 }: {
   perjadinId: string;
-  destination: string;
+  /** The trip's name (`perjadinName`, ADR-0044), for the title. */
+  name: string;
   /** Closed while Drive cannot take an upload: the trigger is disabled, titled with the reason. */
   uploadGate: UploadGate;
   trigger: ReactElement;
@@ -144,7 +144,7 @@ function PerjadinDokumenDialog({
       />
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Dokumen — {shortenKabupaten(destination)}</DialogTitle>
+          <DialogTitle>Dokumen — {name}</DialogTitle>
           <DialogDescription>
             Daftar hadir perjalanan ini, satu file PDF masing-masing.
           </DialogDescription>

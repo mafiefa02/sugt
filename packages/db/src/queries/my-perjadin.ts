@@ -4,7 +4,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
-import { province, school } from "../schema/reference";
+import { province, school, subCluster } from "../schema/reference";
 import {
   groupMember,
   perjadin,
@@ -16,6 +16,7 @@ import {
 import { advanceDrawdownCategoryList } from "./advance-drawdown";
 import type { Person } from "./caller";
 import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
+import { tripSchoolNames } from "./perjadin-naming";
 import {
   derivePreparationChecklist,
   type PreparationItem,
@@ -89,7 +90,10 @@ export type MyPerjadinSchool = {
  */
 export type MyPerjadinTrip = {
   id: string;
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044), read live — never stored. */
+  subClusterName: string;
+  /** The trip's Schools (`tripSchoolNames`): the School line under the card's name. */
+  schoolNames: string[];
   startsOn: string;
   endsOn: string;
   picPersonId: string;
@@ -154,7 +158,8 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
   const rows = await db
     .select({
       id: perjadin.id,
-      destination: perjadin.destination,
+      subClusterName: subCluster.name,
+      schoolNames: tripSchoolNames(perjadin.id),
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
       picPersonId: perjadin.picPersonId,
@@ -170,6 +175,7 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
       groupMember,
       and(eq(groupMember.perjadinId, perjadin.id), eq(groupMember.personId, caller.id)),
     )
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .innerJoin(person, eq(person.id, perjadin.picPersonId))
     // Current trips first, soonest first — a trip is remembered by when it happens. Then the
     // previous ones, the most recently ended first. `id` breaks the tie so the order is total.

@@ -15,8 +15,10 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../client";
 import { person } from "../schema/people";
+import { subCluster } from "../schema/reference";
 import { activityLog, perjadin, perjadinDocument, transaction } from "../schema/travel";
 import type { Person } from "./caller";
+import { tripSchoolNames } from "./perjadin-naming";
 import { requireGrant } from "./staff-only";
 
 /**
@@ -173,7 +175,10 @@ export type ActivityLogAksiFilter = keyof typeof ACTIVITY_LOG_AKSI_FILTERS;
 
 /** What `/log`'s URL asks for. Every filter is optional, and they combine with AND. */
 export type ActivityLogFilters = {
-  /** Matched, case-insensitively, against the actor's email, destination, PIC and `search_text`. */
+  /**
+   * Matched, case-insensitively, against the actor's email, the trip's Sub-Cluster name and its
+   * Schools (ADR-0044), its PIC and `search_text`.
+   */
   q: string;
   aksi: ActivityLogAksiFilter | null;
   /** A WIB calendar date, `YYYY-MM-DD`, inclusive. */
@@ -189,7 +194,15 @@ export type ActivityLogRow = ActivityLogEntry & {
   occurredAt: Date;
   actorEmail: string;
   backfilled: boolean;
-  perjadin: { id: string; destination: string; startsOn: string; endsOn: string; picName: string };
+  /** The trip is named `{subClusterName} · {dates}`, with `schoolNames` as its School line (ADR-0044). */
+  perjadin: {
+    id: string;
+    subClusterName: string;
+    schoolNames: string[];
+    startsOn: string;
+    endsOn: string;
+    picName: string;
+  };
   /** The Drive folder of the transaction the entry names, when it has one. */
   driveFolderId: string | null;
   /** The Drive file of the Perjadin Document the entry names, while the document stands. */
@@ -233,9 +246,10 @@ export async function activityLogPage(
     conditions.push(
       or(
         ilike(activityLog.actorEmail, pattern),
-        // As stored, and as the screen shows it — `shortenKabupaten` writes "Kab." for "Kabupaten".
-        ilike(perjadin.destination, pattern),
-        ilike(sql`regexp_replace(${perjadin.destination}, '\\mKabupaten ', 'Kab. ', 'g')`, pattern),
+        // The trip's name is its Sub-Cluster's and its dates (ADR-0044); the dates are the date
+        // filter's, so the search reads the Kelompok — and the School line under it.
+        ilike(subCluster.name, pattern),
+        ilike(sql`array_to_string(${tripSchoolNames(perjadin.id)}, ', ')`, pattern),
         ilike(pic.fullName, pattern),
         like(activityLog.searchText, pattern),
       ),
@@ -263,6 +277,7 @@ export async function activityLogPage(
     .select({ total: count() })
     .from(activityLog)
     .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
     .where(where);
   const total = matched?.total ?? 0;
@@ -278,7 +293,8 @@ export async function activityLogPage(
       details: activityLog.details,
       backfilled: activityLog.backfilled,
       perjadinId: perjadin.id,
-      destination: perjadin.destination,
+      subClusterName: subCluster.name,
+      schoolNames: tripSchoolNames(perjadin.id),
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
       picName: pic.fullName,
@@ -287,6 +303,7 @@ export async function activityLogPage(
     })
     .from(activityLog)
     .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
     .leftJoin(
       transaction,
@@ -310,7 +327,8 @@ export async function activityLogPage(
       backfilled: row.backfilled,
       perjadin: {
         id: row.perjadinId,
-        destination: row.destination,
+        subClusterName: row.subClusterName,
+        schoolNames: row.schoolNames,
         startsOn: row.startsOn,
         endsOn: row.endsOn,
         picName: row.picName,

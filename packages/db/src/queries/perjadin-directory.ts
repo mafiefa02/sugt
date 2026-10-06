@@ -3,9 +3,10 @@ import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
-import { school } from "../schema/reference";
+import { subCluster } from "../schema/reference";
 import { groupMember, perjadin, perjadinPreparationItem, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
+import { tripSchoolNames } from "./perjadin-naming";
 import {
   derivePreparationChecklist,
   type PreparationItem,
@@ -26,7 +27,8 @@ import {
 /** One trip, as the list shows it. */
 export type DirectoryPerjadin = {
   id: string;
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044), read live — never stored. */
+  subClusterName: string;
   startsOn: string;
   endsOn: string;
   /**
@@ -57,25 +59,29 @@ export type DirectoryPerjadin = {
    */
   preparation: PreparationItem[];
   /**
-   * The three name axes the `/perjadin` search matches on beyond `destination` and `picFullName`
-   * (#334) — the trip-scoped Teaching-Team names, the Group (Kelompok Perjalanan) member names, and
-   * the names of the Schools it visits. All three are one-to-many, so each is returned as an array
-   * and populated by a correlated aggregate subquery rather than a join (see `pengajarNames` below).
-   * Search-only: nothing on the list renders them, so a trip with none carries an empty array.
+   * The two name axes the `/perjadin` search matches on beyond the Sub-Cluster name, the School
+   * names and `picFullName` (#334) — the trip-scoped Teaching-Team names and the Group (Kelompok
+   * Perjalanan) member names. Both are one-to-many, so each is returned as an array and populated by
+   * a correlated aggregate subquery rather than a join (see `pengajarNames` below). Search-only:
+   * nothing on the list renders them, so a trip with none carries an empty array.
    */
   pengajarNames: string[];
   groupMemberNames: string[];
+  /**
+   * **The trip's Schools** (ADR-0044) — `tripSchoolNames`, the one definition: the Schools with a
+   * non-cancelled Session, by name. The list shows them as the School line under the name, and the
+   * search matches them.
+   */
   schoolNames: string[];
 };
 
 /**
- * The three name arrays the `/perjadin` search reads (#334), each a **correlated aggregate
+ * The two name arrays the `/perjadin` search reads (#334), each a **correlated aggregate
  * subquery**, kept off the outer `session` left join so it
  * stays a scalar and never fans the row out. A plain join would multiply the row and break the
  * existing `count(distinct session.school_id)` and the `groupBy`; these open their own scans instead.
  * `coalesce(…, '{}'::text[])` makes a trip with none an empty array rather than `null`, mirroring
- * `roster.ts`'s `grantsHeld`. Ordered by name so the arrays are stable read to read; `schoolNames`
- * is `distinct` because a School is taught over several Sessions on one trip. Correlated on
+ * `roster.ts`'s `grantsHeld`. Ordered by name so the arrays are stable read to read. Correlated on
  * `perjadin.id`, which is in the outer `groupBy`, so each is valid in the grouped select.
  */
 const pengajarNames = sql<string[]>`coalesce(
@@ -93,16 +99,6 @@ const groupMemberNames = sql<string[]>`coalesce(
     from ${groupMember} gm
     join ${person} gp on gp.id = gm.person_id
     where gm.perjadin_id = ${perjadin.id}
-  ),
-  '{}'::text[]
-)`;
-
-const schoolNames = sql<string[]>`coalesce(
-  (
-    select array_agg(distinct sch.name order by sch.name)
-    from ${session} s
-    join ${school} sch on sch.id = s.school_id
-    where s.perjadin_id = ${perjadin.id}
   ),
   '{}'::text[]
 )`;
@@ -134,7 +130,7 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
   const trips = await db
     .select({
       id: perjadin.id,
-      destination: perjadin.destination,
+      subClusterName: subCluster.name,
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
       picFullName: person.fullName,
@@ -150,12 +146,13 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
       sessionsTotal,
       pengajarNames,
       groupMemberNames,
-      schoolNames,
+      schoolNames: tripSchoolNames(perjadin.id),
     })
     .from(perjadin)
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .innerJoin(person, eq(person.id, perjadin.picPersonId))
     .leftJoin(session, eq(session.perjadinId, perjadin.id))
-    .groupBy(perjadin.id, person.fullName)
+    .groupBy(perjadin.id, subCluster.name, person.fullName)
     .orderBy(desc(perjadin.startsOn), desc(perjadin.id));
 
   if (trips.length === 0) return [];

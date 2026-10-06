@@ -11,7 +11,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "../client";
 import { session, sessionTeachingTeam } from "../schema/delivery";
 import { person } from "../schema/people";
-import { province, school } from "../schema/reference";
+import { province, school, subCluster } from "../schema/reference";
 import {
   groupMember,
   perjadin,
@@ -78,7 +78,8 @@ export type EligibleSchool = {
 /** Everything the Perjadin detail screen renders, and no money. */
 export type PerjadinDetail = {
   id: string;
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044), read live — never stored. */
+  subClusterName: string;
   startsOn: string;
   endsOn: string;
   picPersonId: string;
@@ -149,13 +150,14 @@ export async function perjadinDetail(
     db
       .select({
         id: perjadin.id,
-        destination: perjadin.destination,
+        subClusterName: subCluster.name,
         startsOn: perjadin.startsOn,
         endsOn: perjadin.endsOn,
         picPersonId: pic.id,
         picFullName: pic.fullName,
       })
       .from(perjadin)
+      .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
       .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
       .where(eq(perjadin.id, perjadinId)),
     db

@@ -266,3 +266,21 @@ from the browser straight to Drive, so Vercel's request limit is not in play.
 The body above keeps the `SUGT 2026 …` names, the old README text and the 20 MB cap as the
 point-in-time record of what was first decided; the running tool uses the names and the cap in this
 amendment.
+
+## Amendment (2026-10-06): the Perjadin folder's name carries the trip's Schools and an id
+
+[ADR-0044](./0044-a-perjadin-is-named-by-its-kelompok-and-dates.md),
+[#406](https://github.com/sugt-itb/sugt-itb-26/issues/406). `perjadin.destination` is dropped, so the
+Perjadin folder is no longer `{destination} · {starts_on}`. It is
+
+```
+{name} · {the trip's Schools} · P-{perjadin8}
+Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang, SMAN 2 Samarinda · P-1a2b3c4d
+```
+
+where the name is `{Sub-Cluster name} · {dates}` and the trip's Schools are those with a
+non-cancelled Session on it, alphabetically; with none, the Schools part is left out. `P-{perjadin8}`
+is the first 8 hex characters of the Perjadin's uuid, which tells two trips of one Kelompok apart
+when their names and Schools agree. The `:` → ` ·` rule goes: the name has no colon. One function,
+`perjadinFolderName`, builds it for both reconciles and the date-correction rename. The transaction
+folders and files below it are unchanged.

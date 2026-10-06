@@ -7,11 +7,11 @@ import {
   type Person,
 } from "@sugt/db/queries";
 
+import { perjadinFolderName } from "../perjadin-name";
 import { documentFileName } from "./document-files";
 import { ensureDokumenFolders } from "./dokumen-folders";
 import type { ReadyFolders } from "./fixed-folders";
 import { type DriveClient, isDriveFailure, isLinkShared } from "./google";
-import { perjadinFolderName } from "./receipt-files";
 import { reassertPerjadinFolderName } from "./reconcile";
 
 /**
@@ -80,17 +80,17 @@ async function reconcileOnce(
     let tripFolderId = target.dokumenFolderId;
     if (!tripFolderId) {
       const made = await drive.createFolder({
-        name: perjadinFolderName(target.destination, target.startsOn),
+        name: perjadinFolderName(target.perjadin),
         parentId: fixed.pelaksanaanOfflineFolderId,
-        appProperties: { sugtPerjadinId: target.perjadinId },
+        appProperties: { sugtPerjadinId: target.perjadin.id },
       });
-      tripFolderId = await claimPerjadinDokumenFolder(person, target.perjadinId, made.id);
+      tripFolderId = await claimPerjadinDokumenFolder(person, target.perjadin.id, made.id);
       if (tripFolderId !== made.id) await drive.trashFile(made.id);
     }
     const tripFolder = await drive.getFile(tripFolderId);
     if (!tripFolder) return { outcome: "unsynced", reason: "folder-missing" };
     if (tripFolder.trashed) return { outcome: "unsynced", reason: "folder-trashed" };
-    await reassertPerjadinFolderName(person, drive, target.perjadinId, tripFolder);
+    await reassertPerjadinFolderName(person, drive, target.perjadin.id, tripFolder);
 
     // 3. The kind folder.
     let kindFolderId = target.kindFolderId;
@@ -99,9 +99,14 @@ async function reconcileOnce(
         // A kind folder is named for its kind.
         name: target.kind,
         parentId: tripFolderId,
-        appProperties: { sugtPerjadinId: target.perjadinId },
+        appProperties: { sugtPerjadinId: target.perjadin.id },
       });
-      kindFolderId = await claimDocumentKindFolder(person, target.perjadinId, target.kind, made.id);
+      kindFolderId = await claimDocumentKindFolder(
+        person,
+        target.perjadin.id,
+        target.kind,
+        made.id,
+      );
       if (kindFolderId !== made.id) await drive.trashFile(made.id);
     }
     const kindFolder = await drive.getFile(kindFolderId);
@@ -117,7 +122,7 @@ async function reconcileOnce(
         name: documentFileName(target),
         addParent: kindFolderId,
         removeParent: folders.stagingFolderId,
-        appProperties: { sugtPerjadinId: target.perjadinId, sugtDocumentId: target.documentId },
+        appProperties: { sugtPerjadinId: target.perjadin.id, sugtDocumentId: target.documentId },
       });
     }
 

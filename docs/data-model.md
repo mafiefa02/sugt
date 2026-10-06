@@ -331,7 +331,12 @@ given; a Sub-Cluster is invented, so "not yet grouped" is a genuinely tempting s
 It is not allowed. Every School belongs to exactly one Sub-Cluster from the moment the seed
 runs, which is what lets a Perjadin be planned by picking a Sub-Cluster and nothing else — an
 unassigned School would be a School no trip could ever be planned for, and nothing on any
-screen would say so.
+screen would say so. A Sub-Cluster bounds which Schools one Perjadin may combine; it may be
+covered by several Perjadins, and nothing makes `perjadin.sub_cluster_id` unique
+([ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)). `sub_cluster.name`
+is the first half of every trip's name
+([ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)), so renaming a
+Sub-Cluster relabels its trips.
 
 **A School carries both `cluster_id` and `sub_cluster_id`, and they cannot disagree.** The
 second is derivable from the first via `sub_cluster`, so this is a denormalisation, and it is
@@ -1101,10 +1106,11 @@ select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
 
 union all
 
-select 'Perjadin Evaluation', pj.destination, r.aspect, r.rating,
+select 'Perjadin Evaluation', sc.name, r.aspect, r.rating,   -- the trip's name's Kelompok (ADR-0044)
        e.filed_by_name, r.said, e.created_at
   from perjadin_evaluation e
   join perjadin pj on pj.id = e.perjadin_id
+  join sub_cluster sc on sc.id = pj.sub_cluster_id
   cross join lateral (values ('lodging',     e.lodging,     e.lodging_comment),
                              ('transport',   e.transport,   e.transport_comment),
                              ('meals',       e.meals,       e.meals_comment),
@@ -1155,7 +1161,6 @@ the ones who slept in the hotel.
 create table perjadin (
   id                          uuid primary key default gen_random_uuid(),
   sub_cluster_id              uuid not null references sub_cluster (id),
-  destination                 text not null,
   starts_on                   date not null,
   ends_on                     date not null,
 
@@ -1227,20 +1232,23 @@ Two declarative constraints replace what would otherwise be trigger code:
   hold at commit. It has to be deferred because `perjadin` and its `group_member` rows are
   inserted in the same transaction and neither can go first.
 
-**`sub_cluster_id` is where a Perjadin goes, and `destination` is what the paperwork calls it.**
-They are not redundant, and dropping either would cost something real. The Sub-Cluster is
-structural: it decides which Schools may appear on the trip at all, and the composite key on
-`session` makes that unbreakable. `destination` is the prose that ends up on a Surat Tugas —
-`Kelompok 18: Samarinda dan Balikpapan` — the Sub-Cluster's own label followed by the distinct
-Kabupaten/Kota of **all** its Schools, joined with `" dan "` before the last
-([#105](https://github.com/mafiefa02/sugt/issues/105)). It is **derived server-side at insert**
-by `planPerjadin`, from the Sub-Cluster and its Schools rather than typed, so a Surat Tugas cannot
-disagree with the trip the form already shows. Once written it is a **snapshot** and is never
-recomputed on read: Sub-Clusters are editable ([ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md)),
-so a live read would silently rewrite an already-issued Surat Tugas when Schools are later
-regrouped or the Sub-Cluster renamed. (The column began as free text; the earlier note here
-rejected deriving it from `sub_cluster.name` _alone_ — naming the concrete places, prefixed by the
-Kelompok label, is what a destination line is for.)
+**`sub_cluster_id` is where a Perjadin goes, and there is no `destination`.** The Sub-Cluster is
+structural: it bounds which Schools may appear on the trip at all — checked in the application,
+not by a key ([what the database does not hold](#what-the-database-does-not-hold)). It is not
+unique: one Sub-Cluster may be covered by several Perjadins, on the same dates or different ones
+([ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)).
+
+**A Perjadin's name is derived, never stored**
+([ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)): `{sub_cluster.name} ·
+{dates}`, read live — `Kelompok 10 · 12–13 Okt 2026`. Renaming a Sub-Cluster relabels its trips,
+past ones included. **The trip's Schools** — the distinct Schools with a non-cancelled Session on
+it, by name — are its second line where trips are listed, and part of its Drive folder and CSV
+names; one query-side definition (`tripSchoolNames` in `@sugt/db`) serves every read. The
+`destination` column this replaced was a Surat Tugas line —
+`Kelompok 18: Samarinda dan Balikpapan`, the Sub-Cluster's label and every Kabupaten/Kota of its
+Schools — derived at insert and frozen as a snapshot
+([#105](https://github.com/mafiefa02/sugt/issues/105)). Migration 0041 dropped it: no Surat Tugas
+generator exists, and a whole-Sub-Cluster line misnamed a trip to only some of its Schools.
 
 The Schools **actually** visited remain the structural truth and are still reached through
 `session.perjadin_id`. A Perjadin covers several, but no longer an arbitrary several: the
@@ -1652,7 +1660,8 @@ a report, so those start at the migration. `/log` marks a backfilled row "(dari 
 
 **The Log stays small** — a few thousand rows over the whole Programme — so `/log` reads one page of
 50 plus one `count(*)`, and the index above serves "newest 50". Its search is a plain substring
-match with no index: `ilike` on the email, the destination and the PIC's name, `like` on the
+match with no index: `ilike` on the email, the trip's Sub-Cluster name, its Schools (joined into
+one string) and the PIC's name, `like` on the
 already lower-cased `search_text`. If search over a much larger table ever becomes slow, a `pg_trgm` trigram index on the
 searched text is the known fix.
 
@@ -1821,8 +1830,8 @@ Drive id ([Money](#money)). Perjadin Documents are beside them, under `Dokumen/`
 
 ```
 SUGT ITB 2026 Internal App Object Storage/
-├── Bukti Transaksi/Pelaksanaan Offline/{destination} · {starts_on}/…
-└── Dokumen/Pelaksanaan Offline/{destination} · {starts_on}/
+├── Bukti Transaksi/Pelaksanaan Offline/{name} · {the trip's Schools} · P-{perjadin8}/…
+└── Dokumen/Pelaksanaan Offline/{name} · {the trip's Schools} · P-{perjadin8}/
     ├── Daftar Hadir Peserta/{date} · {school} · {Siswa|GTK-MS} · Daftar Hadir Peserta · D-{doc8}.pdf
     ├── Daftar Hadir Pendamping/{date} · Daftar Hadir Pendamping · D-{doc8}.pdf
     └── Daftar Hadir Narasumber/{date} · Daftar Hadir Narasumber · D-{doc8}.pdf
@@ -2082,8 +2091,9 @@ places:
    it clamps rather than shifting.
 
    **A correction that moves `starts_on` also renames the trip's Drive folder**, which is named
-   `{destination} · {starts_on}` ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
-   #376). The rename runs after the commit and is best effort: a failed rename never fails or rolls
+   `{name} · {the trip's Schools} · P-{perjadin8}` — the name carries the dates
+   ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
+   [ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md), #376). The rename runs after the commit and is best effort: a failed rename never fails or rolls
    back the correction. The next reconcile that touches that Perjadin sets the name back to what the
    database says, because folder names are app-owned. That is a Catat transaksi or Unggah bukti on
    it, or a sweep reaching one of its unsynced lines. Until then the folder keeps the old date.
@@ -2099,10 +2109,11 @@ NOT NULL and `school.sub_cluster_id` is NOT NULL, but nothing joins them. The co
 version was designed and rejected — [Delivery](#delivery) has the argument — because it would
 also freeze a School into its Sub-Cluster the moment it had one delivered Session, and the
 whole point of [ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md)
-is that a Sub-Cluster is a revisable judgement. So it is checked in the application at the one
-point it can be violated: planning a trip, where the eligible Schools are read from the chosen
-Sub-Cluster and a payload naming any other School is refused whole. There is no "add a School
-to an existing Perjadin" write, so that is genuinely the only path.
+is that a Sub-Cluster is a revisable judgement. So it is checked in the application at the two
+points it can be violated: planning a trip, where the eligible Schools are read from the chosen
+Sub-Cluster and a payload naming any other School is refused whole; and adding a Session to an
+existing trip (`addPerjadinSession`), whose picker offers the trip's whole Sub-Cluster so a School
+can join a trip after it is planned.
 
 **That a School is not moved out from under a Perjadin that is still going to visit it.** The
 mirror of the rule above, and the reason the pair is application-held rather than declarative.

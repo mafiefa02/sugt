@@ -8,10 +8,12 @@ import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { person } from "../schema/people";
+import { subCluster } from "../schema/reference";
 import { perjadin, perjadinPimpinan, transaction, transactionEvidence } from "../schema/travel";
 import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
 import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
+import { tripSchoolNames } from "./perjadin-naming";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -69,7 +71,10 @@ export type AcquittalTransaction = {
  */
 export type PerjadinAcquittal = {
   perjadinId: string;
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044), read live — never stored. */
+  subClusterName: string;
+  /** The trip's Schools (`tripSchoolNames`), which the CSV export's file name carries. */
+  schoolNames: string[];
   startsOn: string;
   endsOn: string;
   /** Fixed at planning and transferred before departure, so never null and never absent. */
@@ -154,7 +159,8 @@ export async function perjadinAcquittal(
   const [trip] = await db
     .select({
       perjadinId: perjadin.id,
-      destination: perjadin.destination,
+      subClusterName: subCluster.name,
+      schoolNames: tripSchoolNames(perjadin.id),
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
       advanceIdr: perjadin.advanceIdr,
@@ -173,6 +179,7 @@ export async function perjadinAcquittal(
       reportFiledAt: perjadin.reportFiledAt,
     })
     .from(perjadin)
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .where(eq(perjadin.id, perjadinId));
 
   if (!trip) return null;

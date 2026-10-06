@@ -69,7 +69,7 @@ async function scene() {
   const trip = await addPerjadin({
     advanceIdr: 5_000_000,
     picPersonId: staff.id,
-    destination: "Kelompok 3: Garut",
+    subClusterName: "Kelompok 3",
     startsOn: "2026-10-12",
     endsOn: "2026-10-14",
   });

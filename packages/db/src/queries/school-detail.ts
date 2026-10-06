@@ -42,8 +42,8 @@ import { countsTowardsProgress } from "./delivered-sessions";
  *
  * **Three sources, not the concerns list's four.** A Perjadin Evaluation is about the
  * journey rather than the teaching, and `docs/data-model.md` § *The concerns list in
- * full* shows what that costs it here: its branch of that query reports
- * `pj.destination` as its subject, because it has no Session and no School to report.
+ * full* shows what that costs it here: its branch of that query reports the trip's
+ * name (ADR-0044) as its subject, because it has no Session and no School to report.
  * One Perjadin may carry several Schools, so attributing a bad hotel to each of their
  * Sessions would flag teaching nobody complained about.
  */

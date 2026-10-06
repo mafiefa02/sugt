@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   addPerjadin,
   addPerjadinFeedbackToken,
+  addSchoolOnTrip,
   addPerson,
   refusedBy,
   resetDatabase,
@@ -232,10 +233,11 @@ describe("resolvePerjadinFeedbackToken", () => {
     const trip = await addPerjadin({
       advanceIdr: 5_000_000,
       picPersonId: pic.id,
-      destination: "Kabupaten Sleman",
+      subClusterName: "Kelompok 3",
       startsOn: "2026-09-01",
       endsOn: "2026-09-03",
     });
+    await addSchoolOnTrip({ perjadin: trip, name: "SMAN 1 Sleman" });
     const token = await addPerjadinFeedbackToken({ perjadinId: trip.id, issuedByPersonId: pic.id });
 
     const resolved = await resolvePerjadinFeedbackToken(token.token);
@@ -243,7 +245,12 @@ describe("resolvePerjadinFeedbackToken", () => {
     expect(resolved).toEqual({
       outcome: "open",
       caller: { kind: "perjadin", perjadinId: trip.id },
-      perjadin: { destination: "Kabupaten Sleman", startsOn: "2026-09-01", endsOn: "2026-09-03" },
+      perjadin: {
+        subClusterName: "Kelompok 3",
+        startsOn: "2026-09-01",
+        endsOn: "2026-09-03",
+        schoolNames: ["SMAN 1 Sleman"],
+      },
     });
   });
 

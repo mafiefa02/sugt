@@ -58,7 +58,6 @@ async function scene() {
     advanceIdr: 1_000_000,
     picPersonId: staff.id,
     subClusterId: subCluster.id,
-    destination: "Kelompok 18: Kota Bontang",
     startsOn: "2026-10-12",
     endsOn: "2026-10-15",
   });

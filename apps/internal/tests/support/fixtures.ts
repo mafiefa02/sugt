@@ -250,6 +250,37 @@ export async function addOfflineSession(fixture: OfflineSessionFixture) {
 }
 
 /**
+ * A School in the trip's own Sub-Cluster, with one offline Session on the trip — what puts it in
+ * **the trip's Schools** (ADR-0044) unless `status` is `cancelled`. For the tests about a trip's
+ * School line, Drive folder name and search, which care about the School's name and nothing else.
+ */
+export async function addSchoolOnTrip(fixture: {
+  perjadin: { id: string; subClusterId: string; startsOn: string };
+  name: string;
+  status?: SessionStatus;
+}) {
+  const [subCluster] = await db
+    .select({ clusterId: schema.subCluster.clusterId })
+    .from(schema.subCluster)
+    .where(eq(schema.subCluster.id, fixture.perjadin.subClusterId));
+  await addProvince("JB", "Jawa Barat");
+  const school = await addSchool({
+    slug: `school-${randomUUID()}`,
+    name: fixture.name,
+    clusterId: subCluster!.clusterId,
+    subClusterId: fixture.perjadin.subClusterId,
+    provinceCode: "JB",
+  });
+  await addOfflineSession({
+    schoolId: school.id,
+    heldOn: fixture.perjadin.startsOn,
+    perjadinId: fixture.perjadin.id,
+    status: fixture.status,
+  });
+  return school;
+}
+
+/**
  * A Rating that is comfortably above `CONCERN_AT_OR_BELOW`, so a fixture reaches the
  * concerns list only where it says so. Every Rating column is NOT NULL, so each of the
  * three record fixtures below fills its whole rubric and takes overrides for the
@@ -473,7 +504,11 @@ export async function addFeedbackToken(fixture: FeedbackTokenFixture) {
 }
 
 export type PerjadinFixture = {
-  destination?: string;
+  /**
+   * The name of the throwaway Sub-Cluster built when `subClusterId` is absent — the first half of
+   * the trip's name (ADR-0044). Ignored when a `subClusterId` is given.
+   */
+  subClusterName?: string;
   startsOn?: string;
   endsOn?: string;
   advanceIdr: number;
@@ -517,7 +552,7 @@ export async function addPerjadin(fixture: PerjadinFixture) {
         .insert(schema.subCluster)
         .values({
           slug: `sub-cluster-${randomUUID()}`,
-          name: "Kelompok Sekolah Bandung",
+          name: fixture.subClusterName ?? "Kelompok Sekolah Bandung",
           clusterId: cluster!.id,
         })
         .returning();
@@ -528,7 +563,6 @@ export async function addPerjadin(fixture: PerjadinFixture) {
       .insert(schema.perjadin)
       .values({
         subClusterId,
-        destination: fixture.destination ?? "Bandung",
         startsOn: fixture.startsOn ?? "2026-09-01",
         endsOn: fixture.endsOn ?? "2026-09-03",
         advanceIdr: fixture.advanceIdr,

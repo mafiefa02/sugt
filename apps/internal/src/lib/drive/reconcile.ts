@@ -8,14 +8,10 @@ import {
   type Person,
 } from "@sugt/db/queries";
 
+import { perjadinFolderName } from "../perjadin-name";
 import type { ReadyFolders } from "./fixed-folders";
 import { type DriveClient, type DriveFile, isDriveFailure, isLinkShared } from "./google";
-import {
-  evidenceFileName,
-  isReceiptContentType,
-  perjadinFolderName,
-  transactionFolderName,
-} from "./receipt-files";
+import { evidenceFileName, isReceiptContentType, transactionFolderName } from "./receipt-files";
 
 /**
  * **The reconcile** (ADR-0040, #373): put one recorded transaction in its place in the company
@@ -64,7 +60,7 @@ export async function reassertPerjadinFolderName(
 ): Promise<void> {
   const trip = await perjadinDriveFolder(person, perjadinId);
   if (!trip) return;
-  const name = perjadinFolderName(trip.destination, trip.startsOn);
+  const name = perjadinFolderName(trip.naming);
   if (folder.name === name) return;
   await drive.updateFile(folder.id, { name }).catch((error: unknown) => {
     console.error(
@@ -115,11 +111,11 @@ async function reconcileOnce(
     let perjadinFolderId = target.perjadinDriveFolderId;
     if (!perjadinFolderId) {
       const made = await drive.createFolder({
-        name: perjadinFolderName(target.destination, target.startsOn),
+        name: perjadinFolderName(target.perjadin),
         parentId: folders.pelaksanaanOfflineFolderId,
-        appProperties: { sugtPerjadinId: target.perjadinId },
+        appProperties: { sugtPerjadinId: target.perjadin.id },
       });
-      perjadinFolderId = await claimPerjadinDriveFolder(person, target.perjadinId, made.id);
+      perjadinFolderId = await claimPerjadinDriveFolder(person, target.perjadin.id, made.id);
       if (perjadinFolderId !== made.id) await drive.trashFile(made.id);
     }
     // An existing Perjadin folder is checked like the transaction's below: nothing is put into a
@@ -127,7 +123,7 @@ async function reconcileOnce(
     const perjadinFolder = await drive.getFile(perjadinFolderId);
     if (!perjadinFolder) return { outcome: "unsynced", reason: "folder-missing" };
     if (perjadinFolder.trashed) return { outcome: "unsynced", reason: "folder-trashed" };
-    await reassertPerjadinFolderName(person, drive, target.perjadinId, perjadinFolder);
+    await reassertPerjadinFolderName(person, drive, target.perjadin.id, perjadinFolder);
 
     // 2. The transaction folder.
     let transactionFolderId = target.driveFolderId;
@@ -136,7 +132,7 @@ async function reconcileOnce(
         name: transactionFolderName(target.spentOn, target.category, target.transactionId),
         parentId: perjadinFolderId,
         appProperties: {
-          sugtPerjadinId: target.perjadinId,
+          sugtPerjadinId: target.perjadin.id,
           sugtTransactionId: target.transactionId,
         },
       });

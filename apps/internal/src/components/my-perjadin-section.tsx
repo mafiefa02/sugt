@@ -9,8 +9,8 @@ import { PerjadinPreparationDialog } from "-/components/perjadin-preparation";
 import { progressTone } from "-/components/progress-tone";
 import { spentPercent, tripTimeline, type TimelineNode } from "-/components/trip-timeline";
 import type { UploadGate } from "-/lib/drive/upload-gate";
-import { shortenKabupaten } from "-/lib/format-destination";
 import { formatWibDate } from "-/lib/format-wib";
+import { perjadinName, perjadinSchoolsLine } from "-/lib/perjadin-name";
 import type { MyPerjadinTrip } from "@sugt/db/queries";
 import { formatRupiah, formatSessionStartTimeWithWib } from "@sugt/domain";
 import {
@@ -104,7 +104,7 @@ function MyPerjadinSection({
  * The header row holds a second control, the Persiapan pill, so the trigger cannot wrap the row — a
  * button inside a button is invalid HTML. Instead the trigger wraps only the title and is *stretched*
  * over the whole row by an `after:` overlay (the row is its containing block): clicking the PIC, the
- * dates, the chevron or empty space lands on the overlay and toggles the card, and the trigger's
+ * School line, the chevron or empty space lands on the overlay and toggles the card, and the trigger's
  * accessible name is the title alone. The pill sits above the overlay (`relative z-10`), so it takes
  * its own click and opens the checklist without toggling. The chevron is decorative and outside the
  * trigger, rotated from the item's `data-open`.
@@ -131,12 +131,19 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
     >
       <div className="relative flex items-start gap-3 p-4">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
-          <AccordionHeader className="min-w-0 font-heading text-lg font-normal text-foreground">
-            <AccordionPlainTrigger className="after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50">
-              {/* Same render-time abbreviation the trip's own page and its dialogs use (#105). */}
-              {shortenKabupaten(trip.destination)}
-            </AccordionPlainTrigger>
-          </AccordionHeader>
+          <div className="min-w-0">
+            <AccordionHeader className="font-heading text-lg font-normal text-foreground">
+              <AccordionPlainTrigger className="after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50">
+                {/* The name already carries the dates (ADR-0044), so the card shows no date line. */}
+                {perjadinName(trip)}
+              </AccordionPlainTrigger>
+            </AccordionHeader>
+            {trip.schoolNames.length > 0 && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {perjadinSchoolsLine(trip.schoolNames)}
+              </p>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span>PIC: {trip.picFullName}</span>
             {/* The pill *is* the dialog's trigger — clicking it opens the checklist, live-toggleable
@@ -154,9 +161,6 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
                 </button>
               }
             />
-            <span className="text-muted-foreground tabular-nums">
-              {trip.startsOn} – {trip.endsOn}
-            </span>
           </div>
           {trip.report && (
             <ReportLine
@@ -206,7 +210,7 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               />
               <PerjadinDokumenDialog
                 perjadinId={trip.id}
-                destination={trip.destination}
+                name={perjadinName(trip)}
                 uploadGate={uploadGate}
                 trigger={
                   <Button

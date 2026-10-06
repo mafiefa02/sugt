@@ -2,7 +2,7 @@
 
 import { loadParticipantFeedback, loadPerjadinFeedback } from "-/app/(app)/feedback/actions";
 import { MODE_LABELS } from "-/components/session-labels";
-import { shortenKabupaten } from "-/lib/format-destination";
+import { perjadinName } from "-/lib/perjadin-name";
 import type {
   FeedbackCursor,
   FeedbackFilters,
@@ -675,7 +675,7 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
           {/*
             The Session this feedback was filed against, linked through to its detail page (#194) —
             the Participant half of "every feedback links to its origin", parallel to how PerjadinCard
-            links its destination. Routed by mode to skip the redirect hop (`/sesi/[id]` bounces an
+            links its trip. Routed by mode to skip the redirect hop (`/sesi/[id]` bounces an
             online id to `/sesi-daring/[id]` as a safety net); a cancelled Session still links.
           */}
           <Link
@@ -720,9 +720,9 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
  * One Perjadin Evaluation.
  *
  * The header names who filed it (`filedByName`), a badge for their self-declared role, the trip's
- * destination linking to `/perjadin/[id]` — the one card here that links, because a trip has a home
- * page a submission does not — the trip's date range, the day the filer filed it ("Diisi"), and the
- * row average as the headline number.
+ * name (`{Sub-Cluster} · {dates}`, ADR-0044) linking to `/perjadin/[id]` — the one card here that
+ * links, because a trip has a home page a submission does not — the day the filer filed it
+ * ("Diisi"), and the row average as the headline number.
  *
  * Below it, the four Aspects in a fixed order, each with its score and — when the filer left one —
  * the comment about that Aspect. **The Penginapan row is omitted entirely when `lodging` is null**:
@@ -740,12 +740,8 @@ function PerjadinCard({ row }: { row: PerjadinFeedbackRow }) {
             href={`/perjadin/${row.perjadinId}`}
             className="text-sm text-primary hover:underline"
           >
-            {shortenKabupaten(row.destination)}
+            {perjadinName(row)}
           </Link>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-sm text-muted-foreground">
-            {row.startsOn} - {row.endsOn}
-          </span>
           <span className="ml-auto text-sm text-muted-foreground">Diisi {row.createdOn}</span>
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             Rata-rata

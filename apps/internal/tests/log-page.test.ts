@@ -1,4 +1,3 @@
-import { formatTripDates } from "-/app/(app)/log/log-format";
 import { logHref, parseLogParams } from "-/app/(app)/log/log-params";
 import Page from "-/app/(app)/log/page";
 import { formatWibIndonesian } from "-/lib/format-wib";
@@ -14,6 +13,7 @@ import {
   addGrant,
   addPerjadin,
   addPerson,
+  addSchoolOnTrip,
   addTransaction,
   resetDatabase,
 } from "./support/fixtures";
@@ -70,10 +70,11 @@ describe("only an Administrator reaches /log", () => {
     const trip = await addPerjadin({
       picPersonId: rina.id,
       advanceIdr: 15_000_000,
-      destination: "Kelompok 18: Kabupaten Kutai Kartanegara",
+      subClusterName: "Kelompok 18",
       startsOn: "2026-10-12",
       endsOn: "2026-10-15",
     });
+    await addSchoolOnTrip({ perjadin: trip, name: "SMAN 1 Tenggarong" });
     const line = await addTransaction({
       perjadinId: trip.id,
       amountIdr: 3_400_000,
@@ -106,8 +107,8 @@ describe("only an Administrator reaches /log", () => {
       "Waktu (WIB)",
       "20 Sep 2026, 14.02",
       "rina@ditsama.itb.ac.id",
-      "Kelompok 18: Kab. Kutai Kartanegara",
-      "12–15 Okt 2026",
+      "Kelompok 18 · 12–15 Okt 2026",
+      "SMAN 1 Tenggarong",
       "PIC: Rina Setiawati",
       "Catat transaksi (dari data lama)",
       "Tiket Pesawat/Kereta PP · Rp3.400.000 · GTK-MS · tgl 2026-09-18 · 1 bukti",
@@ -156,11 +157,7 @@ describe("the URL is the view", () => {
     expect(logHref(parseLogParams({}), 1)).toBe("/log");
   });
 
-  it("formats Waktu in WIB and a trip's dates short", () => {
+  it("formats Waktu in WIB", () => {
     expect(formatWibIndonesian(new Date("2026-10-14T01:05:00Z"))).toBe("14 Okt 2026, 08.05");
-    expect(formatTripDates("2026-10-12", "2026-10-15")).toBe("12–15 Okt 2026");
-    expect(formatTripDates("2026-10-12", "2026-10-12")).toBe("12 Okt 2026");
-    expect(formatTripDates("2026-09-30", "2026-10-02")).toBe("30 Sep – 2 Okt 2026");
-    expect(formatTripDates("2026-12-30", "2027-01-02")).toBe("30 Des 2026 – 2 Jan 2027");
   });
 });

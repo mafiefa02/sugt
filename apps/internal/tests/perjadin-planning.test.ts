@@ -681,7 +681,6 @@ describe("Rencanakan Perjadin", () => {
       .transaction(async (tx) => {
         await tx.insert(schema.perjadin).values({
           subClusterId: subCluster.id,
-          destination: "Bandung",
           startsOn: "2026-09-01",
           endsOn: "2026-09-03",
           advanceIdr: 5_000_000,
@@ -769,78 +768,74 @@ describe("Rencanakan Perjadin caps", () => {
   });
 });
 
-describe("the derived Perjadin destination", () => {
+describe("the Perjadin's name and its Schools (ADR-0044)", () => {
   beforeEach(resetDatabase);
 
-  it("names every Kabupaten/Kota in the Sub-Cluster, not only the visited Schools", async () => {
-    const { pic, input, schools } = await validPlan();
-    const planned = await planPerjadin(pic, {
-      ...input,
-      sessions: [
-        {
-          schoolId: schools[0]!.id,
-          heldOn: "2026-09-01",
-          startsAt: "09:00",
-          taughtByTeacherIndexes: [],
-        },
-      ],
-    });
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+  /** One planned Session at `school` on the plan's first day, so a trip may hold one School. */
+  const oneSession = (schoolId: string) => [
+    { schoolId, heldOn: "2026-09-01", startsAt: "09:00", taughtByTeacherIndexes: [] },
+  ];
 
-    const [row] = await db
-      .select({ destination: schema.perjadin.destination })
-      .from(schema.perjadin);
-    expect(row?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi");
+  it("plans two trips on one Sub-Cluster: one name, two School lines", async () => {
+    const { pic, input, schools } = await validPlan();
+    const first = await planPerjadin(pic, { ...input, sessions: oneSession(schools[0].id) });
+    const second = await planPerjadin(pic, { ...input, sessions: oneSession(schools[1].id) });
+    if (first.outcome !== "planned" || second.outcome !== "planned") {
+      throw new Error("fixture failed to plan");
+    }
+
+    const trips = await perjadinDirectory(nonStaff());
+
+    expect(trips.map((trip) => trip.subClusterName)).toEqual([
+      "Kelompok Sekolah Bandung",
+      "Kelompok Sekolah Bandung",
+    ]);
+    const byId = new Map(trips.map((trip) => [trip.id, trip.schoolNames]));
+    expect(byId.get(first.perjadinId)).toEqual(["SMAN 1 Bandung"]);
+    expect(byId.get(second.perjadinId)).toEqual(["SMAN 2 Bandung"]);
   });
 
-  it('collapses Schools in one Kabupaten/Kota to a single entry, with no "dan"', async () => {
-    const { pic, input } = await validPlan(["Kota Bandung", "Kota Bandung"]);
+  it("lists only Schools with a non-cancelled Session, alphabetically", async () => {
+    const { pic, input } = await validPlan();
+    // SMAN 2 first in the payload, so the order the read returns is its own.
+    const planned = await planPerjadin(pic, { ...input, sessions: [...input.sessions].reverse() });
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const live = async () => {
+      const [trip] = await perjadinDirectory(nonStaff());
+      return trip?.schoolNames;
+    };
+    expect(await live()).toEqual(["SMAN 1 Bandung", "SMAN 2 Bandung"]);
+
+    // Cancel SMAN 1's only Session: it drops out, from the count and from the line.
+    const [session] = await db
+      .select({ id: schema.session.id })
+      .from(schema.session)
+      .innerJoin(schema.school, eq(schema.school.id, schema.session.schoolId))
+      .where(eq(schema.school.name, "SMAN 1 Bandung"));
+    await cancelSession(pic, session!.id, "Sekolah meminta penjadwalan ulang");
+
+    expect(await live()).toEqual(["SMAN 2 Bandung"]);
+    const [trip] = await perjadinDirectory(nonStaff());
+    expect(trip?.schoolCount).toBe(1);
+  });
+
+  it("follows a Sub-Cluster rename on every read, a past trip's included", async () => {
+    const { pic, input, subCluster } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
-    const [row] = await db
-      .select({ destination: schema.perjadin.destination })
-      .from(schema.perjadin);
-    expect(row?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung");
-  });
+    await db
+      .update(schema.subCluster)
+      .set({ name: "Kelompok 10" })
+      .where(eq(schema.subCluster.id, subCluster.id));
 
-  it('joins three Kabupaten/Kota with commas and a final "dan"', async () => {
-    const pic = await staff();
-    const { cluster, subCluster, schools } = await twoSchools(["Kota Samarinda", "Kota Bontang"]);
-    await addSchool({
-      slug: "sman-3",
-      name: "SMAN 3 Bandung",
-      clusterId: cluster.id,
-      subClusterId: subCluster.id,
-      provinceCode: "JB",
-      kabupatenKota: "Kota Balikpapan",
-    });
-
-    const planned = await planPerjadin(pic, {
-      subClusterId: subCluster.id,
-      advanceIdr: 5_000_000,
-      picPersonId: pic.id,
-      teacherNames: [],
-      pimpinan: [],
-      sessions: [
-        {
-          schoolId: schools[0]!.id,
-          heldOn: "2026-09-01",
-          startsAt: "09:00",
-          taughtByTeacherIndexes: [],
-        },
-      ],
-      startsOn: STARTS_ON,
-      endsOn: ENDS_ON,
-    });
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
-
-    const [row] = await db
-      .select({ destination: schema.perjadin.destination })
-      .from(schema.perjadin);
-    expect(row?.destination).toBe(
-      "Kelompok Sekolah Bandung: Kota Samarinda, Kota Bontang dan Kota Balikpapan",
+    const [listed] = await perjadinDirectory(nonStaff());
+    expect(listed?.subClusterName).toBe("Kelompok 10");
+    expect((await perjadinDetail(nonStaff(), planned.perjadinId))?.subClusterName).toBe(
+      "Kelompok 10",
     );
+    expect((await perjadinAcquittal(pic, planned.perjadinId))?.subClusterName).toBe("Kelompok 10");
   });
 });
 
@@ -867,9 +862,9 @@ describe("the Perjadin list and detail", () => {
 
     const trips = await perjadinDirectory(nonStaff());
 
-    expect(trips.map((trip) => trip.destination)).toEqual([
-      "Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi",
-      "Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi",
+    expect(trips.map((trip) => trip.subClusterName)).toEqual([
+      "Kelompok Sekolah Bandung",
+      "Kelompok Sekolah Bandung",
     ]);
     expect(trips[0]?.schoolCount).toBe(1);
     expect(trips[1]?.schoolCount).toBe(2);
@@ -887,7 +882,7 @@ describe("the Perjadin list and detail", () => {
 
     const detail = await perjadinDetail(nonStaff(), planned.perjadinId);
 
-    expect(detail?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi");
+    expect(detail?.subClusterName).toBe("Kelompok Sekolah Bandung");
     expect(detail?.picFullName).toBe("Rina Nurhayati");
     expect(detail?.group).toHaveLength(1);
     expect(detail?.sessions).toHaveLength(2);

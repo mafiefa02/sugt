@@ -5,7 +5,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
-import { province, school } from "../schema/reference";
+import { province, school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 import { requireStaff } from "./staff-only";
@@ -43,6 +43,8 @@ export type OwedRecord = { kind: "session-record"; personId: string; fullName: s
 /** The Perjadin an offline Session happens on, and the window its date must sit inside. */
 export type SessionPerjadin = {
   id: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044). */
+  subClusterName: string;
   startsOn: string;
   endsOn: string;
 };
@@ -143,6 +145,7 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
       picFullName: pic.fullName,
 
       perjadinId: perjadin.id,
+      perjadinSubClusterName: subCluster.name,
       perjadinStartsOn: perjadin.startsOn,
       perjadinEndsOn: perjadin.endsOn,
 
@@ -162,6 +165,7 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
     .innerJoin(province, eq(province.code, school.provinceCode))
     // Outer: six of every ten Sessions have no Perjadin.
     .leftJoin(perjadin, eq(perjadin.id, session.perjadinId))
+    .leftJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     // **The PIC is the Perjadin's, and only offline Sessions have one (#284).** A LEFT join, not
     // the old `coalesce(online_pic, perjadin.pic)` inner join: an online Session has no PIC now, so
     // it must resolve here with `pic` null rather than be dropped from the read — the page needs the
@@ -191,10 +195,14 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
     picPersonId: row.picPersonId,
     picFullName: row.picFullName,
     perjadin:
-      row.perjadinId === null || row.perjadinStartsOn === null || row.perjadinEndsOn === null
+      row.perjadinId === null ||
+      row.perjadinSubClusterName === null ||
+      row.perjadinStartsOn === null ||
+      row.perjadinEndsOn === null
         ? null
         : {
             id: row.perjadinId,
+            subClusterName: row.perjadinSubClusterName,
             startsOn: row.perjadinStartsOn,
             endsOn: row.perjadinEndsOn,
           },

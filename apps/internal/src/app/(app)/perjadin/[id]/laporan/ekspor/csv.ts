@@ -1,3 +1,4 @@
+import { perjadinCsvFileName } from "-/lib/perjadin-name";
 import type { PerjadinAcquittal } from "@sugt/db/queries";
 
 /**
@@ -57,18 +58,17 @@ export function csvOf(acquittal: PerjadinAcquittal): string {
  * One CSV field.
  *
  * Everything is quoted rather than only the fields that need it: a description is free text and a
- * destination can carry a comma, and a rule with no exceptions is one nobody has to check. An
+ * name can carry a comma, and a rule with no exceptions is one nobody has to check. An
  * embedded quote doubles, which is the whole of RFC 4180's escaping.
  */
 function quoted(field: string): string {
   return `"${field.replaceAll('"', '""')}"`;
 }
 
-/** `laporan-perjadin-bandung-2026-09-01.csv` — the trip and its start, so a folder of them sorts. */
+/**
+ * `laporan-perjadin-kelompok-10-12-13-okt-2026-sman-1-bontang.csv` — the trip's name and Schools,
+ * the Drive folder's rule without its id (`perjadinCsvFileName`, ADR-0044).
+ */
 export function fileNameOf(acquittal: PerjadinAcquittal): string {
-  const slug = acquittal.destination
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-  return `laporan-perjadin-${slug || "perjadin"}-${acquittal.startsOn}.csv`;
+  return perjadinCsvFileName(acquittal);
 }
