@@ -1,7 +1,7 @@
 import { ThemeProvider } from "-/components/theme-provider";
 import { cn } from "@sugt/ui/lib/utils";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 import "@sugt/ui/globals.css";
 import { Montserrat } from "next/font/google";
@@ -17,6 +17,17 @@ export const metadata: Metadata = {
     default: "SUGT ITB Internal",
     template: "%s | SUGT ITB Internal",
   },
+};
+
+/**
+ * `resizes-content` makes the on-screen keyboard shrink the layout viewport, and with it `dvh`, so a
+ * full-screen `panel` popup on a phone keeps its buttons above the keyboard while a field is focused
+ * (#417). Android Chrome honours it; iOS Safari ignores it and scrolls the focused field into view.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

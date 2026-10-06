@@ -3,6 +3,7 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Button } from "@sugt/ui/components/button";
 import { cn } from "@sugt/ui/lib/utils";
+import { cva, type VariantProps } from "class-variance-authority";
 import { XIcon } from "lucide-react";
 import * as React from "react";
 
@@ -55,23 +56,45 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
   );
 }
 
+/**
+ * Two sizes. `default` is the small centred popup — confirmations and single-value edits — and
+ * grows with its content. `panel` is for popups where data is entered (#417): a fixed ~900px ×
+ * (screen height − margin) panel on desktop and the whole screen on a phone, the same size from
+ * opening to closing whatever is added to it. It is a column — `DialogHeader` pinned at the top,
+ * `DialogFooter` at the bottom, and `DialogBody` the only part that scrolls.
+ */
+const dialogContentVariants = cva(
+  "fixed z-50 bg-popover text-sm text-popover-foreground shadow-xl ring-1 ring-foreground/5 duration-100 outline-none dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+  {
+    variants: {
+      size: {
+        default:
+          "top-1/2 left-1/2 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-[min(var(--radius-4xl),24px)] p-6 sm:max-w-md",
+        panel:
+          "inset-0 flex h-dvh w-full flex-col gap-4 p-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:h-[calc(100dvh-4rem)] sm:w-[min(900px,calc(100vw-4rem))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:gap-6 sm:rounded-[min(var(--radius-4xl),24px)] sm:p-6",
+      },
+    },
+    defaultVariants: { size: "default" },
+  },
+);
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  size = "default",
   ...props
-}: DialogPrimitive.Popup.Props & {
-  showCloseButton?: boolean;
-}) {
+}: DialogPrimitive.Popup.Props &
+  VariantProps<typeof dialogContentVariants> & {
+    showCloseButton?: boolean;
+  }) {
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-6 rounded-[min(var(--radius-4xl),24px)] bg-popover p-6 text-sm text-popover-foreground shadow-xl ring-1 ring-foreground/5 duration-100 outline-none sm:max-w-md dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className,
-        )}
+        data-size={size}
+        className={cn(dialogContentVariants({ size }), className)}
         {...props}
       >
         {children}
@@ -99,7 +122,28 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-1.5", className)}
+      // Right padding keeps a long title or description clear of the close button.
+      className={cn("flex shrink-0 flex-col gap-1.5 pr-10", className)}
+      {...props}
+    />
+  );
+}
+
+/**
+ * The scrolling middle of a `panel` popup — the only part that moves, so the title and the buttons
+ * stay in reach however much is added. The negative margin puts the scrollbar at the panel's edge
+ * and leaves room for the fields' focus rings; it matches the panel's `p-4 sm:p-6`, so this is for
+ * `size="panel"` only. Its children stack with the same gap the default dialog puts between its
+ * parts.
+ */
+function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="dialog-body"
+      className={cn(
+        "-mx-4 grid min-h-0 flex-1 content-start gap-6 overflow-y-auto px-4 py-1 sm:-mx-6 sm:px-6",
+        className,
+      )}
       {...props}
     />
   );
@@ -116,7 +160,7 @@ function DialogFooter({
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      className={cn("flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
       {...props}
     >
       {children}
@@ -152,6 +196,7 @@ function DialogDescription({ className, ...props }: DialogPrimitive.Description.
 
 export {
   Dialog,
+  DialogBody,
   DialogClose,
   DialogContent,
   DialogDescription,

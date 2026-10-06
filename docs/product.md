@@ -101,6 +101,14 @@ Perjadin Reports and their financial detail are Staff-only. Writing stays with t
 record's owner throughout. Publishing to the public site is Staff-only; every Group
 contains a Staff member by construction, so no trip's material is unreachable.
 
+**Popups that take data are a big fixed panel** (#417), because Staff work the tool mostly from
+phones during a Perjadin. Catat transaksi, Dokumen, Catatan Sesi, Tambah/Ubah Sesi, Ubah Group,
+Ubah Sesi daring and both Persiapan popups open as a panel about 900px wide and nearly the screen's
+height on a laptop, and as the whole screen on a phone. It keeps that size however much is added —
+twenty checklist items, five staged receipts — with the title pinned at the top, the buttons at the
+bottom, and only the fields between them scrolling. Confirmations and single-value edits stay small
+popups.
+
 ### Coverage view — the landing screen
 
 Every School with its delivered count, grouped by Cluster. Answers "where are we

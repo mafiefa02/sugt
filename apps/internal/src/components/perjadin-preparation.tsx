@@ -5,6 +5,7 @@ import type { PreparationItem } from "@sugt/db/queries";
 import { Checkbox } from "@sugt/ui/components/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -153,16 +154,18 @@ function PerjadinPreparationDialog({
   return (
     <Dialog>
       <DialogTrigger render={trigger} />
-      <DialogContent>
+      <DialogContent size="panel">
         <DialogHeader>
           <DialogTitle>Persiapan</DialogTitle>
         </DialogHeader>
 
-        <PreparationChecklist
-          items={optimisticItems}
-          canToggle={canToggle}
-          onToggle={toggle}
-        />
+        <DialogBody>
+          <PreparationChecklist
+            items={optimisticItems}
+            canToggle={canToggle}
+            onToggle={toggle}
+          />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
