@@ -47,7 +47,8 @@ function AppShellMobileBar({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-16 items-center gap-2.5 border-b border-border bg-background px-5 md:hidden">
+    // The same 16px / 28px gutter as the pages below it (#418), so the logo lines up with the content.
+    <div className="flex h-16 items-center gap-2.5 border-b border-border bg-background px-4 sm:px-7 md:hidden">
       <AppBrand />
 
       {/* Toggle and hamburger grouped on the right, mirroring the public header

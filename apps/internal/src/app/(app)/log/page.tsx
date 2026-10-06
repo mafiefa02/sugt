@@ -75,8 +75,7 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
         method="get"
         className="flex flex-wrap items-end gap-3 px-4 pt-5 sm:px-7"
       >
-        {/* Below `sm` the search and the date range take the whole width and the two dates stack, so
-            the form fits a 360px phone (#418). */}
+        {/* Below `sm` the search takes the whole width, so the form fits a 360px phone (#418). */}
         <div className="grid w-full gap-1.5 sm:w-auto">
           <Label htmlFor="log-q">Cari</Label>
           <Input
@@ -113,6 +112,8 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
             </SelectContent>
           </Select>
         </div>
+        {/* Below `sm` the range takes the whole width and the two dates stack (#418). `min-w-0`
+            because a fieldset otherwise refuses to shrink below its content. */}
         <fieldset className="grid w-full min-w-0 gap-1.5 sm:w-auto">
           <legend className="mb-1.5 text-sm font-medium">Rentang tanggal</legend>
           <div className="flex flex-wrap items-center gap-2">
