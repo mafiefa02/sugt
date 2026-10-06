@@ -1444,6 +1444,14 @@ are claimed by compare-and-set: the first by `where drive_dokumen_folder_id is n
 the primary key, `on conflict do nothing`. A caller that lost trashes its own folder and uses the
 winner's.
 
+**Hapus trashes the file first, then deletes the row** (#398). Its file is public by link, so a row
+must never vanish while the file stays live: the file goes to the Drive trash, and only then are the
+row deleted and a `document_deleted` Log entry written, in one transaction. The entry is a snapshot
+of the row's fields, since the row is gone after it. A file already in the trash, or gone, counts as
+trashed, so if the delete fails after the trash, the row stays, pointing at a trashed file, and
+Hapus again finishes it. Hapus is refused while the connection is not usable. An emptied kind folder
+is left in place, and nothing is ever edited: a wrong upload is a Hapus and a new upload.
+
 ## Money
 
 **There is no `perjadin_report` table.** A Perjadin yields exactly one Report, always, so the

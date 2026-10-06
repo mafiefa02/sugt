@@ -37,3 +37,10 @@ export type RecordDocumentActionResult =
   | { outcome: "file-unverified" }
   | { outcome: "not-pdf" }
   | DriveRefusal;
+
+/** What `deleteDocumentAction` did (#398): the file trashed and the row gone, or why not. */
+export type DeleteDocumentActionResult =
+  | { outcome: "deleted" }
+  /** Already deleted — a second Hapus, or a stale dialog. */
+  | { outcome: "no-such-document" }
+  | DriveRefusal;

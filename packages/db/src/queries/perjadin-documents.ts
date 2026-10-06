@@ -201,6 +201,59 @@ export async function recordPerjadinDocument(
   });
 }
 
+export type DeletePerjadinDocumentResult =
+  | { outcome: "deleted"; perjadinId: string }
+  /** Already deleted — a second Hapus, or a stale dialog. Nothing to do. */
+  | { outcome: "no-such-document" };
+
+/**
+ * **Delete one Perjadin Document's row, with its `document_deleted` Log entry**, in one transaction
+ * (#398). The entry is a snapshot of the row as it goes — the same fields `document_uploaded`
+ * recorded — since nothing is left to read afterwards.
+ *
+ * **The file must already be in the Drive trash** (ADR-0042): `deleteDocumentAction` trashes it
+ * first and calls this second, so a row never vanishes while its public file stays live. If this
+ * fails after the trash, the row stays, pointing at a trashed file, and Hapus again finishes it.
+ */
+export async function deletePerjadinDocument(
+  caller: Person,
+  documentId: string,
+): Promise<DeletePerjadinDocumentResult> {
+  requireStaff(caller);
+
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .delete(perjadinDocument)
+      .where(sql`${perjadinDocument.id}::text = ${documentId}`)
+      .returning();
+    if (!row) return { outcome: "no-such-document" };
+
+    const details: DocumentLogDetails = {
+      documentId: row.id,
+      kind: row.kind,
+      documentDate: row.documentDate,
+    };
+    if (row.schoolId && row.participantType && row.startsAt && row.endsAt) {
+      const [found] = await tx
+        .select({ name: school.name, timeZone: province.timeZone })
+        .from(school)
+        .innerJoin(province, eq(province.code, school.provinceCode))
+        .where(eq(school.id, row.schoolId));
+      Object.assign(details, {
+        schoolName: found?.name,
+        participantType: row.participantType,
+        // As the upload's entry wrote them: `HH:MM`.
+        startsAt: row.startsAt.slice(0, 5),
+        endsAt: row.endsAt.slice(0, 5),
+        timeZone: found?.timeZone,
+      });
+    }
+    await logActivity(tx, caller, row.perjadinId, { action: "document_deleted", details });
+
+    return { outcome: "deleted", perjadinId: row.perjadinId };
+  });
+}
+
 /** One uploaded sheet, as the Dokumen dialog lists it. Peserta fields are null on the others. */
 export type PerjadinDocumentRow = {
   id: string;
