@@ -115,6 +115,15 @@ inside their border on a phone (#419). Tables still scroll sideways inside their
 `/log`'s filters stack below 640px, and on the Laporan each transaction's receipts wrap under
 it.
 
+**An upload to Google Drive says that it is running** (#420). Catat transaksi, a line's Unggah
+bukti and Dokumen's Unggah show a spinner with "Mengunggah ke Google Drive…" — "Mengunggah 2 dari 3
+berkas ke Google Drive…" when several files go at once — and "Jangan tutup halaman ini sampai
+selesai." under it. Once the files are in Drive it reads "Menyimpan…" while the app records them.
+There is no progress bar. In a popup it sits directly above the buttons; for Unggah bukti it sits
+under the line's receipts. Until it is over, the popup cannot be closed (its close button is
+disabled, and Esc and a click outside do nothing), its fields are disabled (so is Dokumen's Hapus),
+and reloading or closing the tab asks first. Then everything unlocks and the usual result shows.
+
 ### Coverage view — the landing screen
 
 Every School with its delivered count, grouped by Cluster. Answers "where are we

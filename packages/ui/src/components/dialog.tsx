@@ -82,11 +82,17 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  closeDisabled = false,
   size = "default",
   ...props
 }: DialogPrimitive.Popup.Props &
   VariantProps<typeof dialogContentVariants> & {
     showCloseButton?: boolean;
+    /**
+     * Disables the close button, for while the popup refuses to close (an upload running). Esc and
+     * an outside click are not buttons, so the caller's `onOpenChange` must ignore the close too.
+     */
+    closeDisabled?: boolean;
   }) {
   return (
     <DialogPortal>
@@ -101,6 +107,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
+            disabled={closeDisabled}
             render={
               <Button
                 variant="ghost"
