@@ -21,6 +21,12 @@ import {
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
 import { UnsyncedMarker } from "-/components/unsynced-marker";
 import {
+  holdOpenWhile,
+  UploadStatus,
+  useLeaveWarning,
+  type UploadProgress,
+} from "-/components/upload-status";
+import {
   isAcceptedReceipt,
   MAX_UPLOAD_MEGABYTES,
   prepareReceipt,
@@ -338,14 +344,21 @@ function Receipts({
 }) {
   const [note, setNote] = useState<string | null>(null);
   const [uploading, startUploading] = useTransition();
+  // What the upload is doing, said inline under the row while it runs (#420). Read only while
+  // `uploading`, so a finished upload's last value never shows.
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   // Negative for a line grandfathered with more than five; it gains nothing either way.
   const slotsLeft = MAX_RECEIPTS_PER_TRANSACTION - line.evidence.length;
+  useLeaveWarning(uploading);
 
   function upload(files: File[]) {
+    const batch = files.slice(0, Math.max(0, slotsLeft));
+    // Set before the transition, not inside it: React holds an async transition's updates made
+    // before its first `await` until the whole action ends, so the status would never show.
+    setProgress({ phase: "uploading", done: 0, total: batch.length });
     startUploading(async () => {
       setNote(null);
-      const batch = files.slice(0, Math.max(0, slotsLeft));
       const notes: string[] = [];
       if (batch.length < files.length) {
         notes.push(`${files.length - batch.length} berkas tidak diunggah: ${CAP_NOTE}`);
@@ -357,7 +370,13 @@ function Receipts({
         if (tooLarge > 0) notes.push(`${tooLarge} berkas: ${UPLOAD_TOO_LARGE}`);
 
         if (prepared.length > 0) {
-          const sent = await uploadToDrive(perjadinId, prepared, line.id);
+          setProgress({ phase: "uploading", done: 0, total: prepared.length });
+          const sent = await uploadToDrive(perjadinId, prepared, {
+            transactionId: line.id,
+            onFileDone: () => {
+              setProgress(oneMoreDone);
+            },
+          });
           if ("refusal" in sent) {
             setNote([...notes, sent.refusal].join(" "));
             return;
@@ -365,6 +384,7 @@ function Receipts({
           let failed = sent.failed;
 
           if (sent.landed.length > 0) {
+            setProgress({ phase: "saving" });
             const result = await finalizeReceiptsAction(perjadinId, line.id, sent.landed);
             // The write's refusals are answered rather than counted as upload failures: none of
             // them means a file did not reach Drive.
@@ -443,9 +463,16 @@ function Receipts({
         title={uploadGate.open ? undefined : uploadGate.reason}
         onClick={() => picker.current?.click()}
       >
-        {uploading ? "Mengunggah…" : "Unggah bukti"}
+        Unggah bukti
       </Button>
 
+      {uploading && progress !== null && (
+        <UploadStatus
+          inline
+          progress={progress}
+          className="basis-full"
+        />
+      )}
       {note !== null && <span className="text-destructive">{note}</span>}
     </div>
   );
@@ -480,8 +507,12 @@ function RecordTransaction({
   // this says so rather than closing as if all were done.
   const [unsynced, setUnsynced] = useState(false);
   const [saving, startSaving] = useTransition();
+  // What the save is doing (#420), shown above the buttons only while `saving`. Until it ends the
+  // popup will not close, its fields are disabled and leaving the page asks first.
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const fields = useId();
+  useLeaveWarning(saving);
 
   const complete =
     spentOn !== "" &&
@@ -512,6 +543,8 @@ function RecordTransaction({
    * against fresh sessions. Files that did land stay in private `_staging`, which ADR-0040 accepts.
    */
   function submit() {
+    // Before the transition, so it shows at once (see `Receipts`'s `upload`).
+    setProgress({ phase: "uploading", done: 0, total: staged.length });
     startSaving(async () => {
       setRefusal(null);
       setUnsynced(false);
@@ -521,7 +554,11 @@ function RecordTransaction({
       if (unsupported > 0) return setRefusal(UNSUPPORTED_RECEIPT);
       if (tooLarge > 0) return setRefusal(UPLOAD_TOO_LARGE);
 
-      const sent = await uploadToDrive(perjadinId, prepared);
+      const sent = await uploadToDrive(perjadinId, prepared, {
+        onFileDone: () => {
+          setProgress(oneMoreDone);
+        },
+      });
       if ("refusal" in sent) {
         setRefusal(sent.refusal);
         return;
@@ -531,6 +568,7 @@ function RecordTransaction({
         return;
       }
 
+      setProgress({ phase: "saving" });
       const result = await recordTransactionAction({
         perjadinId,
         spentOn,
@@ -559,7 +597,7 @@ function RecordTransaction({
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
+      onOpenChange={holdOpenWhile(saving, (next) => {
         setOpen(next);
         // Clear a stale alert when the form is reopened, so a prior refusal does not greet the
         // next entry.
@@ -567,7 +605,7 @@ function RecordTransaction({
           setRefusal(null);
           setUnsynced(false);
         }
-      }}
+      })}
     >
       <DialogTrigger
         disabled={!uploadGate.open}
@@ -583,7 +621,10 @@ function RecordTransaction({
           )
         }
       />
-      <DialogContent size="panel">
+      <DialogContent
+        size="panel"
+        closeDisabled={saving}
+      >
         <DialogHeader>
           <DialogTitle>Catat transaksi</DialogTitle>
           <DialogDescription>
@@ -619,6 +660,7 @@ function RecordTransaction({
               <Input
                 id={`${fields}-spent-on`}
                 aria-required="true"
+                disabled={saving}
                 type="date"
                 value={spentOn}
                 onChange={(event) => {
@@ -638,6 +680,7 @@ function RecordTransaction({
               <Input
                 id={`${fields}-description`}
                 aria-required="true"
+                disabled={saving}
                 value={description}
                 onChange={(event) => {
                   setDescription(event.target.value);
@@ -663,6 +706,7 @@ function RecordTransaction({
               <Input
                 id={`${fields}-amount`}
                 aria-required="true"
+                disabled={saving}
                 type="text"
                 inputMode="numeric"
                 value={amount === "" ? "" : formatIdr(Number(amount))}
@@ -687,6 +731,7 @@ function RecordTransaction({
               */}
               <Select
                 value={category}
+                disabled={saving}
                 onValueChange={(value) => {
                   setCategory(value as TransactionCategory);
                 }}
@@ -726,6 +771,7 @@ function RecordTransaction({
               */}
               <Select
                 value={participantType}
+                disabled={saving}
                 onValueChange={(value) => {
                   setParticipantType(value as TransactionParticipantType);
                 }}
@@ -826,9 +872,12 @@ function RecordTransaction({
           </div>
         </DialogBody>
 
+        {saving && progress !== null && <UploadStatus progress={progress} />}
+
         <DialogFooter>
           <Button
             variant="ghost"
+            disabled={saving}
             onClick={() => {
               setOpen(false);
             }}
@@ -839,7 +888,7 @@ function RecordTransaction({
             disabled={saving || !complete}
             onClick={submit}
           >
-            {saving ? "Menyimpan…" : "Catat"}
+            Catat
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -869,12 +918,13 @@ async function prepareAll(
  * ids that landed and how many did not, or the sentence for why no session opened.
  *
  * It records nothing: the entry form hands `landed` to `recordTransactionAction`, the row to
- * `finalizeReceiptsAction`, each with its own answer to a partial failure.
+ * `finalizeReceiptsAction`, each with its own answer to a partial failure. `onFileDone` fires as
+ * each file's `PUT` settles, landed or not, so the upload status can count them (#420).
  */
 async function uploadToDrive(
   perjadinId: string,
   prepared: PreparedReceipt[],
-  transactionId?: string,
+  { transactionId, onFileDone }: { transactionId?: string; onFileDone: () => void },
 ): Promise<{ landed: UploadedReceipt[]; failed: number } | { refusal: string }> {
   const sessions = await openReceiptSessionsAction(
     perjadinId,
@@ -884,10 +934,17 @@ async function uploadToDrive(
   if (sessions.outcome !== "ready") return { refusal: sessionRefusalFor(sessions) };
 
   const ids = await Promise.all(
-    prepared.map((file, index) => putToDriveSession(sessions.sessionUris[index]!, file.blob)),
+    prepared.map((file, index) =>
+      putToDriveSession(sessions.sessionUris[index]!, file.blob).finally(onFileDone),
+    ),
   );
   const landed = ids.flatMap((driveFileId) => (driveFileId ? [{ driveFileId }] : []));
   return { landed, failed: ids.length - landed.length };
+}
+
+/** One more file finished, for a `setProgress` updater; anything but the upload phase is left alone. */
+function oneMoreDone(progress: UploadProgress | null): UploadProgress | null {
+  return progress?.phase === "uploading" ? { ...progress, done: progress.done + 1 } : progress;
 }
 
 /** The five-receipt ceiling, as each place that meets it says it: a row upload or a dialog pick cut short, or a refused line. */

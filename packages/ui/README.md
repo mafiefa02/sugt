@@ -128,6 +128,11 @@ wraps rather than spilling sideways. A panel never takes its own `max-h-*` or `o
 body is what scrolls. `DialogHeader` keeps right padding in both sizes, so a long title never runs
 under the close button.
 
+`closeDisabled` shows the close button disabled while a popup refuses to close — an upload to Google
+Drive running ([#420](https://github.com/sugt-itb/sugt-itb-26/issues/420)). It only shows it: the
+refusal is the caller's `onOpenChange` ignoring the close, which is also what stops Esc and an
+outside click.
+
 ## The two Rating controls
 
 A **Rating** is the score one person gives one Aspect. It is the only thing in the

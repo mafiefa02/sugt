@@ -18,6 +18,12 @@ import {
 } from "-/components/perjadin-dokumen-form";
 import { PerjadinDokumenList } from "-/components/perjadin-dokumen-list";
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
+import {
+  holdOpenWhile,
+  UploadStatus,
+  useLeaveWarning,
+  type UploadProgress,
+} from "-/components/upload-status";
 import { putToDriveSession } from "-/lib/drive/receipt-upload";
 import type { UploadGate } from "-/lib/drive/upload-gate";
 import type { PerjadinDokumen } from "@sugt/db/queries";
@@ -84,8 +90,12 @@ function PerjadinDokumenDialog({
   const [refusal, setRefusal] = useState<string | null>(null);
   const [unsynced, setUnsynced] = useState(false);
   const [saving, startSaving] = useTransition();
+  // What the upload is doing (#420), shown above the button only while `saving`. Until it ends the
+  // popup will not close, its fields are disabled and leaving the page asks first.
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const ids = useId();
+  useLeaveWarning(saving);
 
   const fields = documentFields(form);
   const isPeserta = form.kind === "Daftar Hadir Peserta";
@@ -103,6 +113,9 @@ function PerjadinDokumenDialog({
 
   function submit() {
     if (!fields || !file) return;
+    // Set before the transition, not inside it: React holds an async transition's updates made
+    // before its first `await` until the whole action ends, so the status would never show.
+    setProgress({ phase: "uploading", done: 0, total: 1 });
     startSaving(async () => {
       setRefusal(null);
       setUnsynced(false);
@@ -116,6 +129,7 @@ function PerjadinDokumenDialog({
       const driveFileId = await putToDriveSession(session.sessionUri, file);
       if (!driveFileId) return setRefusal("Berkas gagal diunggah — coba lagi.");
 
+      setProgress({ phase: "saving" });
       const result = await recordDocumentAction({ ...fields, perjadinId, driveFileId });
       if (result.outcome !== "recorded") return setRefusal(recordRefusalText(result));
 
@@ -129,21 +143,24 @@ function PerjadinDokumenDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
+      onOpenChange={holdOpenWhile(saving, (next) => {
         setOpen(next);
         if (next) {
           setRefusal(null);
           setUnsynced(false);
           void load();
         }
-      }}
+      })}
     >
       <DialogTrigger
         disabled={!uploadGate.open}
         title={uploadGate.open ? undefined : uploadGate.reason}
         render={trigger}
       />
-      <DialogContent size="panel">
+      <DialogContent
+        size="panel"
+        closeDisabled={saving}
+      >
         <DialogHeader>
           <DialogTitle>Dokumen — {name}</DialogTitle>
           <DialogDescription>
@@ -194,6 +211,7 @@ function PerjadinDokumenDialog({
               </Label>
               <Select
                 value={form.kind}
+                disabled={saving}
                 onValueChange={(value) => {
                   update({ kind: value as PerjadinDocumentKind });
                 }}
@@ -233,6 +251,7 @@ function PerjadinDokumenDialog({
                   min={dokumen?.startsOn}
                   max={dokumen?.endsOn}
                   value={form.documentDate}
+                  disabled={saving}
                   onChange={(event) => {
                     update({ documentDate: event.target.value });
                   }}
@@ -253,6 +272,7 @@ function PerjadinDokumenDialog({
                   {/* A plain select: a trip has few Schools, so nothing to search. */}
                   <Select
                     value={form.schoolId}
+                    disabled={saving}
                     onValueChange={(value) => {
                       update({ schoolId: (value as string | null) ?? "" });
                     }}
@@ -289,6 +309,7 @@ function PerjadinDokumenDialog({
                       id={`${ids}-starts`}
                       aria-required="true"
                       value={form.startsAt}
+                      disabled={saving}
                       onValueChange={(value) => {
                         update({ startsAt: value });
                       }}
@@ -306,6 +327,7 @@ function PerjadinDokumenDialog({
                       id={`${ids}-ends`}
                       aria-required="true"
                       value={form.endsAt}
+                      disabled={saving}
                       onValueChange={(value) => {
                         update({ endsAt: value });
                       }}
@@ -323,6 +345,7 @@ function PerjadinDokumenDialog({
                   </Label>
                   <Select
                     value={form.participantType}
+                    disabled={saving}
                     onValueChange={(value) => {
                       update({ participantType: value as PerjadinDocumentParticipantType });
                     }}
@@ -391,12 +414,14 @@ function PerjadinDokumenDialog({
           </div>
         </DialogBody>
 
+        {saving && progress !== null && <UploadStatus progress={progress} />}
+
         <DialogFooter>
           <Button
             disabled={saving || !fields || !file || !dokumen}
             onClick={submit}
           >
-            {saving ? "Mengunggah…" : "Unggah"}
+            Unggah
           </Button>
         </DialogFooter>
       </DialogContent>
