@@ -1,5 +1,6 @@
 "use client";
 
+import { matchesPerjadinSearch } from "-/components/perjadin-directory-search";
 import {
   PERJADIN_DEFAULT_SORT,
   sortPerjadinDirectory,
@@ -14,7 +15,7 @@ import {
   StickyTableHeader,
 } from "-/components/sortable-table";
 import { nextTableSort, type TableSort } from "-/components/table-sort";
-import { shortenKabupaten } from "-/lib/format-destination";
+import { perjadinName, perjadinSchoolsLine } from "-/lib/perjadin-name";
 import type { DirectoryPerjadin } from "@sugt/db/queries";
 import { Input } from "@sugt/ui/components/input";
 import { TableBody, TableCell, TableRow } from "@sugt/ui/components/table";
@@ -26,11 +27,10 @@ import { useMemo, useState } from "react";
  * The Perjadin table, narrowed by a search box and sorted by any column (#343).
  *
  * **The filtering and sorting happen here and not in the query**, the one-round-trip shape
- * `SchoolDirectoryTable` uses: the page fetches every trip — carrying the three name arrays the
- * search reads (#334) — and the browser narrows and orders them. A trip matches when the query is a
- * case-insensitive substring of its **destination** (a Perjadin has no separate name — the
- * destination is its identity), its **PIC** name, or any of its **pengajar**, **Group-member** or
- * **School** names. Those three arrays are search-only: nothing below renders them.
+ * `SchoolDirectoryTable` uses: the page fetches every trip — carrying the name arrays the search
+ * reads (#334) — and the browser narrows (`matchesPerjadinSearch`) and orders them. The trip's
+ * Schools are also the School line under the name; the pengajar and Group-member names are
+ * search-only.
  *
  * Sorting defaults to Mulai, newest first; the sort state is `useState`, not the URL. A row
  * opens the trip on click, and its title is a real link besides. **Persiapan** is the checklist
@@ -46,23 +46,14 @@ function PerjadinDirectoryList({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<TableSort<PerjadinColumn>>(PERJADIN_DEFAULT_SORT);
 
-  const shown = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const matching =
-      needle === ""
-        ? trips
-        : trips.filter((trip) => {
-            const haystack = [
-              trip.destination,
-              trip.picFullName,
-              ...trip.pengajarNames,
-              ...trip.groupMemberNames,
-              ...trip.schoolNames,
-            ];
-            return haystack.some((field) => field.toLowerCase().includes(needle));
-          });
-    return sortPerjadinDirectory(matching, sort);
-  }, [trips, query, sort]);
+  const shown = useMemo(
+    () =>
+      sortPerjadinDirectory(
+        trips.filter((trip) => matchesPerjadinSearch(trip, query)),
+        sort,
+      ),
+    [trips, query, sort],
+  );
 
   function sortBy(column: PerjadinColumn) {
     setSort((current) => nextTableSort(current, column));
@@ -97,7 +88,7 @@ function PerjadinDirectoryList({
             <StickyTableHeader>
               <TableRow>
                 <SortableTableHead
-                  column="destination"
+                  column="name"
                   {...head}
                 >
                   Perjadin
@@ -147,14 +138,19 @@ function PerjadinDirectoryList({
                   key={trip.id}
                   href={`/perjadin/${trip.id}`}
                 >
-                  {/* The title wraps, so a long destination does not push the table past the page. */}
+                  {/* The School line wraps, so a long list does not push the table past the page. */}
                   <TableCell className="min-w-56 font-medium whitespace-normal">
                     <Link
                       href={`/perjadin/${trip.id}`}
                       className="rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/30"
                     >
-                      {shortenKabupaten(trip.destination)}
+                      {perjadinName(trip)}
                     </Link>
+                    {trip.schoolNames.length > 0 && (
+                      <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                        {perjadinSchoolsLine(trip.schoolNames)}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{trip.schoolCount}</TableCell>
                   <TableCell className="text-muted-foreground tabular-nums">

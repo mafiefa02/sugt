@@ -1,7 +1,7 @@
 import { StickyTable, StickyTableHeader } from "-/components/sortable-table";
 import { driveFileUrl, driveFolderUrl } from "-/lib/drive/receipt-files";
-import { shortenKabupaten } from "-/lib/format-destination";
 import { formatWibIndonesian } from "-/lib/format-wib";
+import { perjadinName, perjadinSchoolsLine } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
 import {
   ACTIVITY_LOG_AKSI_FILTERS,
@@ -27,7 +27,6 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { forbidden } from "next/navigation";
 
-import { formatTripDates } from "./log-format";
 import { logHref, parseLogParams } from "./log-params";
 
 export const metadata: Metadata = { title: "Log" };
@@ -215,13 +214,14 @@ function LogRow({ row }: { row: ActivityLogRow }) {
           href={`/perjadin/${row.perjadin.id}`}
           className="font-medium underline-offset-4 hover:underline"
         >
-          {shortenKabupaten(row.perjadin.destination)}
+          {perjadinName(row.perjadin)}
         </Link>
-        <span className="text-muted-foreground">
-          {" "}
-          — {formatTripDates(row.perjadin.startsOn, row.perjadin.endsOn)} — PIC:{" "}
-          {row.perjadin.picName}
-        </span>
+        <span className="text-muted-foreground"> — PIC: {row.perjadin.picName}</span>
+        {row.perjadin.schoolNames.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {perjadinSchoolsLine(row.perjadin.schoolNames)}
+          </p>
+        )}
       </TableCell>
       <TableCell>{activityLogAksi(row.action, row.backfilled)}</TableCell>
       <TableCell className="min-w-64 whitespace-normal">

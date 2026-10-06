@@ -16,7 +16,8 @@ import { csvOf } from "../src/app/(app)/perjadin/[id]/laporan/ekspor/csv";
 function acquittal(overrides: Partial<PerjadinAcquittal> = {}): PerjadinAcquittal {
   return {
     perjadinId: "00000000-0000-0000-0000-000000000001",
-    destination: "Bandung",
+    subClusterName: "Kelompok 10",
+    schoolNames: [],
     startsOn: "2026-09-01",
     endsOn: "2026-09-03",
     advanceIdr: 5_000_000,

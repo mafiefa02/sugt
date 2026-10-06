@@ -21,6 +21,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { connectDrive, digestOf, FORBIDDEN, jpeg, pdf, stubTokenEndpoint } from "./support/drive";
 import {
   addCluster,
+  addOfflineSession,
   addGrant,
   addPerjadin,
   addPerson,
@@ -50,6 +51,10 @@ vi.mock("next/headers", () => ({
 let drive: FakeDrive;
 let folders: ReadyFolders;
 
+/** The trip's Drive folder name (ADR-0044) for the dates given: name, its one School, `P-` id. */
+const tripFolderName = (trip: { id: string }, dates = "12–16 Okt 2026") =>
+  `Kelompok 18 · ${dates} · SMAN 1/Bontang · P-${trip.id.slice(0, 8)}`;
+
 /**
  * A Staff Administrator, a Pimpinan, a trip to Kelompok 18 with one School in it, and Drive
  * connected — with its Dokumen folders, unless `dokumen` is false: a connection made before them.
@@ -78,10 +83,10 @@ async function scene(
     advanceIdr: 5_000_000,
     picPersonId: staff.id,
     subClusterId: subCluster.id,
-    destination: "Kelompok 18: Samarinda, Bontang dan Balikpapan",
     startsOn: "2026-10-12",
     endsOn: "2026-10-16",
   });
+  await addOfflineSession({ schoolId: school.id, heldOn: "2026-10-14", perjadinId: trip.id });
 
   const connection = options.connection ?? "connected";
   if (connection !== "none") {
@@ -182,7 +187,7 @@ describe("an upload, recorded and reconciled", () => {
     if (result.outcome !== "recorded") return;
     const doc8 = result.documentId.replaceAll("-", "").slice(0, 8);
 
-    // Dokumen/Pelaksanaan Offline/{destination} · {starts_on}/Daftar Hadir Peserta/{file}
+    // Dokumen/Pelaksanaan Offline/{name} · {Schools} · P-{trip8}/Daftar Hadir Peserta/{file}
     const file = drive.files.get(fileId)!;
     expect(file.name).toBe(
       `2026-10-14 · SMAN 1-Bontang · Siswa · Daftar Hadir Peserta · D-${doc8}.pdf`,
@@ -194,7 +199,7 @@ describe("an upload, recorded and reconciled", () => {
     const kindFolder = drive.files.get(file.parents[0]!)!;
     expect(kindFolder.name).toBe("Daftar Hadir Peserta");
     const tripFolder = drive.files.get(kindFolder.parents[0]!)!;
-    expect(tripFolder.name).toBe("Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12");
+    expect(tripFolder.name).toBe(tripFolderName(trip));
     const offline = drive.files.get(tripFolder.parents[0]!)!;
     expect(offline.name).toBe(PELAKSANAAN_OFFLINE_FOLDER_NAME);
     expect(drive.files.get(offline.parents[0]!)!.name).toBe(DOKUMEN_FOLDER_NAME);
@@ -228,9 +233,7 @@ describe("an upload, recorded and reconciled", () => {
       documentDate: "2026-10-13",
     });
 
-    expect(
-      drive.named("Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12"),
-    ).toHaveLength(1);
+    expect(drive.named(tripFolderName(trip))).toHaveLength(1);
     expect(drive.named("Daftar Hadir Peserta")).toHaveLength(1);
     expect(drive.named("Daftar Hadir Narasumber")).toHaveLength(1);
     await expect(db.select().from(schema.perjadinDocumentFolder)).resolves.toHaveLength(2);
@@ -403,7 +406,7 @@ describe("a start-date correction", () => {
     ).resolves.toMatchObject({ outcome: "updated" });
 
     expect(drive.files.get(before!.driveDokumenFolderId!)!.name).toBe(
-      "Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-13",
+      tripFolderName(trip, "13–16 Okt 2026"),
     );
   });
 });

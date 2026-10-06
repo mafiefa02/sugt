@@ -1,13 +1,14 @@
 import { driveCredentials, perjadinDriveFolder, type Person } from "@sugt/db/queries";
 
+import { perjadinFolderName } from "../perjadin-name";
 import { refreshDriveToken } from "./access-token";
 import { openDrive } from "./google";
-import { perjadinFolderName } from "./receipt-files";
 
 /**
  * **Rename a Perjadin's Drive folders after its start date was corrected** (#376, ADR-0040), so the
- * company Drive shows `{destination} · {new starts_on}` — its receipts folder and, once it has one,
- * its Dokumen folder (ADR-0042). File names carry no `starts_on`, so nothing else moves.
+ * company Drive shows the trip's name with its new dates (`perjadinFolderName`, ADR-0044) — its
+ * receipts folder and, once it has one, its Dokumen folder (ADR-0042). File names carry no trip
+ * dates, so nothing else moves.
  *
  * **Best effort, after the commit.** The correction has already been written; nothing here can fail
  * it or roll it back. A trip with no Drive folder yet, or a connection that is not `connected`, makes
@@ -31,7 +32,7 @@ export async function renamePerjadinFolder(person: Person, perjadinId: string): 
     if (token.outcome !== "ok") return;
 
     const drive = openDrive(token.accessToken);
-    const name = perjadinFolderName(trip.destination, trip.startsOn);
+    const name = perjadinFolderName(trip.naming);
     await Promise.all(folderIds.map((id) => drive.updateFile(id, { name })));
   } catch (error) {
     console.error(`Renaming the Drive folder of Perjadin ${perjadinId} failed.`, error);

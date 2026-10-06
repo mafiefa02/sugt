@@ -1,5 +1,5 @@
-import { shortenKabupaten } from "-/lib/format-destination";
 import { resolvePerjadinFeedbackToken } from "-/lib/perjadin-feedback-token";
+import { perjadinName, perjadinSchoolsLine } from "-/lib/perjadin-name";
 import type { Metadata } from "next";
 
 import { EpForm } from "./ep-form";
@@ -28,9 +28,8 @@ export default async function Page({ params }: PageProps<"/ep/[token]">) {
       ) : (
         <EpForm
           token={token}
-          destination={shortenKabupaten(resolved.perjadin.destination)}
-          startsOn={resolved.perjadin.startsOn}
-          endsOn={resolved.perjadin.endsOn}
+          tripName={perjadinName(resolved.perjadin)}
+          schoolsLine={perjadinSchoolsLine(resolved.perjadin.schoolNames)}
         />
       )}
     </main>

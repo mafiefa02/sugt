@@ -2,8 +2,10 @@ import type { TransactionCategory } from "@sugt/domain";
 import { and, asc, count, eq, exists, isNull, notExists, notInArray, sql } from "drizzle-orm";
 
 import { db } from "../client";
+import { subCluster } from "../schema/reference";
 import { perjadin, transaction, transactionEvidence } from "../schema/travel";
 import type { Person } from "./caller";
+import { perjadinFolderNaming, type PerjadinFolderNaming } from "./perjadin-naming";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -19,18 +21,17 @@ import { requireStaff } from "./staff-only";
  * a caller that lost reads back the winner's id and trashes the folder it made.
  */
 
-/** A Perjadin's Drive folder and the two facts it is named from. */
+/** A Perjadin's Drive folders and what they are named from. */
 export type PerjadinDriveFolder = {
   driveFolderId: string | null;
   /** Its folder under `Dokumen/Pelaksanaan Offline` (ADR-0042), named the same way. */
   driveDokumenFolderId: string | null;
-  destination: string;
-  startsOn: string;
+  naming: PerjadinFolderNaming;
 };
 
 /**
- * What renaming a Perjadin's Drive folder reads (#376) — after a start-date correction, and again in
- * the reconcile, fresh, just before it re-asserts the name. `null` when there is no such trip.
+ * What renaming a Perjadin's Drive folder reads (#376) — after a date correction, and again in the
+ * reconcile, fresh, just before it re-asserts the name. `null` when there is no such trip.
  */
 export async function perjadinDriveFolder(
   caller: Person,
@@ -42,10 +43,10 @@ export async function perjadinDriveFolder(
     .select({
       driveFolderId: perjadin.driveFolderId,
       driveDokumenFolderId: perjadin.driveDokumenFolderId,
-      destination: perjadin.destination,
-      startsOn: perjadin.startsOn,
+      naming: perjadinFolderNaming,
     })
     .from(perjadin)
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .where(eq(perjadin.id, perjadinId));
   return trip ?? null;
 }
@@ -59,9 +60,8 @@ export type ReconcileTarget = {
   spentOn: string;
   category: TransactionCategory;
   driveFolderId: string | null;
-  perjadinId: string;
-  destination: string;
-  startsOn: string;
+  /** Its Perjadin, and what that Perjadin's folder is named from. */
+  perjadin: PerjadinFolderNaming;
   perjadinDriveFolderId: string | null;
   evidence: ReconcileEvidence[];
 };
@@ -79,13 +79,12 @@ export async function reconcileTarget(
       spentOn: transaction.spentOn,
       category: transaction.category,
       driveFolderId: transaction.driveFolderId,
-      perjadinId: perjadin.id,
-      destination: perjadin.destination,
-      startsOn: perjadin.startsOn,
+      perjadin: perjadinFolderNaming,
       perjadinDriveFolderId: perjadin.driveFolderId,
     })
     .from(transaction)
     .innerJoin(perjadin, eq(perjadin.id, transaction.perjadinId))
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .where(eq(transaction.id, transactionId));
   if (!line) return null;
 

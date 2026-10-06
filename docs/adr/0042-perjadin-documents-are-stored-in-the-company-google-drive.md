@@ -123,3 +123,11 @@ are.
 - A sheet a person shares from Drive by hand is beyond the app's control, as a receipt is.
 - A trip's Dokumen and receipts folders are separate trees, so moving one by hand moves only that
   one.
+
+## Amendment (2026-10-06): the Perjadin's Dokumen folder name
+
+[ADR-0044](./0044-a-perjadin-is-named-by-its-kelompok-and-dates.md),
+[#406](https://github.com/sugt-itb/sugt-itb-26/issues/406). The Perjadin's Dokumen folder still
+carries the same name as its receipts folder, which is now
+`{name} · {the trip's Schools} · P-{perjadin8}` (ADR-0040's 2026-10-06 amendment) rather than
+`{destination} · {starts_on}`. The kind folders and file names below it are unchanged.

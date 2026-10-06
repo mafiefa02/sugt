@@ -289,7 +289,6 @@ export type DocumentSchool = { id: string; name: string; timeZone: TimeZone };
 /** Everything the Dokumen dialog renders for one trip. */
 export type PerjadinDokumen = {
   perjadinId: string;
-  destination: string;
   startsOn: string;
   endsOn: string;
   schools: DocumentSchool[];
@@ -308,7 +307,6 @@ export async function perjadinDokumen(
   const [trip] = await db
     .select({
       perjadinId: perjadin.id,
-      destination: perjadin.destination,
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
       subClusterId: perjadin.subClusterId,

@@ -127,7 +127,9 @@ mean, so there is no selection.
 What that costs is the thing the old design was proudest of — planning in front of the
 delivered counts rather than from memory. It is a real loss and it is accepted: the counts
 decide _which Sub-Cluster is next_, and that reading now happens before you leave this
-screen instead of inside the form you launched from it.
+screen instead of inside the form you launched from it. Since one Sub-Cluster may need several trips
+([ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)), the reading is per
+School: _which Schools are next_, and the trip is planned around the Sub-Cluster they share.
 
 ### Pendamping — your own trips
 
@@ -143,7 +145,8 @@ Group of:
 - **Perjalanan Dinas Sebelumnya**: the trips that are over, the most recently ended first, with
   every action still on them.
 
-Each trip is a card that opens to show Uang Perjalanan, Catat Transaksi, Evaluasi Perjadin, Edit,
+Each trip is a card headed by its name — `Kelompok 10 · 12–13 Okt 2026`, which already carries the
+dates — with the trip's Schools as a muted line beneath it. It opens to show Uang Perjalanan, Catat Transaksi, Evaluasi Perjadin, Edit,
 the Persiapan pill, the timeline of Sessions and who is on the trip. Each section shows three
 cards with **Tampilkan lebih banyak** for the rest, and is left out when it has none. With neither,
 the page says "Anda belum tergabung dalam Perjalanan Dinas."
@@ -156,7 +159,7 @@ the page says "Anda belum tergabung dalam Perjalanan Dinas."
 - "Laporan: terkirim {tanggal}" once it is filed.
 
 **Dokumen**, beside Catat Transaksi on every card in both sections, opens **"Dokumen —
-{destination}"**: the trip's attendance sheets
+{name}"**: the trip's attendance sheets
 ([ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)).
 
 - **The list**, under three headings: Daftar Hadir Peserta, Daftar Hadir Narasumber and Daftar
@@ -284,10 +287,25 @@ Session's date picker is bounded by the two dates. On the trip's own screen Staf
 **Ubah tanggal** beside the range; the edit moves no Session, and is refused whole if a Session still
 to be delivered would fall outside the new range. A Pimpinan sees the dates read-only.
 
-**A trip goes to one Sub-Cluster.** That is what a journey is: a set of Schools near enough
-to reach on one trip. Choosing it is what decides which Schools may appear on the trip at
+**A trip goes to one Sub-Cluster.** A Sub-Cluster is a set of Schools near enough that any of
+them can share a journey. Choosing it is what decides which Schools may appear on the trip at
 all, so the form no longer asks anyone to assemble that set by hand — which was the old
 design asking a planner to remember geography the tool could have held.
+
+**One Kelompok may need several trips**
+([ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)). Two of a Sub-Cluster's
+three Schools can be visited on Monday and Tuesday and the third only the following Monday: that is
+two Perjadins on one Sub-Cluster, each keeping only the Schools it visits.
+
+**A trip is named `{Sub-Cluster} · {dates}`** — `Kelompok 10 · 12–13 Okt 2026`, or
+`Kelompok 10 · 12 Okt 2026` for a one-day trip — on every screen
+([ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)). The name is read live, so
+renaming a Sub-Cluster relabels its trips, past ones included. Where trips are listed — the
+Perjadin list, the `/pendamping` cards, `/log` and the Evaluasi Perjadin form — **the trip's
+Schools** (those with a Session that was not cancelled, alphabetically) sit as a muted second line
+under the name, because two trips of one Kelompok on the same dates share a name. The trip's own
+screen is headed by the name and its tab reads `Perjadin — {name}`; the Laporan's reads
+`Laporan — {name}`.
 
 **Its Schools default to all of the Sub-Cluster's, and any of them can be dropped.** The
 Sub-Cluster says which Schools are eligible; the plan says which are visited this time. A
@@ -327,8 +345,9 @@ uploading and Hapus happen in the card's Dokumen dialog.
 Perjadin, Sekolah (Schools with a Session that was not cancelled), Mulai, Selesai, PIC,
 Persiapan and Terlaksana — delivered over not-cancelled Sessions, as an `x/N` badge in the same three
 tones, `0/0` grey. It opens newest Mulai first; every column sorts, a new column descending
-first. The header stays in view while the list scrolls, a row opens its trip, and the search box
-above narrows it.
+first — Perjadin by name, Kelompok 2 before Kelompok 10, and two trips of one Kelompok by their
+dates. The header stays in view while the list scrolls, a row opens its trip, and the search box
+above narrows it by the trip's Kelompok, its Schools, its PIC, its Narasumber and its Group.
 
 ### The acquittal — the most important screen
 
@@ -585,10 +604,12 @@ Publishing or unpublishing tells the public site to refresh rather than waiting 
 scheduled one — the site otherwise serves its last good copy indefinitely, which is right for
 a figure and wrong for a photograph someone has asked to have removed.
 
-### Sub-Clusters — which Schools are one journey
+### Sub-Clusters — which Schools can share a journey
 
-Staff group a Cluster's Schools into **Sub-Clusters**: sets close enough to reach on a single
-trip. This is what offline planning is built on, so it is the one piece of reference data the
+Staff group a Cluster's Schools into **Sub-Clusters**: sets close enough that any of them can share
+a trip. A trip goes to one Sub-Cluster, and one Sub-Cluster may be covered by one trip or by several
+([ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)). This is what offline
+planning is built on, so it is the one piece of reference data the
 tool lets anyone edit — create a Sub-Cluster, rename one, move Schools between them.
 
 **Every School is in exactly one, always.** There is no unassigned state to represent, because
@@ -607,7 +628,7 @@ Two things the screen refuses, both saying why rather than failing quietly:
 - **Deleting a Sub-Cluster that still holds Schools.** Empty it first — there is nowhere for
   the Schools to go.
 - **Moving a School that a planned trip is still going to visit**, naming the Perjadins in the
-  way so somebody can re-plan or cancel them. Only trips that have not happened block a move:
+  way — each by its name, `Kelompok 10 · 12–13 Okt 2026` — so somebody can re-plan or cancel them. Only trips that have not happened block a move:
   Sessions already delivered record where the Programme went, and a grouping that could not be
   corrected after the first trip would be a grouping nobody could fix.
 
@@ -696,15 +717,16 @@ receipts, documents and report, and when.
 
 A table, newest first, 50 rows a page:
 
-| Waktu (WIB)        | Oleh   | Perjadin                                                                              | Aksi                   | Rincian                                                                     |
-| ------------------ | ------ | ------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
-| 14 Okt 2026, 08.05 | rina@… | Kelompok 18: Samarinda, Bontang dan Balikpapan — 12–15 Okt 2026 — PIC: Rina Setiawati | Unggah bukti           | Konsumsi · Rp1.250.000 · tgl 2026-10-12 · +1 bukti (kini 3/5) · Buka folder |
-| 8 Okt 2026, 16.02  | budi@… | (the same)                                                                            | Uang Perjalanan diubah | Rp15.000.000 → Rp18.500.000                                                 |
+| Waktu (WIB)        | Oleh   | Perjadin                                                                               | Aksi                   | Rincian                                                                     |
+| ------------------ | ------ | -------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------- |
+| 14 Okt 2026, 08.05 | rina@… | Kelompok 18 · 12–15 Okt 2026 — PIC: Rina Setiawati<br>SMAN 1 Bontang, SMAN 2 Samarinda | Unggah bukti           | Konsumsi · Rp1.250.000 · tgl 2026-10-12 · +1 bukti (kini 3/5) · Buka folder |
+| 8 Okt 2026, 16.02  | budi@… | (the same)                                                                             | Uang Perjalanan diubah | Rp15.000.000 → Rp18.500.000                                                 |
 
 - **Waktu** is when the act happened in the app, in WIB. "tgl" in Rincian is the date the money
   was spent, and the two differ.
 - **Oleh** is the email the person had at that moment.
-- **Perjadin** links to the trip, with its dates and its current PIC.
+- **Perjadin** links to the trip by its name (`Kelompok 18 · 12–15 Okt 2026`), with its current PIC
+  and, as a second line, the trip's Schools.
 - **Aksi** is one of Uang Perjalanan ditetapkan, Uang Perjalanan diubah, Catat transaksi, Unggah
   bukti, Laporan dikirim, Dokumen diunggah and Dokumen dihapus. Entries derived from data recorded
   before the Log existed read "(dari data lama)" after it.
@@ -712,8 +734,8 @@ A table, newest first, 50 rows a page:
 
 **Above the table**, a search box, an Aksi filter and a Rentang tanggal:
 
-- the search matches, ignoring case, the email, the Perjadin's destination, its PIC's name, and the
-  Aksi and Rincian text;
+- the search matches, ignoring case, the email, the trip's Kelompok (its Sub-Cluster's name), its
+  Schools, its PIC's name, and the Aksi and Rincian text;
 - Aksi is Semua, Uang Perjalanan, Catat transaksi, Unggah bukti, Dokumen or Laporan dikirim;
 - Rentang tanggal is two WIB dates, dari and sampai, both included.
 

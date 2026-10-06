@@ -84,8 +84,9 @@ describe("perjadinDirectory — the table's counts", () => {
     expect(trip?.schoolCount).toBe(1);
     expect(trip?.sessionsDelivered).toBe(1);
     expect(trip?.sessionsTotal).toBe(2);
-    // Two Schools are still searchable by name — the search arrays are not narrowed by status.
-    expect(trip?.schoolNames).toEqual(["SMAN 1 Bandung", "SMAN 2 Bandung"]);
+    // The trip's Schools (ADR-0044) — the School line and the search — agree with the count: the
+    // School whose only Session was cancelled is no longer visited, so it drops out of both.
+    expect(trip?.schoolNames).toEqual(["SMAN 1 Bandung"]);
   });
 
   it("reads 0/0 and zero Schools for a Perjadin with no Sessions", async () => {

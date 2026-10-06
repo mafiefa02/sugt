@@ -3,7 +3,6 @@ import {
   driveFileUrl,
   driveFolderUrl,
   evidenceFileName,
-  perjadinFolderName,
   sniffReceiptType,
   transactionFolderName,
 } from "-/lib/drive/receipt-files";
@@ -14,8 +13,8 @@ import { describe, expect, it, vi } from "vitest";
 
 /**
  * **Receipt names, types and links** (#373, ADR-0040) — the pure part, no database and no Drive. The
- * names are the ADR's to the character: ISO dates, ` · ` everywhere, `/` → `-` in a category, `:` →
- * ` ·` in a destination, 8-hex ids, and the extension from the sniffed type.
+ * names are the ADR's to the character: ISO dates, ` · ` everywhere, `/` → `-` in a category, 8-hex
+ * ids, and the extension from the sniffed type. The Perjadin folder's name is `perjadin-name.test.ts`'s.
  */
 
 // The acquittal's client component imports its Server Actions; nothing here calls them.
@@ -25,12 +24,6 @@ const TXN = "1a2b3c4d-0000-4000-8000-000000000001";
 const EV = "5e6f7a8b-0000-4000-8000-000000000002";
 
 describe("names", () => {
-  it("names a Perjadin folder from its destination, a colon becoming a separator", () => {
-    expect(perjadinFolderName("Kelompok 18: Samarinda, Bontang dan Balikpapan", "2026-10-12")).toBe(
-      "Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12",
-    );
-  });
-
   it.each([
     ["Tiket Pesawat/Kereta PP", "2026-10-13 · Tiket Pesawat-Kereta PP · T-1a2b3c4d"],
     ["Transport Bandara/Stasiun", "2026-10-13 · Transport Bandara-Stasiun · T-1a2b3c4d"],

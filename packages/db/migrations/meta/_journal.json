@@ -288,6 +288,13 @@
       "when": 1791243518811,
       "tag": "0040_perjadin_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791293048523,
+      "tag": "0041_drop_perjadin_destination",
+      "breakpoints": true
     }
   ]
 }

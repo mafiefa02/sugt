@@ -22,7 +22,7 @@ import {
   stubTokenEndpoint,
   upload as uploadTo,
 } from "./support/drive";
-import { addPerjadin, addPerson, resetDatabase } from "./support/fixtures";
+import { addPerjadin, addPerson, addSchoolOnTrip, resetDatabase } from "./support/fixtures";
 
 /**
  * **Catat transaksi uploads its receipts to Google Drive** (#373, ADR-0040), against the real
@@ -46,6 +46,8 @@ vi.mock("next/headers", () => ({
 
 let drive: FakeDrive;
 let folders: ReadyFolders;
+/** The trip's Drive folder name (ADR-0044): its name, its Schools, its `P-` id. Set by `scene`. */
+let perjadinFolderName: string;
 
 /** A Staff PIC, a Pimpinan, a trip, and Drive connected with its fixed tree built in the fake. */
 async function scene(options: { connection?: "connected" | "broken" | "none" } = {}) {
@@ -58,10 +60,12 @@ async function scene(options: { connection?: "connected" | "broken" | "none" } =
   const trip = await addPerjadin({
     advanceIdr: 5_000_000,
     picPersonId: staff.id,
-    destination: "Kelompok 18: Samarinda, Bontang dan Balikpapan",
+    subClusterName: "Kelompok 18",
     startsOn: "2026-10-12",
     endsOn: "2026-10-16",
   });
+  await addSchoolOnTrip({ perjadin: trip, name: "SMAN 1 Bontang" });
+  perjadinFolderName = `Kelompok 18 · 12–16 Okt 2026 · SMAN 1 Bontang · P-${trip.id.slice(0, 8)}`;
 
   const connection = options.connection ?? "connected";
   if (connection !== "none") folders = await connectDrive(drive, staff.id, connection);
@@ -232,9 +236,7 @@ describe("recording a line with its Drive receipts", () => {
         .from(schema.perjadin)
         .where(eq(schema.perjadin.id, trip.id));
       const perjadinFolder = (await drive.getFile(trip_!.driveFolderId!))!;
-      expect(perjadinFolder.name).toBe(
-        "Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12",
-      );
+      expect(perjadinFolder.name).toBe(perjadinFolderName);
       expect(perjadinFolder.parents).toEqual([folders.pelaksanaanOfflineFolderId]);
 
       const folder = (await drive.getFile(line!.driveFolderId!))!;
@@ -276,9 +278,7 @@ describe("recording a line with its Drive receipts", () => {
       drive.getFile(second!.driveFolderId!),
     ]);
     expect(a!.parents).toEqual(b!.parents);
-    expect(
-      drive.named("Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12"),
-    ).toHaveLength(1);
+    expect(drive.named(perjadinFolderName)).toHaveLength(1);
   });
 });
 
@@ -381,7 +381,7 @@ describe("after the commit", () => {
     const [a, b] = await Promise.all([upload(trip.id, [jpeg()]), upload(trip.id, [jpeg()])]);
     // Hold each Perjadin-folder creation until both have started, so both reconciles have read "no
     // folder yet" before either claims one — the race itself, every run.
-    const perjadinFolder = "Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12";
+    const perjadinFolder = perjadinFolderName;
     const createFolder = drive.createFolder.bind(drive);
     let release!: () => void;
     const bothStarted = new Promise<void>((resolve) => (release = resolve));
@@ -425,9 +425,7 @@ describe("after the commit", () => {
       parents: [folders.stagingFolderId],
       trashed: false,
     });
-    expect(
-      drive.named("Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12"),
-    ).toHaveLength(1);
+    expect(drive.named(perjadinFolderName)).toHaveLength(1);
   });
 
   it("answers recorded, not an error, when the reconcile throws after the commit", async () => {

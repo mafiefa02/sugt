@@ -72,7 +72,6 @@ async function scene({ synced = true }: { synced?: boolean } = {}) {
     advanceIdr: 5_000_000,
     picPersonId: staff.id,
     subClusterId: subCluster.id,
-    destination: "Kelompok 18: Bontang",
     startsOn: "2026-10-12",
     endsOn: "2026-10-16",
   });

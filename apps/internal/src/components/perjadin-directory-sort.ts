@@ -13,7 +13,7 @@ import type { DirectoryPerjadin } from "@sugt/db/queries";
  * Terlaksana.
  */
 export type PerjadinColumn =
-  | "destination"
+  | "name"
   | "schools"
   | "start"
   | "end"
@@ -31,7 +31,7 @@ export const PERJADIN_DEFAULT_SORT: TableSort<PerjadinColumn> = {
 export type SortablePerjadin = Pick<
   DirectoryPerjadin,
   | "id"
-  | "destination"
+  | "subClusterName"
   | "schoolCount"
   | "startsOn"
   | "endsOn"
@@ -48,8 +48,13 @@ function deliveredRatio(trip: SortablePerjadin): number {
 
 /** Each column ascending. The direction is applied on top; ties are left to `tiebreak`. */
 const ASCENDING: Record<PerjadinColumn, (a: SortablePerjadin, b: SortablePerjadin) => number> = {
-  // Numeric-aware, so "Kelompok 2" sorts before "Kelompok 12".
-  destination: (a, b) => a.destination.localeCompare(b.destination, "id", { numeric: true }),
+  // By name — `{Sub-Cluster} · {dates}` (ADR-0044) — numeric-aware, so "Kelompok 2" sorts before
+  // "Kelompok 12". The dates part compares as dates, not as the words the name spells them in, so
+  // two trips of one Kelompok sort by when they leave.
+  name: (a, b) =>
+    a.subClusterName.localeCompare(b.subClusterName, "id", { numeric: true }) ||
+    a.startsOn.localeCompare(b.startsOn) ||
+    a.endsOn.localeCompare(b.endsOn),
   schools: (a, b) => a.schoolCount - b.schoolCount,
   // ISO `YYYY-MM-DD`, so the string order is the date order.
   start: (a, b) => a.startsOn.localeCompare(b.startsOn),
