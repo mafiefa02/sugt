@@ -1,7 +1,7 @@
 import { AcquittalTransactions } from "-/components/laporan-perjadin/acquittal-transactions";
 import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-report";
 import { driveFileUrl, driveFolderUrl } from "-/lib/drive/receipt-files";
-import { receiptUploadGate } from "-/lib/drive/upload-gate";
+import { uploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, type AcquittalTransaction } from "@sugt/db/queries";
@@ -59,7 +59,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
   if (!acquittal) notFound();
 
   const transactions = acquittal.transactions.map(withLinks);
-  const uploadGate = await receiptUploadGate(person);
+  const gate = await uploadGate(person);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -151,7 +151,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
       <AcquittalTransactions
         perjadinId={id}
         transactions={transactions}
-        uploadGate={uploadGate}
+        uploadGate={gate}
       />
     </div>
   );

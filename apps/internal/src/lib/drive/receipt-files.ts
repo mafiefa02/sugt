@@ -44,10 +44,11 @@ export function receiptExtension(contentType: ReceiptContentType): string {
   return EXTENSIONS[contentType];
 }
 
-const SEPARATOR = " · ";
+/** The separator in every app-made name. Shared with the Dokumen names (`document-files.ts`). */
+export const SEPARATOR = " · ";
 
 /** The first 8 hex characters of a uuid — its first group. */
-function short(uuid: string): string {
+export function short(uuid: string): string {
   return uuid.replaceAll("-", "").slice(0, 8);
 }
 
@@ -98,7 +99,10 @@ export function sniffReceiptType(bytes: Uint8Array): ReceiptContentType | null {
   return null;
 }
 
-/** A receipt file in Drive, as a link anyone holding it can open once its folder is shared. */
+/**
+ * A file in Drive, as a link — a receipt, which anyone holding it can open once its transaction
+ * folder is shared, or a Perjadin Document, shared file by file (ADR-0042).
+ */
 export function driveFileUrl(fileId: string): string {
   return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
 }

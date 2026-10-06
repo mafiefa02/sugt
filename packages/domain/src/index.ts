@@ -152,6 +152,16 @@ export function formatSessionStartTimeWithWib(time: string, zone: TimeZone): str
 }
 
 /**
+ * A wall-clock span in its zone, the Indonesian way — `"08.00–11.30 WITA"` — as a Perjadin
+ * Document's Waktu Mulai and Waktu Selesai read (#397). Both are Postgres `time` values local to
+ * the School.
+ */
+export function formatTimeRange(startsAt: string, endsAt: string, zone: TimeZone): string {
+  const dotted = (time: string) => formatWallClockTime(time).replace(":", ".");
+  return `${dotted(startsAt)}–${dotted(endsAt)} ${zone}`;
+}
+
+/**
  * The parenthesised Time Zone tag a time-of-day input label carries so a Staffer knows which
  * zone they are entering — `" (WITA)"`, or `""` when no zone is in scope yet (a Session with
  * no School picked, a legacy Perjadin before its return zone is chosen). Prepend it to a label:
@@ -622,3 +632,26 @@ export const ACTIVITY_LOG_ACTION_LABELS: Record<ActivityLogAction, string> = {
   document_uploaded: "Dokumen diunggah",
   document_deleted: "Dokumen dihapus",
 };
+
+/**
+ * **The three kinds of Perjadin Document**
+ * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042): attendance sheets, one
+ * PDF each. Indonesian because they are the names of paperwork, on the same footing as
+ * `TRANSACTION_CATEGORIES`, and mirrored character for character by
+ * `perjadin_document_kind_check` (see `packages/db/src/schema/travel.ts`).
+ */
+export const PERJADIN_DOCUMENT_KINDS = [
+  "Daftar Hadir Peserta",
+  "Daftar Hadir Narasumber",
+  "Daftar Hadir Pendamping",
+] as const;
+export type PerjadinDocumentKind = (typeof PERJADIN_DOCUMENT_KINDS)[number];
+
+/**
+ * Which cohort a Daftar Hadir Peserta is for. The same two values as
+ * `TRANSACTION_PARTICIPANT_TYPES` today, but a **dedicated** const, following
+ * `PRETEST_PARTICIPANT_TYPES`: a document's cohort and a transaction's are separate columns that
+ * may yet diverge. Mirrored by `perjadin_document_participant_type_check`.
+ */
+export const PERJADIN_DOCUMENT_PARTICIPANT_TYPES = ["Siswa", "GTK-MS"] as const;
+export type PerjadinDocumentParticipantType = (typeof PERJADIN_DOCUMENT_PARTICIPANT_TYPES)[number];

@@ -325,6 +325,32 @@ export {
   type UnsyncedTransaction,
 } from "./drive-sync";
 export {
+  claimDocumentKindFolder,
+  claimDokumenFolder,
+  claimPerjadinDokumenFolder,
+  documentReconcileTarget,
+  dokumenFolderIds,
+  markDocumentSynced,
+  markDocumentSyncFailed,
+  unsyncedDocuments,
+  type DocumentReconcileTarget,
+  type DokumenFolderIds,
+  type UnsyncedDocument,
+} from "./document-drive-sync";
+export {
+  checkDocumentFields,
+  perjadinDokumen,
+  recordPerjadinDocument,
+  type DocumentFields,
+  type DocumentFieldsRefusal,
+  type DocumentSchool,
+  type NewPerjadinDocument,
+  type PerjadinDocumentRow,
+  type PerjadinDokumen,
+  type PesertaFields,
+  type RecordPerjadinDocumentResult,
+} from "./perjadin-documents";
+export {
   canViewDashboard,
   hasGrant,
   isNotGrantedError,

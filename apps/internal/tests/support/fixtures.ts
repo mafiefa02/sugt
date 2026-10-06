@@ -676,6 +676,8 @@ export async function addActivityLogEntry(fixture: ActivityLogFixture) {
  * T3 (#153).) `perjadin_evaluation` is named even though no fixture writes one: the Perjadin
  * Evaluation write-path tests file them directly, and `cascade` from `public."perjadin"` reaches it,
  * so naming it is for that reason and not for a fixture.
+ * `perjadin_document` and `perjadin_document_folder` are named for `perjadin_evaluation`'s reason:
+ * the document tests write them directly, though `cascade` from `public."perjadin"` reaches both.
  * `perjadin_feedback_token` is named for the fixture reason `session_feedback_token` is:
  * `addPerjadinFeedbackToken` writes it (ADR-0024), even though `cascade` from `public."perjadin"`
  * already reaches it.
@@ -712,7 +714,9 @@ export async function resetDatabase() {
       public."preparation_card",
       public."preparation_checklist_item",
       public."drive_connection",
-      public."activity_log"
+      public."activity_log",
+      public."perjadin_document",
+      public."perjadin_document_folder"
     restart identity cascade
   `);
 }

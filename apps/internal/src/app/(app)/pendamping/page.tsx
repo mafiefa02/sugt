@@ -1,5 +1,5 @@
 import { MyPerjadinSection } from "-/components/my-perjadin-section";
-import { receiptUploadGate } from "-/lib/drive/upload-gate";
+import { uploadGate } from "-/lib/drive/upload-gate";
 import { requirePerson } from "-/lib/person";
 import { myPerjadin } from "@sugt/db/queries";
 import type { Metadata } from "next";
@@ -25,10 +25,10 @@ export default async function Page() {
   const person = await requirePerson();
   if (person.role !== "Staff") redirect("/");
 
-  const [trips, uploadGate] = await Promise.all([
+  const [trips, gate] = await Promise.all([
     myPerjadin(person),
     // Each trip card's Catat Transaksi is closed, with the reason, while Drive is (ADR-0040).
-    receiptUploadGate(person),
+    uploadGate(person),
   ]);
 
   return (
@@ -47,13 +47,13 @@ export default async function Page() {
             title="Perjalanan Dinas Anda"
             description="Perjalanan yang belum selesai, dan yang bisa Anda kerjakan pada masing-masing."
             trips={trips.current}
-            uploadGate={uploadGate}
+            uploadGate={gate}
           />
           <MyPerjadinSection
             title="Perjalanan Dinas Sebelumnya"
             description="Perjalanan yang sudah selesai, yang terbaru di atas. Laporan dan dokumennya masih bisa dikerjakan."
             trips={trips.previous}
-            uploadGate={uploadGate}
+            uploadGate={gate}
           />
         </>
       )}

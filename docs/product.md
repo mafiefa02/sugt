@@ -155,6 +155,28 @@ the page says "Anda belum tergabung dalam Perjalanan Dinas."
   acquittal shows, has passed;
 - "Laporan: terkirim {tanggal}" once it is filed.
 
+**Dokumen**, beside Catat Transaksi on every card in both sections, opens **"Dokumen —
+{destination}"**: the trip's attendance sheets
+([ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)).
+
+- **The list**, under three headings: Daftar Hadir Peserta, Daftar Hadir Narasumber and Daftar
+  Hadir Pendamping. A Peserta sheet reads `2026-10-14 · SMA Y · Siswa · 08.00–11.30 WITA`; the
+  other two read their date. Each has a **Buka** link that opens the PDF in Drive in a new tab, and
+  "belum tersinkron" while it is not yet in place there. An empty heading says "Belum ada".
+- **Unggah dokumen**: pick the **Jenis dokumen**, then its fields.
+  - A Peserta sheet asks for **Tanggal Sesi**, **Waktu Mulai** and **Waktu Selesai** (with the
+    School's time zone beside them once it is picked), **Sekolah** (a plain list of the trip's
+    Sub-Cluster's Schools) and **Tipe Peserta** (`Siswa` or `GTK-MS`).
+  - A Narasumber or Pendamping sheet asks for **Tanggal Dokumen**.
+  - Both dates are limited to the trip's.
+  - **File**: one PDF, "1 file .pdf, maks. 50 MB". Anything else is refused with "Hanya file .pdf",
+    and a larger file with the 50 MB message, before anything is uploaded.
+- **Unggah** uploads the PDF straight to Drive and records it. Any refusal keeps every field and
+  the picked file, so pressing Unggah again retries. A sheet recorded while Drive could not finish
+  putting it in place says so, and Periksa koneksi finishes it.
+- Any Staff member uploads; the button is disabled, with the reason, while Drive is not connected
+  or broken, as Catat Transaksi is.
+
 ### Concerns list
 
 A plain list of **Aspects Rated 7 or below**, across all Schools and all trips, newest first,
@@ -643,12 +665,16 @@ was recorded while the connection was down, as Periksa koneksi does below.
 - whether a "anyone with the link" share reaches the main folder or `_staging`. That happens when
   someone moves the main folder into a shared company folder. It is warned about prominently: "Folder
   utama dapat dibuka siapa saja yang punya link — pindahkan keluar dari folder yang dibagikan."
+- whether `Dokumen/` and its `Pelaksanaan Offline/` are there, making them if not: "Folder Dokumen:
+  ada." or "Folder Dokumen: dibuat." A connection made before Dokumen existed gets them here,
+  without reconnecting;
 - a **sweep** of the transactions whose receipts are not yet in place in Drive, oldest first, up to
   25 per press: "{n} transaksi disinkronkan, {m} masih menunggu", with the reason for any that could
-  not be finished, such as a folder in the Drive trash, which is never recreated.
+  not be finished, such as a folder in the Drive trash, which is never recreated. Then the same for
+  Perjadin Documents: "{n} dokumen disinkronkan, {m} masih menunggu".
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
-connected, broken, or its folders unresolved — the states in which nobody can upload a receipt.
+connected, broken, or its folders unresolved — the states in which nobody can upload a receipt or a Dokumen.
 
 **On the acquittal**, a line whose receipts are recorded but not yet in place in Drive shows a small
 "belum tersinkron" mark. Its tooltip reads "Bukti belum tersinkron ke Google Drive — Administrator

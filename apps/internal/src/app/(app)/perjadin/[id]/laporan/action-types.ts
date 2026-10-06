@@ -1,3 +1,4 @@
+import type { DriveRefusal } from "-/lib/drive/upload-messages";
 import type {
   AcquittalEvidence,
   AcquittalTransaction,
@@ -23,15 +24,6 @@ export type UploadedReceipt = { driveFileId: string };
  * so Drive refuses anything longer, and re-checks both on the file Drive ends up holding.
  */
 export type ReceiptToOpen = { size: number; contentType: string };
-
-/**
- * Why receipts cannot go to Drive right now. The first two carry the same sentence the page's gate
- * shows — the date a connection broke included — so a stale page's dialog says what the fresh one
- * would have.
- */
-export type DriveRefusal =
-  | { outcome: "drive-disconnected" | "drive-folders-unresolved"; reason: string }
-  | { outcome: "drive-unreachable" };
 
 /** What `openReceiptSessionsAction` did: a session URI per file, in order, or why none. */
 export type OpenReceiptSessionsResult =

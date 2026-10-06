@@ -188,6 +188,10 @@ _Avoid_: report (unqualified), expense report, reimbursement (nothing is claimed
 The append-only record of who changed money, evidence or documents on a **Perjadin**, and when — one entry per act, written with the act itself. Read only by an **Administrator**. The UI says _Log_.
 _Avoid_: audit log ("audit" means the external auditor of ADR-0040), history, journal
 
+**Perjadin Document**:
+A paper record of attendance on a **Perjadin**, uploaded as one PDF — one of three types: **Daftar Hadir Peserta** (one School's attendance at one session, for one cohort, `Siswa` or `GTK-MS`), **Daftar Hadir Narasumber** (the Teaching Team's attendance for one day) and **Daftar Hadir Pendamping** (the Group's attendance for one day). The UI says _Dokumen_. The type names stay Indonesian because they are names of paperwork, the same footing as the transaction categories. Uploaded or deleted, never edited ([ADR-0042](./docs/adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)).
+_Avoid_: file, attachment, evidence (that is a transaction's receipt), Narsum
+
 **Session Record**:
 What the PIC says about one **offline** Session as a whole — the visit rather than the teaching. Rates five Aspects: **Facilities**, **Turnout**, **School support**, **Timing** and **Coordination**. Filed by Staff, who organised the Session and taught none of it, so it asks nothing about how a cohort got on. **Only offline Sessions produce one** ([ADR-0035](./docs/adr/0035-online-sessions-track-no-pic-and-file-no-session-record.md)): an online Session has no PIC and files none — a third-party LMS runs online delivery.
 _Avoid_: report (unqualified), notes, minutes, evaluation (unqualified — it names none of the four)

@@ -15,18 +15,15 @@ import {
   type ReceiptContentType,
 } from "-/lib/drive/receipt-files";
 import { reconcileTransaction } from "-/lib/drive/reconcile";
-import { receiptUploadGate } from "-/lib/drive/upload-gate";
-import { DRIVE_FOLDERS_UNRESOLVED, DRIVE_NOT_CONNECTED } from "-/lib/drive/upload-messages";
+import { driveRefusal, isStagedUploadFor, staffOnTrip } from "-/lib/drive/upload-guard";
 import { requireEnv } from "-/lib/env";
 import { requirePerson, type Person } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import {
   attachTransactionEvidence,
   filePerjadinReport,
-  perjadinAcquittal,
   receiptsOnLine,
   recordTransaction,
-  requireStaff,
   type FilePerjadinReportResult,
   type NewEvidence,
 } from "@sugt/db/queries";
@@ -35,7 +32,6 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import type {
-  DriveRefusal,
   FinalizeReceiptsResult,
   OpenReceiptSessionsResult,
   ReceiptToOpen,
@@ -54,42 +50,10 @@ import type {
  * None opens a transaction. The boundary is the query layer's fifth convention and lives in
  * `@sugt/db`; `requireStaff` inside each query is what closes the path, since a layout does not run
  * before a Server Action. Every one that touches Drive — opening upload sessions, recording a line,
- * attaching receipts to one — also calls it itself, first, through `staffOnTrip`, because Google is
- * reached before any query runs. Every refusal comes back as a value.
+ * attaching receipts to one — also calls it itself, first, through `staffOnTrip`
+ * (`-/lib/drive/upload-guard`), because Google is reached before any query runs. Every refusal
+ * comes back as a value.
  */
-
-/**
- * **The guard every receipt write runs before it touches Drive**: an explicit `requireStaff`, then
- * a read of the Perjadin. Returns whether the Perjadin exists.
- *
- * The order is load-bearing. An upload session is a write credential on the company Drive, and the
- * verify reads files with the company's own token; doing either first would give a non-Staff caller
- * an upload URL, or tell them whether a file exists and how big it is. The `requireStaff` is what
- * closes this: `perjadinAcquittal` is an open money read since #180 (ADR-0026), so the read alone
- * no longer refuses a Pimpinan.
- */
-async function staffOnTrip(person: Person, perjadinId: string): Promise<boolean> {
-  const acquittal = await staffSurface(() => {
-    requireStaff(person);
-    return perjadinAcquittal(person, perjadinId);
-  });
-  return acquittal !== null;
-}
-
-/**
- * Why `driveAccessToken` said no, as the action answers it: with the gate's own sentence for the two
- * states the page also closes on, so the dialog says exactly what a fresh page would have.
- */
-async function driveRefusal(
-  person: Person,
-  outcome: Exclude<Awaited<ReturnType<typeof driveAccessToken>>["outcome"], "ok">,
-): Promise<DriveRefusal> {
-  if (outcome === "drive-unreachable") return { outcome };
-  const gate = await receiptUploadGate(person);
-  const fallback =
-    outcome === "drive-disconnected" ? DRIVE_NOT_CONNECTED : DRIVE_FOLDERS_UNRESOLVED;
-  return { outcome, reason: gate.open ? fallback : gate.reason };
-}
 
 /**
  * Open a Drive resumable upload session per file a receipt control is about to send (ADR-0040) —
@@ -174,17 +138,7 @@ async function verifyReceipt(
   driveFileId: string,
 ): Promise<VerifiedReceipt | "unverified" | "unsupported-type"> {
   const file = await drive.getFile(driveFileId);
-  if (
-    !file ||
-    file.trashed ||
-    !file.parents.includes(stagingFolderId) ||
-    file.appProperties.sugtPerjadinId !== perjadinId ||
-    file.size === null ||
-    file.size === 0 ||
-    file.size > MAX_UPLOAD_BYTES
-  ) {
-    return "unverified";
-  }
+  if (!isStagedUploadFor(file, stagingFolderId, perjadinId)) return "unverified";
   const contentType = sniffReceiptType(await drive.readRange(driveFileId, 0, SNIFF_LENGTH - 1));
   if (!contentType) return "unsupported-type";
   return { driveFileId, contentType, byteSize: file.size };
