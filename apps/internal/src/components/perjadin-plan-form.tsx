@@ -5,6 +5,7 @@ import { MultiSelectCombobox } from "-/components/multi-select-combobox";
 import { duplicateSessionRows } from "-/components/perjadin-plan-duplicates";
 import { PersonSelect } from "-/components/person-select";
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
+import { SchoolBookedElsewhere } from "-/components/school-booked-elsewhere";
 import type {
   PlannablePerson,
   PlannableSchool,
@@ -724,6 +725,11 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
                 ))}
               </ul>
             </>
+          )}
+          {result.outcome === "school-booked-on-another-perjadin" && (
+            <p>
+              <SchoolBookedElsewhere refusal={result} />
+            </p>
           )}
           {result.outcome === "session-time-clash" && (
             <>

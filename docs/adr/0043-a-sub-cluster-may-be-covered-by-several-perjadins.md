@@ -46,3 +46,15 @@ it — the glossary called a Sub-Cluster one journey — and a way to tell the t
   ([#408](https://github.com/sugt-itb/sugt-itb-26/issues/408),
   [#409](https://github.com/sugt-itb/sugt-itb-26/issues/409)). The cap of two offline Sessions per
   School is still not enforced.
+
+## Amendment (2026-10-06): Consequence: the double-booking guard
+
+[#408](https://github.com/sugt-itb/sugt-itb-26/issues/408). "Never twice at the same date and start
+time" is now held by the database across every Perjadin. `session_no_duplicate_offline_per_school`,
+on `(school_id, held_on, starts_at)` and partial on `status <> 'cancelled' and perjadin_id is not
+null`, replaces the per-trip `session_no_duplicate_offline_per_school_per_perjadin`, whose key led
+with `perjadin_id` and so let two trips book one School at one moment unnoticed. Only an exact match
+on date and start time collides. Planning a trip, and adding, editing or moving a Session, read the
+slot first, so a double-booking is refused with a sentence that names and links the other trip — and
+a race past that read gets the same sentence. Two **different** Schools at one moment stays an
+application rule **per trip**: two Groups can be in two places at once.

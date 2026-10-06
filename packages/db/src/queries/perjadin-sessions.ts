@@ -7,6 +7,12 @@ import { school } from "../schema/reference";
 import { perjadin, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
 import { snapshotTripSchools } from "./perjadin-naming";
+import {
+  isSlotTaken,
+  type SchoolBookedOnAnotherPerjadin,
+  type SchoolSlot,
+  slotHolder,
+} from "./school-slot";
 import { heldOnWithinPerjadin, type PastArranged } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -24,8 +30,9 @@ import { requireStaff } from "./staff-only";
  * `session_one_school_at_a_time_per_perjadin` index was dropped so two Sessions at the *same* School
  * and moment became legal), so this application check is its only guard. ADR-0038 made that same-School
  * pair illegal again, but refuses it through its own per-School index rather than restoring the
- * trip-wide one: the *same* School twice at one moment is the database's to refuse, reported as
- * `duplicate-session`, and is not pre-checked here.
+ * trip-wide one: the *same* School twice at one moment on this trip is the database's to refuse,
+ * reported as `duplicate-session`, and is not pre-checked here. On **another** trip it is checked
+ * first (#408, `slotHolder`), so the refusal can name that trip.
  *
  * "Diajar oleh" is the set of the trip's `perjadin_teacher` names who staffed the Session's parallel
  * rooms, written as `session_teaching_team` links. It is replaced whole on each write — a name the
@@ -55,7 +62,9 @@ export type SessionPlacementRefusal =
   /** Two different Schools at one moment — the Group cannot be in two places at once. */
   | { outcome: "session-time-clash"; heldOn: string; startsAt: string; schoolIds: string[] }
   /** A "Diajar oleh" id that is not one of this trip's `perjadin_teacher` names. */
-  | { outcome: "unknown-teacher"; teacherIds: string[] };
+  | { outcome: "unknown-teacher"; teacherIds: string[] }
+  /** The School already has a live offline Session at this date and time on another trip (#408). */
+  | SchoolBookedOnAnotherPerjadin;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -145,6 +154,11 @@ async function checkPlacement(
     };
   }
 
+  // The same School at the same moment on another trip (#408). On this trip it is left to the
+  // index, which `slotTakenOrRethrow` reports as `duplicate-session`.
+  const holder = await slotHolder(tx, input, excludeSessionId);
+  if (holder && holder.perjadinId !== perjadinId) return holder.refusal;
+
   return null;
 }
 
@@ -169,9 +183,9 @@ export type AddPerjadinSessionResult =
   | { outcome: "no-such-perjadin" }
   /**
    * A second live Session at the same School, date and time on the trip, which
-   * `session_no_duplicate_offline_per_school_per_perjadin` refuses at the database (ADR-0038).
-   * Parallel rooms are one Session now, whose Teaching Team lists everyone who taught, so this is
-   * where a second one at the same moment is reported rather than crashing.
+   * `session_no_duplicate_offline_per_school` refuses at the database (ADR-0038, #408). Parallel
+   * rooms are one Session now, whose Teaching Team lists everyone who taught, so this is where a
+   * second one at the same moment is reported rather than crashing.
    */
   | { outcome: "duplicate-session" }
   | SessionPlacementRefusal;
@@ -219,7 +233,7 @@ export async function addPerjadinSession(
       return { outcome: "added", sessionId: created!.id, schoolsChanged: await schoolsChanged() };
     });
   } catch (error) {
-    return duplicateOrRethrow(error);
+    return slotTakenOrRethrow(error, input, perjadinId);
   }
 }
 
@@ -251,6 +265,9 @@ export async function editPerjadinSession(
 ): Promise<EditPerjadinSessionResult> {
   requireStaff(caller);
 
+  // The trip the Session is on, kept for the catch: a race on the index is a duplicate when the
+  // slot's holder is on this same trip.
+  let tripId: string | null = null;
   try {
     return await db.transaction(async (tx) => {
       const [row] = await tx
@@ -273,6 +290,7 @@ export async function editPerjadinSession(
         );
       }
       if (row.status !== "arranged") return { outcome: "not-arranged", status: row.status };
+      tripId = row.perjadinId;
 
       const refusal = await checkPlacement(
         tx,
@@ -297,20 +315,27 @@ export async function editPerjadinSession(
       return { outcome: "edited", schoolsChanged: await schoolsChanged() };
     });
   } catch (error) {
-    return duplicateOrRethrow(error);
+    return slotTakenOrRethrow(error, input, tripId, sessionId);
   }
 }
 
 /**
  * Turn the one-per-School-per-moment index violation into a refusal value; rethrow everything else.
+ * The index cannot say whose Session holds the slot, so it is read again, outside the failed
+ * transaction: on this trip it is `duplicate-session`, on another `school-booked-on-another-perjadin`
+ * — the sentence a race past `checkPlacement`'s own read still gets (#408).
  *
  * Named rather than caught wholesale: this row satisfies several CHECKs and a foreign key, and
  * swallowing any of those as "that Session already exists" would report a bug as a user state.
  */
-function duplicateOrRethrow(error: unknown): { outcome: "duplicate-session" } {
-  const constraint = (error as { cause?: { constraint_name?: string } }).cause?.constraint_name;
-  if (constraint === "session_no_duplicate_offline_per_school_per_perjadin") {
-    return { outcome: "duplicate-session" };
-  }
-  throw error;
+async function slotTakenOrRethrow(
+  error: unknown,
+  slot: SchoolSlot,
+  perjadinId: string | null,
+  excludeSessionId?: string,
+): Promise<{ outcome: "duplicate-session" } | SchoolBookedOnAnotherPerjadin> {
+  if (!isSlotTaken(error)) throw error;
+  const holder = await slotHolder(db, slot, excludeSessionId);
+  if (holder && holder.perjadinId !== perjadinId) return holder.refusal;
+  return { outcome: "duplicate-session" };
 }

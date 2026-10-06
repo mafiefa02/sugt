@@ -6,6 +6,7 @@ import {
   editPerjadinSessionAction,
 } from "-/app/(app)/perjadin/[id]/actions";
 import { MultiSelectCombobox } from "-/components/multi-select-combobox";
+import { SchoolBookedElsewhere } from "-/components/school-booked-elsewhere";
 import { SessionStatusBadge } from "-/components/session-labels";
 import type {
   AddPerjadinSessionResult,
@@ -181,7 +182,7 @@ function SessionDialog({
   const [taughtBy, setTaughtBy] = useState<string[]>(
     () => session?.taughtBy.map((teacher) => teacher.id) ?? [],
   );
-  const [refusal, setRefusal] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<React.ReactNode>(null);
   const [saving, startSaving] = useTransition();
   const idPrefix = useId();
 
@@ -227,7 +228,7 @@ function SessionDialog({
           <DialogDescription>Sekolah, tanggal, jam dan siapa yang mengajar.</DialogDescription>
         </DialogHeader>
 
-        {refusal !== null && (
+        {refusal != null && (
           <Alert variant="destructive">
             <AlertTitle>Sesi belum tersimpan.</AlertTitle>
             <AlertDescription>{refusal}</AlertDescription>
@@ -424,7 +425,7 @@ function CancelDialog({ perjadinId, sessionId }: { perjadinId: string; sessionId
 /** What each add/edit refusal says. Field-level messages; nothing was written. */
 function sessionRefusalMessage(
   result: AddPerjadinSessionResult | EditPerjadinSessionResult,
-): string {
+): React.ReactNode {
   switch (result.outcome) {
     case "not-arranged":
       return "Sesi ini tidak lagi berstatus terjadwal, jadi tidak bisa diubah.";
@@ -442,6 +443,8 @@ function sessionRefusalMessage(
       return "Dua Sekolah yang berbeda tidak bisa berada di tanggal dan jam yang sama.";
     case "unknown-teacher":
       return "Ada narasumber yang sudah tidak ada. Muat ulang halaman.";
+    case "school-booked-on-another-perjadin":
+      return <SchoolBookedElsewhere refusal={result} />;
     default:
       return "Perubahan gagal. Muat ulang halaman.";
   }

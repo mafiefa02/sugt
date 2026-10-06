@@ -1,0 +1,2 @@
+DROP INDEX "session_no_duplicate_offline_per_school_per_perjadin";--> statement-breakpoint
+CREATE UNIQUE INDEX "session_no_duplicate_offline_per_school" ON "session" USING btree ("school_id","held_on","starts_at") WHERE status <> 'cancelled' and perjadin_id is not null;

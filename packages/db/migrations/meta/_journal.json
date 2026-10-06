@@ -295,6 +295,13 @@
       "when": 1791293048523,
       "tag": "0041_drop_perjadin_destination",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1791297943364,
+      "tag": "0042_school_slot_across_perjadins",
+      "breakpoints": true
     }
   ]
 }
