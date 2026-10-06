@@ -319,6 +319,19 @@ not a date _and_ a time, because the Group cannot be in two places.
 **Creating a Perjadin is what brings its Sessions into existence** — one per School kept on
 the trip. This form is the arranging.
 
+**Each School shows what it already has on other trips**
+([#409](https://github.com/sugt-itb/sugt-itb-26/issues/409)), because a Kelompok split across
+several trips is otherwise planned one School at a time from memory. Under each School row of the
+plan form, one muted line per offline Session it has on another Perjadin that was not cancelled —
+`Sesi 1 · 12 Okt 2026, 08:00 WITA · Kelompok 10 · 12–13 Okt 2026`, the Sesi being the School's
+ADR-0027 rank and the trip's name opening it in a new tab — or "Belum ada Sesi luring". On the
+trip's own screen the Tambah/Ubah Sesi dialog still offers the whole Sub-Cluster, so a School can be
+added to a trip later, and shows the same lines under the Sekolah picker once a School is chosen,
+leaving out this trip's own Sessions, which the screen already lists ("Belum ada Sesi luring di
+Perjadin lain" when there are none). **The note is read-only and never blocks**: the cap of two
+offline Sessions per School is still not enforced, and a School with Sessions elsewhere can be
+planned like any other — only the same School at the same date and time is refused.
+
 The **Advance** is fixed during trip planning and transferred to the PIC before
 departure, so a Perjadin is never in an unfunded state.
 

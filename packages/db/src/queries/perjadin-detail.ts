@@ -21,6 +21,7 @@ import {
 } from "../schema/travel";
 import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
+import { type CoveredSession, offlineSessionsElsewhere } from "./covered-sessions";
 import { duplicatedStaff } from "./group-rules";
 import { derivePreparationChecklist, type PreparationItem } from "./preparation-checklist";
 import { unknownPimpinanIds } from "./rosters";
@@ -73,6 +74,11 @@ export type EligibleSchool = {
    * input with the zone the moment a School is picked (#165). A School always sits in one Province.
    */
   timeZone: TimeZone;
+  /**
+   * Its live offline Sessions on **other** Perjadins (#409), for the note the add/edit-Session
+   * picker shows once it is chosen — this trip's own are listed on the page already. Read-only.
+   */
+  offlineSessionsElsewhere: CoveredSession[];
 };
 
 /** Everything the Perjadin detail screen renders, and no money. */
@@ -265,6 +271,12 @@ export async function perjadinDetail(
   // derivation, so it does not read the Group at all.
   const preparation = derivePreparationChecklist(preparationTicks);
 
+  // What each eligible School already has on other trips (#409), this trip's own left out.
+  const covered = await offlineSessionsElsewhere(
+    eligibleSchools.map((row) => row.id),
+    perjadinId,
+  );
+
   return {
     ...trip,
     group,
@@ -276,7 +288,10 @@ export async function perjadinDetail(
     pimpinan: pimpinan.map((row) => ({ personId: row.personId, name: row.name })),
     pimpinanRoster,
     staff,
-    eligibleSchools,
+    eligibleSchools: eligibleSchools.map((row) => ({
+      ...row,
+      offlineSessionsElsewhere: covered.get(row.id) ?? [],
+    })),
     preparation,
   };
 }

@@ -72,6 +72,41 @@ export type SessionMode = (typeof SESSION_MODES)[number];
 export const SESSION_STATUSES = ["arranged", "delivered", "cancelled"] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
+/** What a Session's Sesi is ranked by ([ADR-0027](../../../docs/adr/0027-a-sessions-sesi-is-its-per-school-date-rank.md)). */
+export type RankableSession = { id: string; schoolId: string; heldOn: string; startsAt: string };
+
+/**
+ * Order two Sessions the way rank does: by held date, then start time, then id as a stable
+ * tie-break. Plain string comparison is correct for both — `heldOn` is `YYYY-MM-DD` and `startsAt`
+ * is `HH:MM[:SS]`, both of which sort lexically as they sort chronologically.
+ */
+function bySesiRank(a: RankableSession, b: RankableSession): number {
+  if (a.heldOn !== b.heldOn) return a.heldOn < b.heldOn ? -1 : 1;
+  if (a.startsAt !== b.startsAt) return a.startsAt < b.startsAt ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * **A Session's Sesi** — its per-School, per-mode date rank
+ * ([ADR-0027](../../../docs/adr/0027-a-sessions-sesi-is-its-per-school-date-rank.md)), computed on
+ * the fly and never stored. Each School's Sessions in Sesi order: index 0 is Sesi 1, index 1 is
+ * Sesi 2. The one ranking, shared by the `/monitoring` matrix and the planning note (#409).
+ *
+ * The caller passes **one mode's live Sessions** — cancelled ones are left out, so the next Session
+ * after a cancelled one takes its rank rather than one past it — and **all** of a School's, whichever
+ * trip each is on, since the rank is the School's and not a trip's.
+ */
+export function rankBySchool<T extends RankableSession>(sessions: readonly T[]): Map<string, T[]> {
+  const ranked = new Map<string, T[]>();
+  for (const s of sessions) {
+    const list = ranked.get(s.schoolId);
+    if (list) list.push(s);
+    else ranked.set(s.schoolId, [s]);
+  }
+  for (const list of ranked.values()) list.sort(bySesiRank);
+  return ranked;
+}
+
 /**
  * Indonesia's three Time Zones. A Province keeps exactly one and a School's is its
  * Province's, so this is what makes a Session's start time mean something — 09:00 at a

@@ -183,6 +183,7 @@ export {
   type SessionPlacementRefusal,
 } from "./perjadin-sessions";
 export { type SchoolBookedOnAnotherPerjadin } from "./school-slot";
+export { type CoveredSession } from "./covered-sessions";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
   myPerjadin,

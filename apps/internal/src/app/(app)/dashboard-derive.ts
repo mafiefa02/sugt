@@ -5,6 +5,7 @@ import {
   LURING_SESI_WINDOWS,
   PRETEST_PARTICIPANT_TYPES,
   PROGRAMME_BUDGET_IDR,
+  rankBySchool,
   SESSIONS_PER_SCHOOL,
   STREAMS,
   type SessionMode,
@@ -87,17 +88,6 @@ export type DerivedDashboard = {
 };
 
 /**
- * Order two Sessions the way rank does: by held date, then start time, then id as a stable
- * tie-break. Plain string comparison is correct for both — `heldOn` is `YYYY-MM-DD` and `startsAt`
- * is `HH:MM[:SS]`, both of which sort lexically as they sort chronologically.
- */
-function byRank(a: MonitoringSession, b: MonitoringSession): number {
-  if (a.heldOn !== b.heldOn) return a.heldOn < b.heldOn ? -1 : 1;
-  if (a.startsAt !== b.startsAt) return a.startsAt < b.startsAt ? -1 : 1;
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-}
-
-/**
  * The delivery matrix for one mode: `sesiCount` rows, one `"X/Y"` cell per Cluster.
  *
  * For each School, its non-cancelled Sessions **of this mode** are ordered by rank — index 0 is
@@ -112,18 +102,14 @@ export function deliveryMatrix(
   mode: SessionMode,
   sesiCount: number,
 ): MatrixRow[] {
-  // Rank each School's Sessions of this mode once, so a cell is a lookup rather than a re-sort.
-  const rankedBySchool = new Map<string, MonitoringSession[]>();
-  for (const s of sessions) {
-    // Non-cancelled Sessions of this mode only. The query already drops cancelled rows, but
-    // skipping them here too makes the rank's "a cancelled Session does not exist to it" rule hold
-    // for any caller — so the next Session after a cancelled one takes its rank, not one past it.
-    if (s.mode !== mode || s.status === "cancelled") continue;
-    const list = rankedBySchool.get(s.schoolId);
-    if (list) list.push(s);
-    else rankedBySchool.set(s.schoolId, [s]);
-  }
-  for (const list of rankedBySchool.values()) list.sort(byRank);
+  // Rank each School's Sessions of this mode once (ADR-0027, `rankBySchool`), so a cell is a lookup
+  // rather than a re-sort. Non-cancelled Sessions of this mode only. The query already drops
+  // cancelled rows, but skipping them here too makes the rank's "a cancelled Session does not exist
+  // to it" rule hold for any caller — so the next Session after a cancelled one takes its rank, not
+  // one past it.
+  const rankedBySchool = rankBySchool(
+    sessions.filter((s) => s.mode === mode && s.status !== "cancelled"),
+  );
 
   // Group Schools by Cluster once — the grouping is the same for every Sesi row, so folding it here
   // keeps the per-row work to a single pass over each Cluster's Schools.
