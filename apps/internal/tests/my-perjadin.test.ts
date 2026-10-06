@@ -1,7 +1,6 @@
 import { db, schema } from "@sugt/db";
 import { myPerjadin, perjadinAcquittal } from "@sugt/db/queries";
 import type { Person } from "@sugt/db/queries";
-import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {

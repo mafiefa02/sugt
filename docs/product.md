@@ -112,7 +112,8 @@ popups.
 **On a phone, pages keep 16px side margins** (28px from 640px up) (#418), so the content gets the
 width; the top bar uses the same gutter, and so does `/pendamping`, whose cards also sit 12px
 inside their border on a phone (#419). Tables still scroll sideways inside their own frame.
-`/log`'s filters stack below 640px, and a Laporan line's receipts wrap under it.
+`/log`'s filters stack below 640px, and on the Laporan each transaction's receipts wrap under
+it.
 
 ### Coverage view — the landing screen
 
