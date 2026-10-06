@@ -11,6 +11,7 @@ import { cluster, province, school, subCluster } from "../schema/reference";
 import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
 import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
+import { type CoveredSession, offlineSessionsElsewhere } from "./covered-sessions";
 import { duplicatedStaff } from "./group-rules";
 import {
   activeRosters,
@@ -509,12 +510,19 @@ export async function planPerjadin(
 }
 
 /**
- * A School the form is planning a Session for, as one row of its Sub-Cluster shows it. The same
- * three fields a form row has always rendered, so it **aliases** `SelectedSchool` rather than
- * restating the shape — the reuse `arrange-online-session.ts`'s `SchoolOption` also makes, which
- * keeps the two from drifting.
+ * A School the form is planning a Session for, as one row of its Sub-Cluster shows it: the fields of
+ * `SelectedSchool`, extended rather than restated — the reuse `arrange-online-session.ts`'s
+ * `SchoolOption` also makes, so the shared fields cannot drift — plus what the School already has
+ * on other trips (#409), which only this form shows.
  */
-export type PlannableSchool = SelectedSchool;
+export type PlannableSchool = SelectedSchool & {
+  /**
+   * Its live offline Sessions on other Perjadins (#409) — every one, since the trip being planned
+   * does not exist yet — for the note under its row. Read-only: nothing here changes what can be
+   * submitted.
+   */
+  offlineSessionsElsewhere: CoveredSession[];
+};
 
 /** One Sub-Cluster the form can plan a trip around, with the Schools it is eligible to visit. */
 export type PlannableSubCluster = {
@@ -545,12 +553,15 @@ export type PerjadinPlan = {
   pimpinan: PlannablePerson[];
 };
 
+/** A Sub-Cluster and its Schools as stored, before `perjadinPlan` adds what each already has. */
+type SubClusterOfSchools = Omit<PlannableSubCluster, "schools"> & { schools: SelectedSchool[] };
+
 /**
  * The Sub-Clusters a trip can be planned around, each with its eligible Schools, in one round
  * trip. An inner join to `school`, so a Sub-Cluster with no Schools does not appear — it has
  * nothing to visit, and the form's first act is to reveal a Sub-Cluster's Schools.
  */
-async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
+async function plannableSubClusters(): Promise<SubClusterOfSchools[]> {
   const rows = await db
     .select({
       subClusterId: subCluster.id,
@@ -567,7 +578,7 @@ async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
     .innerJoin(province, eq(province.code, school.provinceCode))
     .orderBy(asc(cluster.name), asc(subCluster.name), asc(school.name));
 
-  const map = new Map<string, PlannableSubCluster>();
+  const map = new Map<string, SubClusterOfSchools>();
   for (const row of rows) {
     let entry = map.get(row.subClusterId);
     if (!entry) {
@@ -595,7 +606,9 @@ async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
  *
  * **Staff-only, so the read is too** — a Teaching Team member reaching the URL directly would
  * otherwise be shown the whole form and refused only on submit. `Promise.all` keeps the
- * Sub-Cluster read and the roster read concurrent; the rosters come from `./rosters.ts`. Both the
+ * Sub-Cluster read and the roster read concurrent; the rosters come from `./rosters.ts`. What each
+ * School already has on other trips (#409) is a second round trip after them, since it is keyed on
+ * the Schools the first one found. Both the
  * `staff` and `pimpinan` halves are kept — Staff for the PIC/extra-Staff pickers, Pimpinan for the
  * record-only checkbox list (#181). The Teaching Team are trip-scoped names now, not a roster (ADR-0020).
  */
@@ -607,5 +620,19 @@ export async function perjadinPlan(caller: Person): Promise<PerjadinPlan> {
     activeRosters(),
   ]);
 
-  return { subClusters, staff, pimpinan };
+  // What each School already has on other trips (#409), read once for every School the form can show.
+  const covered = await offlineSessionsElsewhere(
+    subClusters.flatMap((entry) => entry.schools.map((row) => row.id)),
+  );
+  return {
+    subClusters: subClusters.map((entry) => ({
+      ...entry,
+      schools: entry.schools.map((row) => ({
+        ...row,
+        offlineSessionsElsewhere: covered.get(row.id) ?? [],
+      })),
+    })),
+    staff,
+    pimpinan,
+  };
 }

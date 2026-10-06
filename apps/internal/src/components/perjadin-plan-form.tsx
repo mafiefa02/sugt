@@ -1,6 +1,7 @@
 "use client";
 
 import { planPerjadinAction } from "-/app/(app)/perjadin/baru/actions";
+import { CoveredSessionsNote } from "-/components/covered-sessions-note";
 import { MultiSelectCombobox } from "-/components/multi-select-combobox";
 import { duplicateSessionRows } from "-/components/perjadin-plan-duplicates";
 import { PersonSelect } from "-/components/person-select";
@@ -498,6 +499,12 @@ function PerjadinPlanForm({
                   <div className={list.length === 0 ? "text-muted-foreground" : undefined}>
                     <p className="text-sm font-medium">{school.name}</p>
                     <p className="text-xs text-muted-foreground">{school.kabupatenKota}</p>
+                    <div className="mt-1">
+                      <CoveredSessionsNote
+                        sessions={school.offlineSessionsElsewhere}
+                        empty="Belum ada Sesi luring"
+                      />
+                    </div>
                   </div>
                   <Button
                     type="button"

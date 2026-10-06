@@ -39,6 +39,17 @@ export function tripSchoolNames(perjadinId: AnyColumn | SQL) {
 }
 
 /**
+ * A Perjadin as a screen names and links it: its id, for `/perjadin/[id]`, and the parts of its name
+ * (ADR-0044) — what a refusal or a note that points at another trip carries (#408, #409).
+ */
+export type PerjadinNameRef = {
+  id: string;
+  subClusterName: string;
+  startsOn: string;
+  endsOn: string;
+};
+
+/**
  * What a Perjadin's Drive folder is named from: its id, its Sub-Cluster's name, its two dates and
  * the trip's Schools. `perjadinFolderName` in `@sugt/internal` puts them together.
  */

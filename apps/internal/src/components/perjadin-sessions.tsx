@@ -5,6 +5,7 @@ import {
   cancelPerjadinSessionAction,
   editPerjadinSessionAction,
 } from "-/app/(app)/perjadin/[id]/actions";
+import { CoveredSessionsNote } from "-/components/covered-sessions-note";
 import { MultiSelectCombobox } from "-/components/multi-select-combobox";
 import { SchoolBookedElsewhere } from "-/components/school-booked-elsewhere";
 import { SessionStatusBadge } from "-/components/session-labels";
@@ -192,8 +193,8 @@ function SessionDialog({
   // The picked School's Time Zone, for the Jam Mulai label. In add mode it appears and flips as the
   // School is chosen (#165); in edit mode the seeded School's zone matches `session.timeZone`, and
   // that seed is the fallback for the rare case the seeded School is not among the eligible ones.
-  const timeZone =
-    eligibleSchools.find((option) => option.id === schoolId)?.timeZone ?? session?.timeZone;
+  const pickedSchool = eligibleSchools.find((option) => option.id === schoolId);
+  const timeZone = pickedSchool?.timeZone ?? session?.timeZone;
 
   function submit() {
     if (incomplete) return;
@@ -263,6 +264,13 @@ function SessionDialog({
                 ))}
               </SelectContent>
             </Select>
+            {/* What the chosen School already has on other trips (#409) — shown, never blocking. */}
+            {pickedSchool && (
+              <CoveredSessionsNote
+                sessions={pickedSchool.offlineSessionsElsewhere}
+                empty="Belum ada Sesi luring di Perjadin lain"
+              />
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
