@@ -4,15 +4,15 @@ import {
   documentReconcileTarget,
   markDocumentSynced,
   markDocumentSyncFailed,
-  perjadinDriveFolder,
   type Person,
 } from "@sugt/db/queries";
 
-import { documentFileName, documentKindFolderName } from "./document-files";
+import { documentFileName } from "./document-files";
 import { ensureDokumenFolders } from "./dokumen-folders";
 import type { ReadyFolders } from "./fixed-folders";
 import { type DriveClient, isDriveFailure, isLinkShared } from "./google";
 import { perjadinFolderName } from "./receipt-files";
+import { reassertPerjadinFolderName } from "./reconcile";
 
 /**
  * **The document reconcile** (ADR-0042, #397): put one recorded Perjadin Document in its place in
@@ -42,6 +42,8 @@ export type DocumentUnsyncedReason =
   /** The uploaded file itself is in the Drive trash, or gone. */
   | "file-trashed"
   | "file-missing"
+  /** `Dokumen/` kept changing under this run (`ensureDokumenFolders`); the next one finishes it. */
+  | "dokumen-folders-busy"
   | "drive-failed";
 
 export type DocumentReconcileResult =
@@ -72,6 +74,7 @@ async function reconcileOnce(
   try {
     // 1. The fixed Dokumen folders.
     const fixed = await ensureDokumenFolders(person, drive, folders.rootFolderId);
+    if (!fixed) return { outcome: "unsynced", reason: "dokumen-folders-busy" };
 
     // 2. The Perjadin's Dokumen folder.
     let tripFolderId = target.dokumenFolderId;
@@ -87,13 +90,14 @@ async function reconcileOnce(
     const tripFolder = await drive.getFile(tripFolderId);
     if (!tripFolder) return { outcome: "unsynced", reason: "folder-missing" };
     if (tripFolder.trashed) return { outcome: "unsynced", reason: "folder-trashed" };
-    await reassertTripFolderName(person, drive, target.perjadinId, tripFolder.id, tripFolder.name);
+    await reassertPerjadinFolderName(person, drive, target.perjadinId, tripFolder);
 
     // 3. The kind folder.
     let kindFolderId = target.kindFolderId;
     if (!kindFolderId) {
       const made = await drive.createFolder({
-        name: documentKindFolderName(target.kind),
+        // A kind folder is named for its kind.
+        name: target.kind,
         parentId: tripFolderId,
         appProperties: { sugtPerjadinId: target.perjadinId },
       });
@@ -130,28 +134,4 @@ async function reconcileOnce(
   // 6.
   await markDocumentSynced(person, documentId);
   return { outcome: "synced" };
-}
-
-/**
- * Names are app-owned: a stale Dokumen folder name — a start date corrected while its rename
- * failed, or a rename by hand — is set back to what the database says, read fresh, as the receipts
- * folder's is (#376). A failed rename is logged and left; it is cosmetic.
- */
-async function reassertTripFolderName(
-  person: Person,
-  drive: DriveClient,
-  perjadinId: string,
-  folderId: string,
-  current: string,
-): Promise<void> {
-  const trip = await perjadinDriveFolder(person, perjadinId);
-  if (!trip) return;
-  const name = perjadinFolderName(trip.destination, trip.startsOn);
-  if (current === name) return;
-  await drive.updateFile(folderId, { name }).catch((error: unknown) => {
-    console.error(
-      `Re-asserting the name of Perjadin ${perjadinId}'s Dokumen folder failed.`,
-      error,
-    );
-  });
 }

@@ -6,7 +6,7 @@ import { driveAccessToken } from "-/lib/drive/access-token";
 import { type DriveClient, isDriveFailure, openDrive } from "-/lib/drive/google";
 import { SNIFF_LENGTH, sniffReceiptType } from "-/lib/drive/receipt-files";
 import { reconcileDocument } from "-/lib/drive/reconcile-document";
-import { driveRefusal, staffOnTrip } from "-/lib/drive/upload-guard";
+import { driveRefusal, isStagedUploadFor, staffOnTrip } from "-/lib/drive/upload-guard";
 import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
@@ -89,17 +89,7 @@ async function verifyDocument(
   driveFileId: string,
 ): Promise<{ byteSize: number } | "file-unverified" | "not-pdf"> {
   const file = await drive.getFile(driveFileId);
-  if (
-    !file ||
-    file.trashed ||
-    !file.parents.includes(stagingFolderId) ||
-    file.appProperties.sugtPerjadinId !== perjadinId ||
-    file.size === null ||
-    file.size === 0 ||
-    file.size > MAX_UPLOAD_BYTES
-  ) {
-    return "file-unverified";
-  }
+  if (!isStagedUploadFor(file, stagingFolderId, perjadinId)) return "file-unverified";
   const sniffed = sniffReceiptType(await drive.readRange(driveFileId, 0, SNIFF_LENGTH - 1));
   if (sniffed !== "application/pdf") return "not-pdf";
   return { byteSize: file.size };

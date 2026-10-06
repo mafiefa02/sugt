@@ -1,6 +1,5 @@
+import type { DriveRefusal } from "-/lib/drive/upload-messages";
 import type { DocumentFields, DocumentFieldsRefusal } from "@sugt/db/queries";
-
-import type { DriveRefusal } from "../laporan/action-types";
 
 /**
  * The shapes the Dokumen dialog's Server Actions pass to and from the client (ADR-0042). They live

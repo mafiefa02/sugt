@@ -674,7 +674,7 @@ was recorded while the connection was down, as Periksa koneksi does below.
   Perjadin Documents: "{n} dokumen disinkronkan, {m} masih menunggu".
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
-connected, broken, or its folders unresolved — the states in which nobody can upload a receipt.
+connected, broken, or its folders unresolved — the states in which nobody can upload a receipt or a Dokumen.
 
 **On the acquittal**, a line whose receipts are recorded but not yet in place in Drive shows a small
 "belum tersinkron" mark. Its tooltip reads "Bukti belum tersinkron ke Google Drive — Administrator

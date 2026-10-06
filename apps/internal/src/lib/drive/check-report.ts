@@ -38,13 +38,15 @@ const DOCUMENT_FAILURE_REASONS: Record<DocumentSweepFailure["reason"], string> =
   "folder-missing": "folder tidak ditemukan",
   "file-trashed": "berkas ada di Sampah Google Drive",
   "file-missing": "berkas tidak ditemukan",
+  "dokumen-folders-busy": "folder Dokumen sedang disiapkan proses lain",
   "drive-failed": "Google Drive gagal menjawab",
   "no-such-document": "dokumen sudah tidak ada",
 };
 
-const DOKUMEN_LINES: Record<"ok" | "created", string> = {
+const DOKUMEN_LINES: Record<"ok" | "created" | "busy", string> = {
   ok: "Folder Dokumen: ada.",
   created: "Folder Dokumen: dibuat.",
+  busy: "Folder Dokumen: sedang disiapkan proses lain — periksa lagi.",
 };
 
 /** The prominent warning when a link-shared folder reaches the root or `_staging`. */

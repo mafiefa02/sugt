@@ -1879,8 +1879,8 @@ create table drive_connection (
   bukti_transaksi_folder_id      text,
   pelaksanaan_offline_folder_id  text,
   readme_file_id                 text,
-  dokumen_folder_id                      text,
-  dokumen_pelaksanaan_offline_folder_id  text,
+  dokumen_folder_id              text,
+  dokumen_pelaksanaan_offline_folder_id text,
   folder_problem                 text check (folder_problem in
                                    ('root-trashed', 'root-missing',
                                     'staging-trashed', 'staging-missing',
@@ -1910,16 +1910,17 @@ sibling of the root, never inside it), `Bukti Transaksi`, `Pelaksanaan Offline` 
 names matter only when a first connect creates the folders; the root and `_staging` are found by
 stored id after that, so a rename by hand breaks nothing and nothing renames them back.
 
-**`dokumen_folder_id` and `dokumen_pelaksanaan_offline_folder_id`** are `Dokumen/` and its
-`Pelaksanaan Offline/` (ADR-0042), beside `Bukti Transaksi`. They are not part of the five: a
-connection made before them has neither, and a receipt must not wait on them. A connect, Periksa
-koneksi and the document reconcile each make whichever is unset, missing or trashed, and claim it by
-compare-and-set, so no Administrator has to reconnect for them.
 They are nullable because the row is written before the folders are ensured, in a second write,
 since no transaction is held open across a call to Google. `folder_problem` is set when a reconnect
 finds the root or `_staging` trashed or gone, or when Drive failed partway through. The root and
 `_staging` are never quietly recreated, so the token stays stored while the card does not say
 Terhubung. Uploads and the card read one rule: usable means no `folder_problem` and every id set.
+
+**`dokumen_folder_id` and `dokumen_pelaksanaan_offline_folder_id`** are `Dokumen/` and its
+`Pelaksanaan Offline/` (ADR-0042), beside `Bukti Transaksi`. They are not part of the five: a
+connection made before them has neither, and a receipt must not wait on them. A connect, Periksa
+koneksi and the document reconcile each make whichever is unset, missing or trashed, and claim it by
+compare-and-set, so no Administrator has to reconnect for them.
 
 **Who reaches it.** The card's read and the connect writes need the Administrator Grant. The
 credential read, and the two writes a token refresh makes (`last_used_at`, broken), need Staff,

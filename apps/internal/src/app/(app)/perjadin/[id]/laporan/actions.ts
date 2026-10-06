@@ -15,7 +15,7 @@ import {
   type ReceiptContentType,
 } from "-/lib/drive/receipt-files";
 import { reconcileTransaction } from "-/lib/drive/reconcile";
-import { driveRefusal, staffOnTrip } from "-/lib/drive/upload-guard";
+import { driveRefusal, isStagedUploadFor, staffOnTrip } from "-/lib/drive/upload-guard";
 import { requireEnv } from "-/lib/env";
 import { requirePerson, type Person } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
@@ -138,17 +138,7 @@ async function verifyReceipt(
   driveFileId: string,
 ): Promise<VerifiedReceipt | "unverified" | "unsupported-type"> {
   const file = await drive.getFile(driveFileId);
-  if (
-    !file ||
-    file.trashed ||
-    !file.parents.includes(stagingFolderId) ||
-    file.appProperties.sugtPerjadinId !== perjadinId ||
-    file.size === null ||
-    file.size === 0 ||
-    file.size > MAX_UPLOAD_BYTES
-  ) {
-    return "unverified";
-  }
+  if (!isStagedUploadFor(file, stagingFolderId, perjadinId)) return "unverified";
   const contentType = sniffReceiptType(await drive.readRange(driveFileId, 0, SNIFF_LENGTH - 1));
   if (!contentType) return "unsupported-type";
   return { driveFileId, contentType, byteSize: file.size };

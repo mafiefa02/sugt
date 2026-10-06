@@ -19,11 +19,6 @@ import { SEPARATOR, short } from "./receipt-files";
  * School, date and cohort.
  */
 
-/** A kind's folder is named for the kind. */
-export function documentKindFolderName(kind: PerjadinDocumentKind): string {
-  return kind;
-}
-
 /** What a document's file name is built from. The School and cohort are a Peserta sheet's only. */
 export type DocumentNameParts = {
   documentId: string;

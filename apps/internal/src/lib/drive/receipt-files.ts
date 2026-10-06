@@ -99,7 +99,10 @@ export function sniffReceiptType(bytes: Uint8Array): ReceiptContentType | null {
   return null;
 }
 
-/** A receipt file in Drive, as a link anyone holding it can open once its folder is shared. */
+/**
+ * A file in Drive, as a link — a receipt, which anyone holding it can open once its transaction
+ * folder is shared, or a Perjadin Document, shared file by file (ADR-0042).
+ */
 export function driveFileUrl(fileId: string): string {
   return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
 }

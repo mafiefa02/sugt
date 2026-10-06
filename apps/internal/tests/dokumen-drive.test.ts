@@ -13,7 +13,7 @@ import { PELAKSANAAN_OFFLINE_FOLDER_NAME, type ReadyFolders } from "-/lib/drive/
 import { DriveRequestError, openDrive } from "-/lib/drive/google";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
-import type { Person } from "@sugt/db/queries";
+import { claimDokumenFolder, type Person } from "@sugt/db/queries";
 import { MAX_UPLOAD_BYTES } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -354,6 +354,41 @@ describe("the Dokumen folders, for a connection made before them", () => {
     );
     expect(again).toMatchObject({ outcome: "recorded", synced: true });
     expect(drive.named(DOKUMEN_FOLDER_NAME).filter((folder) => !folder.trashed)).toHaveLength(1);
+  });
+});
+
+describe("claiming a Dokumen folder", () => {
+  it("lands only over the id the caller read, and a Pelaksanaan Offline only under its Dokumen", async () => {
+    const { staff } = await scene({ dokumen: false });
+
+    await expect(
+      claimDokumenFolder(staff, { folder: "dokumenFolderId", expected: null, next: "dok-1" }),
+    ).resolves.toBe(true);
+    // A second caller that also read "none" has lost: the stored id is no longer what it read.
+    await expect(
+      claimDokumenFolder(staff, { folder: "dokumenFolderId", expected: null, next: "dok-2" }),
+    ).resolves.toBe(false);
+    // A Pelaksanaan Offline made inside a Dokumen/ that is no longer the stored one does not land.
+    await expect(
+      claimDokumenFolder(staff, {
+        folder: "dokumenPelaksanaanOfflineFolderId",
+        expected: null,
+        next: "po-2",
+        parentId: "dok-2",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      claimDokumenFolder(staff, {
+        folder: "dokumenPelaksanaanOfflineFolderId",
+        expected: null,
+        next: "po-1",
+        parentId: "dok-1",
+      }),
+    ).resolves.toBe(true);
+
+    await expect(db.select().from(schema.driveConnection)).resolves.toMatchObject([
+      { dokumenFolderId: "dok-1", dokumenPelaksanaanOfflineFolderId: "po-1" },
+    ]);
   });
 });
 

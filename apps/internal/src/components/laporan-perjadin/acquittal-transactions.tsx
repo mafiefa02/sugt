@@ -1,7 +1,6 @@
 "use client";
 
 import type {
-  DriveRefusal,
   OpenReceiptSessionsResult,
   RecordTransactionActionResult,
   UploadedReceipt,
@@ -32,7 +31,7 @@ import {
   type PreparedReceipt,
 } from "-/lib/drive/receipt-upload";
 import type { UploadGate } from "-/lib/drive/upload-gate";
-import { DRIVE_UNREACHABLE } from "-/lib/drive/upload-messages";
+import { driveRefusalText, STALE_PAGE } from "-/lib/drive/upload-messages";
 import {
   formatIdr,
   formatRupiah,
@@ -377,7 +376,7 @@ function Receipts({
               return;
             }
             if (result.outcome !== "attached") {
-              setNote([...notes, driveRefusalFor(result)].join(" "));
+              setNote([...notes, driveRefusalText(result)].join(" "));
               return;
             }
             failed += result.failed;
@@ -886,14 +885,6 @@ async function uploadToDrive(
   return { landed, failed: ids.length - landed.length };
 }
 
-/**
- * What a page that has gone stale under the reader says. Reached from several places — upload
- * sessions against a deleted trip or line, a record that finds no such trip, and a row upload that
- * finds no such trip or line item — because all of them mean the same thing to a PIC: what is on
- * screen is no longer what is stored, and no field they could edit will fix it.
- */
-const STALE_PAGE = "Halaman ini sudah tidak sesuai. Muat ulang untuk melihat keadaannya.";
-
 /** The five-receipt ceiling, as each place that meets it says it: a row upload or a dialog pick cut short, or a refused line. */
 const CAP_NOTE = `Maksimal ${MAX_RECEIPTS_PER_TRANSACTION} bukti per transaksi.`;
 
@@ -905,11 +896,6 @@ function retryNote(failed: number) {
 /** The line stands, but the reconcile did not finish in Drive; the next one will. */
 const UNSYNCED_NOTE =
   "Bukti belum tersinkron ke Google Drive. Sinkronisasi akan diselesaikan kemudian; tidak ada yang perlu diulang.";
-
-/** Why Drive cannot take an upload right now: the gate's own sentence, or "try again". */
-function driveRefusalFor(result: DriveRefusal) {
-  return "reason" in result ? result.reason : DRIVE_UNREACHABLE;
-}
 
 /** What each refusal to open upload sessions says. Nothing has been uploaded yet. */
 function sessionRefusalFor(result: Exclude<OpenReceiptSessionsResult, { outcome: "ready" }>) {
@@ -926,7 +912,7 @@ function sessionRefusalFor(result: Exclude<OpenReceiptSessionsResult, { outcome:
     case "unsupported-type":
       return UNSUPPORTED_RECEIPT;
     default:
-      return driveRefusalFor(result);
+      return driveRefusalText(result);
   }
 }
 
@@ -951,7 +937,7 @@ function refusalFor(result: Exclude<RecordTransactionActionResult, { outcome: "r
     case "unsupported-type":
       return UNSUPPORTED_RECEIPT;
     default:
-      return driveRefusalFor(result);
+      return driveRefusalText(result);
   }
 }
 

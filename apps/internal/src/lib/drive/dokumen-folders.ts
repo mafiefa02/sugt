@@ -19,8 +19,9 @@ import type { DriveClient } from "./google";
  *
  * The rule is `Bukti Transaksi`'s: an id that is unset, missing or trashed gets a fresh folder, and
  * a fresh `Dokumen/` gets a fresh `Pelaksanaan Offline/` with it. Each id is claimed by
- * compare-and-set (`claimDokumenFolder`); a caller that lost trashes its own and uses the winner's.
- * A Drive failure throws, for the caller to answer.
+ * compare-and-set (`claimDokumenFolder`); a caller that lost trashes its own and reads the ids
+ * again. **`null`** means it lost every time — another caller kept changing them — and the next
+ * ensure tries again. A Drive failure throws, for the caller to answer.
  */
 
 export const DOKUMEN_FOLDER_NAME = "Dokumen";
@@ -38,42 +39,58 @@ async function usable(drive: DriveClient, id: string | null): Promise<boolean> {
   return Boolean(file && !file.trashed);
 }
 
+/** How many times one ensure reads the ids again after losing a claim, before it gives up. */
+const CLAIM_ATTEMPTS = 3;
+
 export async function ensureDokumenFolders(
   person: Person,
   drive: DriveClient,
   rootFolderId: string,
-): Promise<EnsuredDokumenFolders> {
-  const stored = (await dokumenFolderIds(person)) ?? {
-    dokumenFolderId: null,
-    dokumenPelaksanaanOfflineFolderId: null,
-  };
+): Promise<EnsuredDokumenFolders | null> {
   let created = false;
+  for (let attempt = 0; attempt < CLAIM_ATTEMPTS; attempt += 1) {
+    const stored = (await dokumenFolderIds(person)) ?? {
+      dokumenFolderId: null,
+      dokumenPelaksanaanOfflineFolderId: null,
+    };
 
-  let dokumenFolderId = stored.dokumenFolderId;
-  let pelaksanaanId = stored.dokumenPelaksanaanOfflineFolderId;
-  if (!dokumenFolderId || !(await usable(drive, dokumenFolderId))) {
-    const made = await drive.createFolder({ name: DOKUMEN_FOLDER_NAME, parentId: rootFolderId });
-    dokumenFolderId = await claimDokumenFolder(person, "dokumenFolderId", dokumenFolderId, made.id);
-    if (dokumenFolderId !== made.id) await drive.trashFile(made.id);
-    // Whichever `Dokumen/` won, its `Pelaksanaan Offline/` is read afresh below.
-    pelaksanaanId = (await dokumenFolderIds(person))?.dokumenPelaksanaanOfflineFolderId ?? null;
-    created = true;
-  }
+    let dokumenFolderId = stored.dokumenFolderId;
+    if (!dokumenFolderId || !(await usable(drive, dokumenFolderId))) {
+      const made = await drive.createFolder({ name: DOKUMEN_FOLDER_NAME, parentId: rootFolderId });
+      const won = await claimDokumenFolder(person, {
+        folder: "dokumenFolderId",
+        expected: dokumenFolderId,
+        next: made.id,
+      });
+      if (!won) {
+        await drive.trashFile(made.id);
+        continue;
+      }
+      created = true;
+      // The claim cleared `Pelaksanaan Offline/`: a new `Dokumen/` holds none yet.
+      dokumenFolderId = made.id;
+      stored.dokumenPelaksanaanOfflineFolderId = null;
+    }
 
-  if (!pelaksanaanId || !(await usable(drive, pelaksanaanId))) {
+    const pelaksanaanId = stored.dokumenPelaksanaanOfflineFolderId;
+    if (pelaksanaanId && (await usable(drive, pelaksanaanId))) {
+      return { dokumenFolderId, pelaksanaanOfflineFolderId: pelaksanaanId, created };
+    }
     const made = await drive.createFolder({
       name: PELAKSANAAN_OFFLINE_FOLDER_NAME,
       parentId: dokumenFolderId,
     });
-    pelaksanaanId = await claimDokumenFolder(
-      person,
-      "dokumenPelaksanaanOfflineFolderId",
-      pelaksanaanId,
-      made.id,
-    );
-    if (pelaksanaanId !== made.id) await drive.trashFile(made.id);
-    created = true;
+    const won = await claimDokumenFolder(person, {
+      folder: "dokumenPelaksanaanOfflineFolderId",
+      expected: pelaksanaanId,
+      next: made.id,
+      parentId: dokumenFolderId,
+    });
+    if (!won) {
+      await drive.trashFile(made.id);
+      continue;
+    }
+    return { dokumenFolderId, pelaksanaanOfflineFolderId: made.id, created: true };
   }
-
-  return { dokumenFolderId, pelaksanaanOfflineFolderId: pelaksanaanId, created };
+  return null;
 }

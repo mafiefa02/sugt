@@ -139,9 +139,10 @@ export type DriveCheckReport =
       exposed: ExposableFolder[];
       /**
        * `Dokumen/` and its `Pelaksanaan Offline/` (ADR-0042): there, or made just now — a
-       * connection made before them gets them here. `skipped` while the tree is not usable.
+       * connection made before them gets them here. `busy` when another caller kept changing them;
+       * `skipped` while the tree is not usable.
        */
-      dokumen: "ok" | "created" | "skipped";
+      dokumen: "ok" | "created" | "busy" | "skipped";
       /** The sweep — or, when the tree is not usable and it did not run, how much waits. */
       sweep:
         | ({ ran: true } & SweepReport)
@@ -203,11 +204,14 @@ export async function checkDriveConnection(person: Person): Promise<DriveCheckRe
     }
 
     const ready = problem === null ? readyFolders({ ...stored, folderProblem: null }) : null;
-    const dokumen = ready
-      ? (await ensureDokumenFolders(person, drive, ready.rootFolderId)).created
-        ? ("created" as const)
-        : ("ok" as const)
-      : ("skipped" as const);
+    const ensured = ready ? await ensureDokumenFolders(person, drive, ready.rootFolderId) : null;
+    const dokumen = !ready
+      ? ("skipped" as const)
+      : !ensured
+        ? ("busy" as const)
+        : ensured.created
+          ? ("created" as const)
+          : ("ok" as const);
     const sweep = ready
       ? { ran: true as const, ...(await sweepUnsynced(person, drive, ready)) }
       : {

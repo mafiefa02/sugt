@@ -39,34 +39,44 @@ export async function dokumenFolderIds(caller: Person): Promise<DokumenFolderIds
 
 /**
  * **Claim one Dokumen folder** — `Dokumen/` or the `Pelaksanaan Offline/` under it — replacing
- * `expected`, the id the caller found missing, trashed or unset. Answers the id that won: `next`,
- * or one a concurrent caller set first, in which case the caller trashes its own.
+ * `expected`, the id the caller found missing, trashed or unset. Answers whether the claim landed.
+ * A caller that lost trashes its own folder and reads the ids again.
  *
- * A new `Dokumen/` cannot still hold the old `Pelaksanaan Offline/`, so claiming it clears that
- * too.
+ * A new `Dokumen/` cannot still hold the old `Pelaksanaan Offline/`, so claiming it clears that.
+ * A `Pelaksanaan Offline/` lands only while `parentId`, the `Dokumen/` it was made in, is still the
+ * stored one — so it can never be recorded inside a `Dokumen/` another caller has just replaced.
  */
 export async function claimDokumenFolder(
   caller: Person,
-  folder: keyof DokumenFolderIds,
-  expected: string | null,
-  next: string,
-): Promise<string> {
+  claim:
+    | { folder: "dokumenFolderId"; expected: string | null; next: string }
+    | {
+        folder: "dokumenPelaksanaanOfflineFolderId";
+        expected: string | null;
+        next: string;
+        parentId: string;
+      },
+): Promise<boolean> {
   requireStaff(caller);
 
-  const column = driveConnection[folder];
-  const [claimed] = await db
-    .update(driveConnection)
-    .set(
-      folder === "dokumenFolderId"
-        ? { dokumenFolderId: next, dokumenPelaksanaanOfflineFolderId: null }
-        : { dokumenPelaksanaanOfflineFolderId: next },
-    )
-    .where(sql`${column} is not distinct from ${expected}`)
-    .returning({ id: column });
-  if (claimed?.id) return claimed.id;
-
-  const [winner] = await db.select({ id: column }).from(driveConnection);
-  return winner?.id ?? next;
+  const claimed =
+    claim.folder === "dokumenFolderId"
+      ? await db
+          .update(driveConnection)
+          .set({ dokumenFolderId: claim.next, dokumenPelaksanaanOfflineFolderId: null })
+          .where(sql`${driveConnection.dokumenFolderId} is not distinct from ${claim.expected}`)
+          .returning({ id: driveConnection.dokumenFolderId })
+      : await db
+          .update(driveConnection)
+          .set({ dokumenPelaksanaanOfflineFolderId: claim.next })
+          .where(
+            and(
+              eq(driveConnection.dokumenFolderId, claim.parentId),
+              sql`${driveConnection.dokumenPelaksanaanOfflineFolderId} is not distinct from ${claim.expected}`,
+            ),
+          )
+          .returning({ id: driveConnection.dokumenPelaksanaanOfflineFolderId });
+  return claimed.length > 0;
 }
 
 /** Everything the reconcile needs to put one document in place. */

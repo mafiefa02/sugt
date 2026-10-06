@@ -2,9 +2,8 @@ import type {
   OpenDocumentSessionResult,
   RecordDocumentActionResult,
 } from "-/app/(app)/perjadin/[id]/dokumen/action-types";
-import type { DriveRefusal } from "-/app/(app)/perjadin/[id]/laporan/action-types";
 import { MAX_UPLOAD_MEGABYTES, UPLOAD_TOO_LARGE } from "-/lib/drive/receipt-upload";
-import { DRIVE_UNREACHABLE } from "-/lib/drive/upload-messages";
+import { driveRefusalText, STALE_PAGE } from "-/lib/drive/upload-messages";
 import type { DocumentFields, PerjadinDocumentRow } from "@sugt/db/queries";
 import {
   formatTimeRange,
@@ -15,8 +14,7 @@ import {
 
 /**
  * **What the Dokumen dialog says and checks** (ADR-0042, #397) — plain functions, kept apart from
- * the
- * `"use client"` dialog so each is tested without mounting it, the reason `table-sort.ts` is one.
+ * the `"use client"` dialog so each is tested without mounting it, as `table-sort.ts` is.
  */
 
 /** The picker's `accept`: one PDF. A multi-page sheet is scanned to one PDF by the uploader. */
@@ -33,8 +31,6 @@ export const DOCUMENT_UNSYNCED_NOTE =
 /** What the "belum tersinkron" marker on a sheet says, in full. */
 export const DOCUMENT_UNSYNCED_TOOLTIP =
   "Dokumen belum tersinkron ke Google Drive — Administrator dapat menyelesaikannya lewat Periksa koneksi.";
-
-const STALE_PAGE = "Halaman ini sudah tidak sesuai. Muat ulang untuk melihat keadaannya.";
 
 /** A picked file, or why it is refused in the browser — before anything is uploaded. */
 export function pickDocument(file: File): File | string {
@@ -103,10 +99,6 @@ export function documentFields(form: DocumentForm): DocumentFields | null {
       endsAt: form.endsAt,
     },
   };
-}
-
-function driveRefusalText(result: DriveRefusal): string {
-  return "reason" in result ? result.reason : DRIVE_UNREACHABLE;
 }
 
 /** Why no upload session opened. Nothing has been uploaded yet. */

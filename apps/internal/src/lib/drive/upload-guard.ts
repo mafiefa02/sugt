@@ -1,11 +1,16 @@
-import type { DriveRefusal } from "-/app/(app)/perjadin/[id]/laporan/action-types";
 import type { Person } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import { perjadinAcquittal, requireStaff } from "@sugt/db/queries";
+import { MAX_UPLOAD_BYTES } from "@sugt/domain";
 
 import type { driveAccessToken } from "./access-token";
+import type { DriveFile } from "./google";
 import { uploadGate } from "./upload-gate";
-import { DRIVE_FOLDERS_UNRESOLVED, DRIVE_NOT_CONNECTED } from "./upload-messages";
+import {
+  DRIVE_FOLDERS_UNRESOLVED,
+  DRIVE_NOT_CONNECTED,
+  type DriveRefusal,
+} from "./upload-messages";
 
 /**
  * **The two guards every upload to Drive shares** (ADR-0040, ADR-0042) — receipts and Perjadin
@@ -43,4 +48,26 @@ export async function driveRefusal(
   const fallback =
     outcome === "drive-disconnected" ? DRIVE_NOT_CONNECTED : DRIVE_FOLDERS_UNRESOLVED;
   return { outcome, reason: gate.open ? fallback : gate.reason };
+}
+
+/**
+ * **Is this the file the browser said it uploaded, for this Perjadin?** The first half of verifying
+ * any upload before it is recorded — the server never saw the bytes. It must sit in `_staging`,
+ * untrashed, carry this Perjadin's `sugtPerjadinId`, and be no larger than the cap by Drive's own
+ * count. What its first bytes must be is the caller's to sniff: a receipt's four types, or a PDF.
+ */
+export function isStagedUploadFor(
+  file: DriveFile | null,
+  stagingFolderId: string,
+  perjadinId: string,
+): file is DriveFile & { size: number } {
+  return Boolean(
+    file &&
+    !file.trashed &&
+    file.parents.includes(stagingFolderId) &&
+    file.appProperties.sugtPerjadinId === perjadinId &&
+    file.size !== null &&
+    file.size > 0 &&
+    file.size <= MAX_UPLOAD_BYTES,
+  );
 }

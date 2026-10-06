@@ -651,8 +651,7 @@ export type PerjadinDocumentKind = (typeof PERJADIN_DOCUMENT_KINDS)[number];
  * Which cohort a Daftar Hadir Peserta is for. The same two values as
  * `TRANSACTION_PARTICIPANT_TYPES` today, but a **dedicated** const, following
  * `PRETEST_PARTICIPANT_TYPES`: a document's cohort and a transaction's are separate columns that
- * may yet diverge. Mirrored by
- * `perjadin_document_participant_type_check`.
+ * may yet diverge. Mirrored by `perjadin_document_participant_type_check`.
  */
 export const PERJADIN_DOCUMENT_PARTICIPANT_TYPES = ["Siswa", "GTK-MS"] as const;
 export type PerjadinDocumentParticipantType = (typeof PERJADIN_DOCUMENT_PARTICIPANT_TYPES)[number];
