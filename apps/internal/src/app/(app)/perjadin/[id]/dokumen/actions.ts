@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 
 import { driveAccessToken } from "-/lib/drive/access-token";
-import { type DriveClient, isDriveFailure, openDrive } from "-/lib/drive/google";
+import { type DriveClient, DriveRequestError, isDriveFailure, openDrive } from "-/lib/drive/google";
 import { SNIFF_LENGTH, sniffReceiptType } from "-/lib/drive/receipt-files";
 import { reconcileDocument } from "-/lib/drive/reconcile-document";
 import { driveRefusal, isStagedUploadFor, staffOnTrip } from "-/lib/drive/upload-guard";
@@ -12,7 +12,10 @@ import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
 import {
   checkDocumentFields,
+  deletePerjadinDocument,
+  documentReconcileTarget,
   perjadinDokumen,
+  requireStaff,
   recordPerjadinDocument,
   type PerjadinDokumen,
 } from "@sugt/db/queries";
@@ -21,6 +24,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
 import type {
+  DeleteDocumentActionResult,
   DocumentToOpen,
   DocumentToRecord,
   OpenDocumentSessionResult,
@@ -28,8 +32,9 @@ import type {
 } from "./action-types";
 
 /**
- * **The Dokumen dialog's Server Actions** (ADR-0042, #397): the trip's sheets, and uploading one.
- * The write order is Catat transaksi's — check, verify, commit, reconcile — through the same guards
+ * **The Dokumen dialog's Server Actions** (ADR-0042, #397, #398): the trip's sheets, uploading
+ * one, and deleting one. An upload runs Catat transaksi's order — check, verify, commit,
+ * reconcile — and Hapus runs guard, trash, delete; both through the same guards
  * (`-/lib/drive/upload-guard`), because Google is reached before any query runs.
  */
 
@@ -157,4 +162,56 @@ export async function recordDocumentAction(
   );
   revalidatePath("/pendamping");
   return { outcome: "recorded", documentId, synced };
+}
+
+/**
+ * **Hapus — delete one Perjadin Document** (#398, ADR-0042). **The file is trashed first, then the
+ * row**, so a row never vanishes while its public file stays live:
+ *
+ * 1. **Guard** — Staff and the document — then the connection, before any Drive call. While
+ *    Drive is not connected or is broken, Hapus is refused with the upload gate's reason.
+ * 2. **Trash the file.** One already in the trash, or gone, counts as done: a retry is safe.
+ * 3. **Delete the row and log `document_deleted`**, in one transaction (`deletePerjadinDocument`).
+ *    If that fails after the trash, the row stays, pointing at a trashed file; Hapus again ends it.
+ *
+ * A document still unsynced, its file in `_staging`, is deleted the same way. An emptied kind
+ * folder is left as it is.
+ */
+export async function deleteDocumentAction(
+  documentId: string,
+): Promise<DeleteDocumentActionResult> {
+  const person = await requirePerson();
+
+  const target = await staffSurface(() => {
+    requireStaff(person);
+    return documentReconcileTarget(person, documentId);
+  });
+  if (!target) return { outcome: "no-such-document" };
+
+  const access = await driveAccessToken(person);
+  if (access.outcome !== "ok") return driveRefusal(person, access.outcome);
+
+  try {
+    await trashIfLive(openDrive(access.accessToken), target.driveFileId);
+  } catch (error) {
+    if (isDriveFailure(error)) return { outcome: "drive-unreachable" };
+    throw error;
+  }
+
+  const result = await staffSurface(() => deletePerjadinDocument(person, documentId));
+  if (result.outcome === "no-such-document") return result;
+  revalidatePath("/pendamping");
+  revalidatePath(`/perjadin/${result.perjadinId}`);
+  return { outcome: "deleted" };
+}
+
+/** Move a file to the Drive trash, unless it is there already or gone — both count as done. */
+async function trashIfLive(drive: DriveClient, driveFileId: string): Promise<void> {
+  const file = await drive.getFile(driveFileId);
+  if (!file || file.trashed) return;
+  await drive.trashFile(driveFileId).catch((error: unknown) => {
+    // Gone between the read and the trash: done all the same.
+    if (error instanceof DriveRequestError && error.status === 404) return;
+    throw error;
+  });
 }

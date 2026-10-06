@@ -339,8 +339,10 @@ export {
 } from "./document-drive-sync";
 export {
   checkDocumentFields,
+  deletePerjadinDocument,
   perjadinDokumen,
   recordPerjadinDocument,
+  type DeletePerjadinDocumentResult,
   type DocumentFields,
   type DocumentFieldsRefusal,
   type DocumentSchool,

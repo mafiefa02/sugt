@@ -1444,6 +1444,14 @@ are claimed by compare-and-set: the first by `where drive_dokumen_folder_id is n
 the primary key, `on conflict do nothing`. A caller that lost trashes its own folder and uses the
 winner's.
 
+**Hapus trashes the file first, then deletes the row** (#398). Its file is public by link, so a row
+must never vanish while the file stays live: the file goes to the Drive trash, and only then are the
+row deleted and a `document_deleted` Log entry written, in one transaction. The entry is a snapshot
+of the row's fields, since the row is gone after it. A file already in the trash, or gone, counts as
+trashed, so if the delete fails after the trash, the row stays, pointing at a trashed file, and
+Hapus again finishes it. Hapus is refused while the connection is not usable. An emptied kind folder
+is left in place, and nothing is ever edited: a wrong upload is a Hapus and a new upload.
+
 ## Money
 
 **There is no `perjadin_report` table.** A Perjadin yields exactly one Report, always, so the
@@ -1607,8 +1615,8 @@ create index activity_log_occurred_at_id_idx on activity_log (occurred_at desc, 
 
 **One row per act on a Perjadin's money, receipts, documents or report** (#395), read only by an
 Administrator on `/log`. The `action` values are character for character `ACTIVITY_LOG_ACTIONS` in
-`packages/domain/src/index.ts`. The two `document_*` values are in the CHECK before anything writes
-them, so the Dokumen tickets need no CHECK migration.
+`packages/domain/src/index.ts`. The two `document_*` values went into the CHECK with the rest, so the
+Dokumen uploads and Hapus needed no CHECK migration.
 
 **Each entry is written in the same database transaction as the change it records**, so a refused
 or failed write logs nothing. Five writes log today, each through `logActivity` in

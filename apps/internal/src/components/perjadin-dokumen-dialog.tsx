@@ -7,20 +7,17 @@ import {
 } from "-/app/(app)/perjadin/[id]/dokumen/actions";
 import {
   documentFields,
-  documentRowText,
   DOCUMENT_ACCEPT,
   DOCUMENT_HINT,
   DOCUMENT_UNSYNCED_NOTE,
-  DOCUMENT_UNSYNCED_TOOLTIP,
   EMPTY_DOCUMENT_FORM,
   pickDocument,
   recordRefusalText,
   sessionRefusalText,
   type DocumentForm,
 } from "-/components/perjadin-dokumen-form";
+import { PerjadinDokumenList } from "-/components/perjadin-dokumen-list";
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
-import { UnsyncedMarker } from "-/components/unsynced-marker";
-import { driveFileUrl } from "-/lib/drive/receipt-files";
 import { putToDriveSession } from "-/lib/drive/receipt-upload";
 import type { UploadGate } from "-/lib/drive/upload-gate";
 import { shortenKabupaten } from "-/lib/format-destination";
@@ -57,11 +54,11 @@ import { type ReactElement, useId, useRef, useState, useTransition } from "react
 
 /**
  * **Dokumen — one trip's attendance sheets** (ADR-0042, #397), opened from a `/pendamping` trip
- * card. The sheets uploaded so far, under the three kinds, each with a Buka link to its file in
- * Drive; and the **Unggah dokumen** form: the kind, its fields, one PDF.
+ * card. The sheets uploaded so far (`PerjadinDokumenList`), each with a Buka link to its file in
+ * Drive and **Hapus** (#398); and the **Unggah dokumen** form: the kind, its fields, one PDF.
  *
  * The trip's sheets and Schools are fetched when the dialog opens (`perjadinDokumenAction`), and
- * again after each upload, rather than riding on every card's payload. The upload is Catat
+ * again after each upload or Hapus, rather than riding on every card's payload. The upload is Catat
  * transaksi's: a session, the browser's `PUT` straight to Drive, then the record. **Any failure
  * keeps every value and the picked file**, so Unggah again retries against a fresh session.
  */
@@ -160,41 +157,10 @@ function PerjadinDokumenDialog({
         )}
 
         {dokumen && (
-          <div className="grid gap-4">
-            {PERJADIN_DOCUMENT_KINDS.map((kind) => {
-              const rows = dokumen.documents.filter((row) => row.kind === kind);
-              return (
-                <section key={kind}>
-                  <h3 className="text-sm font-medium">{kind}</h3>
-                  {rows.length === 0 ? (
-                    <p className="mt-1 text-sm text-muted-foreground">Belum ada</p>
-                  ) : (
-                    <ul className="mt-1 grid gap-1 text-sm">
-                      {rows.map((row) => (
-                        <li
-                          key={row.id}
-                          className="flex flex-wrap items-center gap-x-3 gap-y-1"
-                        >
-                          <span className="tabular-nums">{documentRowText(row)}</span>
-                          <a
-                            href={driveFileUrl(row.driveFileId)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline underline-offset-4"
-                          >
-                            Buka
-                          </a>
-                          {row.unsynced && (
-                            <UnsyncedMarker explanation={DOCUMENT_UNSYNCED_TOOLTIP} />
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              );
-            })}
-          </div>
+          <PerjadinDokumenList
+            documents={dokumen.documents}
+            hapus={{ gate: uploadGate, onDeleted: () => void load() }}
+          />
         )}
 
         <div className="grid gap-3.5 border-t border-border pt-4">

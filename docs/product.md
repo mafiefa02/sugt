@@ -174,8 +174,11 @@ the page says "Anda belum tergabung dalam Perjalanan Dinas."
 - **Unggah** uploads the PDF straight to Drive and records it. Any refusal keeps every field and
   the picked file, so pressing Unggah again retries. A sheet recorded while Drive could not finish
   putting it in place says so, and Periksa koneksi finishes it.
-- Any Staff member uploads; the button is disabled, with the reason, while Drive is not connected
-  or broken, as Catat Transaksi is.
+- **Hapus** on each sheet asks first — "Hapus dokumen ini? File akan dipindahkan ke Sampah Google
+  Drive." — then moves the file to the Drive trash and removes the sheet. There is no editing: a
+  wrong upload is fixed by Hapus and a new upload.
+- Any Staff member uploads and deletes. The button, and Hapus, are disabled with the reason while
+  Drive is not connected or broken, as Catat Transaksi is.
 
 ### Concerns list
 
@@ -314,6 +317,11 @@ member may tick any box; the boxes flip optimistically. The checklist's state al
 screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
 the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. For Staff
 the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
+
+**A Perjadin's screen ends with its Dokumen**: the attendance sheets uploaded from the
+`/pendamping` card, under the three kinds, each with a **Buka** link and "belum tersinkron" while it
+is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
+uploading and Hapus happen in the card's Dokumen dialog.
 
 **The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):
 Perjadin, Sekolah (Schools with a Session that was not cancelled), Mulai, Selesai, PIC,

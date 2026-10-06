@@ -181,23 +181,90 @@ export async function recordPerjadinDocument(
       uploadedByPersonId: caller.id,
     });
 
-    const details: DocumentLogDetails = {
-      documentId: input.documentId,
-      kind: input.kind,
-      documentDate: input.documentDate,
-    };
-    if (peserta && checked.school) {
-      Object.assign(details, {
-        schoolName: checked.school.name,
-        participantType: peserta.participantType,
-        startsAt: peserta.startsAt,
-        endsAt: peserta.endsAt,
-        timeZone: checked.school.timeZone,
-      });
-    }
+    const details = documentLogDetails(
+      { documentId: input.documentId, kind: input.kind, documentDate: input.documentDate },
+      peserta,
+      checked.school,
+    );
     await logActivity(tx, caller, input.perjadinId, { action: "document_uploaded", details });
 
     return { outcome: "recorded" };
+  });
+}
+
+/**
+ * What a `document_uploaded` or `document_deleted` entry records of one sheet: its kind and date,
+ * and for a Peserta sheet its School's name and zone, cohort and span — one shape for both, so the
+ * Log reads an upload and its deletion the same way.
+ */
+function documentLogDetails(
+  sheet: Pick<DocumentLogDetails, "documentId" | "kind" | "documentDate">,
+  peserta: PesertaFields | undefined,
+  school: { name: string; timeZone: TimeZone } | null,
+): DocumentLogDetails {
+  if (!peserta || !school) return { ...sheet };
+  return {
+    ...sheet,
+    schoolName: school.name,
+    participantType: peserta.participantType,
+    startsAt: peserta.startsAt,
+    endsAt: peserta.endsAt,
+    timeZone: school.timeZone,
+  };
+}
+
+export type DeletePerjadinDocumentResult =
+  | { outcome: "deleted"; perjadinId: string }
+  /** Already deleted — a second Hapus, or a stale dialog. Nothing to do. */
+  | { outcome: "no-such-document" };
+
+/**
+ * **Delete one Perjadin Document's row, with its `document_deleted` Log entry**, in one transaction
+ * (#398). The entry is a snapshot of the row as it goes — the same fields `document_uploaded`
+ * recorded — since nothing is left to read afterwards.
+ *
+ * **The file must already be in the Drive trash** (ADR-0042): `deleteDocumentAction` trashes it
+ * first and calls this second, so a row never vanishes while its public file stays live. If this
+ * fails after the trash, the row stays, pointing at a trashed file, and Hapus again finishes it.
+ */
+export async function deletePerjadinDocument(
+  caller: Person,
+  documentId: string,
+): Promise<DeletePerjadinDocumentResult> {
+  requireStaff(caller);
+
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .delete(perjadinDocument)
+      .where(sql`${perjadinDocument.id}::text = ${documentId}`)
+      .returning();
+    if (!row) return { outcome: "no-such-document" };
+
+    const peserta =
+      row.schoolId && row.participantType && row.startsAt && row.endsAt
+        ? {
+            schoolId: row.schoolId,
+            participantType: row.participantType,
+            // As the upload's entry wrote them: `HH:MM`.
+            startsAt: row.startsAt.slice(0, 5),
+            endsAt: row.endsAt.slice(0, 5),
+          }
+        : undefined;
+    const [found] = peserta
+      ? await tx
+          .select({ name: school.name, timeZone: province.timeZone })
+          .from(school)
+          .innerJoin(province, eq(province.code, school.provinceCode))
+          .where(eq(school.id, peserta.schoolId))
+      : [];
+    const details = documentLogDetails(
+      { documentId: row.id, kind: row.kind, documentDate: row.documentDate },
+      peserta,
+      found ?? null,
+    );
+    await logActivity(tx, caller, row.perjadinId, { action: "document_deleted", details });
+
+    return { outcome: "deleted", perjadinId: row.perjadinId };
   });
 }
 

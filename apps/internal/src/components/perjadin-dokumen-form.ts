@@ -1,4 +1,5 @@
 import type {
+  DeleteDocumentActionResult,
   OpenDocumentSessionResult,
   RecordDocumentActionResult,
 } from "-/app/(app)/perjadin/[id]/dokumen/action-types";
@@ -139,4 +140,11 @@ export function recordRefusalText(
     default:
       return driveRefusalText(result);
   }
+}
+
+/** Why Hapus did not go through. The sheet is still listed, and its file still where it was. */
+export function deleteRefusalText(
+  result: Exclude<DeleteDocumentActionResult, { outcome: "deleted" | "no-such-document" }>,
+): string {
+  return driveRefusalText(result);
 }

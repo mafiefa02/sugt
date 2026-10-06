@@ -46,7 +46,10 @@ export type DocumentLogDetails = {
   timeZone?: TimeZone;
 };
 
-/** What `details` holds for each action. `document_deleted`'s shape is #398's. */
+/**
+ * What `details` holds for each action. `document_deleted` is the same snapshot as
+ * `document_uploaded`, taken of the row as it is deleted (#398), since the row is then gone.
+ */
 export type ActivityLogDetails = {
   advance_set: { amountIdr: number };
   advance_changed: { fromIdr: number; toIdr: number };
@@ -70,7 +73,7 @@ export type ActivityLogDetails = {
   };
   report_filed: { transactionCount: number; totalIdr: number };
   document_uploaded: DocumentLogDetails;
-  document_deleted: Record<string, unknown>;
+  document_deleted: DocumentLogDetails;
 };
 
 /** One act: its action and the details shaped for it. */
@@ -106,10 +109,8 @@ export function activityLogRincian(entry: ActivityLogEntry): string {
     case "report_filed":
       return `${entry.details.transactionCount} transaksi · total ${formatRupiah(entry.details.totalIdr)}`;
     case "document_uploaded":
-      return documentRincian(entry.details);
-    // Nothing writes this until #398, which defines its details and its Rincian.
     case "document_deleted":
-      return "";
+      return documentRincian(entry.details);
   }
 }
 

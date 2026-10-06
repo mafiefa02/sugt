@@ -1,5 +1,6 @@
 import { EditAdvance } from "-/components/perjadin-advance";
 import { PerjadinDates } from "-/components/perjadin-dates";
+import { PerjadinDokumenList } from "-/components/perjadin-dokumen-list";
 import { PerjadinFeedbackTokenDialog } from "-/components/perjadin-feedback-token";
 import { PerjadinGroup } from "-/components/perjadin-group";
 import { PerjadinPimpinan } from "-/components/perjadin-pimpinan";
@@ -8,7 +9,7 @@ import { PerjadinSessions } from "-/components/perjadin-sessions";
 import { PerjadinTeachingTeam } from "-/components/perjadin-teaching-team";
 import { shortenKabupaten } from "-/lib/format-destination";
 import { requirePerson } from "-/lib/person";
-import { perjadinAcquittal, perjadinDetail } from "@sugt/db/queries";
+import { perjadinAcquittal, perjadinDetail, perjadinDokumen } from "@sugt/db/queries";
 import { formatRupiah } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import type { Metadata } from "next";
@@ -53,6 +54,9 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
   // Fetched for any signed-in Person: money reads are open now (ADR-0026, #180), so a Pimpinan
   // sees the money strip too. Writing money stays Staff-only, enforced in each Server Action.
   const acquittal = await perjadinAcquittal(person, id);
+  // The trip's attendance sheets (#398): read-only here, for everyone who can see the page. Upload
+  // and Hapus live on the `/pendamping` card's Dokumen dialog.
+  const dokumen = await perjadinDokumen(person, id);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -200,6 +204,14 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         endsOn={trip.endsOn}
         canEdit={person.role === "Staff"}
       />
+
+      <section className="border-t border-border px-7 py-5">
+        <h2 className="font-heading text-sm font-medium">Dokumen</h2>
+        <p className="mt-1 mb-3 text-sm text-muted-foreground">
+          Daftar hadir perjalanan ini. Unggah dan hapus dari kartu perjalanan di Pendamping.
+        </p>
+        <PerjadinDokumenList documents={dokumen?.documents ?? []} />
+      </section>
     </div>
   );
 }
