@@ -29,7 +29,7 @@ function DashboardTabs({
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="px-7 pt-6">
+      <div className="px-4 pt-6 sm:px-7">
         <Tabs
           value={tab}
           onValueChange={(value) => {

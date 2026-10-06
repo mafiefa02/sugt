@@ -56,7 +56,7 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <Link
           href={`/sekolah/${session.schoolSlug}`}
           className="text-sm text-muted-foreground hover:underline"
@@ -104,7 +104,7 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
         absent, and the dialog self-guards the same way as a backstop.
       */}
       {session.status !== "cancelled" && (
-        <div className="flex flex-wrap gap-2.5 px-7 py-5">
+        <div className="flex flex-wrap gap-2.5 px-4 py-5 sm:px-7">
           <FeedbackTokenDialog session={session} />
         </div>
       )}

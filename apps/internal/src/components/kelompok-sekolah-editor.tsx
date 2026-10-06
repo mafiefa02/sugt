@@ -39,7 +39,7 @@ function KelompokSekolahEditor({
   canWrite: boolean;
 }) {
   return (
-    <div className="flex min-h-full flex-col gap-8 p-7">
+    <div className="flex min-h-full flex-col gap-8 p-4 sm:p-7">
       {clusters.map((cluster) => (
         <ClusterSection
           key={cluster.id}

@@ -62,7 +62,7 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">Log</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Siapa mengubah uang, bukti, dokumen, dan laporan sebuah Perjadin, dan kapan. Yang terbaru
@@ -73,9 +73,10 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
       <form
         action="/log"
         method="get"
-        className="flex flex-wrap items-end gap-3 px-7 pt-5"
+        className="flex flex-wrap items-end gap-3 px-4 pt-5 sm:px-7"
       >
-        <div className="grid gap-1.5">
+        {/* Below `sm` the search takes the whole width, so the form fits a 360px phone (#418). */}
+        <div className="grid w-full gap-1.5 sm:w-auto">
           <Label htmlFor="log-q">Cari</Label>
           <Input
             id="log-q"
@@ -83,7 +84,7 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
             type="search"
             defaultValue={filters.q}
             placeholder="Email, Perjadin, PIC, atau rincian"
-            className="w-72"
+            className="w-full sm:w-72"
           />
         </div>
         <div className="grid gap-1.5">
@@ -111,15 +112,17 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
             </SelectContent>
           </Select>
         </div>
-        <fieldset className="grid gap-1.5">
+        {/* Below `sm` the range takes the whole width and the two dates stack (#418). `min-w-0`
+            because a fieldset otherwise refuses to shrink below its content. */}
+        <fieldset className="grid w-full min-w-0 gap-1.5 sm:w-auto">
           <legend className="mb-1.5 text-sm font-medium">Rentang tanggal</legend>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               name="dari"
               type="date"
               aria-label="Dari tanggal"
               defaultValue={filters.dari ?? ""}
-              className="w-40"
+              className="w-full sm:w-40"
             />
             <span className="text-sm text-muted-foreground">sampai</span>
             <Input
@@ -127,7 +130,7 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
               type="date"
               aria-label="Sampai tanggal"
               defaultValue={filters.sampai ?? ""}
-              className="w-40"
+              className="w-full sm:w-40"
             />
           </div>
         </fieldset>
@@ -143,11 +146,11 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
       </form>
 
       {log.rows.length === 0 ? (
-        <p className="px-7 py-10 text-center text-sm text-muted-foreground">
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground sm:px-7">
           {filtered ? "Tidak ada entri yang cocok dengan saringan ini." : "Belum ada entri."}
         </p>
       ) : (
-        <div className="mt-3 px-5">
+        <div className="mt-3 px-2 sm:px-5">
           <StickyTable>
             <StickyTableHeader>
               <TableRow>
@@ -172,7 +175,7 @@ export default async function Page({ searchParams }: PageProps<"/log">) {
 
       <nav
         aria-label="Halaman"
-        className="flex flex-wrap items-center justify-between gap-3 px-7 py-5 text-sm text-muted-foreground"
+        className="flex flex-wrap items-center justify-between gap-3 px-4 py-5 text-sm text-muted-foreground sm:px-7"
       >
         <span>
           {log.total} entri · halaman {log.page} dari {log.pageCount}

@@ -236,11 +236,11 @@ function PerjadinPlanForm({
         />
       )}
 
-      <div className="px-7 pt-5">
+      <div className="px-4 pt-5 sm:px-7">
         <RequiredLegend />
       </div>
 
-      <div className="grid gap-4 border-b border-border px-7 py-5 sm:grid-cols-2">
+      <div className="grid gap-4 border-b border-border px-4 py-5 sm:grid-cols-2 sm:px-7">
         <Field
           id={subClusterFieldId}
           label="Kelompok Sekolah"
@@ -320,7 +320,7 @@ function PerjadinPlanForm({
         </Field>
       </div>
 
-      <div className="border-b border-border px-7 py-5">
+      <div className="border-b border-border px-4 py-5 sm:px-7">
         <h2 className="font-heading text-sm font-medium">Narasumber</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Nama narasumber untuk Perjadin ini. Tambahkan satu per satu; hingga{" "}
@@ -448,7 +448,7 @@ function PerjadinPlanForm({
         </div>
       </div>
 
-      <div className="grid gap-4 border-b border-border px-7 py-5 sm:grid-cols-2">
+      <div className="grid gap-4 border-b border-border px-4 py-5 sm:grid-cols-2 sm:px-7">
         <Field
           id={`${idPrefix}-starts-on`}
           label="Tanggal mulai"
@@ -483,7 +483,7 @@ function PerjadinPlanForm({
       </div>
 
       {selected === undefined ? (
-        <p className="px-7 py-6 text-sm text-muted-foreground">
+        <p className="px-4 py-6 text-sm text-muted-foreground sm:px-7">
           Pilih Kelompok Sekolah untuk menampilkan Sekolah-sekolahnya.
         </p>
       ) : (
@@ -493,7 +493,7 @@ function PerjadinPlanForm({
             return (
               <li
                 key={school.id}
-                className="border-b border-border px-7 py-4 last:border-b-0"
+                className="border-b border-border px-4 py-4 last:border-b-0 sm:px-7"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className={list.length === 0 ? "text-muted-foreground" : undefined}>
@@ -626,7 +626,7 @@ function PerjadinPlanForm({
         </ul>
       )}
 
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-7 py-3.5 shadow-lg">
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-4 py-3.5 shadow-lg sm:px-7">
         <p className="text-sm">
           <b>{totalSessions}</b> Sesi luring di <b>{keptSchools.length}</b> Sekolah akan dijadwalkan
         </p>
@@ -661,7 +661,7 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
     schools.find((school) => school.id === schoolId)?.name ?? schoolId;
 
   return (
-    <div className="px-7 pt-5">
+    <div className="px-4 pt-5 sm:px-7">
       <Alert variant="destructive">
         <AlertTitle>Perjadin belum dibuat.</AlertTitle>
         <AlertDescription>

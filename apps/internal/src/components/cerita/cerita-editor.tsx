@@ -155,7 +155,7 @@ export function CeritaEditor({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-7">
+    <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-7">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm text-muted-foreground">{story.schoolName}</p>

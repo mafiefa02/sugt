@@ -45,7 +45,7 @@ function OnlineSessionFields({
   const editable = canEdit && session.status !== "cancelled";
 
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Sesi</h2>
         {editable && <EditDialog session={session} />}

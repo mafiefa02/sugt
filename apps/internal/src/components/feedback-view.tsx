@@ -172,7 +172,7 @@ function FeedbackView({
   const [tab, setTab] = useState<Tab>("peserta");
 
   return (
-    <div className="flex min-h-full flex-col p-7">
+    <div className="flex min-h-full flex-col p-4 sm:p-7">
       <Tabs
         value={tab}
         onValueChange={(value) => {

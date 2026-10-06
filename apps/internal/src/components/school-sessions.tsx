@@ -25,7 +25,7 @@ import Link from "next/link";
 function SchoolSessions({ sessions }: { sessions: SchoolSession[] }) {
   if (sessions.length === 0) {
     return (
-      <p className="p-7 text-sm text-muted-foreground">
+      <p className="p-4 text-sm text-muted-foreground sm:p-7">
         Belum ada Sesi yang diatur untuk Sekolah ini.
       </p>
     );
@@ -36,7 +36,7 @@ function SchoolSessions({ sessions }: { sessions: SchoolSession[] }) {
       {sessions.map((session) => (
         <li
           key={session.id}
-          className="flex flex-wrap items-center gap-x-3.5 gap-y-1 border-b border-border px-7 py-3"
+          className="flex flex-wrap items-center gap-x-3.5 gap-y-1 border-b border-border px-4 py-3 sm:px-7"
         >
           {/*
             The date is the link, because it is what names a Session — there is no other

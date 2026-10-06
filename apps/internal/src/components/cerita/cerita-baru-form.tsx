@@ -56,7 +56,7 @@ export function CeritaBaruForm({
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-5 p-7">
+    <div className="mx-auto max-w-lg space-y-5 p-4 sm:p-7">
       <div className="grid gap-1.5">
         <Label htmlFor={schoolFieldId}>Sekolah</Label>
         <Select

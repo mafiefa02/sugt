@@ -54,7 +54,7 @@ export default async function Page({ params }: PageProps<"/sesi-daring/[id]">) {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <Link
           href={`/sekolah/${session.schoolSlug}`}
           className="text-sm text-muted-foreground hover:underline"

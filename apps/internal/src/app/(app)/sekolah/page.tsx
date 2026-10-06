@@ -23,7 +23,7 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">Direktori Sekolah</h1>
         <p className="text-sm text-muted-foreground">
           Setiap Sekolah peserta, dengan Cluster dan jumlah Sesi terlaksana.
@@ -31,7 +31,7 @@ export default async function Page() {
       </header>
 
       {schools.length === 0 ? (
-        <p className="p-7 text-sm text-muted-foreground">
+        <p className="p-4 text-sm text-muted-foreground sm:p-7">
           Belum ada data Sekolah. Jalankan seed data referensi.
         </p>
       ) : (
