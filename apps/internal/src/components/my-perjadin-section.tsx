@@ -9,7 +9,6 @@ import { PerjadinPreparationDialog } from "-/components/perjadin-preparation";
 import { progressTone } from "-/components/progress-tone";
 import { spentPercent, tripTimeline, type TimelineNode } from "-/components/trip-timeline";
 import type { UploadGate } from "-/lib/drive/upload-gate";
-import { formatWibDate } from "-/lib/format-wib";
 import { perjadinName, perjadinSchoolsLine } from "-/lib/perjadin-name";
 import type { MyPerjadinTrip } from "@sugt/db/queries";
 import { formatRupiah, formatSessionStartTimeWithWib } from "@sugt/domain";
@@ -101,6 +100,10 @@ function MyPerjadinSection({
  * two-column body — the money, the actions and the trip timeline on the left, the Anggota roster on
  * the right.
  *
+ * **Every collapsed card is the same shape** (#419) — past, current or future, PIC or not: the name
+ * and the Schools on the left; PIC, the Persiapan pill and the chevron on the right. Nothing else, so
+ * no card's row is squeezed by a line the others lack. The Laporan is reached through Edit.
+ *
  * The header row holds a second control, the Persiapan pill, so the trigger cannot wrap the row — a
  * button inside a button is invalid HTML. Instead the trigger wraps only the title and is *stretched*
  * over the whole row by an `after:` overlay (the row is its containing block): clicking the PIC, the
@@ -129,9 +132,13 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
       value={trip.id}
       className="group/trip rounded-lg border border-border bg-card last:border-b"
     >
-      <div className="relative flex items-start gap-3 p-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
-          <div className="min-w-0">
+      <div className="relative flex items-start gap-3 p-3 sm:p-4">
+        {/* Left and right share a line whenever they fit and wrap on a phone, PIC + Persiapan then
+            sitting under the Schools. The left block's basis is its own width, so the right block
+            wraps away before the name would; the Schools line is `w-0 min-w-full` so its length
+            never counts toward that width, only the name's does. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+          <div className="min-w-0 flex-auto">
             <AccordionHeader className="font-heading text-lg font-normal text-foreground">
               <AccordionPlainTrigger className="after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50">
                 {/* The name already carries the dates (ADR-0044), so the card shows no date line. */}
@@ -139,12 +146,12 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               </AccordionPlainTrigger>
             </AccordionHeader>
             {trip.schoolNames.length > 0 && (
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 w-0 min-w-full text-xs text-muted-foreground">
                 {perjadinSchoolsLine(trip.schoolNames)}
               </p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <div className="flex max-w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span>PIC: {trip.picFullName}</span>
             {/* The pill *is* the dialog's trigger — clicking it opens the checklist, live-toggleable
                 because `/` is Staff-only (canToggle), and the toggle write re-checks the role anyway. */}
@@ -162,12 +169,6 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               }
             />
           </div>
-          {trip.report && (
-            <ReportLine
-              perjadinId={trip.id}
-              report={trip.report}
-            />
-          )}
         </div>
         <ChevronDown
           aria-hidden
@@ -175,7 +176,9 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
         />
       </div>
 
-      <AccordionPanel className="text-foreground">
+      {/* 12px inside the card on a phone, 16px from `sm`: the primitive's own `px-4` is on its inner
+          div, so this card narrows it from outside rather than changing it for every accordion. */}
+      <AccordionPanel className="text-foreground *:px-3 sm:*:px-4">
         <div className="grid gap-6 pt-2 pb-1 lg:grid-cols-[11fr_9fr]">
           <div className="flex min-w-0 flex-col gap-4">
             <div>
@@ -183,7 +186,7 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               <p className="mt-1 font-heading text-lg tabular-nums">
                 Tersisa {formatRupiah(remainingIdr)}
               </p>
-              <div className="mt-1 flex items-baseline justify-between gap-3 text-sm tabular-nums">
+              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
                 <span>Terpakai {formatRupiah(trip.drawnDownIdr)}</span>
                 <span>{formatRupiah(trip.advanceIdr)}</span>
               </div>
@@ -194,7 +197,8 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               />
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            {/* A full-width two-column grid on a phone, each button stretched to its cell. */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               <RecordTransaction
                 perjadinId={trip.id}
                 uploadGate={uploadGate}
@@ -254,41 +258,6 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
         </div>
       </AccordionPanel>
     </AccordionItem>
-  );
-}
-
-/**
- * **The PIC's Laporan line** (#396), on their own cards only. Unfiled, it names the acquittal's own
- * deadline, in the destructive colour once that has passed; filed, the WIB day it was filed, read
- * the way the Laporan reads it. The link sits above the card's stretched trigger
- * (`relative z-10`), so it opens the Laporan rather than toggling the card.
- */
-function ReportLine({
-  perjadinId,
-  report,
-}: {
-  perjadinId: string;
-  report: NonNullable<MyPerjadinTrip["report"]>;
-}) {
-  const { dueOn, overdue, filedAt } = report;
-  return (
-    <p className="flex flex-wrap items-center gap-x-2 text-xs lg:basis-full">
-      {filedAt ? (
-        <span className="text-muted-foreground">
-          Laporan: terkirim <span className="tabular-nums">{formatWibDate(filedAt)}</span>
-        </span>
-      ) : (
-        <span className={overdue ? "text-destructive" : "text-muted-foreground"}>
-          Laporan: belum dikirim · tenggat <span className="tabular-nums">{dueOn}</span>
-        </span>
-      )}
-      <Link
-        href={`/perjadin/${perjadinId}/laporan`}
-        className="relative z-10 underline underline-offset-4 hover:text-foreground"
-      >
-        Buka laporan
-      </Link>
-    </p>
   );
 }
 
@@ -402,7 +371,7 @@ function SessionNode({ node }: { node: TimelineNode }) {
   return (
     <>
       <span className="tabular-nums">{text}</span>
-      <span className="flex gap-2">
+      <span className="flex flex-wrap gap-2">
         {session.status === "arranged" && (
           <SessionMarkDeliveredDialog
             school={school}

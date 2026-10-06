@@ -110,9 +110,10 @@ bottom, and only the fields between them scrolling. Confirmations and single-val
 popups.
 
 **On a phone, pages keep 16px side margins** (28px from 640px up) (#418), so the content gets the
-width; the top bar uses the same gutter. `/pendamping` is reworked on its own (#419). Tables still
-scroll sideways inside their own frame. `/log`'s filters stack below 640px, and a Laporan line's
-receipts wrap under it.
+width; the top bar uses the same gutter, and so does `/pendamping`, whose cards also sit 12px
+inside their border on a phone (#419). Tables still scroll sideways inside their own frame.
+`/log`'s filters stack below 640px, and on the Laporan each transaction's receipts wrap under
+it.
 
 ### Coverage view — the landing screen
 
@@ -156,20 +157,32 @@ Group of:
 - **Perjalanan Dinas Anda**: the trips not yet over (ending today or later, in WIB), soonest
   first.
 - **Perjalanan Dinas Sebelumnya**: the trips that are over, the most recently ended first, with
-  every action still on them.
+  every action still on them. It reads "Perjalanan yang sudah selesai, yang terbaru di atas.
+  Transaksi dan dokumennya masih bisa dikerjakan."
 
-Each trip is a card headed by its name — `Kelompok 10 · 12–13 Okt 2026`, which already carries the
-dates — with the trip's Schools as a muted line beneath it. It opens to show Uang Perjalanan, Catat Transaksi, Evaluasi Perjadin, Edit,
-the Persiapan pill, the timeline of Sessions and who is on the trip. Each section shows three
-cards with **Tampilkan lebih banyak** for the rest, and is left out when it has none. With neither,
-the page says "Anda belum tergabung dalam Perjalanan Dinas."
+**Every collapsed card looks the same** (#419), in both sections, whether the trip is past, current
+or future and whether or not the person is its PIC:
 
-**On a trip the person is PIC of**, the card carries one line about the Laporan, with a
-**Buka laporan** link to it:
+```
+Kelompok 12 · 11–14 Okt 2026                                   PIC: Aziz Satrio   [Persiapan 0/6]   ⌄
+SMA Pradita Dirgantara, SMA Trensains Muhammadiyah Sragen
+```
 
-- "Laporan: belum dikirim · tenggat {tanggal}", in red once that deadline, the same one the
-  acquittal shows, has passed;
-- "Laporan: terkirim {tanggal}" once it is filed.
+- **Left:** the name, which already carries the dates, with the trip's Schools as a muted line
+  beneath it.
+- **Right:** "PIC: {nama}", the Persiapan pill (it opens the checklist, which can be ticked there),
+  and the chevron.
+- **Nothing else.** The card has no Laporan line. The Laporan is reached through **Edit**, on
+  `/perjadin/[id]`.
+- The two sides share a line whenever they fit, and the name never wraps to make room for the
+  right side. On a phone, PIC and Persiapan wrap onto their own line under the Schools.
+
+A card opens to show Uang Perjalanan, then **Catat Transaksi**, **Dokumen**, **Evaluasi Perjadin**
+and **Edit**, then the timeline of Sessions and who is on the trip. On a phone those four buttons
+are a full-width two-column grid, and the money row and each Session's buttons wrap rather than
+spill sideways. Each section shows three cards with **Tampilkan lebih banyak** for the rest, and is
+left out when it has none. With neither, the page says "Anda belum tergabung dalam Perjalanan
+Dinas."
 
 **Dokumen**, beside Catat Transaksi on every card in both sections, opens **"Dokumen —
 {name}"**: the trip's attendance sheets

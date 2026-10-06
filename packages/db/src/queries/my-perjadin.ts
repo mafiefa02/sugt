@@ -15,7 +15,7 @@ import {
 } from "../schema/travel";
 import { advanceDrawdownCategoryList } from "./advance-drawdown";
 import type { Person } from "./caller";
-import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
+import { todayInDeadlineZone } from "./deadline";
 import { tripSchoolNames } from "./perjadin-naming";
 import {
   derivePreparationChecklist,
@@ -26,7 +26,7 @@ import {
 /**
  * **The caller's own trips**, for `/pendamping` (#197, #396): Perjalanan Dinas Anda — the trips not
  * yet over — and Perjalanan Dinas Sebelumnya — the ones that are, still fully workable, since the
- * Laporan and the attendance sheets are often finished after the trip.
+ * transactions and the attendance sheets are often finished after the trip.
  *
  * A read scoped **by** the caller rather than gated by their role: it takes a `Person` and returns
  * only the trips that Person is a working member of, so there is no Staff choke point (every
@@ -98,13 +98,6 @@ export type MyPerjadinTrip = {
   endsOn: string;
   picPersonId: string;
   picFullName: string;
-  /**
-   * The Perjadin Report's state, for the line on the card — **null unless the caller is the
-   * PIC**, so there is no line to draw. `dueOn` is the acquittal's own deadline
-   * (`perjadinReportDeadline`), and `overdue` compares it with today in the office's zone, as
-   * `daysRemaining` does there. `filedAt` is null until the Report is filed.
-   */
-  report: { dueOn: string; overdue: boolean; filedAt: Date | null } | null;
   /** Fixed at planning and transferred before departure, so never null and never absent. */
   advanceIdr: number;
   /**
@@ -166,9 +159,6 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
       picFullName: person.fullName,
       advanceIdr: perjadin.advanceIdr,
       isCurrent,
-      reportDueOn: sql<string>`to_char(${perjadinReportDeadline}, 'YYYY-MM-DD')`,
-      reportOverdue: sql<boolean>`${perjadinReportDeadline} < ${todayInDeadlineZone}`,
-      reportFiledAt: perjadin.reportFiledAt,
     })
     .from(perjadin)
     .innerJoin(
@@ -189,15 +179,7 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
 
   if (rows.length === 0) return { current: [], previous: [] };
 
-  const trips = rows.map(({ reportDueOn, reportOverdue, reportFiledAt, ...trip }) => ({
-    ...trip,
-    report:
-      trip.picPersonId === caller.id
-        ? { dueOn: reportDueOn, overdue: reportOverdue, filedAt: reportFiledAt }
-        : null,
-  }));
-
-  const tripIds = trips.map((trip) => trip.id);
+  const tripIds = rows.map((trip) => trip.id);
 
   // The six hanging lists, gathered concurrently and each scoped to just these trips.
   const [drawnDownRows, staffRows, pengajarRows, pimpinanRows, sessionRows, preparationRows] =
@@ -352,7 +334,7 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
     });
   }
 
-  const built = trips.map(({ isCurrent, ...trip }) => {
+  const built = rows.map(({ isCurrent, ...trip }) => {
     const staff = (staffByTrip.get(trip.id) ?? []).map((member) => ({
       ...member,
       isPic: member.personId === trip.picPersonId,
