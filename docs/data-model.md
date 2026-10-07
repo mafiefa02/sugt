@@ -2335,8 +2335,18 @@ SECURITY`: a great deal of machinery for one role rule. Every money-_writing_ qu
 the authenticated Person and refuses a non-Staff caller, at a single choke point in `@sugt/db`. See
 [ADR-0011](./adr/0011-supabase-and-better-auth.md).
 
+**Who writes a Perjadin** is the same kind of rule, at the same choke point. A Perjadin and its
+offline Sessions are written only by **its Group** — a `group_member` row for the caller, the PIC
+included — or by a Staff Person holding **Editor** (an Administrator implies it)
+([ADR-0048](./adr/0048-a-perjadin-is-written-by-its-group.md), #439). Every write on a trip runs
+`requirePerjadinWriter` (or `requireSessionWriter`, for a write naming an offline Session) after its
+`requireStaff`, on the write's own transaction where it has one, and a non-member without the Grant
+is refused with `NotOnPerjadinError`. No key or CHECK could hold it: whether a row may be written
+depends on who is asking, which Postgres does not know here, for the reason above.
+
 Note what this is _not_: the public/internal boundary is still structural, held by the
-dependency graph. It is only the Staff/non-Staff write line that is a runtime check.
+dependency graph. It is only the Staff/non-Staff write line — and the Group line inside it — that is
+a runtime check.
 
 **Who a caller is, is a type.** This document used to leave open whether the Staff-only choke
 point needed a sibling for "no Person at all, but a valid secret". It does, and the sibling is

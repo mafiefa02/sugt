@@ -115,6 +115,9 @@ says, or a shared file left that no row records.
 only. The upload is closed, with the reason, while the connection is broken or not made, as receipts
 are.
 
+> Amended 2026-10-08: the trip's Group, an Editor or an Administrator, not every Staff member —
+> [ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), and the amendment at the bottom.
+
 ## Consequences
 
 - Attendance sheets have one home, beside the receipts, and an auditor can be given one link per
@@ -158,3 +161,11 @@ They have their own tree, `Foto & Video/`, and their own table
 attendance paperwork, and each tree can be handed over on its own. They keep this ADR's per-file
 sharing, every folder private, and its Hapus order — the file to the Drive trash first, then the row
 and its Log entry.
+
+## Amendment (2026-10-08): the Group uploads and deletes, not every Staff member
+
+"Any Staff member uploads and deletes" now reads: **the trip's Group, an Editor or an Administrator**
+uploads a Perjadin Document and deletes one with Hapus
+([ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), #439). The upload opener and Hapus both check
+before any Drive call, so a Staff member off the trip never gets an upload URL and never trashes a
+file. Reading the sheets stays open to everyone signed in.

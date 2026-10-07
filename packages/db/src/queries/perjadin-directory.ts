@@ -8,6 +8,7 @@ import { groupMember, perjadin, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
 import { tripSchoolNames } from "./perjadin-naming";
 import { preparationChecklists, type PreparationItem } from "./preparation-checklist";
+import { hasGrant } from "./staff-only";
 
 /**
  * **The Perjadin list** — every trip, open to anyone signed in.
@@ -66,6 +67,12 @@ export type DirectoryPerjadin = {
    * search matches them.
    */
   schoolNames: string[];
+  /**
+   * **May the caller write this trip?** (ADR-0048) Its Group, an Editor or an Administrator — so
+   * the Persiapan pill opens its dialog on this row and stays a static count on every other one. A
+   * courtesy: `togglePreparationItem` refuses anyone else again.
+   */
+  canWrite: boolean;
 };
 
 /**
@@ -116,7 +123,16 @@ const sessionsTotal = sql<number>`(
  * happens, and the two differ whenever a trip is planned out of order. `id` breaks the tie
  * so the order is total.
  */
-export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerjadin[]> {
+export async function perjadinDirectory(caller: Person): Promise<DirectoryPerjadin[]> {
+  // Who writes each row (ADR-0048): a Staff Editor or Administrator writes every one; any other Staff
+  // member only those whose Group they are in; a Pimpinan none.
+  const writesEvery = hasGrant(caller, "Editor");
+  const writesOwn = caller.role === "Staff";
+  const inGroup = sql<boolean>`exists (
+    select 1 from ${groupMember} gm
+    where gm.perjadin_id = ${perjadin.id} and gm.person_id::text = ${caller.id}
+  )`;
+
   const trips = await db
     .select({
       id: perjadin.id,
@@ -129,6 +145,7 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
       pengajarNames,
       groupMemberNames,
       schoolNames: tripSchoolNames(perjadin.id),
+      inGroup,
     })
     .from(perjadin)
     .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
@@ -142,10 +159,11 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
   // so the two agree, and `N` is each trip's own.
   const checklists = await preparationChecklists(trips.map((trip) => trip.id));
 
-  return trips.map((trip) => {
+  return trips.map(({ inGroup: member, ...trip }) => {
     const preparation = checklists.get(trip.id) ?? [];
     return {
       ...trip,
+      canWrite: writesEvery || (writesOwn && member),
       // Counted off the trip's Schools (#343, ADR-0044) — one definition for the count, the School
       // line and the search, so the three cannot disagree. A School whose every Session here was
       // cancelled is no longer visited, and counts toward none of them.

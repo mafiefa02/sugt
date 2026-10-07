@@ -20,7 +20,7 @@ import { duplicatedStaff } from "./group-rules";
 import { preparationChecklist, type PreparationItem } from "./preparation-checklist";
 import { unknownPimpinanIds } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
-import { requireStaff } from "./staff-only";
+import { requirePerjadinWriter, requireStaff } from "./staff-only";
 
 /**
  * **One Perjadin, and the writes on it** — the read open to anyone signed in and carrying no
@@ -31,7 +31,8 @@ import { requireStaff } from "./staff-only";
  * separate read — and since #180 (ADR-0026) that read is open to any signed-in Person, so the trip
  * page fetches it alongside this one and shows the money strip to a Pimpinan too. This query still
  * carries none of it, and needs no role check because there is nothing here to refuse; every
- * **write** below opens with `requireStaff`, and reading money stays a job for `perjadinAcquittal`.
+ * **write** below opens with `requireStaff` and runs `requirePerjadinWriter` — the trip's Group, an
+ * Editor or an Administrator (ADR-0048) — and reading money stays a job for `perjadinAcquittal`.
  */
 
 /** One member of the Group. Staff-only now (ADR-0020), so `stream` is always null. */
@@ -320,6 +321,8 @@ export async function setPerjadinStaff(
   }
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     const [trip] = await tx
       .select({ picPersonId: perjadin.picPersonId })
       .from(perjadin)
@@ -378,6 +381,8 @@ export async function changePerjadinPic(
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     const [trip] = await tx
       .select({ picPersonId: perjadin.picPersonId })
       .from(perjadin)
@@ -434,6 +439,8 @@ export async function setPerjadinPimpinan(
   if (offending.length > 0) return { outcome: "unknown-pimpinan", offending };
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     const [trip] = await tx
       .select({ id: perjadin.id })
       .from(perjadin)
@@ -501,6 +508,8 @@ export async function updatePerjadinDates(
   if (input.endsOn < input.startsOn) return { outcome: "ends-before-starts" };
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     const [trip] = await tx
       .select({ id: perjadin.id, startsOn: perjadin.startsOn, endsOn: perjadin.endsOn })
       .from(perjadin)
@@ -589,6 +598,8 @@ export async function updatePerjadinAdvance(
   if (advanceIdr !== null && advanceIdr < 0) return { outcome: "negative-advance" };
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     // The old value is read under the row lock, so the Activity Log's from→to (#395) is the value
     // this write replaced, not one a concurrent correction already moved.
     const [trip] = await tx

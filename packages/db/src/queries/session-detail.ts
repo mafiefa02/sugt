@@ -14,7 +14,7 @@ import {
   type SchoolBookedOnAnotherPerjadin,
   slotViolationRefusal,
 } from "./school-slot";
-import { requireStaff } from "./staff-only";
+import { requireSessionWriter, requireStaff } from "./staff-only";
 
 /**
  * **Detail Sesi** — one Session, what has been filed against it, who still owes what,
@@ -324,6 +324,8 @@ export async function markSessionDelivered(
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
+    await requireSessionWriter(caller, sessionId, tx);
+
     const { status } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
@@ -355,6 +357,8 @@ export async function cancelSession(
   if (cancelledReason === "") return { outcome: "reason-required" };
 
   return db.transaction(async (tx) => {
+    await requireSessionWriter(caller, sessionId, tx);
+
     const { status, perjadinId } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
@@ -436,6 +440,8 @@ export async function moveSessionDate(
   let moving = null as { schoolId: string; perjadinId: string | null } | null;
   try {
     return await db.transaction(async (tx) => {
+      await requireSessionWriter(caller, sessionId, tx);
+
       const [row] = await tx
         .select({
           status: session.status,

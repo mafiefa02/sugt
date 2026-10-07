@@ -14,7 +14,7 @@ import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
 import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
 import { tripSchoolNames } from "./perjadin-naming";
-import { requireStaff } from "./staff-only";
+import { requirePerjadinWriter, requireStaff } from "./staff-only";
 
 /**
  * **Perjadin Report** — the acquittal of one Perjadin. Reading it is now open to any signed-in
@@ -358,6 +358,8 @@ export async function recordTransaction(
   }
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, input.perjadinId, tx);
+
     const [trip] = await tx
       .select({ id: perjadin.id })
       .from(perjadin)
@@ -455,6 +457,8 @@ export async function attachTransactionEvidence(
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     const [line] = await tx
       .select({
         id: transaction.id,
@@ -526,6 +530,7 @@ export async function receiptsOnLine(
   transactionId: string,
 ): Promise<number | null> {
   requireStaff(caller);
+  await requirePerjadinWriter(caller, perjadinId);
 
   const [line] = await db
     .select({ held: count(transactionEvidence.id) })
@@ -577,6 +582,8 @@ export async function filePerjadinReport(
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     const [trip] = await tx
       .select({ reportFiledAt: perjadin.reportFiledAt, advanceIdr: perjadin.advanceIdr })
       .from(perjadin)

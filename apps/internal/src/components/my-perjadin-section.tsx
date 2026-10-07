@@ -49,11 +49,19 @@ function MyPerjadinSection({
   description,
   trips,
   uploadGate,
+  canWrite,
 }: {
   title: string;
   description: string;
   trips: MyPerjadinTrip[];
   uploadGate: UploadGate;
+  /**
+   * **Whether the viewer writes these trips** (ADR-0048), computed from the viewer and not from whose
+   * trips they are. On a person's own `/pendamping` it is always true — every trip listed is one
+   * whose Group they are in. Without it, every write control on the cards is absent: Catat
+   * Transaksi, Dokumen, Tandai, the Persiapan boxes and Foto & Video's upload and Hapus.
+   */
+  canWrite: boolean;
 }) {
   // Reveal three at a time from the client, never a refetch — the full list is already in hand, and
   // the button only widens the slice. Hidden once everything is shown.
@@ -76,6 +84,7 @@ function MyPerjadinSection({
             key={trip.id}
             trip={trip}
             uploadGate={uploadGate}
+            canWrite={canWrite}
           />
         ))}
       </Accordion>
@@ -113,7 +122,15 @@ function MyPerjadinSection({
  * its own click and opens the checklist without toggling. The chevron is decorative and outside the
  * trigger, rotated from the item's `data-open`.
  */
-function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: UploadGate }) {
+function TripCard({
+  trip,
+  uploadGate,
+  canWrite,
+}: {
+  trip: MyPerjadinTrip;
+  uploadGate: UploadGate;
+  canWrite: boolean;
+}) {
   // The pill's `x/N` is read straight off the checklist the card also hands the dialog — one payload
   // for both, so the pill and the boxes can never disagree. `N` is the trip's own (ADR-0045).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
@@ -150,11 +167,11 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
           <div className="flex max-w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span>PIC: {trip.picFullName}</span>
             {/* The pill *is* the dialog's trigger — clicking it opens the checklist, live-toggleable
-                because `/` is Staff-only (canToggle), and the toggle write re-checks the role anyway. */}
+                for whoever writes the trip (ADR-0048), and the toggle write re-checks that anyway. */}
             <PerjadinPreparationDialog
               perjadinId={trip.id}
               items={trip.preparation}
-              canToggle
+              canToggle={canWrite}
               trigger={
                 <button
                   type="button"
@@ -184,33 +201,37 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
 
             {/* A full-width two-column grid on a phone, each button stretched to its cell. */}
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-              <RecordTransaction
-                perjadinId={trip.id}
-                uploadGate={uploadGate}
-                trigger={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="rounded-full"
-                  >
-                    Catat Transaksi
-                  </Button>
-                }
-              />
-              <PerjadinDokumenDialog
-                perjadinId={trip.id}
-                name={perjadinName(trip)}
-                uploadGate={uploadGate}
-                trigger={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="rounded-full"
-                  >
-                    Dokumen
-                  </Button>
-                }
-              />
+              {canWrite && (
+                <>
+                  <RecordTransaction
+                    perjadinId={trip.id}
+                    uploadGate={uploadGate}
+                    trigger={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-full"
+                      >
+                        Catat Transaksi
+                      </Button>
+                    }
+                  />
+                  <PerjadinDokumenDialog
+                    perjadinId={trip.id}
+                    name={perjadinName(trip)}
+                    uploadGate={uploadGate}
+                    trigger={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-full"
+                      >
+                        Dokumen
+                      </Button>
+                    }
+                  />
+                </>
+              )}
               <PerjadinFeedbackTokenDialog
                 perjadinId={trip.id}
                 trigger={
@@ -232,13 +253,14 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               </LinkButton>
             </div>
             {/* Said as text, not only as the disabled button's title: a title never shows on touch. */}
-            {!uploadGate.open && (
+            {canWrite && !uploadGate.open && (
               <p className="-mt-2 text-xs text-muted-foreground">{uploadGate.reason}</p>
             )}
 
             <TripTimeline
               nodes={tripTimeline(trip)}
               uploadGate={uploadGate}
+              canWrite={canWrite}
             />
           </div>
 
@@ -345,7 +367,16 @@ function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
  * with a primary dot. The rail segment below a node is primary only when that node is done; every
  * other segment is muted.
  */
-function TripTimeline({ nodes, uploadGate }: { nodes: TimelineNode[]; uploadGate: UploadGate }) {
+function TripTimeline({
+  nodes,
+  uploadGate,
+  canWrite,
+}: {
+  nodes: TimelineNode[];
+  uploadGate: UploadGate;
+  /** Tandai and Foto & Video's upload and Hapus are the trip's writers' (ADR-0048). */
+  canWrite: boolean;
+}) {
   if (nodes.length === 0) return null;
 
   return (
@@ -371,6 +402,7 @@ function TripTimeline({ nodes, uploadGate }: { nodes: TimelineNode[]; uploadGate
             <SessionNode
               node={node}
               uploadGate={uploadGate}
+              canWrite={canWrite}
             />
           </div>
         </li>
@@ -405,7 +437,15 @@ function TimelineMarker({ done }: { done: boolean }) {
  * (#425), the Session's photos and videos, in both sections since footage is often uploaded after
  * the trip. It opens even while Drive is down, so the files can be viewed; uploading is closed then.
  */
-function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: UploadGate }) {
+function SessionNode({
+  node,
+  uploadGate,
+  canWrite,
+}: {
+  node: TimelineNode;
+  uploadGate: UploadGate;
+  canWrite: boolean;
+}) {
   const { school, session } = node;
   const text = `${session.heldOn} · ${formatSessionStartTimeWithWib(session.startsAt, school.timeZone)} · ${school.name}`;
 
@@ -413,7 +453,7 @@ function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: Upl
     <>
       <span className="tabular-nums">{text}</span>
       <span className="flex flex-wrap gap-2">
-        {session.status === "arranged" && (
+        {canWrite && session.status === "arranged" && (
           <SessionMarkDeliveredDialog
             school={school}
             session={session}
@@ -448,9 +488,9 @@ function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: Upl
           heldOn={session.heldOn}
           schoolName={school.name}
           uploadGate={uploadGate}
-          // `/pendamping` is Staff-only, and the timeline holds no cancelled Session.
-          canUpload
-          canDelete
+          // The timeline holds no cancelled Session; who writes the trip uploads and deletes.
+          canUpload={canWrite}
+          canDelete={canWrite}
           trigger={
             <Button
               variant="secondary"

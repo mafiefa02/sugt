@@ -57,6 +57,9 @@ Only an **Administrator** ([ADR-0028](./0028-grants-are-a-second-additive-access
 reconnects or checks the connection, on `/pengaturan`. **Any Staff member** uploads through it, the
 same Staff who may write money today. A Pimpinan writes nothing, as before.
 
+> Amended 2026-10-08: the trip's Group, an Editor or an Administrator, not every Staff member —
+> [ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), and the amendment at the bottom.
+
 ## The tree
 
 ```
@@ -313,3 +316,11 @@ folder per offline Session ([ADR-0046](./0046-session-footage-is-stored-in-the-c
 transport differs, sent to the resumable session in 16 MiB pieces rather than one `PUT`. A Perjadin
 folder rename now renames all three of a trip's folders together, and Periksa koneksi ensures the
 third tree, sweeps its unsynced files and re-asserts its names.
+
+## Amendment (2026-10-08): the Group uploads, not every Staff member
+
+"Any Staff member uploads through it" now reads: **the trip's Group, an Editor or an Administrator**
+uploads a receipt to a trip ([ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), #439). The
+check that runs before any Drive call (`staffOnTrip`) is that guard, so a Staff member off the trip is
+refused with a 403 before an upload session is opened. The account, `_staging`, the upload gate and the
+reconcile are unchanged.

@@ -13,7 +13,7 @@ import {
   slotViolationRefusal,
 } from "./school-slot";
 import { heldOnWithinPerjadin, type PastArranged } from "./session-detail";
-import { requireStaff } from "./staff-only";
+import { requirePerjadinWriter, requireSessionWriter, requireStaff } from "./staff-only";
 
 /**
  * **Editing a Perjadin's offline Sessions, per Session.** Rencanakan Perjadin brought a trip's whole
@@ -199,6 +199,8 @@ export async function addPerjadinSession(
 
   try {
     return await db.transaction(async (tx) => {
+      await requirePerjadinWriter(caller, perjadinId, tx);
+
       const [trip] = await tx
         .select({
           subClusterId: perjadin.subClusterId,
@@ -271,6 +273,8 @@ export async function editPerjadinSession(
   let tripId = null as string | null;
   try {
     return await db.transaction(async (tx) => {
+      await requireSessionWriter(caller, sessionId, tx);
+
       const [row] = await tx
         .select({
           status: session.status,

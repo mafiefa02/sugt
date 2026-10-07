@@ -9,7 +9,7 @@ import {
   preparationItem,
 } from "../schema/travel";
 import type { Person } from "./caller";
-import { requireStaff } from "./staff-only";
+import { requirePerjadinWriter, requireStaff } from "./staff-only";
 
 /**
  * **A Perjadin's Teaching Team, edited per name.** Adding, renaming and removing one trip-scoped
@@ -31,6 +31,20 @@ import { requireStaff } from "./staff-only";
  */
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The Perjadin a trip-scoped teacher name belongs to, locked for the write that follows — or `null`
+ * for no such name. The rename and the removal take the name's id, so this is how they find the
+ * trip whose Group may write it (ADR-0048).
+ */
+async function teacherTrip(tx: Tx, teacherId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ perjadinId: perjadinTeacher.perjadinId })
+    .from(perjadinTeacher)
+    .where(eq(perjadinTeacher.id, teacherId))
+    .for("update");
+  return row?.perjadinId ?? null;
+}
 
 /** Clear the system item's tick for one trip — whichever item carries the flag. */
 async function clearSystemItemTick(tx: Tx, perjadinId: string): Promise<void> {
@@ -77,6 +91,8 @@ export async function addPerjadinTeacher(
   if (trimmed === "") return { outcome: "name-required" };
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     const [trip] = await tx
       .select({ id: perjadin.id })
       .from(perjadin)
@@ -130,6 +146,10 @@ export async function renamePerjadinTeacher(
   if (trimmed === "") return { outcome: "name-required" };
 
   return db.transaction(async (tx) => {
+    const tripId = await teacherTrip(tx, teacherId);
+    if (tripId === null) return { outcome: "no-such-teacher" };
+    await requirePerjadinWriter(caller, tripId, tx);
+
     const [updated] = await tx
       .update(perjadinTeacher)
       .set({ name: trimmed })
@@ -157,6 +177,10 @@ export async function removePerjadinTeacher(
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
+    const tripId = await teacherTrip(tx, teacherId);
+    if (tripId === null) return { outcome: "no-such-teacher" };
+    await requirePerjadinWriter(caller, tripId, tx);
+
     const [deleted] = await tx
       .delete(perjadinTeacher)
       .where(eq(perjadinTeacher.id, teacherId))

@@ -420,12 +420,17 @@ export {
 } from "./perjadin-documents";
 export {
   canViewDashboard,
+  canWritePerjadin,
   hasGrant,
   isNotGrantedError,
+  isNotOnPerjadinError,
   isNotStaffError,
   NotGrantedError,
+  NotOnPerjadinError,
   NotStaffError,
   requireGrant,
+  requirePerjadinWriter,
+  requireSessionWriter,
   requireStaff,
 } from "./staff-only";
 export {

@@ -1,6 +1,6 @@
 "use client";
 
-import { markSessionDeliveredFromDashboardAction } from "-/app/(app)/actions";
+import { markSessionDeliveredFromPendampingAction } from "-/app/(app)/actions";
 import type { MyPerjadinSchool, MyPerjadinSession } from "@sugt/db/queries";
 import { formatSessionStartTimeWithWib } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
@@ -49,7 +49,7 @@ function SessionMarkDeliveredDialog({
 
   function submit() {
     startSaving(async () => {
-      const result = await markSessionDeliveredFromDashboardAction(session.sessionId);
+      const result = await markSessionDeliveredFromPendampingAction(session.sessionId);
       if (result.outcome === "delivered") {
         setOpen(false);
         return;

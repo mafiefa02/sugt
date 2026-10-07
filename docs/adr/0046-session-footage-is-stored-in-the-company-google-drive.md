@@ -17,7 +17,9 @@ forked. Only the transport of a large file is new (#424).
   1000 MB** each. The caps are domain constants beside `MAX_UPLOAD_BYTES`, in the same MiB
   arithmetic, and the database holds them too (`session_footage_byte_size_check`).
 - **Any Staff member** uploads and deletes. **Anyone signed in**, a Pimpinan included, lists and
-  opens it. Footage is uploaded or deleted, never edited.
+  opens it. Footage is uploaded or deleted, never edited. _Amended 2026-10-08: the trip's Group, an
+  Editor or an Administrator uploads and deletes —
+  [ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), and the amendment at the bottom._
 - **Logged.** Upload and delete each write an Activity Log entry, "Foto/Video diunggah" and
   "Foto/Video dihapus", against the Session's Perjadin. The Log's CHECK was widened for them
   (migration 0044); the `document_*` pair had been added with the rest and needed none.
@@ -124,3 +126,10 @@ no cascade: a delete that would orphan Drive files is refused rather than follow
 The company account is a personal Gmail with about 2 TB. There is **no quota** beyond the per-file
 caps: about 47 Schools × two offline Sessions × a handful of videos fits with room to spare. If that
 ever changes, a per-Session cap belongs in the domain beside the per-file ones.
+
+## Amendment (2026-10-08): the Group uploads and deletes, not every Staff member
+
+"Any Staff member uploads and deletes" now reads: **the Session's trip's Group, an Editor or an
+Administrator** uploads footage and deletes it with Hapus
+([ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), #439). The opener (`footageSession`) and
+Hapus both check before any Drive call. Viewing stays open to everyone signed in, a Pimpinan included.

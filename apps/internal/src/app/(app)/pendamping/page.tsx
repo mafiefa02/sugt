@@ -30,6 +30,9 @@ export default async function Page() {
     // Each trip card's Catat Transaksi is closed, with the reason, while Drive is (ADR-0040).
     uploadGate(person),
   ]);
+  // The viewer writes every trip listed here (ADR-0048): `myPerjadin` lists only trips whose Group
+  // they are in. Computed from the viewer, so a view of someone else's trips can pass its own.
+  const canWrite = true;
 
   return (
     <div className="flex min-h-full flex-col gap-6 px-4 py-5 sm:p-7">
@@ -48,12 +51,14 @@ export default async function Page() {
             description="Perjalanan yang belum selesai, dan yang bisa Anda kerjakan pada masing-masing."
             trips={trips.current}
             uploadGate={gate}
+            canWrite={canWrite}
           />
           <MyPerjadinSection
             title="Perjalanan Dinas Sebelumnya"
             description="Perjalanan yang sudah selesai, yang terbaru di atas. Transaksi dan dokumennya masih bisa dikerjakan."
             trips={trips.previous}
             uploadGate={gate}
+            canWrite={canWrite}
           />
         </>
       )}

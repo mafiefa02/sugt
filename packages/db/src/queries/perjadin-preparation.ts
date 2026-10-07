@@ -4,7 +4,7 @@ import { db } from "../client";
 import { perjadinPreparationTick } from "../schema/travel";
 import type { Person } from "./caller";
 import { preparationChecklist } from "./preparation-checklist";
-import { requireStaff } from "./staff-only";
+import { requirePerjadinWriter, requireStaff } from "./staff-only";
 
 /**
  * **Ticking and un-ticking one Preparation Checklist box** ([#114](https://github.com/mafiefa02/sugt/issues/114)).
@@ -56,6 +56,7 @@ export async function togglePreparationItem(
   requireStaff(caller);
 
   const { perjadinId, itemId, checked } = input;
+  await requirePerjadinWriter(caller, perjadinId);
 
   const checklist = await preparationChecklist(perjadinId);
   if (!checklist?.some((item) => item.itemId === itemId)) return { outcome: "not-applicable" };

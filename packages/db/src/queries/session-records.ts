@@ -10,7 +10,7 @@ import { db } from "../client";
 import { session } from "../schema/delivery";
 import { sessionRecord } from "../schema/evaluations";
 import type { Person } from "./caller";
-import { requireStaff } from "./staff-only";
+import { requireSessionWriter, requireStaff } from "./staff-only";
 
 /**
  * **The PIC's Session Record form**, filed against a Session that has been delivered.
@@ -145,6 +145,8 @@ export async function fileSessionRecord(
 
   try {
     return await db.transaction(async (tx) => {
+      await requireSessionWriter(caller, input.sessionId, tx);
+
       const status = await statusOf(tx, input.sessionId);
       if (status !== "delivered") return { outcome: "session-not-delivered", status };
 
