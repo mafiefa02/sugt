@@ -2,12 +2,17 @@
 
 import { loadParticipantFeedback, loadPerjadinFeedback } from "-/app/(app)/feedback/actions";
 import { MODE_LABELS } from "-/components/session-labels";
+import {
+  PARTICIPANT_ASPECT_LABELS,
+  PARTICIPANT_WRITTEN_QUESTIONS,
+} from "-/lib/participant-feedback-copy";
 import { perjadinName } from "-/lib/perjadin-name";
 import type {
   FeedbackCursor,
   FeedbackFilters,
   FeedbackFilterValue,
   FeedbackSort,
+  ParticipantFeedbackAverages,
   ParticipantFeedbackRow,
   PerjadinFeedbackCursor,
   PerjadinFeedbackFilters,
@@ -62,6 +67,7 @@ type Tab = "peserta" | "perjadin";
  */
 const ALL_FILTERS: FeedbackFilters = {
   reviewType: "all",
+  handsOnRbl: "all",
   instructor: "all",
   materials: "all",
   relevance: "all",
@@ -111,6 +117,14 @@ const REVIEW_TYPE_OPTIONS: FilterOptions = {
   le7: "Ulasan ≤ 7",
   gt7: "Ulasan > 7",
 };
+
+/** One Aspect's three filter options, named with its short label. */
+function aspectOptions(label: string): FilterOptions {
+  return { all: `Semua: ${label}`, le7: `${label} ≤ 7`, gt7: `${label} > 7` };
+}
+
+/** Hands-on RBL (#446): a row without one — GTK, MS or an older Siswa row — is in neither arm. */
+const HANDS_ON_RBL_OPTIONS = aspectOptions(PARTICIPANT_ASPECT_LABELS.hands_on_rbl);
 
 const INSTRUCTOR_OPTIONS: FilterOptions = {
   all: "Semua: Narasumber",
@@ -164,7 +178,7 @@ function FeedbackView({
 }: {
   participantInitialRows: ParticipantFeedbackRow[];
   participantInitialCursor: FeedbackCursor | null;
-  participantAverages: { instructor: number; materials: number; relevance: number };
+  participantAverages: ParticipantFeedbackAverages;
   perjadinInitialRows: PerjadinFeedbackRow[];
   perjadinInitialCursor: PerjadinFeedbackCursor | null;
   perjadinAverages: { lodging: number; transport: number; meals: number; punctuality: number };
@@ -206,7 +220,7 @@ function FeedbackView({
 }
 
 /**
- * The Peserta tab: three summary cards, four server-side filters, two sort dropdowns, and an
+ * The Peserta tab: four summary cards, five server-side filters, two sort dropdowns, and an
  * OFFSET-paged card list.
  *
  * A filter or sort change refetches the first page (cursor `null`) and REPLACES the list; "load
@@ -220,7 +234,7 @@ function ParticipantTab({
 }: {
   initialRows: ParticipantFeedbackRow[];
   initialCursor: FeedbackCursor | null;
-  averages: { instructor: number; materials: number; relevance: number };
+  averages: ParticipantFeedbackAverages;
 }) {
   const [rows, setRows] = useState(initialRows);
   const [cursor, setCursor] = useState(initialCursor);
@@ -259,18 +273,23 @@ function ParticipantTab({
   return (
     <>
       {/* The overall standing — dataset-wide, and unmoved by the filters below. */}
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AverageCard
-          label="Narasumber"
+          label={PARTICIPANT_ASPECT_LABELS.instructor}
           value={averages.instructor}
         />
         <AverageCard
-          label="Materi"
+          label={PARTICIPANT_ASPECT_LABELS.materials}
           value={averages.materials}
         />
         <AverageCard
-          label="Relevansi"
+          label={PARTICIPANT_ASPECT_LABELS.relevance}
           value={averages.relevance}
+        />
+        {/* Over the rows that have one; "—" until any does (#446). */}
+        <AverageCard
+          label={PARTICIPANT_ASPECT_LABELS.hands_on_rbl}
+          value={averages.handsOnRbl}
         />
       </div>
 
@@ -296,8 +315,8 @@ function ParticipantTab({
         />
       </div>
 
-      {/* The four server-side filters. Each change refetches the first page and resets paging. */}
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* The five server-side filters. Each change refetches the first page and resets paging. */}
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <FilterSelect
           ariaLabel="Jenis ulasan"
           options={REVIEW_TYPE_OPTIONS}
@@ -332,6 +351,15 @@ function ParticipantTab({
           disabled={pending}
           onChange={(value) => {
             changeFilter("relevance", value);
+          }}
+        />
+        <FilterSelect
+          ariaLabel="Nilai Hands-on RBL"
+          options={HANDS_ON_RBL_OPTIONS}
+          value={filters.handsOnRbl}
+          disabled={pending}
+          onChange={(value) => {
+            changeFilter("handsOnRbl", value);
           }}
         />
       </div>
@@ -541,7 +569,7 @@ function LoadMore({ pending, onClick }: { pending: boolean; onClick: () => void 
 }
 
 /** One summary card: the Aspect's name over its dataset-wide average, kept to one decimal. */
-function AverageCard({ label, value }: { label: string; value: number }) {
+function AverageCard({ label, value }: { label: string; value: number | null }) {
   return (
     <Card size="sm">
       <CardHeader>
@@ -550,7 +578,9 @@ function AverageCard({ label, value }: { label: string; value: number }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="font-heading text-2xl font-medium">{value.toFixed(1)}</p>
+        <p className="font-heading text-2xl font-medium">
+          {value === null ? "—" : value.toFixed(1)}
+        </p>
       </CardContent>
     </Card>
   );
@@ -657,8 +687,10 @@ function SortSelect<T extends string>({
  * row average as the headline number. The mode label is the mode word only — `Luring` / `Daring` —
  * because the data model carries no session ordinal to number them with (#168).
  *
- * Below it, the three Aspects in a fixed order, each with its score and — when the Participant
- * left one — the comment they wrote about that Aspect.
+ * Below it, the Aspects in a fixed order, each with its score and — when the Participant left one
+ * — the comment they wrote about that Aspect. A Siswa's card also carries **Hands-on RBL** (#446),
+ * "—" on one filed before it existed; GTK and MS are never asked it, so theirs has no such line.
+ * Then the two written answers under their headings, each only when the Participant wrote one.
  */
 function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
   return (
@@ -697,20 +729,39 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
       </CardHeader>
       <CardContent className="space-y-2.5">
         <AspectRow
-          label="Narasumber"
+          label={PARTICIPANT_ASPECT_LABELS.instructor}
           score={row.instructor}
           comment={row.instructorComment}
         />
         <AspectRow
-          label="Materi"
+          label={PARTICIPANT_ASPECT_LABELS.materials}
           score={row.materials}
           comment={row.materialsComment}
         />
         <AspectRow
-          label="Relevansi"
+          label={PARTICIPANT_ASPECT_LABELS.relevance}
           score={row.relevance}
           comment={row.relevanceComment}
         />
+        {row.classKind === "Student" && (
+          <AspectRow
+            label={PARTICIPANT_ASPECT_LABELS.hands_on_rbl}
+            score={row.handsOnRbl}
+            comment={row.handsOnRblComment}
+          />
+        )}
+        {row.knowledgeGain !== null && (
+          <WrittenAnswer
+            heading={PARTICIPANT_WRITTEN_QUESTIONS.knowledgeGain.heading}
+            text={row.knowledgeGain}
+          />
+        )}
+        {row.suggestions !== null && (
+          <WrittenAnswer
+            heading={PARTICIPANT_WRITTEN_QUESTIONS.suggestions.heading}
+            text={row.suggestions}
+          />
+        )}
       </CardContent>
     </Card>
   );
@@ -781,7 +832,8 @@ function PerjadinCard({ row }: { row: PerjadinFeedbackRow }) {
  * One Aspect's line: its label, its score, and — only when there is one — the comment beneath.
  *
  * **The score's rendering is the concern signal.** A score at or below 7 is a red `destructive`
- * pill; a score above 7 is a plain bold number with no pill, so the eye lands on the low ones.
+ * pill; a score above 7 is a plain bold number with no pill, so the eye lands on the low ones. A
+ * missing score — a Siswa's Hands-on RBL filed before it was asked (#446) — reads "—".
  */
 function AspectRow({
   label,
@@ -789,20 +841,32 @@ function AspectRow({
   comment,
 }: {
   label: string;
-  score: number;
+  score: number | null;
   comment: string | null;
 }) {
   return (
     <div>
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">{label}</span>
-        {score <= 7 ? (
+        {score === null ? (
+          <span className="text-sm text-muted-foreground">—</span>
+        ) : score <= 7 ? (
           <Badge variant="destructive">{score}</Badge>
         ) : (
           <span className="text-sm font-bold">{score}</span>
         )}
       </div>
       {comment !== null && <Comment text={comment} />}
+    </div>
+  );
+}
+
+/** One written answer (#446) under its short heading, clamped like a comment. Never scored. */
+function WrittenAnswer({ heading, text }: { heading: string; text: string }) {
+  return (
+    <div>
+      <span className="text-sm font-medium">{heading}</span>
+      <Comment text={text} />
     </div>
   );
 }

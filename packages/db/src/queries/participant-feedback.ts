@@ -1,5 +1,7 @@
 import {
   FEEDBACK_TOKEN_LIFETIME_HOURS,
+  PARTICIPANT_FEEDBACK_ASPECTS,
+  PARTICIPANT_FEEDBACK_ASPECTS_BY_CLASS,
   type ClassKind,
   type ParticipantFeedbackAspect,
 } from "@sugt/domain";
@@ -100,12 +102,12 @@ export async function issueFeedbackToken(
   });
 }
 
-/** The three Ratings a Participant gives — no elaboration rule, so all three are simply present. */
-export type ParticipantFeedbackRatings = {
-  materials: number;
-  instructor: number;
-  relevance: number;
-};
+/**
+ * The Ratings a Participant gives, one per Aspect their Class is asked
+ * (`PARTICIPANT_FEEDBACK_ASPECTS_BY_CLASS`) and `null` for any other — Hands-on RBL is the Student
+ * Class's alone (#446). No elaboration rule, so each asked Rating is simply present.
+ */
+export type ParticipantFeedbackRatings = Record<ParticipantFeedbackAspect, number | null>;
 
 /**
  * One optional comment per Aspect, keyed off `PARTICIPANT_FEEDBACK_ASPECTS` so the form, this
@@ -114,18 +116,36 @@ export type ParticipantFeedbackRatings = {
  */
 export type ParticipantFeedbackComments = Record<ParticipantFeedbackAspect, string | null>;
 
+/**
+ * The two written questions after the Ratings (#446) — not Aspects: no Rating, never counted.
+ * Both optional.
+ */
+export type ParticipantFeedbackAnswers = {
+  /** "Melalui kegiatan kelas ini apakah meningkatkan atau menambah pengetahuan Anda?" */
+  knowledgeGain: string | null;
+  /** "Saran dan masukan untuk kegiatan kelas". */
+  suggestions: string | null;
+};
+
 /** What the public form collects. The `sessionId` is not here — it comes from the resolved token. */
 export type NewParticipantFeedback = {
   classKind: ClassKind;
   name: string;
   ratings: ParticipantFeedbackRatings;
   comments: ParticipantFeedbackComments;
+  answers: ParticipantFeedbackAnswers;
 };
 
 export type SubmitParticipantFeedbackResult =
   | { outcome: "submitted" }
   /** The Participant typed no name. `name` is `not null`, and a blank one is not a name. */
-  | { outcome: "name-required" };
+  | { outcome: "name-required" }
+  /**
+   * The Ratings are not the Class's Aspects: one it is asked is missing — a Siswa with no Hands-on
+   * RBL Rating, say — or one it is not asked is present. The form never sends either; a forced
+   * request gets this, and nothing is written.
+   */
+  | { outcome: "ratings-mismatch" };
 
 /**
  * Insert one Participant's feedback.
@@ -143,22 +163,37 @@ export async function submitParticipantFeedback(
   const name = input.name.trim();
   if (name === "") return { outcome: "name-required" };
 
+  // Each Aspect the Class is asked must be Rated, and no other. "Required for Siswa" lives here
+  // rather than in a CHECK, because Student feedback filed before Hands-on RBL existed has none.
+  const asked = PARTICIPANT_FEEDBACK_ASPECTS_BY_CLASS[input.classKind] ?? [];
+  const matches = PARTICIPANT_FEEDBACK_ASPECTS.every(
+    (aspect) => (input.ratings[aspect] != null) === asked.includes(aspect),
+  );
+  if (asked.length === 0 || !matches) return { outcome: "ratings-mismatch" };
+
   // Trim each comment blank → null exactly as the single `comment` was — a Participant owes no
   // prose, so an empty box stores nothing rather than an empty string.
   const trimmed = (comment: string | null): string | null => {
     const value = comment?.trim() ?? "";
     return value === "" ? null : value;
   };
+  // A comment on an Aspect the Class is not asked is dropped, as the form drops it (#446).
+  const comment = (aspect: ParticipantFeedbackAspect) =>
+    asked.includes(aspect) ? trimmed(input.comments[aspect]) : null;
   await db.insert(participantFeedback).values({
     sessionId: caller.sessionId,
     classKind: input.classKind,
     name,
-    materials: input.ratings.materials,
-    instructor: input.ratings.instructor,
-    relevance: input.ratings.relevance,
-    materialsComment: trimmed(input.comments.materials),
-    instructorComment: trimmed(input.comments.instructor),
-    relevanceComment: trimmed(input.comments.relevance),
+    handsOnRbl: input.ratings.hands_on_rbl,
+    materials: input.ratings.materials!,
+    instructor: input.ratings.instructor!,
+    relevance: input.ratings.relevance!,
+    handsOnRblComment: comment("hands_on_rbl"),
+    materialsComment: comment("materials"),
+    instructorComment: comment("instructor"),
+    relevanceComment: comment("relevance"),
+    knowledgeGain: trimmed(input.answers.knowledgeGain),
+    suggestions: trimmed(input.answers.suggestions),
   });
 
   return { outcome: "submitted" };

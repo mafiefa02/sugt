@@ -724,7 +724,7 @@ rubric, because each asks a question only that person can answer.
 | ---------------------- | ------------- | --------------------- | -------------------------------------------------------------------------------- |
 | `class_record`         | Teaching Team | Class, per professor  | Comprehension, Participation, Readiness, Materials, Delivery, Facilities, Timing |
 | `session_record`       | PIC / Staff   | Session               | Facilities, Turnout, School support, Timing, Coordination                        |
-| `participant_feedback` | Participants  | Class, per respondent | Materials, Instructor, Relevance                                                 |
+| `participant_feedback` | Participants  | Class, per respondent | Materials, Instructor, Relevance; Hands-on RBL for the Student Class only        |
 | `perjadin_evaluation`  | Token link    | Perjadin (no dedup)   | Lodging, Transport, Meals, Punctuality                                           |
 
 They share a scale (1–10), a threshold (`CONCERN_AT_OR_BELOW`, 7), and one rule — **a Rating at
@@ -888,19 +888,25 @@ create table participant_feedback (
   class_kind  text not null check (class_kind in ('GTK', 'MS', 'Student')),
   name        text not null,
 
+  hands_on_rbl smallint        check (hands_on_rbl between 1 and 10),   -- Student Class only (#446)
   materials   smallint not null check (materials  between 1 and 10),
   instructor  smallint not null check (instructor between 1 and 10),
   relevance   smallint not null check (relevance  between 1 and 10),
 
-  materials_comment   text,
-  instructor_comment  text,
-  relevance_comment   text,
-  submitted_at        timestamptz not null default now()
+  hands_on_rbl_comment text,
+  materials_comment    text,
+  instructor_comment   text,
+  relevance_comment    text,
+  knowledge_gain       text,                                         -- written answers (#446),
+  suggestions          text,                                         -- not Aspects
+  submitted_at         timestamptz not null default now(),
+
+  check (class_kind = 'Student' or (hands_on_rbl is null and hands_on_rbl_comment is null))
 );
 
 create index participant_feedback_concerns_idx
-  on participant_feedback (least(materials, instructor, relevance))
-  where least(materials, instructor, relevance) <= 7;
+  on participant_feedback (least(hands_on_rbl, materials, instructor, relevance))
+  where least(hands_on_rbl, materials, instructor, relevance) <= 7;
 ```
 
 **Three Aspects, and none of them ask a Participant to rate themselves.** Comprehension,
@@ -911,6 +917,18 @@ because it lets what the professor thought be set against what the room thought.
 
 `class_kind` says which Class the respondent sat in. It is what makes their Rating comparable to
 the Class Record for that same cohort.
+
+**Hands-on RBL is the Student Class's alone** ([#446](https://github.com/sugt-itb/sugt-itb-26/issues/446)):
+`hands_on_rbl` and its `hands_on_rbl_comment`. A CHECK holds both null on every GTK and MS row.
+The column is nullable, and **"required for Siswa" is the application's rule**
+(`submitParticipantFeedback`, which refuses a Siswa submission without one as `ratings-mismatch`),
+not a constraint: Student feedback filed before the column existed has none, and is not
+backfilled. `least()` ignores a null, so the rebuilt concerns index still covers GTK, MS and those
+older rows, and a Hands-on RBL Rating of 7 or below reaches the concerns list like any other.
+Where a row's Ratings are averaged (the `/feedback` row average), it is over the Ratings present.
+
+**Two written answers that are not Aspects**, `knowledge_gain` and `suggestions`: optional, no
+Rating, never counted, never on the concerns list.
 
 **No elaboration rule applies to Participants.** The `CHECK` forcing prose on a low Rating is on
 `class_record` and `session_record` only. A Participant owes nothing and is not signed in;
@@ -1037,10 +1055,10 @@ box is retired outright — advice with no per-Aspect home now lives inside the 
 nowhere. This mirrors the #102 reversal on `participant_feedback`, plus the per-Aspect CHECK that
 Participant Feedback (which owes no prose) never needed.
 
-**`lodging` is the one nullable Rating in the system, because a day-trip has no hotel.** Not
-every Perjadin involves a night away — the programme budget carries at least one group visiting
-two Schools and returning the same day, with accommodation, flights and airport transfer all at
-zero. A `not null` column would require those travellers to rate a hotel they never saw, and
+**`lodging` is nullable, because a day-trip has no hotel** — one of two nullable Ratings, with
+`participant_feedback.hands_on_rbl` (#446). Not every Perjadin involves a night away — the
+programme budget carries at least one group visiting two Schools and returning the same day, with
+accommodation, flights and airport transfer all at zero. A `not null` column would require those travellers to rate a hotel they never saw, and
 inventing a Rating to satisfy a constraint is worse than the missing row.
 
 **Nothing constrains when it may be null**, deliberately. A Group that did stay somewhere and
@@ -1118,10 +1136,11 @@ select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
   from participant_feedback f
   join session sn on sn.id = f.session_id
   join school sch on sch.id = sn.school_id
-  cross join lateral (values ('materials',  f.materials,  f.materials_comment),
-                             ('instructor', f.instructor, f.instructor_comment),
-                             ('relevance',  f.relevance,  f.relevance_comment))
-                     as r(aspect, rating, said)
+  cross join lateral (values ('hands_on_rbl', f.hands_on_rbl, f.hands_on_rbl_comment),
+                             ('materials',    f.materials,    f.materials_comment),
+                             ('instructor',   f.instructor,   f.instructor_comment),
+                             ('relevance',    f.relevance,    f.relevance_comment))
+                     as r(aspect, rating, said)   -- a null hands_on_rbl fails `<= 7` and drops out
  where r.rating <= 7
 
 union all

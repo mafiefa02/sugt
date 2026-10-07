@@ -17,7 +17,7 @@ import type { Person } from "./caller";
  *
  * **Why a page and not a one-round-trip whole set.** A submission is not rare: every Participant
  * of every delivered Session leaves one, so the set grows without bound and both the filters and
- * the paging live in the query rather than in memory on the screen. The three summary averages
+ * the paging live in the query rather than in memory on the screen. The four summary averages
  * are the exception (`participantFeedbackAverages` below): they are dataset-wide and unfiltered,
  * so they are one scalar read the page filters never touch.
  *
@@ -65,13 +65,16 @@ const dir = (d: "asc" | "desc") => (d === "asc" ? asc : desc);
 export type FeedbackFilterValue = "all" | "le7" | "gt7";
 
 /**
- * The four filters, each independent and each ANDed with the others. `reviewType` gates on the
- * **row average** across the three Aspects; the other three gate on their own Aspect column.
- * A screen sends all four every time; `all` on any of them contributes no predicate.
+ * The five filters, each independent and each ANDed with the others. `reviewType` gates on the
+ * **row average** across the Ratings present; the other four gate on their own Aspect column. A
+ * row with no Hands-on RBL Rating — GTK, MS, or Siswa filed before it existed (#446) — is in
+ * neither `handsOnRbl` arm, since `null <= 7` and `null > 7` are both null. A screen sends all five
+ * every time; `all` on any of them contributes no predicate.
  */
 export type FeedbackFilters = {
-  /** Gates on `(materials + instructor + relevance) / 3` — the row's overall standing. */
+  /** Gates on the present-Ratings average (`rowAverageExpr`) — the row's overall standing. */
   reviewType: FeedbackFilterValue;
+  handsOnRbl: FeedbackFilterValue;
   instructor: FeedbackFilterValue;
   materials: FeedbackFilterValue;
   relevance: FeedbackFilterValue;
@@ -80,6 +83,7 @@ export type FeedbackFilters = {
 /** All filters off — the first page of everything, in the caller's chosen sort. */
 export const NO_FEEDBACK_FILTERS: FeedbackFilters = {
   reviewType: "all",
+  handsOnRbl: "all",
   instructor: "all",
   materials: "all",
   relevance: "all",
@@ -110,21 +114,32 @@ export type ParticipantFeedbackRow = {
   startsAt: string;
   /** The School's Province's Time Zone, the zone `startsAt` is rendered in. */
   timeZone: TimeZone;
+  /** The Student Class's alone (#446); null on GTK, MS and Siswa rows filed before it existed. */
+  handsOnRbl: number | null;
   materials: number;
   instructor: number;
   relevance: number;
-  /** `(materials + instructor + relevance) / 3`, computed in SQL as numeric and mapped to Number. */
+  /** The mean of the Ratings present, computed in SQL as numeric and mapped to Number. */
   rowAverage: number;
+  handsOnRblComment: string | null;
   materialsComment: string | null;
   instructorComment: string | null;
   relevanceComment: string | null;
+  /** The two written answers (#446): not Aspects, never averaged. Null when left empty. */
+  knowledgeGain: string | null;
+  suggestions: string | null;
   /** `submitted_at` as `YYYY-MM-DD`, rendered in SQL — the "Diisi" date the card shows. */
   submittedOn: string;
   submittedAt: Date;
 };
 
-/** The raw, unrounded row average — the expression `reviewType` gates on and the row carries. */
-const rowAverageExpr = sql<number>`(${participantFeedback.materials} + ${participantFeedback.instructor} + ${participantFeedback.relevance}) / 3.0`;
+/**
+ * The raw, unrounded row average — the expression `reviewType` gates on and the row carries —
+ * **over the Ratings present**, as `perjadinRowAverageExpr` is for a missing `lodging`. A row with
+ * no Hands-on RBL Rating averages its three; one with it, all four. A missing Rating never counts
+ * as 0.
+ */
+const rowAverageExpr = sql<number>`(${participantFeedback.materials} + ${participantFeedback.instructor} + ${participantFeedback.relevance} + coalesce(${participantFeedback.handsOnRbl}, 0)) / (3.0 + (case when ${participantFeedback.handsOnRbl} is null then 0 else 1 end))`;
 
 /**
  * Turn one filter into its predicate, or `null` when it is `all`. `le7` → `<= 7`, `gt7` → `> 7`,
@@ -171,6 +186,7 @@ export async function participantFeedbackPage(
   // single `!= null` at the `where`.
   const conditions: (SQL | null | undefined)[] = [
     bound(filters.reviewType, rowAverageExpr),
+    bound(filters.handsOnRbl, participantFeedback.handsOnRbl),
     bound(filters.instructor, participantFeedback.instructor),
     bound(filters.materials, participantFeedback.materials),
     bound(filters.relevance, participantFeedback.relevance),
@@ -189,15 +205,19 @@ export async function participantFeedbackPage(
       heldOn: session.heldOn,
       startsAt: session.startsAt,
       timeZone: province.timeZone,
-      // The smallint columns already read back as `number`; the row average is a numeric
-      // expression, so only it needs the explicit `.mapWith(Number)`.
+      // The smallint columns already read back as `number` (or null for `handsOnRbl`); the row
+      // average is a numeric expression, so only it needs the explicit `.mapWith(Number)`.
+      handsOnRbl: participantFeedback.handsOnRbl,
       materials: participantFeedback.materials,
       instructor: participantFeedback.instructor,
       relevance: participantFeedback.relevance,
       rowAverage: rowAverageExpr.mapWith(Number),
+      handsOnRblComment: participantFeedback.handsOnRblComment,
       materialsComment: participantFeedback.materialsComment,
       instructorComment: participantFeedback.instructorComment,
       relevanceComment: participantFeedback.relevanceComment,
+      knowledgeGain: participantFeedback.knowledgeGain,
+      suggestions: participantFeedback.suggestions,
       // The filed instant as a `YYYY-MM-DD` string in SQL — the "Diisi" date the card shows,
       // mirroring how the Perjadin tab renders `createdOn`.
       submittedOn: sql<string>`to_char(${participantFeedback.submittedAt}, 'YYYY-MM-DD')`,
@@ -227,27 +247,40 @@ export async function participantFeedbackPage(
   return { rows, nextCursor: null };
 }
 
+/** The Peserta tab's four summary averages. Hands-on RBL's is `null` until any row has one. */
+export type ParticipantFeedbackAverages = {
+  handsOnRbl: number | null;
+  instructor: number;
+  materials: number;
+  relevance: number;
+};
+
 /**
- * **The three summary averages, dataset-wide and unfiltered.** The `avg()` runs over the whole
+ * **The four summary averages, dataset-wide and unfiltered.** The `avg()` runs over the whole
  * `participant_feedback` table and takes no filter argument on purpose: the summary cards are the
  * overall standing, so they must not move when the page's filters narrow the list below them.
  *
- * An empty table makes `avg()` return NULL; `coalesce(…, 0)` turns that into `0` so the caller
- * gets three numbers to format rather than a null to guard. Zero is outside the 1–10 scale, so
- * "0.0" on an empty dataset reads as "nothing yet" rather than as a real low score.
+ * An empty table makes `avg()` return NULL; `coalesce(…, 0)` turns that into `0` for the three
+ * every row has, so the caller gets numbers to format rather than a null to guard. Zero is outside
+ * the 1–10 scale, so "0.0" on an empty dataset reads as "nothing yet" rather than as a real low
+ * score. **Hands-on RBL's average is over the rows that have one** (#446) — `avg()` skips a null,
+ * so GTK, MS and older Siswa rows never count as 0 — and stays `null`, shown as "—", while none do.
  */
 export async function participantFeedbackAverages(
   _caller: Person,
-): Promise<{ instructor: number; materials: number; relevance: number }> {
+): Promise<ParticipantFeedbackAverages> {
   const [row] = await db
     .select({
+      handsOnRbl: sql<number | null>`avg(${participantFeedback.handsOnRbl})`.mapWith((value) =>
+        value === null ? null : Number(value),
+      ),
       instructor: sql<number>`coalesce(avg(${participantFeedback.instructor}), 0)`.mapWith(Number),
       materials: sql<number>`coalesce(avg(${participantFeedback.materials}), 0)`.mapWith(Number),
       relevance: sql<number>`coalesce(avg(${participantFeedback.relevance}), 0)`.mapWith(Number),
     })
     .from(participantFeedback);
 
-  return row ?? { instructor: 0, materials: 0, relevance: 0 };
+  return row ?? { handsOnRbl: null, instructor: 0, materials: 0, relevance: 0 };
 }
 
 /**
@@ -299,7 +332,7 @@ export type PerjadinFeedbackRow = {
   endsOn: string;
   /** `created_at` as `YYYY-MM-DD`, rendered in SQL — the "Diisi" date the card shows. */
   createdOn: string;
-  /** The one nullable Rating: a day trip with no hotel leaves it null and omits the row. */
+  /** Nullable: a day trip with no hotel leaves it null and omits the row. */
   lodging: number | null;
   transport: number;
   meals: number;

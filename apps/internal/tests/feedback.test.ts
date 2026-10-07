@@ -195,6 +195,74 @@ describe("participantFeedbackPage", () => {
     expect(row?.submittedOn).toBe("2026-06-15");
   });
 
+  it("averages a row over its Ratings present: four with Hands-on RBL, three without (#446)", async () => {
+    const person = await signedIn();
+    const session = await oneSession();
+    // Rani: RBL 8, Materi 9, Narasumber 7, Relevansi 9.
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Rani",
+      ratings: { handsOnRbl: 8, materials: 9, instructor: 7, relevance: 9 },
+      comments: { hands_on_rbl: "Modulnya jelas" },
+      knowledgeGain: "Ya, saya jadi paham riset.",
+      suggestions: "Tambah waktu praktik.",
+    });
+    // A Siswa row filed before this change: no RBL, so its average is over three.
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Lama",
+      ratings: { materials: 6, instructor: 9, relevance: 9 },
+    });
+
+    const { rows } = await participantFeedbackPage(person, {
+      filters: NO_FEEDBACK_FILTERS,
+      cursor: null,
+      sort: DEFAULT_FEEDBACK_SORT,
+    });
+    const rani = rows.find((row) => row.name === "Rani");
+    const lama = rows.find((row) => row.name === "Lama");
+    expect(rani).toMatchObject({
+      handsOnRbl: 8,
+      handsOnRblComment: "Modulnya jelas",
+      knowledgeGain: "Ya, saya jadi paham riset.",
+      suggestions: "Tambah waktu praktik.",
+    });
+    expect(rani?.rowAverage).toBeCloseTo((8 + 9 + 7 + 9) / 4, 5);
+    expect(lama).toMatchObject({ handsOnRbl: null, knowledgeGain: null, suggestions: null });
+    expect(lama?.rowAverage).toBeCloseTo(8, 5);
+  });
+
+  it("filters on Hands-on RBL, leaving a row without one out of both arms", async () => {
+    const person = await signedIn();
+    const session = await oneSession();
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Rendah",
+      ratings: { handsOnRbl: 4 },
+    });
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      name: "Tinggi",
+      ratings: { handsOnRbl: 9 },
+    });
+    await addParticipantFeedback({ sessionId: session.id, classKind: "MS", name: "Tanpa" });
+
+    const page = async (handsOnRbl: "le7" | "gt7") =>
+      (
+        await participantFeedbackPage(person, {
+          filters: filters({ handsOnRbl }),
+          cursor: null,
+          sort: DEFAULT_FEEDBACK_SORT,
+        })
+      ).rows.map((row) => row.name);
+    await expect(page("le7")).resolves.toEqual(["Rendah"]);
+    await expect(page("gt7")).resolves.toEqual(["Tinggi"]);
+  });
+
   it("filters on the instructor column with le7 and gt7", async () => {
     const person = await signedIn();
     const session = await oneSession();
@@ -506,10 +574,32 @@ describe("participantFeedbackAverages", () => {
   it("defaults to zero on an empty table", async () => {
     const person = await signedIn();
     expect(await participantFeedbackAverages(person)).toEqual({
+      // "—" on screen until any row has one (#446), never a 0 average.
+      handsOnRbl: null,
       instructor: 0,
       materials: 0,
       relevance: 0,
     });
+  });
+
+  it("averages Hands-on RBL over the rows that have one, never counting GTK, MS or older Siswa as 0", async () => {
+    const person = await signedIn();
+    const session = await oneSession();
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      ratings: { handsOnRbl: 8 },
+    });
+    await addParticipantFeedback({
+      sessionId: session.id,
+      classKind: "Student",
+      ratings: { handsOnRbl: 4 },
+    });
+    // A Siswa row filed before Hands-on RBL existed, and a GTK row never asked it.
+    await addParticipantFeedback({ sessionId: session.id, classKind: "Student" });
+    await addParticipantFeedback({ sessionId: session.id, classKind: "GTK" });
+
+    expect((await participantFeedbackAverages(person)).handsOnRbl).toBeCloseTo(6, 5);
   });
 
   it("averages every row, dataset-wide", async () => {

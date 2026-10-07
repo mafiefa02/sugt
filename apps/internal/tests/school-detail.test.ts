@@ -207,6 +207,44 @@ describe("the Detail Sekolah payload", () => {
     expect(flagged?.concern).toEqual({ aspect: "instructor", rating: 3 });
   });
 
+  it("flags a Siswa's Hands-on RBL at or below the threshold (#446), and never a written answer", async () => {
+    const person = await signInAsStaff();
+    const { onSite, online } = await seedOneSchool(person.id);
+    // Rani: Narasumber 7 is the lowest of her four, so it is the concern; RBL 8 is not.
+    await addParticipantFeedback({
+      sessionId: onSite.id,
+      classKind: "Student",
+      ratings: { handsOnRbl: 8, materials: 9, instructor: 7, relevance: 9 },
+      knowledgeGain: "Tidak terlalu.",
+      suggestions: "Kurang waktu.",
+    });
+    await addParticipantFeedback({
+      sessionId: online.id,
+      classKind: "Student",
+      ratings: { handsOnRbl: 4 },
+    });
+
+    const detail = await schoolDetail(person, "sman-1-bandung");
+    const rani = detail?.sessions.find((session) => session.id === onSite.id);
+    const rbl = detail?.sessions.find((session) => session.id === online.id);
+
+    expect(rani).toMatchObject({ ratingsFiled: 4, concern: { aspect: "instructor", rating: 7 } });
+    expect(rbl?.concern).toEqual({ aspect: "hands_on_rbl", rating: 4 });
+  });
+
+  it("counts a GTK row's three Ratings, not its unasked Hands-on RBL", async () => {
+    const person = await signInAsStaff();
+    const { online } = await seedOneSchool(person.id);
+    await addParticipantFeedback({ sessionId: online.id, classKind: "GTK" });
+
+    const detail = await schoolDetail(person, "sman-1-bandung");
+
+    expect(detail?.sessions.find((session) => session.id === online.id)).toMatchObject({
+      ratingsFiled: 3,
+      concern: null,
+    });
+  });
+
   it("flags a Session on a Session Record, including the Aspect whose column is two words", async () => {
     /**
      * `school_support` is the one Aspect whose `@sugt/domain` name and Drizzle property
