@@ -1448,7 +1448,8 @@ only while `added_on <= P.ends_on` and `removed_on` is null or later than `P.end
 the WIB day of the change. A Cluster hide works the same way, one row per spell. Removing a wider
 item is therefore a soft-remove that stamps `removed_on`; the Perjadins that had ended keep it and
 its ticks. A `perjadin` item and a Perjadin-level hide are undated and always apply; removing the
-item deletes it, and its ticks by cascade. Wording is never dated, so a rewording keeps the item's
+item deletes it, and its ticks by cascade. Nothing is snapshotted at the end date: the rule reads the
+trip's `ends_on` as it stands, so moving a trip's dates re-decides which dated changes reach it. Wording is never dated, so a rewording keeps the item's
 id and ticks and shows on finished Perjadins too.
 
 **Only the ticks are stored**, as before ([ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md)).

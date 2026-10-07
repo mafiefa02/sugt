@@ -411,7 +411,8 @@ trip's own.
   transportasi PP", lodging, local transport, "confirmed with the Pendamping" and "Narasumber
   sudah lengkap".
 - **A finished trip's list does not change.** Adding, removing or hiding a box for every Perjadin or
-  for a Cluster reaches only the trips ending that day or later. A change made for one Perjadin
+  for a Cluster reaches only the trips ending that day or later. Moving a trip's dates re-decides
+  this against its new end date. A change made for one Perjadin
   always reaches it. A box's wording, once changed, shows everywhere, finished trips included.
 - **"Fiksasi Dosen/Narasumber oleh PIC Dosen" unticks itself** whenever the trip's Narasumber change
   (a name added, renamed or removed), so each change has to be confirmed again by hand. It can be

@@ -85,7 +85,8 @@ export async function addPreparationItem(
       clusterId,
       perjadinId,
       label,
-      // After every item of the same scope, removed ones included, so a position is never reused.
+      // After every item of the same scope, removed ones included. Two adds at once may take the
+      // same position; the resolver then orders them by id, so the order stays stable.
       position: sql`(select coalesce(max(${preparationItem.position}), 0) + 1 from ${preparationItem} where ${sameScope})`,
       addedOn: scope.level === "perjadin" ? null : sql`${todayInDeadlineZone}`,
     })
@@ -233,15 +234,27 @@ export async function rewordPreparationItem(
   const checked = await checkOverride(input.itemId, input.scope);
   if (checked.outcome !== "ok") return checked;
 
+  // One upsert on the scope's partial unique index, not a delete and an insert: two rewords at once
+  // would both pass the delete, and the second insert would hit the index.
   const scope = input.scope;
-  await db.transaction(async (tx) => {
-    await tx.delete(preparationItemWording).where(wordingIn(input.itemId, scope));
-    await tx.insert(preparationItemWording).values({
+  const byCluster = "clusterId" in scope;
+  await db
+    .insert(preparationItemWording)
+    .values({
       preparationItemId: input.itemId,
-      ...("clusterId" in scope ? { clusterId: scope.clusterId } : { perjadinId: scope.perjadinId }),
+      ...(byCluster ? { clusterId: scope.clusterId } : { perjadinId: scope.perjadinId }),
       label,
+    })
+    .onConflictDoUpdate({
+      target: [
+        preparationItemWording.preparationItemId,
+        byCluster ? preparationItemWording.clusterId : preparationItemWording.perjadinId,
+      ],
+      targetWhere: byCluster
+        ? sql`${preparationItemWording.clusterId} is not null`
+        : sql`${preparationItemWording.perjadinId} is not null`,
+      set: { label },
     });
-  });
   return { outcome: "reworded" };
 }
 

@@ -46,10 +46,10 @@ export type PreparationItem = {
 };
 
 /** What the resolver needs to know about a Perjadin: its id, its Cluster and the day it ends. */
-export type ChecklistPerjadin = { id: string; clusterId: string; endsOn: string };
+type ChecklistPerjadin = { id: string; clusterId: string; endsOn: string };
 
 /** The stored rows the resolver reads, already narrowed to the Perjadins at hand. */
-export type ChecklistCatalog = {
+type ChecklistCatalog = {
   items: {
     id: string;
     level: PreparationItemLevel;
@@ -87,9 +87,9 @@ function covers(from: string | null, until: string | null, endsOn: string): bool
 
 /**
  * Resolve one Perjadin's checklist from the stored rows. **Pure**: every rule above is decided here
- * and nowhere else, so it is tested without a database and the batched read only has to fetch.
+ * and nowhere else, so the batched read only has to fetch.
  */
-export function resolvePreparationChecklist(
+function resolvePreparationChecklist(
   trip: ChecklistPerjadin,
   catalog: ChecklistCatalog,
 ): PreparationItem[] {

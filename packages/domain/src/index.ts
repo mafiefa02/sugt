@@ -677,13 +677,6 @@ export const ACTIVITY_LOG_ACTION_LABELS: Record<ActivityLogAction, string> = {
 export const PREPARATION_ITEM_LEVELS = ["semua", "cluster", "perjadin"] as const;
 export type PreparationItemLevel = (typeof PREPARATION_ITEM_LEVELS)[number];
 
-/** How each level reads on screen. */
-export const PREPARATION_ITEM_LEVEL_LABELS: Record<PreparationItemLevel, string> = {
-  semua: "Semua Perjadin",
-  cluster: "Cluster",
-  perjadin: "Perjadin",
-};
-
 /**
  * **The three kinds of Perjadin Document**
  * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042): attendance sheets, one

@@ -1,5 +1,6 @@
 import { db, schema } from "@sugt/db";
 import {
+  addPerjadinTeacher,
   addPreparationItem,
   clearPreparationItemWording,
   hidePreparationItem,
@@ -20,6 +21,7 @@ import {
   addPerson,
   addSubCluster,
   COMPANY_PREPARATION_ITEMS,
+  refusedBy,
   resetDatabase,
   wibDaysFromToday,
 } from "./support/fixtures";
@@ -29,8 +31,8 @@ import {
  *
  * Every write here runs on today's WIB date, so the dated rule is pinned the way it will run: a
  * change made today reaches a Perjadin ending today or later, and leaves one that ended yesterday
- * exactly as it was. Perjadin-level changes and every wording reach both. The pure resolver's
- * corners — a Cluster hidden, shown and hidden again — are `preparation-checklist.test.ts`'s.
+ * exactly as it was. Perjadin-level changes and every wording reach both. A Cluster hidden, shown
+ * and hidden again is pinned with dated rows written directly, since only a past date can show it.
  */
 
 let admin: Awaited<ReturnType<typeof addPerson>>;
@@ -135,6 +137,27 @@ describe("Semua and Cluster changes are dated: they skip a Perjadin that has alr
 
     await removePreparationItem(admin, added.itemId);
     expect(await labelsOf(ending)).not.toContain("Khusus Cluster Satu");
+  });
+
+  it("removes a long-standing Cluster item from today on, leaving a finished Perjadin's ticked", async () => {
+    const ended = await tripEnding(-1);
+    const ending = await tripEnding(0);
+    const added = await addPreparationItem(admin, {
+      scope: { level: "cluster", clusterId },
+      label: "Lama di Cluster",
+    });
+    if (added.outcome !== "added") throw new Error("fixture failed");
+    await db
+      .update(schema.preparationItem)
+      .set({ addedOn: wibDaysFromToday(-30) })
+      .where(eq(schema.preparationItem.id, added.itemId));
+    await togglePreparationItem(admin, { perjadinId: ended, itemId: added.itemId, checked: true });
+
+    await removePreparationItem(admin, added.itemId);
+
+    expect(await labelsOf(ending)).not.toContain("Lama di Cluster");
+    const kept = (await itemsOf(ended)).find((item) => item.itemId === added.itemId);
+    expect(kept?.checked).toBe(true);
   });
 
   it("hides a Semua item for a Cluster from today, and shows it again with its ticks", async () => {
@@ -294,6 +317,21 @@ describe("wording", () => {
     expect((await labelsOf(ending))[0]).toBe(COMPANY_PREPARATION_ITEMS[0]);
   });
 
+  it("takes two rewords for one scope at once without either failing", async () => {
+    const ending = await tripEnding(0);
+    const [first] = await itemsOf(ending);
+    const scope = { clusterId };
+
+    const results = await Promise.all(
+      ["Satu", "Dua"].map((label) =>
+        rewordPreparationItem(admin, { itemId: first!.itemId, label, scope }),
+      ),
+    );
+
+    expect(results).toEqual([{ outcome: "reworded" }, { outcome: "reworded" }]);
+    expect(["Satu", "Dua"]).toContain((await labelsOf(ending))[0]);
+  });
+
   it("does not move an item", async () => {
     const ending = await tripEnding(0);
     const items = await itemsOf(ending);
@@ -340,6 +378,25 @@ describe("the system item", () => {
     expect(reworded).toEqual(
       expect.objectContaining({ label: "Narasumber sudah fiks", clearsOnTeachingTeamChange: true }),
     );
+
+    // Reworded, it still unticks on a Teaching-Team change: the coupling reads the flag.
+    await togglePreparationItem(admin, { perjadinId: ending, itemId, checked: true });
+    await addPerjadinTeacher(admin, ending, "Prof. Baru");
+    expect((await itemsOf(ending)).find((item) => item.itemId === itemId)?.checked).toBe(false);
+  });
+
+  it("is the only item that can carry the flag", async () => {
+    expect(
+      await refusedBy(
+        db.insert(schema.preparationItem).values({
+          level: "semua",
+          label: "Kedua",
+          position: 99,
+          addedOn: wibDaysFromToday(0),
+          clearsOnTeachingTeamChange: true,
+        }),
+      ),
+    ).toBe("preparation_item_one_system_item");
   });
 });
 

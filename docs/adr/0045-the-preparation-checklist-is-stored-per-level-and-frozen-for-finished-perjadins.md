@@ -44,6 +44,14 @@ day it was made, in WIB. It reaches Perjadin P only if `P.ends_on` is that day o
 A **Perjadin-level** change is undated and always applies to that Perjadin, finished or not.
 Removing a Perjadin item deletes it, and its ticks with it.
 
+**The freeze follows the trip's end date as it stands.** Nothing is copied onto a Perjadin when it
+ends; its list is worked out from its `ends_on` each time it is read. So moving a trip's dates
+(Ubah tanggal) re-decides which dated changes reach it. A finished trip moved to end after the
+cutover shows the 14 instead of the old six, and its ticks on the six drop out of sight, kept in the
+table. This ADR chooses that over snapshotting each list at the end date, because a date move is rare,
+deliberate and made by Staff, and a snapshot would be a second copy of the list to keep in step. The
+product owner has not ruled on it yet; it is raised on the pull request for #421.
+
 **A wording change is not dated.** Rewording an item, at its own level or as a Cluster or Perjadin
 wording, keeps it **the same item**: the same id, its ticks kept, counted as one item. The new
 wording shows wherever the item applies, finished Perjadins included. Removing a wording restores
@@ -54,8 +62,8 @@ the wider one.
 The alternative was to resolve every Perjadin's list from today's definitions. A new Semua item
 would then appear on every finished trip, unticked. Every finished Perjadin's `x/N`, and every past
 week Pimpinan monitor, would drop the day it was added, and an item removed today would erase what
-a finished trip had ticked. The checklist is read back as a record of how preparation went. A
-definition made today should not rewrite that record.
+a finished trip had ticked. Pimpinan read the checklist back as how each trip's preparation went.
+A definition made today should not rewrite that reading.
 
 Wording is the exception on purpose. Fixing a typo, or renaming a task the company has renamed, is
 not a change to what was asked of the trip.
