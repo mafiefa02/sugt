@@ -1,6 +1,7 @@
 "use server";
 
 import { renamePerjadinFolder } from "-/lib/drive/rename-perjadin-folder";
+import { renameSessionFootage } from "-/lib/drive/rename-session-footage";
 import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
@@ -90,7 +91,11 @@ export async function moveSessionDateAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => moveSessionDate(person, sessionId, heldOn, startsAt));
-  if (result.outcome === "moved") revalidatePath(`/sesi/${sessionId}`);
+  if (result.outcome === "moved") {
+    // Its Foto & Video folder and files carry the date and time (ADR-0046): best effort, after the commit.
+    await renameSessionFootage(person, sessionId);
+    revalidatePath(`/sesi/${sessionId}`);
+  }
   return result;
 }
 

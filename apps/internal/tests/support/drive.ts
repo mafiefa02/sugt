@@ -41,13 +41,13 @@ export function pdf(size = 2048) {
  * The company Drive connection, with its fixed tree built in `drive` and a token that decrypts —
  * `connected` by default, or `broken`. Answers the tree's ids. `Dokumen/` and its `Pelaksanaan
  * Offline/` (ADR-0042) are built too, as a connect now builds them, unless `dokumen` is false — a
- * connection made before them.
+ * connection made before them — and likewise `Foto & Video/` (ADR-0046) unless `footage` is false.
  */
 export async function connectDrive(
   drive: FakeDrive,
   connectedByPersonId: string,
   status: "connected" | "broken" = "connected",
-  { dokumen = true }: { dokumen?: boolean } = {},
+  { dokumen = true, footage = true }: { dokumen?: boolean; footage?: boolean } = {},
 ): Promise<ReadyFolders> {
   const ensured = await ensureFixedFolders(drive, {
     rootFolderId: null,
@@ -63,6 +63,12 @@ export async function connectDrive(
   const dokumenPelaksanaanOfflineFolderId = dokumenFolderId
     ? (await drive.createFolder({ name: "Pelaksanaan Offline", parentId: dokumenFolderId })).id
     : null;
+  const footageFolderId = footage
+    ? (await drive.createFolder({ name: "Foto & Video", parentId: folders.rootFolderId })).id
+    : null;
+  const footagePelaksanaanOfflineFolderId = footageFolderId
+    ? (await drive.createFolder({ name: "Pelaksanaan Offline", parentId: footageFolderId })).id
+    : null;
   const token = encryptRefreshToken("refresh");
   await db.insert(schema.driveConnection).values({
     accountEmail: "bukti@perusahaan.test",
@@ -72,6 +78,8 @@ export async function connectDrive(
     ...folders,
     dokumenFolderId,
     dokumenPelaksanaanOfflineFolderId,
+    footageFolderId,
+    footagePelaksanaanOfflineFolderId,
     status,
     brokenAt: status === "broken" ? new Date() : null,
     connectedByPersonId,

@@ -149,3 +149,12 @@ Sub-Cluster. One Sub-Cluster may be covered by several trips
 ([ADR-0043](./0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)), so the Sub-Cluster rule
 offered Schools this trip never visits. The picker offers that set and the server refuses any other
 School with a sentence; a sheet already recorded for a School that later left the trip stays.
+
+## Amendment (2026-10-07): Session Footage beside the documents, not among them
+
+Photos and videos of an offline Session are **not** Perjadin Documents and do not go under `Dokumen/`.
+They have their own tree, `Foto & Video/`, and their own table
+([ADR-0046](./0046-session-footage-is-stored-in-the-company-google-drive.md), #424): they are not
+attendance paperwork, and each tree can be handed over on its own. They keep this ADR's per-file
+sharing, every folder private, and its Hapus order — the file to the Drive trash first, then the row
+and its Log entry.

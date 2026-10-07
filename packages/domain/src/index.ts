@@ -638,6 +638,39 @@ export const MAX_RECEIPTS_PER_TRANSACTION = 5;
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 /**
+ * **Session Footage** — the photos and videos documenting one offline Session, shown as "Foto &
+ * Video" (#424, ADR-0046). Two kinds, each with its own cap, in the same MiB arithmetic as
+ * `MAX_UPLOAD_BYTES`. A photo is held to the receipts' 50 MB; a video may be twenty times that.
+ * Footage is uploaded untouched, so these caps are on the file as it was taken.
+ */
+export const SESSION_FOOTAGE_KINDS = ["foto", "video"] as const;
+export type SessionFootageKind = (typeof SESSION_FOOTAGE_KINDS)[number];
+
+export const MAX_FOOTAGE_PHOTO_BYTES = 50 * 1024 * 1024;
+export const MAX_FOOTAGE_VIDEO_BYTES = 1000 * 1024 * 1024;
+
+/** The cap on one file of each kind. */
+export const MAX_FOOTAGE_BYTES: Record<SessionFootageKind, number> = {
+  foto: MAX_FOOTAGE_PHOTO_BYTES,
+  video: MAX_FOOTAGE_VIDEO_BYTES,
+};
+
+/**
+ * The types Session Footage is stored as — the six the server recognises from a file's first bytes
+ * (JPEG, PNG, HEIC/HEIF, WebP, MP4, MOV), each with its kind. A HEIF file is stored as `image/heic`:
+ * the two share a container and a sniff. Mirrored by `session_footage_content_type_check`.
+ */
+export const SESSION_FOOTAGE_CONTENT_TYPES = {
+  "image/jpeg": "foto",
+  "image/png": "foto",
+  "image/heic": "foto",
+  "image/webp": "foto",
+  "video/mp4": "video",
+  "video/quicktime": "video",
+} as const satisfies Record<string, SessionFootageKind>;
+export type SessionFootageContentType = keyof typeof SESSION_FOOTAGE_CONTENT_TYPES;
+
+/**
  * **What an Activity Log entry records**
  * ([#395](https://github.com/sugt-itb/sugt-itb-26/issues/395)): one act on a Perjadin's money,
  * receipts, documents or report. A closed set, mirrored character for character by
@@ -645,7 +678,8 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
  *
  * The two `document_*` values went into the set with the rest, so the Dokumen uploads
  * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397)) and Hapus
- * ([#398](https://github.com/sugt-itb/sugt-itb-26/issues/398)) needed no CHECK migration.
+ * ([#398](https://github.com/sugt-itb/sugt-itb-26/issues/398)) needed no CHECK migration. The two
+ * `footage_*` values (Session Footage, #424) came later and widened the CHECK in migration 0044.
  */
 export const ACTIVITY_LOG_ACTIONS = [
   "advance_set",
@@ -655,6 +689,8 @@ export const ACTIVITY_LOG_ACTIONS = [
   "report_filed",
   "document_uploaded",
   "document_deleted",
+  "footage_uploaded",
+  "footage_deleted",
 ] as const;
 export type ActivityLogAction = (typeof ACTIVITY_LOG_ACTIONS)[number];
 
@@ -667,6 +703,8 @@ export const ACTIVITY_LOG_ACTION_LABELS: Record<ActivityLogAction, string> = {
   report_filed: "Laporan dikirim",
   document_uploaded: "Dokumen diunggah",
   document_deleted: "Dokumen dihapus",
+  footage_uploaded: "Foto/Video diunggah",
+  footage_deleted: "Foto/Video dihapus",
 };
 
 /**

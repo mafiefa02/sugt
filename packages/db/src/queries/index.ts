@@ -224,6 +224,35 @@ export {
   type RewordPreparationItemResult,
 } from "./preparation-items";
 export {
+  deleteSessionFootage,
+  footageSession,
+  recordSessionFootage,
+  sessionFootageList,
+  type DeleteSessionFootageResult,
+  type FootageSession,
+  type FootageSessionRefusal,
+  type NewSessionFootage,
+  type RecordSessionFootageResult,
+  type SessionFootageRow,
+} from "./session-footage";
+export {
+  claimFootageFolder,
+  claimPerjadinFootageFolder,
+  claimSessionFootageFolder,
+  footageFolderIds,
+  footageReconcileTarget,
+  markFootageSynced,
+  markFootageSyncFailed,
+  sessionFootageFolders,
+  unsyncedFootage,
+  type FootageFolderIds,
+  type FootageReconcileTarget,
+  type PlacedFootage,
+  type SessionFolderNaming,
+  type SessionFootageFolder,
+  type UnsyncedFootage,
+} from "./session-footage-drive-sync";
+export {
   preparationWeek,
   type PreparationWeek,
   type WeekPerjadin,

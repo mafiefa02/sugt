@@ -816,21 +816,52 @@ was recorded while the connection was down, as Periksa koneksi does below.
   utama dapat dibuka siapa saja yang punya link — pindahkan keluar dari folder yang dibagikan."
 - whether `Dokumen/` and its `Pelaksanaan Offline/` are there, making them if not: "Folder Dokumen:
   ada." or "Folder Dokumen: dibuat." A connection made before Dokumen existed gets them here,
-  without reconnecting;
+  without reconnecting. Then the same for `Foto & Video/`: "Folder Foto & Video: ada." or "…dibuat.";
 - a **sweep** of the transactions whose receipts are not yet in place in Drive, oldest first, up to
   25 per press: "{n} transaksi disinkronkan, {m} masih menunggu", with the reason for any that could
   not be finished, such as a folder in the Drive trash, which is never recreated. Then the same for
-  Perjadin Documents: "{n} dokumen disinkronkan, {m} masih menunggu";
-- **every Perjadin folder's name**, receipts and Dokumen, brought to the trip's name
-  (`Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang · P-1a2b3c4d`): "{n} folder Perjadin diganti
-  namanya, {m} tersisa". It renames up to 25 per press; a folder already right is only read. A
+  Perjadin Documents: "{n} dokumen disinkronkan, {m} masih menunggu", and for Foto & Video: "{n}
+  foto/video disinkronkan, {m} masih menunggu";
+- **every Perjadin folder's name**, receipts, Dokumen and Foto & Video, brought to the trip's name
+  (`Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang · P-1a2b3c4d`), and every Session's Foto & Video
+  folder and files brought to the Session's date, time and School: "{n} nama folder dan berkas
+  diganti, {m} folder tersisa". It stops after 25 renamed folders, or when the press's time is up,
+  even part-way through one Session's files; a folder already right is only read, and a Session
+  folder already right means its files are too, so they are not read at all. A
   folder in the Drive trash or gone is listed with the reason and left alone. Folders made before
   the name changed, or whose Sub-Cluster was renamed since, take the new name here — press again
   until nothing is left.
 
 A trip's folders are also renamed by themselves, right after the change is saved, when either of
 its dates changes or its Schools do: a Session added at a new School, moved to another School, or a
-School's last Session cancelled. If Drive fails then, the next Periksa koneksi catches it.
+School's last Session cancelled. A Session's Foto & Video folder and files are renamed the same way
+when its date or start time changes. If Drive fails then, the next Periksa koneksi catches it.
+
+**The whole tree in the company Drive** — each folder private, and only the files marked shared:
+
+```
+SUGT ITB 2026 _staging — jangan dibagikan/          every upload lands here first, then is moved
+SUGT ITB 2026 Internal App Object Storage/
+├── README
+├── Bukti Transaksi/Pelaksanaan Offline/
+│   └── Kelompok 12 · 11–14 Okt 2026 · SMA Pradita …, SMA Trensains … · P-1a2b3c4d/
+│       └── 2026-10-12 · Konsumsi · T-9f8e7d6c/          shared by link (the whole folder)
+├── Dokumen/Pelaksanaan Offline/
+│   └── Kelompok 12 · 11–14 Okt 2026 · … · P-1a2b3c4d/
+│       └── Daftar Hadir Peserta/
+│           └── 2026-10-12 · SMA Pradita Dirgantara · Siswa · Daftar Hadir Peserta · D-5c6d7e8f.pdf   shared
+└── Foto & Video/Pelaksanaan Offline/
+    └── Kelompok 12 · 11–14 Okt 2026 · … · P-1a2b3c4d/
+        └── 2026-10-12 · 08.00 · SMA Pradita Dirgantara · S-3e4f5a6b/   one per offline Session
+            ├── 2026-10-12 · SMA Pradita Dirgantara · Foto · M-7c8d9e0f.jpg    shared
+            └── 2026-10-12 · SMA Pradita Dirgantara · Video · M-1d2e3f4a.mp4   shared
+```
+
+**Foto & Video** ([ADR-0046](./adr/0046-session-footage-is-stored-in-the-company-google-drive.md))
+holds the photos (JPEG, PNG, HEIC or WebP, up to 50 MB) and videos (MP4 or MOV, up to 1000 MB) of
+each offline Session, uploaded as they were taken — a photo keeps its location data — and shared one
+file at a time. A large file is sent to Drive in 16 MB pieces and picks up where it stopped if the
+connection drops. Where Staff upload and view them is the screens' own ticket (#425).
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
 connected, broken, or its folders unresolved — the states in which nobody can upload a receipt or a Dokumen.
@@ -858,7 +889,8 @@ A table, newest first, 50 rows a page:
 - **Perjadin** links to the trip by its name (`Kelompok 18 · 12–15 Okt 2026`), with its current PIC
   and, as a second line, the trip's Schools.
 - **Aksi** is one of Uang Perjalanan ditetapkan, Uang Perjalanan diubah, Catat transaksi, Unggah
-  bukti, Laporan dikirim, Dokumen diunggah and Dokumen dihapus. Entries derived from data recorded
+  bukti, Laporan dikirim, Dokumen diunggah, Dokumen dihapus, Foto/Video diunggah and Foto/Video
+  dihapus. Entries derived from data recorded
   before the Log existed read "(dari data lama)" after it.
 - **Rincian** says what changed. A transaction's row links to its folder in Drive, when it has one.
 
@@ -866,7 +898,8 @@ A table, newest first, 50 rows a page:
 
 - the search matches, ignoring case, the email, the trip's Kelompok (its Sub-Cluster's name), its
   Schools, its PIC's name, and the Aksi and Rincian text;
-- Aksi is Semua, Uang Perjalanan, Catat transaksi, Unggah bukti, Dokumen or Laporan dikirim;
+- Aksi is Semua, Uang Perjalanan, Catat transaksi, Unggah bukti, Dokumen, Foto & Video or Laporan
+  dikirim;
 - Rentang tanggal is two WIB dates, dari and sampai, both included.
 
 They combine, and **all of them are in the URL**, with the page number, so a view can be bookmarked.

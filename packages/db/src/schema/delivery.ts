@@ -1,6 +1,12 @@
-import type { SessionMode, SessionStatus } from "@sugt/domain";
+import type {
+  SessionFootageContentType,
+  SessionFootageKind,
+  SessionMode,
+  SessionStatus,
+} from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   date,
   foreignKey,
@@ -14,6 +20,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { person } from "./people";
 import { school } from "./reference";
 import { perjadin, perjadinTeacher } from "./travel";
 
@@ -97,6 +104,9 @@ export const session = pgTable(
     // third-party LMS provider now runs online delivery (the Zoom host is in WIB), so SUGT no longer
     // tracks a PIC for online Sessions and they no longer produce a Session Record. Offline Sessions
     // still take their PIC from their Perjadin (`perjadin.pic_person_id`), never from a column here.
+    // The Session's own folder under its Perjadin's `Foto & Video/` folder (ADR-0046), claimed by
+    // compare-and-set the first time its footage is reconciled. Only an offline Session ever has one.
+    driveFootageFolderId: text("drive_footage_folder_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -225,5 +235,65 @@ export const sessionTeachingTeam = pgTable(
       columns: [t.perjadinTeacherId],
       foreignColumns: [perjadinTeacher.id],
     }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * **Session Footage** (#424, ADR-0046): the photos and videos documenting one offline Session, shown
+ * as "Foto & Video". Each row is one file in the company Google Drive under `Foto & Video/`, uploaded
+ * untouched and shared on its own; it is uploaded or deleted, never edited.
+ *
+ * `id` is generated before the insert, because the file's name carries it (`M-{footage8}`). The kind
+ * follows from the type the server sniffed, and the size is Drive's: both CHECKs below hold what
+ * the upload already checked, so no write path can store a 2 GB "photo".
+ *
+ * **Offline only, and not cancelled at upload time**, are the application's rules
+ * (`recordSessionFootage`); footage of a Session cancelled later stays. The foreign key to `session`
+ * has no cascade: offline Sessions are only ever cancelled, never deleted, and a delete that would
+ * orphan Drive files is refused rather than followed.
+ *
+ * The uploader is Staff by the composite `(id, role)` key, as a Perjadin's PIC is.
+ * `drive_synced_at` and `drive_sync_failed_at` mean what they mean on `perjadin_document`.
+ */
+export const sessionFootage = pgTable(
+  "session_footage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => session.id),
+    kind: text("kind").$type<SessionFootageKind>().notNull(),
+    contentType: text("content_type").$type<SessionFootageContentType>().notNull(),
+    // As the browser named it, for the list; the Drive name is the app's own.
+    originalFilename: text("original_filename").notNull(),
+    // Up to 1000 MiB fits an integer; a bigint leaves headroom should the cap ever grow.
+    byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+    driveFileId: text("drive_file_id").notNull().unique(),
+    uploadedByPersonId: uuid("uploaded_by_person_id").notNull(),
+    uploadedByRole: text("uploaded_by_role").notNull().default("Staff"),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+    driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
+    driveSyncFailedAt: timestamp("drive_sync_failed_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("session_footage_kind_check", sql`${t.kind} in ('foto', 'video')`),
+    check(
+      "session_footage_content_type_check",
+      sql`(${t.kind} = 'foto' and ${t.contentType} in ('image/jpeg', 'image/png', 'image/heic', 'image/webp')) or (${t.kind} = 'video' and ${t.contentType} in ('video/mp4', 'video/quicktime'))`,
+    ),
+    // `MAX_FOOTAGE_PHOTO_BYTES` and `MAX_FOOTAGE_VIDEO_BYTES`, as literals.
+    check(
+      "session_footage_byte_size_check",
+      sql`${t.byteSize} > 0 and ${t.byteSize} <= case ${t.kind} when 'foto' then 52428800 else 1048576000 end`,
+    ),
+    check("session_footage_original_filename_check", sql`length(${t.originalFilename}) > 0`),
+    check("session_footage_uploaded_by_role_check", sql`${t.uploadedByRole} = 'Staff'`),
+    foreignKey({
+      name: "session_footage_uploaded_by_is_staff",
+      columns: [t.uploadedByPersonId, t.uploadedByRole],
+      foreignColumns: [person.id, person.role],
+    }),
+    // A Session's footage is listed by Session; Postgres does not index the FK on its own (#270).
+    index("session_footage_session_id_idx").on(t.sessionId),
   ],
 );
