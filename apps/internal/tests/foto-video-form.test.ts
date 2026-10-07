@@ -8,7 +8,13 @@ import {
   MAX_FOOTAGE_FILES_PER_BATCH,
 } from "-/components/foto-video-form";
 import { uploadFootageBatch } from "-/components/foto-video-upload";
-import { describe, expect, it } from "vitest";
+import { TripTimeline } from "-/components/my-perjadin-section";
+import { tripTimeline } from "-/components/trip-timeline";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined }) }));
 
 /**
  * **The Foto & Video popup's rules and copy** (#425): what a picked file is declared as, which picks
@@ -76,13 +82,31 @@ describe("checkPickedFootage", () => {
   it("takes at most 30 in all, counting those already picked, and says so", () => {
     const files = Array.from({ length: 12 }, (_, i) => file(`f${i}.jpg`, "image/jpeg"));
 
-    const checked = checkPickedFootage(files, 25);
+    const staged = Array.from({ length: 25 }, (_, i) => ({
+      file: file(`staged${i}.jpg`, "image/jpeg"),
+      contentType: "image/jpeg",
+      kind: "foto" as const,
+    }));
+    const checked = checkPickedFootage(files, staged);
 
     expect(MAX_FOOTAGE_FILES_PER_BATCH).toBe(30);
     expect(checked.accepted).toHaveLength(5);
     expect(checked.overLimit).toBe(
       "Paling banyak 30 berkas sekali unggah — sisanya tidak dipilih.",
     );
+  });
+});
+
+describe("picking the same file twice", () => {
+  it("leaves out a repeat, in one pick or across picks, so it is never uploaded twice", () => {
+    const photo = file("IMG_0001.JPG", "image/jpeg");
+    const first = checkPickedFootage([photo, photo]);
+    expect(first.accepted).toHaveLength(1);
+    expect(first.refused).toEqual([{ file: photo, reason: "Sudah dipilih" }]);
+
+    const again = checkPickedFootage([photo], first.accepted);
+    expect(again.accepted).toEqual([]);
+    expect(again.refused.map((entry) => entry.reason)).toEqual(["Sudah dipilih"]);
   });
 });
 
@@ -175,5 +199,47 @@ describe("uploadFootageBatch", () => {
       "saving 3/4",
       "uploading 4/4",
     ]);
+  });
+});
+
+describe("the Foto & Video button on a /pendamping Session row", () => {
+  it("sits after Tandai and Feedback on every live Session, and a cancelled one has no row", () => {
+    const session = (sessionId: string, status: "arranged" | "delivered" | "cancelled") => ({
+      sessionId,
+      heldOn: "2026-10-12",
+      startsAt: "08:00:00",
+      status,
+    });
+    const nodes = tripTimeline({
+      schools: [
+        {
+          schoolId: "s1",
+          name: "SMA Pradita Dirgantara",
+          kabupatenKota: "Kab. Bogor",
+          timeZone: "WIB",
+          sessions: [
+            session("a", "arranged"),
+            session("b", "delivered"),
+            session("c", "cancelled"),
+          ],
+        },
+      ],
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(TripTimeline, { nodes, uploadGate: { open: false, reason: "Terputus." } }),
+    );
+
+    // Each row's buttons in order: the arranged one has Tandai first; the delivered one does not.
+    const labels = [...html.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]);
+    expect(labels).toEqual([
+      "Tandai",
+      "Feedback",
+      "Foto &amp; Video",
+      "Feedback",
+      "Foto &amp; Video",
+    ]);
+    // It opens while Drive is down, so the files can be viewed: never disabled.
+    expect(html).not.toMatch(/<button[^>]* disabled=""[^>]*>Foto &amp; Video</);
   });
 });

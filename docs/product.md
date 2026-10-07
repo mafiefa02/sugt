@@ -242,7 +242,9 @@ described "Upload dokumentasi kegiatan luring untuk sesi ini"
   status — "Mengunggah 2 dari 5 berkas ke Google Drive…", "Jangan tutup halaman ini sampai selesai.",
   "Menyimpan…" — with the popup locked and the browser asking before the page is left. Afterwards it
   says "{n} berkas terunggah", names each file that failed with its reason, and offers **Coba lagi**
-  for just those. A file whose place in Drive is not yet finished says so, as Dokumen does.
+  for just those; picking more files keeps that summary. Files whose place in Drive is not yet
+  finished are counted ("{k} berkas belum tersinkron…"), as Dokumen says it. A file picked twice is
+  left out the second time ("Sudah dipilih").
 - **Sudah diunggah** lists the Session's files, newest first: Foto or Video, the file's own name, its
   size, who uploaded it and when, **Buka** (it opens in Drive in a new tab), "belum tersinkron" while
   it is not yet in place, and **Hapus**, which asks "Hapus berkas ini? File akan dipindahkan ke Sampah
@@ -892,7 +894,8 @@ SUGT ITB 2026 Internal App Object Storage/
 holds the photos (JPEG, PNG, HEIC or WebP, up to 50 MB) and videos (MP4 or MOV, up to 1000 MB) of
 each offline Session, uploaded as they were taken — a photo keeps its location data — and shared one
 file at a time. A large file is sent to Drive in 16 MB pieces and picks up where it stopped if the
-connection drops. Staff upload and view them from each Session's **Foto & Video** on `/pendamping` and on `/sesi/[id]`.
+connection drops. Staff upload them from each Session's **Foto & Video** on `/pendamping` and on `/sesi/[id]`;
+anyone signed in views them on `/sesi/[id]`.
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
 connected, broken, or its folders unresolved — the states in which nobody can upload a receipt or a Dokumen.

@@ -9,7 +9,7 @@ import {
   checkPickedFootage,
   FOOTAGE_ACCEPT,
   FOOTAGE_DESCRIPTION,
-  FOOTAGE_UNSYNCED_NOTE,
+  footageUnsyncedNote,
   footageKindLabel,
   footageTitle,
   formatFileSize,
@@ -49,7 +49,7 @@ import { type ReactElement, useRef, useState, useTransition } from "react";
  *
  * **Picked files are checked at once** — type, size against the kind's cap, at most 30 — and a
  * refused one is named with its reason and left out. **Unggah sends them one at a time**, each opened,
- * sent to Drive in pieces and recorded on its own (`uploadFootageBatch`), under T4's status line, the
+ * sent to Drive in pieces and recorded on its own (`uploadFootageBatch`), under #420's status line, the
  * popup locked and the page warning before it is left. Afterwards a summary names each failure with
  * its reason, and **Coba lagi** sends just those again.
  *
@@ -87,7 +87,8 @@ function FotoVideoDialog({
   const [summary, setSummary] = useState<{
     uploaded: number;
     failures: { picked: PickedFootage; reason: string }[];
-    unsynced: boolean;
+    /** How many were recorded but are not yet in place in Drive. */
+    unsynced: number;
   } | null>(null);
   const [saving, startSaving] = useTransition();
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -101,11 +102,11 @@ function FotoVideoDialog({
   }
 
   function pick(files: File[]) {
-    const checked = checkPickedFootage(files, picked.length);
+    const checked = checkPickedFootage(files, picked);
     setPicked((current) => [...current, ...checked.accepted]);
     setRefusedPicks(checked.refused);
     setOverLimit(checked.overLimit);
-    setSummary(null);
+    // The last batch's summary stays: its failures and Coba lagi are still to be dealt with.
   }
 
   function upload(batch: PickedFootage[]) {
@@ -119,7 +120,7 @@ function FotoVideoDialog({
     startSaving(async () => {
       const results = await uploadFootageBatch(sessionId, batch, {
         open: openFootageUploadAction,
-        send: (sessionUri, file, onProgress) => uploadInPieces(sessionUri, file, { onProgress }),
+        send: (sessionUri, file) => uploadInPieces(sessionUri, file),
         record: recordFootageAction,
         onStep: ({ phase, index, total }) => {
           setProgress(
@@ -134,7 +135,7 @@ function FotoVideoDialog({
       setSummary({
         uploaded: results.length - failures.length,
         failures,
-        unsynced: results.some((entry) => entry.result.ok && !entry.result.synced),
+        unsynced: results.filter((entry) => entry.result.ok && !entry.result.synced).length,
       });
       setPicked([]);
       await load();
@@ -168,8 +169,8 @@ function FotoVideoDialog({
         </DialogHeader>
 
         <DialogBody>
-          {/* `min-w-0` on each grid item, so a long file name truncates instead of widening the
-              track — and the popup — past a phone's width. */}
+          {/* `min-w-0` on each grid item, and `truncate` or `break-all` on every file name, so a long
+              name never widens the track — and the popup — past a phone's width. */}
           {canUpload && (
             <div className="grid min-w-0 gap-3">
               {!uploadGate.open && (
@@ -182,17 +183,18 @@ function FotoVideoDialog({
                   <AlertDescription>
                     {summary.failures.length > 0 && (
                       <ul className="grid gap-1">
-                        {summary.failures.map(({ picked: failed, reason }) => (
+                        {summary.failures.map(({ picked: failed, reason }, index) => (
                           <li
-                            key={`${failed.file.name}-${failed.file.size}-${failed.file.lastModified}`}
-                            className="break-words"
+                            key={`${failed.file.name}-${failed.file.size}-${failed.file.lastModified}-${index}`}
+                            // `break-all`: a long name with no space must break, not widen the popup.
+                            className="break-all"
                           >
                             {failed.file.name}: {reason}
                           </li>
                         ))}
                       </ul>
                     )}
-                    {summary.unsynced && <p>{FOOTAGE_UNSYNCED_NOTE}</p>}
+                    {summary.unsynced > 0 && <p>{footageUnsyncedNote(summary.unsynced)}</p>}
                     {summary.failures.length > 0 && uploadOpen && (
                       <Button
                         size="sm"
@@ -239,10 +241,10 @@ function FotoVideoDialog({
               {overLimit && <p className="text-sm text-destructive">{overLimit}</p>}
               {refusedPicks.length > 0 && (
                 <ul className="grid gap-1 text-sm text-destructive">
-                  {refusedPicks.map(({ file, reason }) => (
+                  {refusedPicks.map(({ file, reason }, index) => (
                     <li
-                      key={`${file.name}-${file.size}-${file.lastModified}`}
-                      className="break-words"
+                      key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                      className="break-all"
                     >
                       {file.name}: {reason}
                     </li>

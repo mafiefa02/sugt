@@ -435,4 +435,4 @@ function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: Upl
   );
 }
 
-export { MyPerjadinSection };
+export { MyPerjadinSection, TripTimeline };

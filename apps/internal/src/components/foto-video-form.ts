@@ -69,17 +69,30 @@ export type PickedFootageCheck = {
 
 const MEGABYTE = 1024 * 1024;
 
+/** One picked file, told apart from another the way a gallery picker repeats one: name, size, time. */
+function sameFile(a: File, b: File): boolean {
+  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
 /**
  * **Check what was picked**, before anything is uploaded: a type footage may be, within its kind's
- * cap, not empty — and no more than `MAX_FOOTAGE_FILES_PER_BATCH` in all, counting those already
- * staged (`alreadyPicked`). The server checks every one of these again.
+ * cap, not empty, not picked already — and no more than `MAX_FOOTAGE_FILES_PER_BATCH` in all,
+ * counting those already staged (`alreadyPicked`). A file picked twice would be uploaded twice, as two
+ * Drive files and two rows, so the repeat is left out. The server checks every one of these again.
  */
-export function checkPickedFootage(files: readonly File[], alreadyPicked = 0): PickedFootageCheck {
+export function checkPickedFootage(
+  files: readonly File[],
+  alreadyPicked: readonly PickedFootage[] = [],
+): PickedFootageCheck {
   const accepted: PickedFootage[] = [];
   const refused: { file: File; reason: string }[] = [];
   let overLimit: string | null = null;
 
   for (const file of files) {
+    if ([...alreadyPicked, ...accepted].some((entry) => sameFile(entry.file, file))) {
+      refused.push({ file, reason: "Sudah dipilih" });
+      continue;
+    }
     const contentType = declaredFootageType(file);
     const kind = contentType ? DECLARABLE_FOOTAGE_TYPES[contentType]! : null;
     if (!contentType || !kind) {
@@ -88,7 +101,7 @@ export function checkPickedFootage(files: readonly File[], alreadyPicked = 0): P
       refused.push({ file, reason: "Berkas kosong" });
     } else if (file.size > MAX_FOOTAGE_BYTES[kind]) {
       refused.push({ file, reason: tooLargeText(kind) });
-    } else if (alreadyPicked + accepted.length >= MAX_FOOTAGE_FILES_PER_BATCH) {
+    } else if (alreadyPicked.length + accepted.length >= MAX_FOOTAGE_FILES_PER_BATCH) {
       overLimit = `Paling banyak ${MAX_FOOTAGE_FILES_PER_BATCH} berkas sekali unggah — sisanya tidak dipilih.`;
     } else {
       accepted.push({ file, contentType, kind });
@@ -125,9 +138,10 @@ export function footageTitle(heldOn: string, schoolName: string): string {
 /** The popup's description, word for word as the ticket set it. */
 export const FOOTAGE_DESCRIPTION = "Upload dokumentasi kegiatan luring untuk sesi ini";
 
-/** After an upload whose reconcile did not finish, said once under the summary. */
-export const FOOTAGE_UNSYNCED_NOTE =
-  "Sebagian berkas belum tersinkron ke Google Drive. Sinkronisasi akan diselesaikan kemudian; tidak ada yang perlu diulang.";
+/** After an upload whose reconcile did not finish for `count` files, said once under the summary. */
+export function footageUnsyncedNote(count: number): string {
+  return `${count} berkas belum tersinkron ke Google Drive. Sinkronisasi akan diselesaikan kemudian; tidak ada yang perlu diulang.`;
+}
 
 /** What the "belum tersinkron" marker on a file says, in full. */
 export const FOOTAGE_UNSYNCED_TOOLTIP =

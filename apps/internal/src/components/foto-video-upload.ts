@@ -17,11 +17,11 @@ import { footageFailureText, type PickedFootage } from "./foto-video-form";
 
 export type FootageUploadDeps = {
   open: (sessionId: string, file: FootageToOpen) => Promise<OpenFootageUploadResult>;
-  send: (
-    sessionUri: string,
-    file: File,
-    onProgress: (sent: number, total: number) => void,
-  ) => Promise<ResumableUploadResult>;
+  /**
+   * Send one file to its resumable session. The status line names the file, not the bytes, as every
+   * upload's does (#420), so no per-piece progress is asked for.
+   */
+  send: (sessionUri: string, file: File) => Promise<ResumableUploadResult>;
   record: (input: FootageToRecord) => Promise<RecordFootageActionResult>;
   /** Called as each file starts its upload and its save, for the popup's status line. */
   onStep?: (step: { phase: "uploading" | "saving"; index: number; total: number }) => void;
@@ -52,7 +52,7 @@ export async function uploadFootageBatch(
       });
       if (opened.outcome !== "ready") return { ok: false, reason: footageFailureText(opened) };
 
-      const sent = await deps.send(opened.sessionUri, file, () => undefined);
+      const sent = await deps.send(opened.sessionUri, file);
       if (sent.outcome !== "uploaded") return { ok: false, reason: footageFailureText(sent) };
 
       deps.onStep?.({ phase: "saving", index, total });

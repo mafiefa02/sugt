@@ -29,7 +29,8 @@ export async function generateMetadata({ params }: PageProps<"/sesi/[id]">): Pro
  * **Detail Sesi** — one Session: what has been filed against it, who still owes what, and
  * the PIC.
  *
- * One `requirePerson()`, one query, one payload. **No role check on the read**, because a
+ * One `requirePerson()`, the Session's query, then its Foto & Video and — for Staff — the upload
+ * gate, read together (#425). **No role check on the read**, because a
  * Session carries no money and ADR-0004 opens delivery data to everyone signed in — a
  * professor opening the Session they taught to see who else still owes a Record is the
  * ordinary case, not an edge one.
@@ -55,6 +56,13 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
   if (!session) notFound();
   // An online Session's detail and editing live on `/sesi-daring/[id]`; only offline stays here.
   if (session.mode === "online") redirect(`/sesi-daring/${id}`);
+
+  const isStaff = person.role === "Staff";
+  const [footage, gate] = await Promise.all([
+    sessionFootageList(person, session.id),
+    // Only Staff upload or Hapus; for anyone else the gate is never read.
+    isStaff ? uploadGate(person) : Promise.resolve({ open: false as const, reason: "" }),
+  ]);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -119,12 +127,10 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
         sessionId={session.id}
         heldOn={session.heldOn}
         schoolName={session.schoolName}
-        footage={await sessionFootageList(person, session.id)}
-        isStaff={person.role === "Staff"}
+        footage={footage}
+        isStaff={isStaff}
         cancelled={session.status === "cancelled"}
-        uploadGate={
-          person.role === "Staff" ? await uploadGate(person) : { open: false, reason: "" }
-        }
+        uploadGate={gate}
       />
 
       {person.role === "Staff" && <SessionWrites session={session} />}

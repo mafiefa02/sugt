@@ -142,14 +142,14 @@ function Hapus({
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent closeDisabled={deleting}>
         <DialogHeader>
           <DialogTitle>Hapus berkas</DialogTitle>
           <DialogDescription>
             Hapus berkas ini? File akan dipindahkan ke Sampah Google Drive.
           </DialogDescription>
         </DialogHeader>
-        <p className="text-sm break-words">
+        <p className="text-sm break-all">
           {footageKindLabel(row.kind)} · {row.originalFilename}
         </p>
         {refusal !== null && <p className="text-sm text-destructive">{refusal}</p>}
