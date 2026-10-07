@@ -678,6 +678,12 @@ export const PREPARATION_ITEM_LEVELS = ["semua", "cluster", "perjadin"] as const
 export type PreparationItemLevel = (typeof PREPARATION_ITEM_LEVELS)[number];
 
 /**
+ * The longest a Preparation Item's wording may be, in characters, at any level. The company's longest
+ * item is under 130; this leaves room without letting a paragraph in.
+ */
+export const MAX_PREPARATION_ITEM_LABEL_LENGTH = 200;
+
+/**
  * **The three kinds of Perjadin Document**
  * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042): attendance sheets, one
  * PDF each. Indonesian because they are the names of paperwork, on the same footing as

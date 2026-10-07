@@ -418,6 +418,8 @@ trip's own.
   (a name added, renamed or removed), so each change has to be confirmed again by hand. It can be
   reworded but never removed or hidden.
 
+The levels are edited on [Pengaturan Perjadin](#pengaturan-perjadin--the-preparation-checklist).
+
 **A Perjadin's screen ends with its Dokumen**: the attendance sheets uploaded from the
 `/pendamping` card, under the three kinds, each with a **Buka** link and "belum tersinkron" while it
 is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
@@ -430,6 +432,9 @@ tones, `0/0` grey. It opens newest Mulai first; every column sorts, a new column
 first — Perjadin by name, Kelompok 2 before Kelompok 10, and two trips of one Kelompok by their
 dates. The header stays in view while the list scrolls, a row opens its trip, and the search box
 above narrows it by the trip's Kelompok, its Schools, its PIC, its Narasumber and its Group.
+
+**The list's header holds two buttons**: Rencanakan Perjadin, for Staff, and beside it **Pengaturan
+Perjadin**, for an Administrator only. Anyone else is not shown the second; it is not in the sidebar.
 
 ### The acquittal — the most important screen
 
@@ -834,6 +839,49 @@ A table, newest first, 50 rows a page:
 They combine, and **all of them are in the URL**, with the page number, so a view can be bookmarked.
 Below the table are the number of entries that match and the page links. The page does not update
 itself: new entries appear on the next load or filter change.
+
+### Pengaturan Perjadin — the Preparation Checklist
+
+**Only an Administrator opens Pengaturan Perjadin**, at `/perjadin/pengaturan`, from its button on
+the Perjadin list. Anyone else, Pimpinan included, gets the 403. For now it does one thing: decide
+which boxes the Preparation Checklist has, at its three levels
+([ADR-0045](./adr/0045-the-preparation-checklist-is-stored-per-level-and-frozen-for-finished-perjadins.md)).
+Its changes are not written to the Log.
+
+**First, choose the level**: **Semua Perjadin**; **Cluster**, then one of the four from a list; or
+**Perjadin**, then one trip from a search box that lists every Perjadin newest first, by its name with
+its Schools as a second line. The level is in the URL, so it survives a reload. The page then shows
+the checklist as it applies there:
+
+- **Semua Perjadin** — the boxes every trip gets.
+- **A Cluster** — what a trip of that Cluster that has not ended gets: the Semua boxes it has not
+  hidden, in its wording, then its own.
+- **A Perjadin** — that trip's own list. A finished trip shows the list it was frozen with, and says
+  that only changes made for it still reach it.
+
+**Each box shows where it comes from** — "Semua", the Cluster's name or "Perjadin ini" — and
+"Diubah di sini" when its wording was changed at this level, with the wording beneath it as "Teks
+asal". Each box has:
+
+- **Ubah**, which edits the wording in place, with Simpan and Batal. A box from this level is
+  reworded itself; a box from a wider level gets a wording for this level only, which **Kembalikan
+  teks asal** takes away again.
+- **Hapus**, which always asks first and says what it will do: "Item ini akan hilang dari 7 Perjadin
+  yang belum selesai. Perjadin yang sudah selesai tidak berubah.", counted from the trips at the
+  time, or "Item ini akan hilang dari Perjadin ini." A box from this level is removed; a box from a
+  wider level is hidden here, and is listed under **Disembunyikan di sini** with **Tampilkan lagi**.
+- **Up and down arrows**, on this level's own boxes only, which move it within them at once.
+
+**"Fiksasi Dosen/Narasumber oleh PIC Dosen" has no Hapus** at any level, with a line saying why: its
+tick is cleared, and must be given again, whenever the trip's Narasumber change.
+
+**Tambah item adds nothing by itself.** It opens an empty row with Simpan and Batal; the box is
+created, at the end of this level's own boxes, only on Simpan, and Batal throws the row away. An
+empty wording is refused, as is one longer than 200 characters, or one a box on this list already
+has (ignoring case and spacing).
+
+On a phone the level buttons and pickers take the full width, each box's buttons wrap under its
+wording, and nothing scrolls sideways.
 
 ---
 
