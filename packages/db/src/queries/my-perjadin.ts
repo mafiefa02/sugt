@@ -1,5 +1,5 @@
 import type { SessionStatus, TimeZone } from "@sugt/domain";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
@@ -17,6 +17,7 @@ import type { Person } from "./caller";
 import { todayInDeadlineZone } from "./deadline";
 import { tripSchoolNames } from "./perjadin-naming";
 import { preparationChecklists, type PreparationItem } from "./preparation-checklist";
+import { requireGrant, requireStaff } from "./staff-only";
 
 /**
  * **The caller's own trips**, for `/pendamping` (#197, #396): Perjalanan Dinas Anda — the trips not
@@ -138,6 +139,65 @@ export type MyPerjadin = { current: MyPerjadinTrip[]; previous: MyPerjadinTrip[]
  * and the extra round trips are skipped entirely.
  */
 export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
+  return perjadinOf(caller.id);
+}
+
+/**
+ * **One Staff Person's `/pendamping`, for an Administrator** (#440): the trips that Person sees as
+ * theirs, exactly as `myPerjadin` gives them to that Person, for the "Pendamping Lain" tab — the
+ * screenshot an Administrator needs to show someone how to use their own page.
+ *
+ * **Administrator only, held here rather than only in the page.** `requireStaff` first, so a
+ * Pimpinan is refused as non-Staff; then `requireGrant(caller, "Administrator")` — Editor is not
+ * enough — before any row is read. A `personId` that names no Staff Person (a Pimpinan, an unknown id,
+ * a malformed one) is `no-such-pendamping`, a value the page says in a sentence. Viewing writes
+ * nothing to the Activity Log.
+ */
+export async function pendampingPerjadin(
+  caller: Person,
+  personId: string,
+): Promise<
+  { outcome: "ok"; fullName: string; perjadin: MyPerjadin } | { outcome: "no-such-pendamping" }
+> {
+  requireStaff(caller);
+  requireGrant(caller, "Administrator");
+
+  const [found] = await db
+    .select({ id: person.id, fullName: person.fullName })
+    .from(person)
+    // A text compare, so a malformed id is simply no Person rather than a cast error.
+    .where(and(sql`${person.id}::text = ${personId}`, eq(person.role, "Staff")));
+  if (!found) return { outcome: "no-such-pendamping" };
+
+  return { outcome: "ok", fullName: found.fullName, perjadin: await perjadinOf(found.id) };
+}
+
+/** One Staff Person "Pendamping Lain" offers to pick (#440). */
+export type PendampingOption = { id: string; fullName: string; email: string };
+
+/**
+ * **Whom "Pendamping Lain" offers** (#440): every active Staff Person but the caller, by name, with
+ * the email the picker also searches. Administrator only, like `pendampingPerjadin`.
+ */
+export async function pendampingOptions(caller: Person): Promise<PendampingOption[]> {
+  requireStaff(caller);
+  requireGrant(caller, "Administrator");
+
+  return (
+    db
+      .select({ id: person.id, fullName: person.fullName, email: person.email })
+      .from(person)
+      // A revoked Person is not offered: they no longer sign in, so there is no page of theirs to show.
+      .where(and(eq(person.role, "Staff"), eq(person.active, true), ne(person.id, caller.id)))
+      .orderBy(asc(person.fullName), asc(person.id))
+  );
+}
+
+/**
+ * The body of `myPerjadin`, keyed on a **person id** rather than a caller, so `pendampingPerjadin`
+ * gives an Administrator another Person's trips through exactly the read that Person gets.
+ */
+async function perjadinOf(personId: string): Promise<MyPerjadin> {
   // Not yet over: `ends_on` on or after today, reckoned in the office's zone via the shared
   // `todayInDeadlineZone` fragment (`./deadline.ts`) — the same calendar the acquittal's
   // `daysRemaining` counts in, not the database session's default zone.
@@ -161,7 +221,7 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
     .from(perjadin)
     .innerJoin(
       groupMember,
-      and(eq(groupMember.perjadinId, perjadin.id), eq(groupMember.personId, caller.id)),
+      and(eq(groupMember.perjadinId, perjadin.id), eq(groupMember.personId, personId)),
     )
     .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .innerJoin(person, eq(person.id, perjadin.picPersonId))

@@ -188,6 +188,8 @@ export { type PerjadinNameRef } from "./perjadin-naming";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
   myPerjadin,
+  pendampingOptions,
+  pendampingPerjadin,
   type MyPerjadin,
   type MyPerjadinPengajar,
   type MyPerjadinPimpinan,
@@ -195,6 +197,7 @@ export {
   type MyPerjadinSession,
   type MyPerjadinStaff,
   type MyPerjadinTrip,
+  type PendampingOption,
 } from "./my-perjadin";
 export {
   togglePreparationItem,
