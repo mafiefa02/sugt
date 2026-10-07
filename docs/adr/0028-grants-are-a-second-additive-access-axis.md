@@ -110,3 +110,12 @@ what was first ratified; the running tool — its `GRANTS` value, guards, gates 
 names the Grant `Editor` throughout. Earlier ADRs that mention `Monitoring Editor` in passing
 (e.g. [ADR-0031](./0031-pretest-posttest-completion-is-tracked-as-delivery-not-outcomes.md)) are left
 as their own point-in-time records.
+
+## Amendment (2026-10-08): some writes move from the Staff Role to the Editor Grant
+
+"Additive" no longer holds without exception. Planning a Perjadin and recording, editing or deleting an
+online Session now need the **Editor** Grant
+([ADR-0047](./0047-planning-a-perjadin-and-online-sessions-need-the-editor-grant.md), #438): those
+writes moved from the Staff Role to the Grant, so a Staff member without it can no longer do them. The
+three properties otherwise stand — a Grant is Staff-only, never reaches a Pimpinan, and never lets a
+Pimpinan write; an Administrator still implies every Grant.

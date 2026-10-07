@@ -6,7 +6,7 @@ import { session } from "../schema/delivery";
 import { province, school } from "../schema/reference";
 import type { SchoolOption } from "./arrange-online-session";
 import type { Person } from "./caller";
-import { requireStaff } from "./staff-only";
+import { requireGrant, requireStaff } from "./staff-only";
 
 /**
  * **Detail Sesi daring** — one online Session, and the edits it offers (#152, #318). The online
@@ -18,8 +18,9 @@ import { requireStaff } from "./staff-only";
  * A separate module from `./session-detail.ts` for convention 3's reason — one module per surface's
  * payload — and because this one is online-only: `/sesi/[id]` stays the offline detail surface and an
  * online id redirects here, so the two reads never overlap. The read is open to anyone signed in (a
- * Session carries no money, ADR-0004); **every write is Staff-only**, by the surface list, gated with
- * `requireStaff` and surfaced only for Staff exactly as `/perjadin/[id]` does.
+ * Session carries no money, ADR-0004); **every write needs the Editor Grant** (ADR-0047), gated with
+ * `requireStaff` then `requireGrant(caller, "Editor")` and surfaced only for an Editor (an
+ * Administrator implies it).
  *
  * **An online Session is born `delivered` now (#318, ADR-0036)** — a third-party LMS runs delivery,
  * so it is recorded after it happened, not arranged then marked. So the field edit is offered on a
@@ -188,7 +189,8 @@ function wibToday(): string {
 
 /**
  * Edit an online Session's School, date, times and two Pengajar — the online counterpart of
- * `editPerjadinSession`, and the correction path for a born-`delivered` Session (#318). Staff-only.
+ * `editPerjadinSession`, and the correction path for a born-`delivered` Session (#318). Editor-only
+ * (ADR-0047).
  * Offered on an `arranged` **or** `delivered` Session; a `cancelled` one is a dead row and refuses
  * the edit.
  *
@@ -210,6 +212,9 @@ export async function updateOnlineSession(
   input: OnlineSessionInput,
 ): Promise<UpdateOnlineSessionResult> {
   requireStaff(caller);
+  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
+  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  requireGrant(caller, "Editor");
 
   // The online-required fields the nullable columns cannot enforce, refused before the write exactly
   // as `arrangeOnlineSession` does. The dialog guards them, so these catch a hand-edited request.
@@ -266,7 +271,7 @@ export type DeleteOnlineSessionResult =
   | { outcome: "no-such-session" };
 
 /**
- * **Hard-delete an online Session** (#318). Staff-only, the correction for a mis-recorded Session that
+ * **Hard-delete an online Session** (#318). Editor-only (ADR-0047), the correction for a mis-recorded Session that
  * replaced the arrange→cancel flow for born-`delivered` rows — a cancelled Session lingered as a dead
  * row, but a recorded-in-error one is simply removed.
  *
@@ -282,6 +287,9 @@ export async function deleteOnlineSession(
   sessionId: string,
 ): Promise<DeleteOnlineSessionResult> {
   requireStaff(caller);
+  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
+  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  requireGrant(caller, "Editor");
 
   const [deleted] = await db
     .delete(session)

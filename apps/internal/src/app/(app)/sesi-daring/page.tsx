@@ -1,6 +1,6 @@
 import { OnlineSessionDirectoryList } from "-/components/online-session-directory-list";
 import { requirePerson } from "-/lib/person";
-import { onlineSessionDirectory } from "@sugt/db/queries";
+import { hasGrant, onlineSessionDirectory } from "@sugt/db/queries";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import { Plus } from "lucide-react";
 import type { Metadata } from "next";
@@ -35,9 +35,9 @@ export default async function Page() {
             Catat Sesi daring.
           </p>
         </div>
-        {/* Staff-only create action, moved off the sidebar onto its list page (#294). Non-Staff
-            render nothing — no disabled state. */}
-        {person.role === "Staff" && (
+        {/* The create action, moved off the sidebar onto its list page (#294). It needs the Editor
+            Grant (ADR-0047); anyone without it renders nothing — no disabled state. */}
+        {hasGrant(person, "Editor") && (
           <LinkButton render={<Link href="/sesi-daring/baru" />}>
             <Plus data-icon="inline-start" />
             Catat Sesi Daring

@@ -5,7 +5,7 @@ import { ONLINE_SESSION_STILL_STANDS, session } from "../schema/delivery";
 import { province, school } from "../schema/reference";
 import type { Person } from "./caller";
 import type { SelectedSchool } from "./rosters";
-import { requireStaff } from "./staff-only";
+import { requireGrant, requireStaff } from "./staff-only";
 
 /**
  * **Catat Sesi daring** — recording **one** online Session, for **one** School, as an event that has
@@ -22,7 +22,8 @@ import { requireStaff } from "./staff-only";
  * Staff-only, by the surface list rather than by ADR-0004 (see `./staff-only.ts`, which carries
  * both reasons). It matters more on a write than on a read: a Next.js layout does not run before
  * a Server Action, so `requireStaff` here is the only thing standing between a Teaching Team
- * member and a recorded Session.
+ * member and a recorded Session. **It also needs the Editor Grant** (ADR-0047): recording online
+ * delivery is a deliberate choice of who does it, not every Staff member's.
  */
 
 /**
@@ -109,6 +110,9 @@ export async function arrangeOnlineSession(
   input: ArrangeOnlineSessionInput,
 ): Promise<ArrangeOnlineSessionResult> {
   requireStaff(caller);
+  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
+  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  requireGrant(caller, "Editor");
 
   // Both Pengajar are required (#318); trimmed here so a name of spaces reads as blank. The
   // not-null-for-online CHECK is the backstop — this gives a value the form renders instead.
@@ -186,11 +190,15 @@ async function pickableSchools(): Promise<SchoolOption[]> {
 }
 
 /**
- * The standalone screen's payload: the Schools to pick from. Staff-only, so a non-Staff caller
- * reaching the URL directly is refused server-side rather than shown a form.
+ * The standalone screen's payload: the Schools to pick from. Editor-only (ADR-0047), like the write it
+ * feeds, so a caller without the Grant reaching the URL directly is refused server-side (a 403) rather
+ * than shown a form.
  */
 export async function arrangeOnlineSessionForm(caller: Person): Promise<ArrangeOnlineSessionForm> {
   requireStaff(caller);
+  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
+  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  requireGrant(caller, "Editor");
 
   const schools = await pickableSchools();
 
@@ -214,6 +222,8 @@ export async function arrangeOnlineSessionAt(
   slug: string,
 ): Promise<ArrangeOnlineSessionAt | null> {
   requireStaff(caller);
+  // The embedded form's read is Editor-only like the write it feeds (ADR-0047).
+  requireGrant(caller, "Editor");
 
   const [row] = await db
     .select(SCHOOL_OPTION_COLUMNS)

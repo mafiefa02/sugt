@@ -59,6 +59,15 @@ export async function addGrant(personId: string, grant: Grant) {
   await db.insert(schema.personGrant).values({ personId, grant }).onConflictDoNothing();
 }
 
+/**
+ * The same Person holding the **Editor** Grant, stored and on the caller — what planning a Perjadin and
+ * recording, editing or deleting an online Session need (ADR-0047).
+ */
+export async function asEditor<P extends { id: string; grants: Grant[] }>(person: P): Promise<P> {
+  await addGrant(person.id, "Editor");
+  return { ...person, grants: [...person.grants, "Editor"] };
+}
+
 /** Every `better_auth.user` row. The invite gate's job is to leave this empty. */
 export async function authUsers() {
   return db.select().from(schema.user);

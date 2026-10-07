@@ -336,6 +336,12 @@ tool does not schedule one and confirm it later — it **logs a Session that alr
 written straight to _delivered_ (ADR-0036). The form is titled "Catat Sesi daring" and its button
 reads "Tandai Terlaksana"; the date cannot be in the future.
 
+**Recording, editing and deleting an online Session need the Editor Grant** (ADR-0047, #438); an
+Administrator has it implicitly. **Catat Sesi Daring** on `/sesi-daring` and the form on
+`/sekolah/[slug]` are shown only to them, `/sesi-daring/baru` answers 403 to anyone else, and the edit
+and delete controls on `/sesi-daring/[id]` are theirs alone. Everyone signed in still reads every
+online Session.
+
 **An offline Session's own page, `/sesi/[id]`, has a Foto & Video section** (#425), so a Pimpinan —
 who has no `/pendamping` — sees its photos and videos too. Everyone signed in gets the list with
 **Buka**; Staff also get **Hapus** and **Unggah Foto & Video**, which opens the same popup. A
@@ -507,8 +513,10 @@ first — Perjadin by name, Kelompok 2 before Kelompok 10, and two trips of one 
 dates. The header stays in view while the list scrolls, a row opens its trip, and the search box
 above narrows it by the trip's Kelompok, its Schools, its PIC, its Narasumber and its Group.
 
-**The list's header holds two buttons**: Rencanakan Perjadin, for Staff, and beside it **Pengaturan
-Perjadin**, for an Administrator only. Anyone else is not shown the second; it is not in the sidebar.
+**The list's header holds two buttons**: **Rencanakan Perjadin**, for an Editor (ADR-0047, #438 — an
+Administrator has it implicitly), and beside it **Pengaturan Perjadin**, for an Administrator only.
+Anyone else is not shown them; neither is in the sidebar. `/perjadin/baru` answers 403 to a Staff
+member without the Editor Grant, who still runs any trip they are on but cannot plan a new one.
 
 ### The acquittal — the most important screen
 

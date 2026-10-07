@@ -55,9 +55,9 @@ export default async function Page() {
               Pengaturan Perjadin
             </LinkButton>
           )}
-          {/* Staff-only create action, moved off the sidebar onto its list page (#294). Non-Staff
-              render nothing — no disabled state. */}
-          {person.role === "Staff" && (
+          {/* The create action, moved off the sidebar onto its list page (#294). It needs the
+              Editor Grant (ADR-0047); anyone without it renders nothing — no disabled state. */}
+          {hasGrant(person, "Editor") && (
             <LinkButton render={<Link href="/perjadin/baru" />}>
               <Plus data-icon="inline-start" />
               Rencanakan Perjadin

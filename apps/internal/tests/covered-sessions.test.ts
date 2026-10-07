@@ -14,6 +14,7 @@ import {
   addSchool,
   addSession,
   addSubCluster,
+  asEditor,
   resetDatabase,
 } from "./support/fixtures";
 
@@ -31,7 +32,10 @@ import {
  * Samarinda has none.
  */
 async function scene() {
-  const pic = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
+  // An Editor: the plan form's read needs the Grant (ADR-0047).
+  const pic = await asEditor(
+    await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" }),
+  );
   await addProvince("KT", "Kalimantan Timur", "WITA");
   const cluster = await addCluster({ slug: "kaltim", name: "Cluster Kaltim" });
   const subCluster = await addSubCluster({

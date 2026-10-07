@@ -2,7 +2,7 @@ import { OnlineSessionFields } from "-/components/online-session-fields";
 import { OnlineSessionWrites } from "-/components/online-session-writes";
 import { MODE_LABELS, SessionStatusBadge } from "-/components/session-labels";
 import { requirePerson } from "-/lib/person";
-import { onlineSessionDetail } from "@sugt/db/queries";
+import { hasGrant, onlineSessionDetail } from "@sugt/db/queries";
 import { formatSessionStartTimeWithWib } from "@sugt/domain";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -35,10 +35,10 @@ export async function generateMetadata({
  * thing to arrive with, since a pasted link outlives its row.
  *
  * One `requirePerson()`, one query, one payload. **No role check on the read** — a Session carries no
- * money and ADR-0004 opens delivery data to everyone signed in. The edits are Staff-only, and they
- * are **absent rather than disabled** for a professor: `canEdit` hides the affordances, and
- * `requireStaff` inside each write is what actually closes the path, since a layout does not run
- * before a Server Action.
+ * money and ADR-0004 opens delivery data to everyone signed in. The edits need the **Editor Grant**
+ * (ADR-0047), and they are **absent rather than disabled** without it: `canEdit` hides the
+ * affordances, and the guard inside each write is what actually closes the path, since a layout does
+ * not run before a Server Action.
  */
 export default async function Page({ params }: PageProps<"/sesi-daring/[id]">) {
   const person = await requirePerson();
@@ -50,7 +50,7 @@ export default async function Page({ params }: PageProps<"/sesi-daring/[id]">) {
   if (lookup.outcome === "offline") redirect(`/sesi/${id}`);
 
   const session = lookup.session;
-  const canEdit = person.role === "Staff";
+  const canEdit = hasGrant(person, "Editor");
 
   return (
     <div className="flex min-h-full flex-col">
