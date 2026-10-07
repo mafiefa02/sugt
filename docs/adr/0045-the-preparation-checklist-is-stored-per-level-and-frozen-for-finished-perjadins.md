@@ -57,6 +57,10 @@ wording, keeps it **the same item**: the same id, its ticks kept, counted as one
 wording shows wherever the item applies, finished Perjadins included. Removing a wording restores
 the wider one.
 
+**Order is not dated either** (#422). Moving an item up or down among its level's items renumbers
+that level's `position`s, so the new order shows on every Perjadin holding those items, finished ones
+included. Order changes no item and no tick, so freezing it would buy nothing.
+
 ### The rejected alternative: fully live
 
 The alternative was to resolve every Perjadin's list from today's definitions. A new Semua item

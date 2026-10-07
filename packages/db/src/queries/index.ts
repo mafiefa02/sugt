@@ -208,16 +208,29 @@ export {
   addPreparationItem,
   clearPreparationItemWording,
   hidePreparationItem,
+  movePreparationItem,
   removePreparationItem,
+  removePreparationItemAt,
   rewordPreparationItem,
+  rewordPreparationItemAt,
   showPreparationItem,
   type AddPreparationItemResult,
   type HidePreparationItemResult,
+  type MovePreparationItemResult,
   type PreparationOverrideScope,
   type PreparationScope,
+  type RemovePreparationItemAtResult,
   type RemovePreparationItemResult,
   type RewordPreparationItemResult,
 } from "./preparation-items";
+export {
+  preparationSettings,
+  preparationSettingsClusters,
+  preparationSettingsPerjadins,
+  type PreparationSettings,
+  type PreparationSettingsItem,
+  type PreparationSettingsPerjadin,
+} from "./preparation-settings";
 export { onlineSessionDirectory, type DirectoryOnlineSession } from "./online-session-directory";
 export {
   deleteOnlineSession,

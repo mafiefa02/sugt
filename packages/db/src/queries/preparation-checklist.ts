@@ -45,11 +45,18 @@ export type PreparationItem = {
   checkedAt: Date | null;
 };
 
-/** What the resolver needs to know about a Perjadin: its id, its Cluster and the day it ends. */
-type ChecklistPerjadin = { id: string; clusterId: string; endsOn: string };
+/**
+ * What the resolver needs to know about a Perjadin: its id, its Cluster and the day it ends.
+ * Pengaturan Perjadin (`./preparation-settings.ts`) also resolves a Perjadin that does not exist —
+ * "one ending today", with no id, in a Cluster or in none — to show what a level gives.
+ */
+export type ChecklistPerjadin = { id: string | null; clusterId: string | null; endsOn: string };
+
+/** The database or a transaction on it: what the catalog and a level's view are read through. */
+export type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** The stored rows the resolver reads, already narrowed to the Perjadins at hand. */
-type ChecklistCatalog = {
+export type ChecklistCatalog = {
   items: {
     id: string;
     level: PreparationItemLevel;
@@ -89,13 +96,18 @@ function covers(from: string | null, until: string | null, endsOn: string): bool
  * Resolve one Perjadin's checklist from the stored rows. **Pure**: every rule above is decided here
  * and nowhere else, so the batched read only has to fetch.
  */
-function resolvePreparationChecklist(
+export function resolvePreparationChecklist(
   trip: ChecklistPerjadin,
   catalog: ChecklistCatalog,
 ): PreparationItem[] {
+  // A null id or Cluster matches nothing: a row's own null `perjadin_id` must not read as "this one".
+  const onTrip = (perjadinId: string | null) => trip.id !== null && perjadinId === trip.id;
+  const inCluster = (clusterId: string | null) =>
+    trip.clusterId !== null && clusterId === trip.clusterId;
+
   const applies = catalog.items.filter((item) => {
-    if (item.level === "perjadin") return item.perjadinId === trip.id;
-    if (item.level === "cluster" && item.clusterId !== trip.clusterId) return false;
+    if (item.level === "perjadin") return onTrip(item.perjadinId);
+    if (item.level === "cluster" && !inCluster(item.clusterId)) return false;
     return covers(item.addedOn, item.removedOn, trip.endsOn);
   });
 
@@ -103,17 +115,15 @@ function resolvePreparationChecklist(
     catalog.hides
       .filter(
         (hide) =>
-          hide.perjadinId === trip.id ||
-          (hide.clusterId === trip.clusterId && covers(hide.hiddenOn, hide.shownOn, trip.endsOn)),
+          onTrip(hide.perjadinId) ||
+          (inCluster(hide.clusterId) && covers(hide.hiddenOn, hide.shownOn, trip.endsOn)),
       )
       .map((hide) => hide.preparationItemId),
   );
 
   const wordingFor = (itemId: string, label: string) =>
-    catalog.wordings.find((w) => w.preparationItemId === itemId && w.perjadinId === trip.id)
-      ?.label ??
-    catalog.wordings.find((w) => w.preparationItemId === itemId && w.clusterId === trip.clusterId)
-      ?.label ??
+    catalog.wordings.find((w) => w.preparationItemId === itemId && onTrip(w.perjadinId))?.label ??
+    catalog.wordings.find((w) => w.preparationItemId === itemId && inCluster(w.clusterId))?.label ??
     label;
 
   const ticks = new Map(
@@ -166,13 +176,29 @@ export async function preparationChecklists(
     .where(inArray(perjadin.id, perjadinIds));
   if (trips.length === 0) return new Map();
 
-  const ids = trips.map((trip) => trip.id);
-  const clusterIds = [...new Set(trips.map((trip) => trip.clusterId))];
+  const catalog = await loadChecklistCatalog({
+    clusterIds: [...new Set(trips.map((trip) => trip.clusterId))],
+    perjadinIds: trips.map((trip) => trip.id),
+  });
+  return new Map(trips.map((trip) => [trip.id, resolvePreparationChecklist(trip, catalog)]));
+}
+
+/**
+ * Every stored row that could bear on a checklist in these Clusters or of these Perjadins: all
+ * `semua` items, the Clusters' and the Perjadins' own items, the hides and wordings on either, and the
+ * Perjadins' ticks — four selects, run concurrently.
+ */
+export async function loadChecklistCatalog(
+  scope: { clusterIds: string[]; perjadinIds: string[] },
+  executor: Executor = db,
+): Promise<ChecklistCatalog> {
+  const { clusterIds, perjadinIds: ids } = scope;
+  // `inArray` over an empty list is `false`, so a scope with no Cluster or no Perjadin is harmless.
   const inScope = (table: typeof preparationItemHide | typeof preparationItemWording) =>
     or(inArray(table.clusterId, clusterIds), inArray(table.perjadinId, ids));
 
   const [items, hides, wordings, ticks] = await Promise.all([
-    db
+    executor
       .select({
         id: preparationItem.id,
         level: preparationItem.level,
@@ -192,7 +218,7 @@ export async function preparationChecklists(
           and(eq(preparationItem.level, "perjadin"), inArray(preparationItem.perjadinId, ids)),
         ),
       ),
-    db
+    executor
       .select({
         preparationItemId: preparationItemHide.preparationItemId,
         clusterId: preparationItemHide.clusterId,
@@ -202,7 +228,7 @@ export async function preparationChecklists(
       })
       .from(preparationItemHide)
       .where(inScope(preparationItemHide)),
-    db
+    executor
       .select({
         preparationItemId: preparationItemWording.preparationItemId,
         clusterId: preparationItemWording.clusterId,
@@ -211,7 +237,7 @@ export async function preparationChecklists(
       })
       .from(preparationItemWording)
       .where(inScope(preparationItemWording)),
-    db
+    executor
       .select({
         perjadinId: perjadinPreparationTick.perjadinId,
         preparationItemId: perjadinPreparationTick.preparationItemId,
@@ -222,8 +248,7 @@ export async function preparationChecklists(
       .where(inArray(perjadinPreparationTick.perjadinId, ids)),
   ]);
 
-  const catalog: ChecklistCatalog = { items, hides, wordings, ticks };
-  return new Map(trips.map((trip) => [trip.id, resolvePreparationChecklist(trip, catalog)]));
+  return { items, hides, wordings, ticks };
 }
 
 /** One Perjadin's checklist, or `null` when there is no such Perjadin. */
