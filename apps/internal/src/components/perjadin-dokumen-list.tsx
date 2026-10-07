@@ -97,7 +97,7 @@ function PerjadinDokumenList({
 
 /**
  * **Hapus** behind a confirmation (#398). The file goes to the Drive trash first, then the row; a
- * refusal — Drive disconnected, or unreachable — leaves the sheet listed and says why.
+ * refusal — Drive disconnected, or unreachable — leaves the document listed and says why.
  */
 function Hapus({
   row,

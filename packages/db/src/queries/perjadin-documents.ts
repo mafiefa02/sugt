@@ -5,7 +5,7 @@ import {
   type PerjadinDocumentParticipantType,
   type TimeZone,
 } from "@sugt/domain";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { type AnyColumn, and, asc, eq, exists, type SQL, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { province, school } from "../schema/reference";
@@ -17,9 +17,10 @@ import { requirePerjadinWriter, requireStaff } from "./staff-only";
 
 /**
  * **Perjadin Documents** (#397, ADR-0042) — a trip's paperwork, the attendance sheets and each
- * School's SPPD (#441), one PDF each in the company Google Drive. This module is the database half: recording one, and the Dokumen dialog's read. The
- * upload, the checks on the file and the reconcile talk to Google and live in `@sugt/internal`;
- * their bookkeeping is `./document-drive-sync.ts`.
+ * School's SPPD (#441), one PDF each in the company Google Drive. This module is the database half:
+ * recording one, and the Dokumen dialog's read. The upload, the checks on the file and the
+ * reconcile talk to Google and live in `@sugt/internal`; their bookkeeping is
+ * `./document-drive-sync.ts`.
  *
  * **The trip's Group, an Editor or an Administrator records one** (`requirePerjadinWriter`,
  * ADR-0048), as they record a transaction; everyone else, a Pimpinan included, reads only.
@@ -87,6 +88,9 @@ export type DocumentFieldsRefusal =
 
 export type RecordPerjadinDocumentResult = { outcome: "recorded" } | DocumentFieldsRefusal;
 
+/** A School's name and its Province's Time Zone: what a document's Log entry says of its School. */
+type ZonedSchool = { name: string; timeZone: TimeZone };
+
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -98,9 +102,9 @@ const WALL_CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
  * Zone a Peserta sheet's or an SPPD's Log entry needs, or why the fields are refused.
  *
  * Exported for the upload's own early answers: `openDocumentSessionAction` asks it **before the
- * upload opens**, so an SPPD for a School that already has one is refused before anyone uploads
- * 40 MB, and `recordDocumentAction` asks again before anything moves in Drive, so a sheet dated
- * outside the trip is refused while the file still sits unnamed in `_staging`.
+ * upload opens**, so an SPPD for a School that already has one is refused before anyone uploads a
+ * large scan, and `recordDocumentAction` asks again before anything moves in Drive, so a sheet
+ * dated outside the trip is refused while the file still sits unnamed in `_staging`.
  * `recordPerjadinDocument` asks once more inside its transaction; that is the rule, these are the
  * courtesy.
  */
@@ -109,9 +113,7 @@ export async function checkDocumentFields(
   perjadinId: string,
   fields: DocumentFields,
   tx: Tx | typeof db = db,
-): Promise<
-  { outcome: "ok"; school: { name: string; timeZone: TimeZone } | null } | DocumentFieldsRefusal
-> {
+): Promise<{ outcome: "ok"; school: ZonedSchool | null } | DocumentFieldsRefusal> {
   requireStaff(caller);
   await requirePerjadinWriter(caller, perjadinId, tx);
 
@@ -134,17 +136,12 @@ export async function checkDocumentFields(
     if (fields.documentDate !== null) return { outcome: "invalid-fields" };
     const found = await tripSchool(tx, perjadinId, fields.sppd.schoolId);
     if (!found) return { outcome: "school-not-on-perjadin" };
-    // At most one per (this Perjadin, this School); the unique index holds it against a race.
+    // At most one per (this Perjadin, this School); the unique index holds it against a race. The
+    // School matched a trip School's id above, so it is a well-formed uuid by now.
     const [existing] = await tx
       .select({ id: perjadinDocument.id })
       .from(perjadinDocument)
-      .where(
-        and(
-          eq(perjadinDocument.perjadinId, perjadinId),
-          eq(perjadinDocument.kind, "SPPD"),
-          sql`${perjadinDocument.schoolId}::text = ${fields.sppd.schoolId}`,
-        ),
-      );
+      .where(sppdOf(perjadinId, fields.sppd.schoolId));
     if (existing) return { outcome: "sppd-exists", schoolName: found.name };
     return { outcome: "ok", school: found };
   }
@@ -182,6 +179,18 @@ export async function checkDocumentFields(
 }
 
 /**
+ * **The SPPD of one School on one Perjadin** (#441), as a condition on `perjadin_document` — one
+ * rule for the check that refuses a second and the read that marks a School "sudah ada".
+ */
+function sppdOf(perjadinId: string, schoolId: string | AnyColumn): SQL {
+  return and(
+    eq(perjadinDocument.perjadinId, perjadinId),
+    eq(perjadinDocument.kind, "SPPD"),
+    eq(perjadinDocument.schoolId, schoolId),
+  )!;
+}
+
+/**
  * The School named, with its zone, **if it is one of the trip's Schools** (#410) — the same rule
  * the pickers offer. A new upload only: a document already recorded for a School that has since
  * left the trip stays listed and deletable.
@@ -190,7 +199,7 @@ async function tripSchool(
   tx: Tx | typeof db,
   perjadinId: string,
   schoolId: string,
-): Promise<{ name: string; timeZone: TimeZone } | null> {
+): Promise<ZonedSchool | null> {
   const [found] = await tx
     .select({ name: school.name, timeZone: province.timeZone })
     .from(school)
@@ -205,9 +214,10 @@ async function tripSchool(
  * (`checkDocumentFields`) — the upload's early checks are a courtesy, this is the rule. The three
  * attendance kinds have no duplicate rule: a second sheet of one kind and date is a second row.
  *
- * **An SPPD is at most one per (Perjadin, School)** (#441). Two racing past the check both reach the
- * insert, and the loser trips `perjadin_document_sppd_unique`; that comes back as `sppd-exists`,
- * never as an error, and its file stays unnamed in private `_staging` like any refused record's.
+ * **An SPPD is at most one per (Perjadin, School)** (#441). Two racing past the check both reach
+ * the insert, and the loser trips `perjadin_document_sppd_unique`; that comes back as
+ * `sppd-exists`, never as an error, and its file stays unnamed in private `_staging` like any
+ * refused record's.
  */
 export async function recordPerjadinDocument(
   caller: Person,
@@ -215,22 +225,24 @@ export async function recordPerjadinDocument(
 ): Promise<RecordPerjadinDocumentResult> {
   requireStaff(caller);
 
-  let schoolName = "";
-  try {
-    return await db.transaction(async (tx) => {
-      const checked = await checkDocumentFields(caller, input.perjadinId, input, tx);
-      if (checked.outcome !== "ok") return checked;
-      schoolName = checked.school?.name ?? "";
+  return db.transaction(async (tx) => {
+    const checked = await checkDocumentFields(caller, input.perjadinId, input, tx);
+    if (checked.outcome !== "ok") return checked;
 
-      await insertDocument(tx, caller, input, checked.school);
-      return { outcome: "recorded" };
-    });
-  } catch (error) {
-    if (constraintOf(error) === "perjadin_document_sppd_unique") {
-      return { outcome: "sppd-exists", schoolName };
-    }
-    throw error;
-  }
+    // In a savepoint, so a lost race is answered here rather than aborting the whole transaction.
+    const inserted = await tx
+      .transaction((savepoint) => insertDocument(savepoint, caller, input, checked.school))
+      .then(
+        () => true,
+        (error: unknown) => {
+          if (constraintOf(error) === "perjadin_document_sppd_unique") return false;
+          throw error;
+        },
+      );
+    // Only an SPPD trips that index, and an SPPD's check always answers its School.
+    if (!inserted) return { outcome: "sppd-exists", schoolName: checked.school!.name };
+    return { outcome: "recorded" };
+  });
 }
 
 /** The row and its `document_uploaded` entry, once the fields are checked. */
@@ -238,7 +250,7 @@ async function insertDocument(
   tx: Tx,
   caller: Person,
   input: NewPerjadinDocument,
-  checkedSchool: { name: string; timeZone: TimeZone } | null,
+  checkedSchool: ZonedSchool | null,
 ): Promise<void> {
   const peserta = input.peserta;
   await tx.insert(perjadinDocument).values({
@@ -276,12 +288,13 @@ function constraintOf(error: unknown): string | null {
 /**
  * What a `document_uploaded` or `document_deleted` entry records of one document: its kind and
  * date, for a Peserta sheet its School's name and zone, cohort and span, and for an SPPD its
- * School's name alone — one shape for both, so the Log reads an upload and its deletion the same way.
+ * School's name alone — one shape for both, so the Log reads an upload and its deletion the same
+ * way.
  */
 function documentLogDetails(
   sheet: Pick<DocumentLogDetails, "documentId" | "kind" | "documentDate">,
   peserta: PesertaFields | undefined,
-  school: { name: string; timeZone: TimeZone } | null,
+  school: ZonedSchool | null,
 ): DocumentLogDetails {
   if (!school) return { ...sheet };
   if (!peserta) return { ...sheet, schoolName: school.name };
@@ -412,12 +425,12 @@ export async function perjadinDokumen(
         id: school.id,
         name: school.name,
         timeZone: province.timeZone,
-        hasSppd: sql<boolean>`exists (
-          select 1 from ${perjadinDocument}
-          where ${perjadinDocument.perjadinId} = ${perjadinId}::uuid
-            and ${perjadinDocument.kind} = 'SPPD'
-            and ${perjadinDocument.schoolId} = ${school.id}
-        )`,
+        hasSppd: sql<boolean>`${exists(
+          db
+            .select({ id: perjadinDocument.id })
+            .from(perjadinDocument)
+            .where(sppdOf(perjadinId, school.id)),
+        )}`,
       })
       .from(school)
       .innerJoin(province, eq(province.code, school.provinceCode))

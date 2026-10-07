@@ -18,7 +18,7 @@ A transaction can be entered whenever suits the PIC — photographed and logged 
 
 ## Amendment: the bet is not placed until the real template exists
 
-The document this ADR promises to fill cannot be built yet. `CONTEXT.md` and [`data-model.md`](../data-model.md) both record that the acquittal's real paperwork — Surat Tugas, SPPD, SPJ or otherwise — is unconfirmed, and it is worse than that: **no completed example exists to confirm it against.** Nobody has filed one for this Programme and no prior trip's set is available to borrow, so the first real Perjadin is what produces one.
+The document this ADR promises to fill cannot be built yet. `CONTEXT.md` and [`data-model.md`](../data-model.md) both record that the acquittal's real paperwork — Surat Tugas, SPPD, SPJ or otherwise — is unconfirmed (SPPD no longer: see [the 2026-10-08 amendment](#amendment-2026-10-08-sppd-is-uploaded-not-generated)), and it is worse than that: **no completed example exists to confirm it against.** Nobody has filed one for this Programme and no prior trip's set is available to borrow, so the first real Perjadin is what produces one.
 
 Waiting is not the answer either. Everything else on the acquittal screen — itemised transactions, evidence attached to the line it belongs to, the running reconciliation against the Advance, the returned-to-Treasurer mark, the receipts checklist — needs nothing from the template. So the screen ships, with a **generic export**: a plain itemisation a PIC can attach, not the real form.
 
@@ -57,3 +57,12 @@ A Perjadin often has to be planned before anyone knows its Uang Perjalanan, so t
 as optional and it is filled in later; once set it can be changed but not cleared. What this ADR
 rests on is unchanged: the acquittal still reconciles against the Advance, which is why filing the
 Perjadin Report is the one write that waits for it.
+
+## Amendment (2026-10-08): SPPD is uploaded, not generated
+
+**SPPD** is no longer among the unconfirmed paperwork
+([#441](https://github.com/sugt-itb/sugt-itb-26/issues/441)): each School's SPPD for a Perjadin is
+now a kind of Perjadin Document, uploaded as one PDF beside the attendance sheets
+([ADR-0042](./0042-perjadin-documents-are-stored-in-the-company-google-drive.md)). The tool stores
+the signed paper; it does not fill an SPPD template, so nothing here changes what the acquittal
+export renders. Surat Tugas and SPJ stay unconfirmed, and this ADR's bet still waits on them.

@@ -22,7 +22,9 @@ export type OpenDocumentSessionResult =
   | { outcome: "too-large"; limit: number }
   | DriveRefusal;
 
-/** What the dialog sends once the PDF has landed in Drive: the sheet's fields and the file's id. */
+/**
+ * What the dialog sends once the PDF has landed in Drive: the document's fields and the file's id.
+ */
 export type DocumentToRecord = DocumentFields & { perjadinId: string; driveFileId: string };
 
 /**

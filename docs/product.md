@@ -529,8 +529,8 @@ trip's own.
 The levels are edited on [Pengaturan Perjadin](#pengaturan-perjadin--the-preparation-checklist).
 
 **A Perjadin's screen ends with its Dokumen**: the attendance sheets and SPPDs uploaded from the
-`/pendamping` card, under the four kinds with the "SPPD: x/y sekolah" summary, each with a **Buka** link and "belum tersinkron" while it
-is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
+`/pendamping` card, under the four kinds with the "SPPD: x/y sekolah" summary, each with a **Buka**
+link and "belum tersinkron" while it is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
 uploading and Hapus happen in the card's Dokumen dialog.
 
 **The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):

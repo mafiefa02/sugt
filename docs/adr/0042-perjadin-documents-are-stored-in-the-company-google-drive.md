@@ -191,7 +191,7 @@ under the 50 MB cap, uploaded or deleted, never edited.
   row the old CHECKs allowed satisfies the new ones.
 - **At most one per (Perjadin, School).** A second SPPD for a School on the same Perjadin is refused
   — "SMAN 1 Bontang sudah punya SPPD untuk Perjadin ini. Hapus dulu untuk menggantinya." — **before
-  the upload session opens**, so nobody uploads 40 MB to be refused. The partial unique index
+  the upload session opens**, so nobody uploads a large scan only to be refused. The partial unique index
   `perjadin_document_sppd_unique` on `(perjadin_id, school_id) where kind = 'SPPD'` holds it against
   two uploads racing: the loser's record comes back as the same refusal, and its file stays unnamed
   in private `_staging`. The rule is per **Perjadin**: the same School on another trip gets its own.

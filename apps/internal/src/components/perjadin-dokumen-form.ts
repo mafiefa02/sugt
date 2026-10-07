@@ -18,18 +18,18 @@ import {
  * the `"use client"` dialog so each is tested without mounting it, as `table-sort.ts` is.
  */
 
-/** The picker's `accept`: one PDF. A multi-page sheet is scanned to one PDF by the uploader. */
+/** The picker's `accept`: one PDF. A multi-page document is scanned to one PDF by the uploader. */
 export const DOCUMENT_ACCEPT = "application/pdf";
 
 export const DOCUMENT_HINT = `1 file .pdf, maks. ${MAX_UPLOAD_MEGABYTES} MB`;
 
 export const ONLY_PDF = "Hanya file .pdf";
 
-/** The sheet is recorded, but the reconcile did not finish in Drive; the next one will. */
+/** The document is recorded, but the reconcile did not finish in Drive; the next one will. */
 export const DOCUMENT_UNSYNCED_NOTE =
   "Dokumen belum tersinkron ke Google Drive. Sinkronisasi akan diselesaikan kemudian; tidak ada yang perlu diulang.";
 
-/** What the "belum tersinkron" marker on a sheet says, in full. */
+/** What the "belum tersinkron" marker on a document says, in full. */
 export const DOCUMENT_UNSYNCED_TOOLTIP =
   "Dokumen belum tersinkron ke Google Drive — Administrator dapat menyelesaikannya lewat Periksa koneksi.";
 
@@ -45,7 +45,7 @@ export function pickDocument(file: File): File | string {
  * an SPPD its School alone (#441).
  */
 export function documentRowText(row: PerjadinDocumentRow): string {
-  if (row.documentDate === null) return row.schoolName ?? "";
+  if (row.kind === "SPPD") return row.schoolName ?? "";
   if (row.schoolName && row.participantType && row.startsAt && row.endsAt && row.timeZone) {
     return [
       row.documentDate,
@@ -54,7 +54,7 @@ export function documentRowText(row: PerjadinDocumentRow): string {
       formatTimeRange(row.startsAt, row.endsAt, row.timeZone),
     ].join(" · ");
   }
-  return row.documentDate;
+  return row.documentDate ?? "";
 }
 
 /**
@@ -122,6 +122,20 @@ export function documentFields(form: DocumentForm): DocumentFields | null {
   };
 }
 
+/** Every refusal of a document's fields, so one guard tells them from the actions' own. */
+const FIELDS_REFUSALS: Record<DocumentFieldsRefusal["outcome"], true> = {
+  "no-such-perjadin": true,
+  "invalid-fields": true,
+  "date-outside-perjadin": true,
+  "school-not-on-perjadin": true,
+  "times-out-of-order": true,
+  "sppd-exists": true,
+};
+
+function isFieldsRefusal(result: { outcome: string }): result is DocumentFieldsRefusal {
+  return Object.hasOwn(FIELDS_REFUSALS, result.outcome);
+}
+
 /** Why the document's fields are refused — before the upload opens, or again at the record. */
 function fieldsRefusalText(result: DocumentFieldsRefusal): string {
   switch (result.outcome) {
@@ -144,18 +158,12 @@ function fieldsRefusalText(result: DocumentFieldsRefusal): string {
 export function sessionRefusalText(
   result: Exclude<OpenDocumentSessionResult, { outcome: "ready" }>,
 ): string {
+  if (isFieldsRefusal(result)) return fieldsRefusalText(result);
   switch (result.outcome) {
     case "not-pdf":
       return ONLY_PDF;
     case "too-large":
       return UPLOAD_TOO_LARGE;
-    case "no-such-perjadin":
-    case "invalid-fields":
-    case "date-outside-perjadin":
-    case "school-not-on-perjadin":
-    case "times-out-of-order":
-    case "sppd-exists":
-      return fieldsRefusalText(result);
     default:
       return driveRefusalText(result);
   }
@@ -165,14 +173,8 @@ export function sessionRefusalText(
 export function recordRefusalText(
   result: Exclude<RecordDocumentActionResult, { outcome: "recorded" }>,
 ): string {
+  if (isFieldsRefusal(result)) return fieldsRefusalText(result);
   switch (result.outcome) {
-    case "no-such-perjadin":
-    case "invalid-fields":
-    case "date-outside-perjadin":
-    case "school-not-on-perjadin":
-    case "times-out-of-order":
-    case "sppd-exists":
-      return fieldsRefusalText(result);
     case "file-unverified":
       return "Berkas tidak dapat diperiksa di Google Drive — unggah ulang.";
     case "not-pdf":
@@ -182,7 +184,7 @@ export function recordRefusalText(
   }
 }
 
-/** Why Hapus did not go through. The sheet is still listed, and its file still where it was. */
+/** Why Hapus did not go through. The document is still listed, and its file still where it was. */
 export function deleteRefusalText(
   result: Exclude<DeleteDocumentActionResult, { outcome: "deleted" | "no-such-document" }>,
 ): string {

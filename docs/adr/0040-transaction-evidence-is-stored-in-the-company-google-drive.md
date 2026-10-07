@@ -327,5 +327,4 @@ reconcile are unchanged.
 
 ## Amendment (2026-10-08): an `SPPD/` kind folder under `Dokumen/`
 
-Each Perjadin's Dokumen folder gains a fourth kind folder, `SPPD/`, for each School's SPPD (#441);
-the whole tree is redrawn in [ADR-0042's amendment](./0042-perjadin-documents-are-stored-in-the-company-google-drive.md#amendment-2026-10-08-sppd-a-fourth-kind-one-per-school-per-perjadin).
+The tree gains an `SPPD/` kind folder (#441), redrawn whole in [ADR-0042's amendment](./0042-perjadin-documents-are-stored-in-the-company-google-drive.md#amendment-2026-10-08-sppd-a-fourth-kind-one-per-school-per-perjadin).

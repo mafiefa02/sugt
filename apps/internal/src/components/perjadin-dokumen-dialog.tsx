@@ -66,7 +66,7 @@ import { type ReactElement, useId, useRef, useState, useTransition } from "react
  * **Unggah dokumen** form: the kind, its fields, one PDF. An SPPD asks only for its School, and a
  * School that already has one on this trip is offered marked "sudah ada" and not selectable.
  *
- * The trip's sheets and Schools are fetched when the dialog opens (`perjadinDokumenAction`), and
+ * The trip's documents and Schools are fetched when the dialog opens (`perjadinDokumenAction`), and
  * again after each upload or Hapus, rather than riding on every card's payload. The upload is Catat
  * transaksi's: a session, the browser's `PUT` straight to Drive, then the record. **Any failure
  * keeps every value and the picked file**, so Unggah again retries against a fresh session.
@@ -129,14 +129,22 @@ function PerjadinDokumenDialog({
         { size: file.size, contentType: file.type },
         fields,
       );
-      if (session.outcome !== "ready") return setRefusal(sessionRefusalText(session));
+      if (session.outcome !== "ready") {
+        // Someone else's SPPD for this School landed since the dialog opened: reload, so the
+        // picker marks it "sudah ada" too.
+        if (session.outcome === "sppd-exists") await load();
+        return setRefusal(sessionRefusalText(session));
+      }
 
       const driveFileId = await putToDriveSession(session.sessionUri, file);
       if (!driveFileId) return setRefusal("Berkas gagal diunggah — coba lagi.");
 
       setProgress({ phase: "saving" });
       const result = await recordDocumentAction({ ...fields, perjadinId, driveFileId });
-      if (result.outcome !== "recorded") return setRefusal(recordRefusalText(result));
+      if (result.outcome !== "recorded") {
+        if (result.outcome === "sppd-exists") await load();
+        return setRefusal(recordRefusalText(result));
+      }
 
       setForm(EMPTY_DOCUMENT_FORM);
       setFile(null);
@@ -185,7 +193,7 @@ function PerjadinDokumenDialog({
               documents={dokumen.documents}
               schools={dokumen.schools}
               hapus={{
-                // Closed too while a sheet uploads, so nothing else changes the list under it.
+                // Closed too while a document uploads, so nothing else changes the list under it.
                 gate: saving ? { open: false, reason: UPLOAD_RUNNING } : uploadGate,
                 onDeleted: () => void load(),
               }}
@@ -294,7 +302,8 @@ function PerjadinDokumenDialog({
                   >
                     <SelectValue placeholder="Pilih sekolah">{school?.name}</SelectValue>
                   </SelectTrigger>
-                  <SelectContent>
+                  {/* As wide as its longest School, so a "sudah ada" mark is never cut off. */}
+                  <SelectContent className="w-auto min-w-(--anchor-width)">
                     {(dokumen?.schools ?? []).map((option) => {
                       // One SPPD per School on this trip (#441): Hapus frees it for a new one.
                       const taken = isSppd && option.hasSppd;
@@ -451,7 +460,7 @@ function PerjadinDokumenDialog({
   );
 }
 
-/** Why Hapus waits while a sheet uploads. */
+/** Why Hapus waits while a document uploads. */
 const UPLOAD_RUNNING = "Tunggu sampai unggahan selesai.";
 
 export { PerjadinDokumenDialog };

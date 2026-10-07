@@ -1543,9 +1543,10 @@ content type is pinned to PDF.
 
 **At most one SPPD per (Perjadin, School)** is the partial unique index
 `perjadin_document_sppd_unique`. It is per Perjadin, never per School alone: the same School on
-another trip gets its own. `recordPerjadinDocument` checks it first, so the upload opener can refuse
-before a byte moves (`sppd-exists`); the index is what holds two uploads racing, the loser's
-violation coming back as the same `sppd-exists`.
+another trip gets its own. `checkDocumentFields` checks it first — the upload opener asks it, so a
+second SPPD is refused before a byte moves (`sppd-exists`) — and `recordPerjadinDocument` asks again
+in its transaction; the index is what holds two uploads racing, the loser's violation coming back
+as the same `sppd-exists`.
 
 **The application holds the rest**, in `recordPerjadinDocument`: `document_date` lies inside the
 trip, and a Peserta sheet's School is one of **the trip's Schools** — it has a non-cancelled

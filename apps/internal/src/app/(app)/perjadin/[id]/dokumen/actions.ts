@@ -35,13 +35,13 @@ import type {
 } from "./action-types";
 
 /**
- * **The Dokumen dialog's Server Actions** (ADR-0042, #397, #398): the trip's sheets, uploading
+ * **The Dokumen dialog's Server Actions** (ADR-0042, #397, #398): the trip's documents, uploading
  * one, and deleting one. An upload runs Catat transaksi's order — check, verify, commit,
  * reconcile — and Hapus runs guard, trash, delete; both through the same guards
  * (`-/lib/drive/upload-guard`), because Google is reached before any query runs.
  */
 
-/** The dialog's read: the trip's window, its Schools and its sheets. Any signed-in Person. */
+/** The dialog's read: the trip's window, its Schools and its documents. Any signed-in Person. */
 export async function perjadinDokumenAction(perjadinId: string): Promise<PerjadinDokumen | null> {
   const person = await requirePerson();
   return perjadinDokumen(person, perjadinId);
@@ -161,7 +161,8 @@ export async function recordDocumentAction(
   );
   if (result.outcome !== "recorded") return result;
 
-  // After the commit nothing may throw: an error would invite a retry that records the sheet twice.
+  // After the commit nothing may throw: an error would invite a retry that records the document
+  // twice.
   const synced = await reconcileDocument(person, drive, access.folders, documentId).then(
     (reconciled) => reconciled.outcome === "synced",
     (error: unknown) => {
