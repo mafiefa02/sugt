@@ -5,6 +5,7 @@ import {
   markSessionDeliveredAction,
   moveSessionDateAction,
 } from "-/app/(app)/sesi/[id]/actions";
+import { SchoolBookedElsewhere } from "-/components/school-booked-elsewhere";
 import type { SessionDetail } from "@sugt/db/queries";
 import { timeZoneSuffix } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
@@ -44,7 +45,7 @@ import { useId, useState, useTransition } from "react";
  */
 function SessionWrites({ session }: { session: SessionDetail }) {
   return (
-    <div className="flex flex-wrap gap-2.5 px-7 py-5">
+    <div className="flex flex-wrap gap-2.5 px-4 py-5 sm:px-7">
       {session.status === "arranged" && (
         <>
           <OfflineMarkDelivered session={session} />
@@ -97,7 +98,7 @@ function OfflineMarkDelivered({ session }: { session: SessionDetail }) {
         <DialogHeader>
           <DialogTitle>Tandai Sesi terlaksana</DialogTitle>
           <DialogDescription>
-            Tandai Sesi luring ini sebagai terlaksana. Pengajarnya dicatat lewat &ldquo;Diajar
+            Tandai Sesi luring ini sebagai terlaksana. Narasumbernya dicatat lewat &ldquo;Diajar
             oleh&rdquo; di halaman Perjadin, bukan di sini.
           </DialogDescription>
         </DialogHeader>
@@ -225,7 +226,7 @@ function MoveDate({ session }: { session: SessionDetail }) {
   // moving only the date leaves the hour where the School expects it.
   // `session.startsAt` is `HH:MM:SS`; TimeField's contract (and every sibling seed) is `HH:MM`.
   const [startsAt, setStartsAt] = useState(session.startsAt.slice(0, 5));
-  const [refusal, setRefusal] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<React.ReactNode>(null);
   const [saving, startSaving] = useTransition();
   const dateId = useId();
   const timeId = useId();
@@ -243,6 +244,8 @@ function MoveDate({ session }: { session: SessionDetail }) {
             ? "Sekolah ini sudah punya Sesi daring pada tanggal tersebut."
             : "Sekolah ini sudah punya Sesi luring pada tanggal dan jam tersebut di Perjadin ini.",
         );
+      } else if (result.outcome === "school-booked-on-another-perjadin") {
+        setRefusal(<SchoolBookedElsewhere refusal={result} />);
       } else if (result.outcome === "outside-perjadin") {
         setRefusal(
           `Sesi luring harus berada dalam rentang Perjadin, ${result.startsOn} – ${result.endsOn}.`,
@@ -329,7 +332,7 @@ function MoveDate({ session }: { session: SessionDetail }) {
  * page — but it is worth saying plainly, because the button that produced it was one this
  * screen had offered.
  */
-function StaleAlert({ message }: { message: string }) {
+function StaleAlert({ message }: { message: React.ReactNode }) {
   return (
     <Alert variant="destructive">
       <AlertTitle>Tidak jadi disimpan.</AlertTitle>

@@ -9,21 +9,21 @@ import type { DirectoryPerjadin } from "@sugt/db/queries";
 
 /**
  * The seven columns, left to right — keyed in English like the rest of the code (CONTEXT.md); the
- * headers the screen shows are Perjadin, Sekolah, Keberangkatan, Kepulangan, PIC, Persiapan and
+ * headers the screen shows are Perjadin, Sekolah, Mulai, Selesai, PIC, Persiapan and
  * Terlaksana.
  */
 export type PerjadinColumn =
-  | "destination"
+  | "name"
   | "schools"
-  | "departure"
-  | "return"
+  | "start"
+  | "end"
   | "pic"
   | "preparation"
   | "delivered";
 
-/** Keberangkatan, newest first — the order the list has always had. */
+/** Mulai, newest first — the order the list has always had. */
 export const PERJADIN_DEFAULT_SORT: TableSort<PerjadinColumn> = {
-  key: "departure",
+  key: "start",
   direction: "desc",
 };
 
@@ -31,7 +31,7 @@ export const PERJADIN_DEFAULT_SORT: TableSort<PerjadinColumn> = {
 export type SortablePerjadin = Pick<
   DirectoryPerjadin,
   | "id"
-  | "destination"
+  | "subClusterName"
   | "schoolCount"
   | "startsOn"
   | "endsOn"
@@ -48,19 +48,24 @@ function deliveredRatio(trip: SortablePerjadin): number {
 
 /** Each column ascending. The direction is applied on top; ties are left to `tiebreak`. */
 const ASCENDING: Record<PerjadinColumn, (a: SortablePerjadin, b: SortablePerjadin) => number> = {
-  // Numeric-aware, so "Kelompok 2" sorts before "Kelompok 12".
-  destination: (a, b) => a.destination.localeCompare(b.destination, "id", { numeric: true }),
+  // By name — `{Sub-Cluster} · {dates}` (ADR-0044) — numeric-aware, so "Kelompok 2" sorts before
+  // "Kelompok 12". The dates part compares as dates, not as the words the name spells them in, so
+  // two trips of one Kelompok sort by when they leave.
+  name: (a, b) =>
+    a.subClusterName.localeCompare(b.subClusterName, "id", { numeric: true }) ||
+    a.startsOn.localeCompare(b.startsOn) ||
+    a.endsOn.localeCompare(b.endsOn),
   schools: (a, b) => a.schoolCount - b.schoolCount,
   // ISO `YYYY-MM-DD`, so the string order is the date order.
-  departure: (a, b) => a.startsOn.localeCompare(b.startsOn),
-  return: (a, b) => a.endsOn.localeCompare(b.endsOn),
+  start: (a, b) => a.startsOn.localeCompare(b.startsOn),
+  end: (a, b) => a.endsOn.localeCompare(b.endsOn),
   pic: (a, b) => a.picFullName.localeCompare(b.picFullName, "id"),
   preparation: (a, b) => a.preparationDone - b.preparationDone,
   delivered: (a, b) =>
     deliveredRatio(a) - deliveredRatio(b) || a.sessionsDelivered - b.sessionsDelivered,
 };
 
-/** Ties fall back to Keberangkatan descending, then id — whatever the chosen direction — for a total order. */
+/** Ties fall back to Mulai descending, then id — whatever the chosen direction — for a total order. */
 function tiebreak(a: SortablePerjadin, b: SortablePerjadin): number {
   return b.startsOn.localeCompare(a.startsOn) || b.id.localeCompare(a.id);
 }

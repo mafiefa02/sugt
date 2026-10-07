@@ -5,6 +5,7 @@ import {
   hasGrant,
   monitoringData,
   preparationCards,
+  preparationWeek,
 } from "@sugt/db/queries";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -14,6 +15,8 @@ import { showBudget } from "./dashboard-state";
 import { DashboardTabs } from "./dashboard-tabs";
 import { DashboardView } from "./dashboard-view";
 import { DashboardWarnings } from "./dashboard-warnings";
+import { deriveWeek, parseWeekParam, weekOf, weekStarts } from "./persiapan-luring-derive";
+import { PersiapanLuringTab } from "./persiapan-luring-tab";
 import { PersiapanTab } from "./persiapan-tab";
 import { preparationWarnings } from "./preparation-derive";
 
@@ -38,22 +41,30 @@ export const metadata: Metadata = { title: "Dashboard" };
  * elsewhere. `today` is the **WIB** calendar date — the Programme's zone, the one Session times are
  * stored in — not UTC: an overdue warning or a completed step turns over at local midnight, and a
  * UTC date would flip it up to seven hours early against `LURING_SESI_WINDOWS`, which are WIB dates.
+ *
+ * **Persiapan Luring** (#423) reads the week `?minggu=` names, or today's week (a Sunday's being the
+ * one that starts the next day); a URL that names one opens on that tab.
  */
-export default async function Page() {
+export default async function Page({ searchParams }: PageProps<"/">) {
   const person = await requirePerson();
   // Reading the Dashboard needs a grant now (#322). A grant-less Staff Person is redirected to their
   // own landing screen — the mirror of `pendamping/page.tsx`'s `/pendamping → /` for a Pimpinan.
   // `canViewDashboard` is the one predicate the sidebar filters on too, so the link and the page
   // agree. The redirect throws, so nothing below runs for a grant-less Staff.
   if (!canViewDashboard(person)) redirect("/pendamping");
-  // These three reads depend only on `person`, not on one another, so they run under a single
-  // `Promise.all` — one round of latency, not a three-deep request waterfall. `pendamping/page.tsx`
+  // `en-CA` formats as `YYYY-MM-DD`; `Asia/Jakarta` pins it to WIB so the date compares like-for-like
+  // against the WIB window bounds in `LURING_SESI_WINDOWS`.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
+  const minggu = (await searchParams).minggu;
+  const monday = parseWeekParam(minggu, today);
+  // These reads depend only on `person` and the week, not on one another, so they run under a single
+  // `Promise.all` — one round of latency, not a request waterfall. `pendamping/page.tsx`
   // batches the same way; this brings the landing surface back in line with the codebase's
   // `Promise.all` convention (#269). The destructured order matches the reads below.
-  const [data, cards, completions] = await Promise.all([
+  const [data, cards, completions, week] = await Promise.all([
     // The raw Pelaksanaan rows in one round trip, folded below by `deriveDashboard`.
     monitoringData(person),
-    // The Persiapan tab's cards (#221). Reading is open to any signed-in Person; `canEdit` — the
+    // The Persiapan Program tab's cards (#221). Reading is open to any signed-in Person; `canEdit` — the
     // "Editor" Grant — gates the tab's editor controls. The Grant is re-checked in every write, so
     // this only hides controls a non-holder could not use anyway. An Administrator implies the
     // Grant, which `hasGrant` already folds in.
@@ -61,11 +72,10 @@ export default async function Page() {
     // The Pretest tracker card's rows (#248) — open to any signed-in Person, folded into the derive
     // against the always-47 School denominator. Editing lives on `/pretest`.
     assessmentCompletions(person),
+    // Persiapan Luring's week (#423): its Perjadins and their resolved checklists, batched.
+    preparationWeek(person, weekStarts(monday)),
   ]);
   const canEdit = hasGrant(person, "Editor");
-  // `en-CA` formats as `YYYY-MM-DD`; `Asia/Jakarta` pins it to WIB so the date compares like-for-like
-  // against the WIB window bounds in `LURING_SESI_WINDOWS`.
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
   const derived = deriveDashboard(data, today, completions);
   // The Peringatan section's warnings, merged in a stable order — the server's Luring-overdue
   // warnings first, then the Persiapan due-date warnings (#234) folded from the same `cards` already
@@ -77,6 +87,7 @@ export default async function Page() {
       <DashboardWarnings warnings={warnings} />
 
       <DashboardTabs
+        initialTab={minggu === undefined ? "pelaksanaan" : "persiapan-luring"}
         pelaksanaan={
           <DashboardView
             showBudget={showBudget(person.role)}
@@ -89,10 +100,17 @@ export default async function Page() {
             postestTable={derived.postestTable}
           />
         }
-        persiapan={
+        persiapanProgram={
           <PersiapanTab
             cards={cards}
             canEdit={canEdit}
+          />
+        }
+        persiapanLuring={
+          <PersiapanLuringTab
+            monday={monday}
+            currentWeek={weekOf(today)}
+            figures={deriveWeek(week)}
           />
         }
       />

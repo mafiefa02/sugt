@@ -1,5 +1,4 @@
-import { db, schema } from "@sugt/db";
-import { perjadinDirectory, type Person } from "@sugt/db/queries";
+import { perjadinDirectory, togglePreparationItem, type Person } from "@sugt/db/queries";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -9,7 +8,9 @@ import {
   addPerson,
   addProvince,
   addSchool,
+  COMPANY_PREPARATION_ITEMS,
   resetDatabase,
+  wibDaysFromToday,
 } from "./support/fixtures";
 
 /**
@@ -84,8 +85,9 @@ describe("perjadinDirectory — the table's counts", () => {
     expect(trip?.schoolCount).toBe(1);
     expect(trip?.sessionsDelivered).toBe(1);
     expect(trip?.sessionsTotal).toBe(2);
-    // Two Schools are still searchable by name — the search arrays are not narrowed by status.
-    expect(trip?.schoolNames).toEqual(["SMAN 1 Bandung", "SMAN 2 Bandung"]);
+    // The trip's Schools (ADR-0044) — the School line and the search — agree with the count: the
+    // School whose only Session was cancelled is no longer visited, so it drops out of both.
+    expect(trip?.schoolNames).toEqual(["SMAN 1 Bandung"]);
   });
 
   it("reads 0/0 and zero Schools for a Perjadin with no Sessions", async () => {
@@ -99,32 +101,48 @@ describe("perjadinDirectory — the table's counts", () => {
     expect(trip?.sessionsTotal).toBe(0);
   });
 
-  it("carries the seven checklist items with their tick state, agreeing with the pill's count", async () => {
+  it("carries the trip's checklist with its tick state, agreeing with the pill's count", async () => {
     const pic = await staff();
-    const perjadin = await addPerjadin({ picPersonId: pic.id, advanceIdr: 5_000_000 });
-    await db.insert(schema.perjadinPreparationItem).values([
-      { perjadinId: perjadin.id, itemKey: "sk_perjalanan", checkedBy: pic.id },
-      { perjadinId: perjadin.id, itemKey: "staff", checkedBy: pic.id },
-    ]);
+    const perjadin = await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: 5_000_000,
+      startsOn: wibDaysFromToday(0),
+      endsOn: wibDaysFromToday(2),
+    });
+    const [before] = await perjadinDirectory(caller);
+    const [first, second] = before!.preparation;
+    for (const item of [first!, second!]) {
+      await togglePreparationItem(pic, {
+        perjadinId: perjadin.id,
+        itemId: item.itemId,
+        checked: true,
+      });
+    }
 
     const [trip] = await perjadinDirectory(caller);
 
-    expect(trip?.preparation).toHaveLength(7);
-    expect(trip?.preparation.filter((item) => item.checked).map((item) => item.itemKey)).toEqual([
-      "sk_perjalanan",
-      "staff",
+    // A trip not yet over has the company's 14 (ADR-0045).
+    expect(trip?.preparation.map((item) => item.label)).toEqual(COMPANY_PREPARATION_ITEMS);
+    expect(trip?.preparation.filter((item) => item.checked).map((item) => item.itemId)).toEqual([
+      first!.itemId,
+      second!.itemId,
     ]);
     expect(trip?.preparationDone).toBe(2);
-    expect(trip?.preparationTotal).toBe(7);
+    expect(trip?.preparationTotal).toBe(14);
   });
 
-  it("gives a trip with no ticks seven unchecked items", async () => {
+  it("gives a trip with no ticks every item unchecked", async () => {
     const pic = await staff();
-    await addPerjadin({ picPersonId: pic.id, advanceIdr: 5_000_000 });
+    await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: 5_000_000,
+      startsOn: wibDaysFromToday(0),
+      endsOn: wibDaysFromToday(2),
+    });
 
     const [trip] = await perjadinDirectory(caller);
 
     expect(trip?.preparation.every((item) => !item.checked)).toBe(true);
-    expect(trip?.preparation).toHaveLength(7);
+    expect(trip?.preparation).toHaveLength(14);
   });
 });

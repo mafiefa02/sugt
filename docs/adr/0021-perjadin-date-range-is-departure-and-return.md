@@ -1,5 +1,9 @@
 # A Perjadin's date range is its departure and return dates
 
+> **Superseded by [ADR-0041](./0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md).**
+> A Perjadin carries no travel legs now, and its range is typed again. The resize-and-clamp rule
+> below survives unchanged on the new date edit. The body is kept as the point-in-time record.
+
 A Perjadin's stored range **is** its travel legs: `starts_on = date(departure_at)` and
 `ends_on = date(return_at)`. The range is no longer a pair of hand-typed fields. It is derived from
 the departure and return dates at every write — planning (`/perjadin/baru`) and the logistics

@@ -42,6 +42,16 @@
  */
 export type { Caller, ParticipantToken, PerjadinToken, Person, ServiceCaller } from "./caller";
 export {
+  ACTIVITY_LOG_AKSI_FILTERS,
+  activityLogAksi,
+  activityLogPage,
+  activityLogRincian,
+  type ActivityLogAksiFilter,
+  type ActivityLogEntry,
+  type ActivityLogFilters,
+  type ActivityLogRow,
+} from "./activity-log";
+export {
   delivery,
   publishedStories,
   publishedStory,
@@ -92,12 +102,6 @@ export {
   type PerjadinFeedbackFilters,
   type PerjadinFeedbackRow,
 } from "./feedback";
-export {
-  staffDashboard,
-  type ClusterReach,
-  type PicReport,
-  type StaffDashboard,
-} from "./dashboard";
 export { monitoringData, type MonitoringData, type MonitoringSession } from "./monitoring";
 export {
   assessmentCompletions,
@@ -150,18 +154,17 @@ export {
   setPerjadinPimpinan,
   setPerjadinStaff,
   updatePerjadinAdvance,
-  updatePerjadinLogistics,
+  updatePerjadinDates,
   type ChangePerjadinPicResult,
   type EligibleSchool,
   type GroupMemberEntry,
+  type PerjadinDatesInput,
   type PerjadinDetail,
-  type PerjadinLogisticsInput,
   type PerjadinSession,
-  type PerjadinTravelLeg,
   type SetPerjadinPimpinanResult,
   type SetPerjadinStaffResult,
   type UpdatePerjadinAdvanceResult,
-  type UpdatePerjadinLogisticsResult,
+  type UpdatePerjadinDatesResult,
 } from "./perjadin-detail";
 export {
   addPerjadinTeacher,
@@ -179,24 +182,90 @@ export {
   type PerjadinSessionInput,
   type SessionPlacementRefusal,
 } from "./perjadin-sessions";
+export { type SchoolBookedOnAnotherPerjadin } from "./school-slot";
+export { type CoveredSession } from "./covered-sessions";
+export { type PerjadinNameRef } from "./perjadin-naming";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
-  myUpcomingPerjadin,
+  myPerjadin,
+  type MyPerjadin,
   type MyPerjadinPengajar,
   type MyPerjadinPimpinan,
   type MyPerjadinSchool,
   type MyPerjadinSession,
   type MyPerjadinStaff,
-  type MyUpcomingPerjadin,
+  type MyPerjadinTrip,
 } from "./my-perjadin";
 export {
   togglePreparationItem,
   type TogglePreparationItemInput,
   type TogglePreparationItemResult,
 } from "./perjadin-preparation";
-// The derived checklist's item shape rides on `PerjadinDetail`; the rest of
-// `./preparation-checklist.ts` is a helper beneath the queries, like `./group-rules.ts`.
+// The resolved checklist's item shape rides on `PerjadinDetail`, `MyPerjadinTrip` and
+// `DirectoryPerjadin`; the resolver itself is a helper beneath the queries, like `./group-rules.ts`.
 export type { PreparationItem } from "./preparation-checklist";
+export {
+  addPreparationItem,
+  clearPreparationItemWording,
+  hidePreparationItem,
+  movePreparationItem,
+  removePreparationItem,
+  removePreparationItemAt,
+  rewordPreparationItem,
+  rewordPreparationItemAt,
+  showPreparationItem,
+  type AddPreparationItemResult,
+  type HidePreparationItemResult,
+  type MovePreparationItemResult,
+  type PreparationOverrideScope,
+  type PreparationScope,
+  type RemovePreparationItemAtResult,
+  type RemovePreparationItemResult,
+  type RewordPreparationItemResult,
+} from "./preparation-items";
+export {
+  deleteSessionFootage,
+  footageSession,
+  recordSessionFootage,
+  sessionFootageList,
+  type DeleteSessionFootageResult,
+  type FootageSession,
+  type FootageSessionRefusal,
+  type NewSessionFootage,
+  type RecordSessionFootageResult,
+  type SessionFootageRow,
+} from "./session-footage";
+export {
+  claimFootageFolder,
+  claimPerjadinFootageFolder,
+  claimSessionFootageFolder,
+  footageFolderIds,
+  footageReconcileTarget,
+  markFootageSynced,
+  markFootageSyncFailed,
+  sessionFootageFolders,
+  unsyncedFootage,
+  type FootageFolderIds,
+  type FootageReconcileTarget,
+  type PlacedFootage,
+  type SessionFolderNaming,
+  type SessionFootageFolder,
+  type UnsyncedFootage,
+} from "./session-footage-drive-sync";
+export {
+  preparationWeek,
+  type PreparationWeek,
+  type WeekPerjadin,
+  type WeekPreparationItem,
+} from "./preparation-week";
+export {
+  preparationSettings,
+  preparationSettingsClusters,
+  preparationSettingsPerjadins,
+  type PreparationSettings,
+  type PreparationSettingsItem,
+  type PreparationSettingsPerjadin,
+} from "./preparation-settings";
 export { onlineSessionDirectory, type DirectoryOnlineSession } from "./online-session-directory";
 export {
   deleteOnlineSession,
@@ -243,7 +312,6 @@ export {
   type PlannableSchool,
   type PlannableSubCluster,
   type PlannedSession,
-  type PlannedTravelLeg,
   type PlanPerjadinInput,
   type PlanPerjadinResult,
   type SessionTimeClash,
@@ -309,18 +377,12 @@ export {
   type DriveUploadState,
 } from "./drive-connection";
 export {
-  legacyReceipts,
-  moveReceiptToDrive,
-  receiptMigrationState,
-  type LegacyReceipt,
-  type ReceiptMigrationState,
-} from "./receipt-migration";
-export {
   claimPerjadinDriveFolder,
   claimTransactionDriveFolder,
   markTransactionSyncFailed,
   markTransactionSynced,
   perjadinDriveFolder,
+  perjadinDriveFolders,
   reconcileTarget,
   unsyncedTransactions,
   type PerjadinDriveFolder,
@@ -328,6 +390,34 @@ export {
   type ReconcileTarget,
   type UnsyncedTransaction,
 } from "./drive-sync";
+export {
+  claimDocumentKindFolder,
+  claimDokumenFolder,
+  claimPerjadinDokumenFolder,
+  documentReconcileTarget,
+  dokumenFolderIds,
+  markDocumentSynced,
+  markDocumentSyncFailed,
+  unsyncedDocuments,
+  type DocumentReconcileTarget,
+  type DokumenFolderIds,
+  type UnsyncedDocument,
+} from "./document-drive-sync";
+export {
+  checkDocumentFields,
+  deletePerjadinDocument,
+  perjadinDokumen,
+  recordPerjadinDocument,
+  type DeletePerjadinDocumentResult,
+  type DocumentFields,
+  type DocumentFieldsRefusal,
+  type DocumentSchool,
+  type NewPerjadinDocument,
+  type PerjadinDocumentRow,
+  type PerjadinDokumen,
+  type PesertaFields,
+  type RecordPerjadinDocumentResult,
+} from "./perjadin-documents";
 export {
   canViewDashboard,
   hasGrant,

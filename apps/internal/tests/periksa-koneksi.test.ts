@@ -1,13 +1,18 @@
 import { checkDriveConnectionAction } from "-/app/(app)/pengaturan/actions";
 import LaporanPage from "-/app/(app)/perjadin/[id]/laporan/page";
 import { UNSYNCED_TOOLTIP } from "-/components/laporan-perjadin/acquittal-transactions";
-import { SWEEP_LIMIT, sweepUnsynced } from "-/lib/drive/check";
+import {
+  RENAME_LIMIT,
+  reassertPerjadinFolderNames,
+  SWEEP_LIMIT,
+  sweepUnsynced,
+} from "-/lib/drive/check";
 import { describeDriveCheck, exposureWarning } from "-/lib/drive/check-report";
 import { completeDriveConnection } from "-/lib/drive/connect";
 import { FakeDrive, MY_DRIVE } from "-/lib/drive/fake-drive";
 import type { ReadyFolders } from "-/lib/drive/fixed-folders";
 import { DRIVE_FILE_SCOPE, openDrive } from "-/lib/drive/google";
-import { receiptUploadGate } from "-/lib/drive/upload-gate";
+import { uploadGate } from "-/lib/drive/upload-gate";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
@@ -21,23 +26,18 @@ import {
   addPerjadin,
   addPerson,
   addTransaction,
-  addTransactionEvidence,
   resetDatabase,
 } from "./support/fixtures";
 
 /**
  * **Periksa koneksi, the sweep, the badge and the marker** (#375, ADR-0040) — against the real
- * database and the in-memory `FakeDrive`, faked as in `catat-transaksi-drive.test.ts`. Legacy
- * receipts' signed links are stubbed too: they would call Supabase, which no test reaches.
+ * database and the in-memory `FakeDrive`, faked as in `catat-transaksi-drive.test.ts`.
  */
 
 vi.mock("-/lib/person", () => ({ requirePerson: vi.fn() }));
 vi.mock("-/lib/drive/google", async (importOriginal) => ({
   ...(await importOriginal<typeof import("-/lib/drive/google")>()),
   openDrive: vi.fn(),
-}));
-vi.mock("-/lib/receipt-media", () => ({
-  signedReceiptUrl: vi.fn(async () => "https://storage.test/legacy"),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({
@@ -74,7 +74,7 @@ async function scene() {
   const trip = await addPerjadin({
     advanceIdr: 5_000_000,
     picPersonId: staff.id,
-    destination: "Kelompok 3: Garut",
+    subClusterName: "Kelompok 3",
     startsOn: "2026-10-12",
     endsOn: "2026-10-14",
   });
@@ -147,7 +147,17 @@ describe("the check, in order", () => {
         { folder: "pelaksanaan-offline", state: "ok" },
       ],
       exposed: [],
-      sweep: { ran: true, synced: 0, waiting: 0, failures: [] },
+      dokumen: "ok",
+      footage: "ok",
+      sweep: {
+        ran: true,
+        synced: 0,
+        waiting: 0,
+        failures: [],
+        documents: { synced: 0, waiting: 0, failures: [] },
+        footage: { synced: 0, waiting: 0, failures: [] },
+      },
+      names: { ran: true, renamed: 0, remaining: 0, failures: [] },
     });
     expect(describeDriveCheck(report).warnings).toEqual([]);
     const [row] = await db.select().from(schema.driveConnection);
@@ -189,7 +199,7 @@ describe("the check, in order", () => {
     await expect(db.select().from(schema.driveConnection)).resolves.toMatchObject([
       { folderProblem: "root-trashed" },
     ]);
-    await expect(receiptUploadGate(admin)).resolves.toMatchObject({ open: false });
+    await expect(uploadGate(admin)).resolves.toMatchObject({ open: false });
 
     drive.restore(folders.rootFolderId);
     await checkDriveConnectionAction();
@@ -197,7 +207,7 @@ describe("the check, in order", () => {
     await expect(db.select().from(schema.driveConnection)).resolves.toMatchObject([
       { folderProblem: null },
     ]);
-    await expect(receiptUploadGate(admin)).resolves.toEqual({ open: true });
+    await expect(uploadGate(admin)).resolves.toEqual({ open: true });
   });
 
   it("reports a trashed folder, and skips the sweep while the tree is not usable", async () => {
@@ -210,10 +220,13 @@ describe("the check, in order", () => {
     expect(report).toMatchObject({
       token: "ok",
       folders: expect.arrayContaining([{ folder: "bukti-transaksi", state: "trashed" }]),
-      sweep: { ran: false, waiting: 1 },
+      dokumen: "skipped",
+      footage: "skipped",
+      sweep: { ran: false, waiting: 1, documentsWaiting: 0, footageWaiting: 0 },
+      names: { ran: false },
     });
     expect(describeDriveCheck(report).lines).toContain(
-      "Sinkronisasi dilewati sampai folder di atas beres; 1 transaksi masih menunggu.",
+      "Sinkronisasi dilewati sampai folder di atas beres; 1 transaksi, 0 dokumen dan 0 foto/video masih menunggu.",
     );
   });
 });
@@ -260,7 +273,7 @@ describe("the sweep", () => {
     const second = await anUnsyncedLine(trip.id, admin.id, "Kedua");
     const third = await anUnsyncedLine(trip.id, admin.id, "Ketiga");
 
-    await expect(sweepUnsynced(admin, drive, folders, { limit: 2 })).resolves.toEqual({
+    await expect(sweepUnsynced(admin, drive, folders, { limit: 2 })).resolves.toMatchObject({
       synced: 2,
       waiting: 1,
       failures: [],
@@ -289,7 +302,7 @@ describe("the sweep", () => {
     const second = await sweepUnsynced(admin, drive, folders, { limit: 1 });
 
     expect(first).toMatchObject({ synced: 0, failures: [{ transactionId: stuck.id }] });
-    expect(second).toEqual({ synced: 1, waiting: 1, failures: [] });
+    expect(second).toMatchObject({ synced: 1, waiting: 1, failures: [] });
     expect((await lineRow(healthy.id)).driveSyncedAt).toBeInstanceOf(Date);
   });
 
@@ -298,27 +311,28 @@ describe("the sweep", () => {
     await anUnsyncedLine(trip.id, admin.id, "Satu");
     await anUnsyncedLine(trip.id, admin.id, "Dua");
 
-    await expect(sweepUnsynced(admin, drive, folders, { budgetMs: -1 })).resolves.toEqual({
+    await expect(sweepUnsynced(admin, drive, folders, { budgetMs: -1 })).resolves.toMatchObject({
       synced: 0,
       waiting: 2,
       failures: [],
     });
   });
 
-  it("never counts a legacy or zero-receipt line as owed", async () => {
+  it("never counts a synced or zero-receipt line as owed", async () => {
     const { admin, trip } = await scene();
-    const legacy = await addTransaction({
-      perjadinId: trip.id,
-      amountIdr: 10_000,
-      createdByPersonId: admin.id,
-    });
-    await addTransactionEvidence({ transactionId: legacy.id, uploadedByPersonId: admin.id });
+    const synced = await anUnsyncedLine(trip.id, admin.id, "Sudah");
+    await db
+      .update(schema.transaction)
+      .set({ driveSyncedAt: new Date() })
+      .where(eq(schema.transaction.id, synced.id));
     await addTransaction({ perjadinId: trip.id, amountIdr: 5_000, createdByPersonId: admin.id });
 
     await expect(sweepUnsynced(admin, drive, folders)).resolves.toEqual({
       synced: 0,
       waiting: 0,
       failures: [],
+      documents: { synced: 0, waiting: 0, failures: [] },
+      footage: { synced: 0, waiting: 0, failures: [] },
     });
   });
 
@@ -379,6 +393,142 @@ describe("the sweep", () => {
   });
 });
 
+describe("the folder names (#407)", () => {
+  /** A Drive folder named as before ADR-0044, recorded as `column` of the trip. */
+  async function staleFolder(
+    perjadinId: string,
+    column: "driveFolderId" | "driveDokumenFolderId" = "driveFolderId",
+  ) {
+    const { id } = await drive.createFolder({
+      name: "Kelompok 3: Kota Bandung",
+      parentId: folders.pelaksanaanOfflineFolderId,
+    });
+    await db
+      .update(schema.perjadin)
+      .set({ [column]: id })
+      .where(eq(schema.perjadin.id, perjadinId));
+    return id;
+  }
+
+  const nameOf = async (id: string) => (await drive.getFile(id))!.name;
+
+  /** A second trip, in another Kelompok, a week later. */
+  async function anotherTrip(staffId: string) {
+    return addPerjadin({
+      advanceIdr: 1_000_000,
+      picPersonId: staffId,
+      subClusterName: "Kelompok 4",
+      startsOn: "2026-10-19",
+      endsOn: "2026-10-20",
+    });
+  }
+
+  it("renames both of a trip's out-of-date folders, and says so", async () => {
+    const { trip } = await scene();
+    const receipts = await staleFolder(trip.id);
+    const dokumen = await staleFolder(trip.id, "driveDokumenFolderId");
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toMatchObject({ names: { ran: true, renamed: 2, remaining: 0, failures: [] } });
+    const name = `Kelompok 3 · 12–14 Okt 2026 · P-${trip.id.slice(0, 8)}`;
+    await expect(nameOf(receipts)).resolves.toBe(name);
+    await expect(nameOf(dokumen)).resolves.toBe(name);
+    expect(describeDriveCheck(report).lines).toContain(
+      "2 nama folder dan berkas diganti, 0 folder tersisa.",
+    );
+  });
+
+  it("reads a folder already right and writes nothing, so a second press is safe", async () => {
+    const { admin, trip } = await scene();
+    await staleFolder(trip.id);
+    await reassertPerjadinFolderNames(admin, drive);
+    const updateFile = vi.spyOn(drive, "updateFile");
+
+    await expect(reassertPerjadinFolderNames(admin, drive)).resolves.toEqual({
+      renamed: 0,
+      remaining: 0,
+      failures: [],
+    });
+    expect(updateFile).not.toHaveBeenCalled();
+  });
+
+  it("stops at the bound, and the next press carries on past what it put right", async () => {
+    const { admin, staff, trip } = await scene();
+    const other = await anotherTrip(staff.id);
+    const first = await staleFolder(trip.id);
+    const second = await staleFolder(other.id);
+    const [earlier, later] = trip.id < other.id ? [first, second] : [second, first];
+
+    await expect(reassertPerjadinFolderNames(admin, drive, { limit: 1 })).resolves.toEqual({
+      renamed: 1,
+      remaining: 1,
+      failures: [],
+    });
+    await expect(nameOf(later)).resolves.toBe("Kelompok 3: Kota Bandung");
+
+    await expect(reassertPerjadinFolderNames(admin, drive, { limit: 1 })).resolves.toEqual({
+      renamed: 1,
+      remaining: 0,
+      failures: [],
+    });
+    await expect(nameOf(earlier)).resolves.not.toBe("Kelompok 3: Kota Bandung");
+    await expect(nameOf(later)).resolves.not.toBe("Kelompok 3: Kota Bandung");
+    expect(RENAME_LIMIT).toBe(25);
+  });
+
+  it("reads nothing past its time budget, and counts what it did not reach", async () => {
+    const { admin, trip } = await scene();
+    await staleFolder(trip.id);
+    await staleFolder(trip.id, "driveDokumenFolderId");
+
+    await expect(reassertPerjadinFolderNames(admin, drive, { budgetMs: -1 })).resolves.toEqual({
+      renamed: 0,
+      remaining: 2,
+      failures: [],
+    });
+  });
+
+  it("reports a trashed or deleted folder, and neither renames nor recreates it", async () => {
+    const { trip, staff } = await scene();
+    const trashed = await staleFolder(trip.id);
+    drive.trash(trashed);
+    const other = await anotherTrip(staff.id);
+    const deleted = await staleFolder(other.id, "driveDokumenFolderId");
+    drive.remove(deleted);
+    const before = drive.files.size;
+
+    const report = await checkDriveConnectionAction();
+
+    expect(report).toMatchObject({ names: { ran: true, renamed: 0, remaining: 0 } });
+    const failures = report.token === "ok" && report.names.ran ? report.names.failures : [];
+    expect(failures).toEqual(
+      expect.arrayContaining([
+        {
+          perjadinId: trip.id,
+          name: `Kelompok 3 · 12–14 Okt 2026 · P-${trip.id.slice(0, 8)}`,
+          folder: "bukti-transaksi",
+          reason: "folder-trashed",
+        },
+        {
+          perjadinId: other.id,
+          name: `Kelompok 4 · 19–20 Okt 2026 · P-${other.id.slice(0, 8)}`,
+          folder: "dokumen",
+          reason: "folder-missing",
+        },
+      ]),
+    );
+    expect(describeDriveCheck(report).failures).toEqual(
+      expect.arrayContaining([
+        `Kelompok 3 · 12–14 Okt 2026 · P-${trip.id.slice(0, 8)} (Bukti Transaksi): folder ada di Sampah Google Drive.`,
+        `Kelompok 4 · 19–20 Okt 2026 · P-${other.id.slice(0, 8)} (Dokumen): folder tidak ditemukan.`,
+      ]),
+    );
+    expect(drive.files.size).toBe(before);
+    await expect(nameOf(trashed)).resolves.toBe("Kelompok 3: Kota Bandung");
+  });
+});
+
 describe("the belum tersinkron marker", () => {
   it("shows only on a line whose Drive receipt is still owed", async () => {
     const { admin, trip } = await scene();
@@ -388,13 +538,6 @@ describe("the belum tersinkron marker", () => {
       .update(schema.transaction)
       .set({ driveSyncedAt: new Date() })
       .where(eq(schema.transaction.id, synced.id));
-    const legacy = await addTransaction({
-      perjadinId: trip.id,
-      amountIdr: 10_000,
-      description: "Lama",
-      createdByPersonId: admin.id,
-    });
-    await addTransactionEvidence({ transactionId: legacy.id, uploadedByPersonId: admin.id });
     await addTransaction({
       perjadinId: trip.id,
       amountIdr: 5_000,
@@ -409,7 +552,7 @@ describe("the belum tersinkron marker", () => {
     const cards = html.split('data-slot="card"').slice(1);
     const marked = cards
       .filter((card) => card.includes(UNSYNCED_TOOLTIP))
-      .map((card) => /(Belum|Sudah|Lama|Kosong)/.exec(card)?.[1]);
+      .map((card) => /(Belum|Sudah|Kosong)/.exec(card)?.[1]);
     expect(marked).toEqual(["Belum"]);
   });
 });

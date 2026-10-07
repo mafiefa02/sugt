@@ -1,5 +1,6 @@
 "use client";
 
+import { matchesPerjadinSearch } from "-/components/perjadin-directory-search";
 import {
   PERJADIN_DEFAULT_SORT,
   sortPerjadinDirectory,
@@ -14,7 +15,7 @@ import {
   StickyTableHeader,
 } from "-/components/sortable-table";
 import { nextTableSort, type TableSort } from "-/components/table-sort";
-import { shortenKabupaten } from "-/lib/format-destination";
+import { perjadinName, perjadinSchoolsLine } from "-/lib/perjadin-name";
 import type { DirectoryPerjadin } from "@sugt/db/queries";
 import { Input } from "@sugt/ui/components/input";
 import { TableBody, TableCell, TableRow } from "@sugt/ui/components/table";
@@ -26,13 +27,12 @@ import { useMemo, useState } from "react";
  * The Perjadin table, narrowed by a search box and sorted by any column (#343).
  *
  * **The filtering and sorting happen here and not in the query**, the one-round-trip shape
- * `SchoolDirectoryTable` uses: the page fetches every trip — carrying the three name arrays the
- * search reads (#334) — and the browser narrows and orders them. A trip matches when the query is a
- * case-insensitive substring of its **destination** (a Perjadin has no separate name — the
- * destination is its identity), its **PIC** name, or any of its **pengajar**, **Group-member** or
- * **School** names. Those three arrays are search-only: nothing below renders them.
+ * `SchoolDirectoryTable` uses: the page fetches every trip — carrying the name arrays the search
+ * reads (#334) — and the browser narrows (`matchesPerjadinSearch`) and orders them. The trip's
+ * Schools are also the School line under the name; the pengajar and Group-member names are
+ * search-only.
  *
- * Sorting defaults to Keberangkatan, newest first; the sort state is `useState`, not the URL. A row
+ * Sorting defaults to Mulai, newest first; the sort state is `useState`, not the URL. A row
  * opens the trip on click, and its title is a real link besides. **Persiapan** is the checklist
  * dialog's trigger for Staff (`canTogglePreparation`) and a static pill for anyone else.
  */
@@ -46,23 +46,14 @@ function PerjadinDirectoryList({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<TableSort<PerjadinColumn>>(PERJADIN_DEFAULT_SORT);
 
-  const shown = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const matching =
-      needle === ""
-        ? trips
-        : trips.filter((trip) => {
-            const haystack = [
-              trip.destination,
-              trip.picFullName,
-              ...trip.pengajarNames,
-              ...trip.groupMemberNames,
-              ...trip.schoolNames,
-            ];
-            return haystack.some((field) => field.toLowerCase().includes(needle));
-          });
-    return sortPerjadinDirectory(matching, sort);
-  }, [trips, query, sort]);
+  const shown = useMemo(
+    () =>
+      sortPerjadinDirectory(
+        trips.filter((trip) => matchesPerjadinSearch(trip, query)),
+        sort,
+      ),
+    [trips, query, sort],
+  );
 
   function sortBy(column: PerjadinColumn) {
     setSort((current) => nextTableSort(current, column));
@@ -72,7 +63,7 @@ function PerjadinDirectoryList({
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="px-7 pt-5">
+      <div className="px-4 pt-5 sm:px-7">
         <Input
           value={query}
           onChange={(event) => {
@@ -88,16 +79,16 @@ function PerjadinDirectoryList({
       </div>
 
       {shown.length === 0 ? (
-        <p className="px-7 py-10 text-center text-sm text-muted-foreground">
+        <p className="px-4 py-10 text-center text-sm text-muted-foreground sm:px-7">
           Tidak ada Perjadin yang cocok dengan pencarian ini.
         </p>
       ) : (
-        <div className="mt-3 px-5">
+        <div className="mt-3 px-2 sm:px-5">
           <StickyTable>
             <StickyTableHeader>
               <TableRow>
                 <SortableTableHead
-                  column="destination"
+                  column="name"
                   {...head}
                 >
                   Perjadin
@@ -110,16 +101,16 @@ function PerjadinDirectoryList({
                   Sekolah
                 </SortableTableHead>
                 <SortableTableHead
-                  column="departure"
+                  column="start"
                   {...head}
                 >
-                  Keberangkatan
+                  Mulai
                 </SortableTableHead>
                 <SortableTableHead
-                  column="return"
+                  column="end"
                   {...head}
                 >
-                  Kepulangan
+                  Selesai
                 </SortableTableHead>
                 <SortableTableHead
                   column="pic"
@@ -147,14 +138,19 @@ function PerjadinDirectoryList({
                   key={trip.id}
                   href={`/perjadin/${trip.id}`}
                 >
-                  {/* The title wraps, so a long destination does not push the table past the page. */}
+                  {/* The School line wraps, so a long list does not push the table past the page. */}
                   <TableCell className="min-w-56 font-medium whitespace-normal">
                     <Link
                       href={`/perjadin/${trip.id}`}
                       className="rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/30"
                     >
-                      {shortenKabupaten(trip.destination)}
+                      {perjadinName(trip)}
                     </Link>
+                    {trip.schoolNames.length > 0 && (
+                      <p className="mt-0.5 text-xs font-normal text-muted-foreground">
+                        {perjadinSchoolsLine(trip.schoolNames)}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{trip.schoolCount}</TableCell>
                   <TableCell className="text-muted-foreground tabular-nums">
@@ -203,7 +199,7 @@ function CountBadge({ done, total }: { done: number; total: number }) {
 /**
  * **The Persiapan pill** ([#114](https://github.com/mafiefa02/sugt/issues/114)), `x/N` in the shared
  * progress tone. For Staff it is the trigger of the checklist dialog, toggleable — the same pill the
- * home strip's trip card wears (`my-perjadin-section.tsx`); for anyone else it is a static badge.
+ * `/pendamping` card wears (`my-perjadin-section.tsx`); for anyone else it is a static badge.
  * Opening the dialog never also opens the trip: `ClickableTableRow` ignores a click on a button, and
  * one inside the dialog's portal, so the click stops short of the row's navigation.
  */

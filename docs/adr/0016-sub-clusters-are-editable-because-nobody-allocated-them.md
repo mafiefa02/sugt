@@ -34,7 +34,7 @@ This is the part worth knowing before anyone tries to tighten the schema.
 
 **Editability is what kills it.** Those keys default to `NO ACTION`, so Postgres would refuse to move a School between Sub-Clusters while any Session referenced the old pairing — including delivered ones. Every School has four offline Sessions, so each would be frozen into its original Sub-Cluster by its first completed trip, and the screen this ADR exists to justify would stop working part-way through the Programme. `on update cascade` is not the answer, for the reason ADR-0013 gives when it rejects the same escape for `person.role`: it rewrites history, making a past Perjadin claim it travelled somewhere it did not — and here it fails mechanically too, because the trip's own Sub-Cluster does not move with the School, so the cascade violates the other half of the pair.
 
-The general shape: **a mutable grouping cannot be a key into immutable history.** Choosing editability means choosing that this rule lives in the application, and it does — checked when a trip is planned, which is the only place it can be violated, since there is no write that adds a School to an existing Perjadin. Its mirror is checked on the other side: moving a School is refused while an _arranged_ Session at it sits on a Perjadin against the Sub-Cluster it is leaving. Delivered and cancelled Sessions never block a move, which is the whole point.
+The general shape: **a mutable grouping cannot be a key into immutable history.** Choosing editability means choosing that this rule lives in the application, and it does — checked when a trip is planned, which is the only place it can be violated, since there is no write that adds a School to an existing Perjadin _(see the 2026-10-06 amendment below)_. Its mirror is checked on the other side: moving a School is refused while an _arranged_ Session at it sits on a Perjadin against the Sub-Cluster it is leaving. Delivered and cancelled Sessions never block a move, which is the whole point.
 
 ## Consequences
 
@@ -42,3 +42,15 @@ The general shape: **a mutable grouping cannot be a key into immutable history.*
 - **Two rules move out of the database and into `@sugt/db`**, joining `heldOnWithinPerjadin` in [what the database does not hold](../data-model.md#what-the-database-does-not-hold). Both are cheap for the reason the others there are: every write path goes through one package, and the constraint trigger stays available if raw SQL ever produces a row they refuse.
 - **Deleting a Sub-Cluster is declaratively blocked while it holds Schools**, free, from `school.sub_cluster_id` being NOT NULL with the default `NO ACTION`. Emptying it first is the only route — which is what keeps "every School belongs to exactly one Sub-Cluster" true without inventing an unassigned state to represent on screens.
 - A `slug` on `sub_cluster`, as everywhere else here, so the seed stays re-runnable with `on conflict (slug) do update`. Note the consequence: **the seed is authoritative for the rows it names.** Re-running it after somebody has renamed a Sub-Cluster in the screen reverts that rename, exactly as it would for a School — the seed is not a floor, and a Sub-Cluster created through the screen has no slug conflict and survives.
+
+## Amendment (2026-10-06): two writes check the rule, and a Sub-Cluster may have several trips
+
+[ADR-0043](./0043-a-sub-cluster-may-be-covered-by-several-perjadins.md),
+[#406](https://github.com/sugt-itb/sugt-itb-26/issues/406). "There is no write that adds a School to
+an existing Perjadin" stopped being true when `addPerjadinSession` arrived: the add-Session picker
+on `/perjadin/[id]` offers the trip's whole Sub-Cluster, so a School can join a trip after it is
+planned. The rule is checked in both writes — planning and adding a Session — and the reasoning
+above (a mutable grouping cannot be a key into immutable history) is unchanged.
+
+ADR-0043 also makes explicit what the data already allowed: one Sub-Cluster may be covered by
+several Perjadins. The rule here still bounds each of them to Schools of its own Sub-Cluster.

@@ -17,3 +17,9 @@
  */
 export { db, type Db } from "./client";
 export * as schema from "./schema";
+/**
+ * The trip's Schools as a SQL fragment (ADR-0044), for the Perjadin token resolver in
+ * `@sugt/internal`, which reads `schema` directly — the one definition every query here reuses, so
+ * the resolver needs no second copy.
+ */
+export { tripSchoolNames } from "./queries/perjadin-naming";

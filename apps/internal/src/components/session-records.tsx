@@ -23,7 +23,7 @@ import type { SessionDetail } from "@sugt/db/queries";
  */
 function SessionRecords({ session, personId }: { session: SessionDetail; personId: string }) {
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <h2 className="font-heading text-sm font-medium">Yang belum mengisi</h2>
 
       {/*

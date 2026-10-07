@@ -9,7 +9,7 @@ import { reconcileTransaction } from "-/lib/drive/reconcile";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import type { Person } from "@sugt/db/queries";
-import { MAX_RECEIPT_BYTES, MAX_RECEIPTS_PER_TRANSACTION } from "@sugt/domain";
+import { MAX_RECEIPTS_PER_TRANSACTION, MAX_UPLOAD_BYTES } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,7 +22,7 @@ import {
   stubTokenEndpoint,
   upload as uploadTo,
 } from "./support/drive";
-import { addPerjadin, addPerson, resetDatabase } from "./support/fixtures";
+import { addPerjadin, addPerson, addSchoolOnTrip, resetDatabase } from "./support/fixtures";
 
 /**
  * **Catat transaksi uploads its receipts to Google Drive** (#373, ADR-0040), against the real
@@ -46,6 +46,8 @@ vi.mock("next/headers", () => ({
 
 let drive: FakeDrive;
 let folders: ReadyFolders;
+/** The trip's Drive folder name (ADR-0044): its name, its Schools, its `P-` id. Set by `scene`. */
+let perjadinFolderName: string;
 
 /** A Staff PIC, a Pimpinan, a trip, and Drive connected with its fixed tree built in the fake. */
 async function scene(options: { connection?: "connected" | "broken" | "none" } = {}) {
@@ -58,10 +60,12 @@ async function scene(options: { connection?: "connected" | "broken" | "none" } =
   const trip = await addPerjadin({
     advanceIdr: 5_000_000,
     picPersonId: staff.id,
-    destination: "Kelompok 18: Samarinda, Bontang dan Balikpapan",
+    subClusterName: "Kelompok 18",
     startsOn: "2026-10-12",
     endsOn: "2026-10-16",
   });
+  await addSchoolOnTrip({ perjadin: trip, name: "SMAN 1 Bontang" });
+  perjadinFolderName = `Kelompok 18 · 12–16 Okt 2026 · SMAN 1 Bontang · P-${trip.id.slice(0, 8)}`;
 
   const connection = options.connection ?? "connected";
   if (connection !== "none") folders = await connectDrive(drive, staff.id, connection);
@@ -147,9 +151,9 @@ describe("no Drive call before the guard", () => {
     ).resolves.toEqual({ outcome: "unsupported-type" });
     await expect(
       openReceiptSessionsAction(trip.id, [
-        { size: MAX_RECEIPT_BYTES + 1, contentType: "image/jpeg" },
+        { size: MAX_UPLOAD_BYTES + 1, contentType: "image/jpeg" },
       ]),
-    ).resolves.toEqual({ outcome: "too-large", limit: MAX_RECEIPT_BYTES });
+    ).resolves.toEqual({ outcome: "too-large", limit: MAX_UPLOAD_BYTES });
     await expect(recordTransactionAction(aLine(trip.id, []))).resolves.toEqual({
       outcome: "evidence-missing",
     });
@@ -182,6 +186,23 @@ describe("opening upload sessions", () => {
     expect(sessions[0]!.name).toMatch(/^[0-9a-f-]{36}\.jpg$/);
     expect(sessions[1]!.name).toMatch(/\.pdf$/);
   });
+  it("accepts a declared size of exactly 50 MB and refuses one byte more (#394)", async () => {
+    const { trip } = await scene();
+    expect(MAX_UPLOAD_BYTES).toBe(50 * 1024 * 1024);
+
+    await expect(
+      openReceiptSessionsAction(trip.id, [
+        { size: MAX_UPLOAD_BYTES, contentType: "application/pdf" },
+      ]),
+    ).resolves.toMatchObject({ outcome: "ready" });
+    expect([...drive.sessions.values()][0]).toMatchObject({ size: MAX_UPLOAD_BYTES });
+
+    await expect(
+      openReceiptSessionsAction(trip.id, [
+        { size: MAX_UPLOAD_BYTES + 1, contentType: "application/pdf" },
+      ]),
+    ).resolves.toEqual({ outcome: "too-large", limit: MAX_UPLOAD_BYTES });
+  });
 });
 
 describe("recording a line with its Drive receipts", () => {
@@ -202,10 +223,9 @@ describe("recording a line with its Drive receipts", () => {
       const evidence = await evidenceRows();
       expect(evidence).toHaveLength(count);
       for (const row of evidence) {
-        expect(row.storagePath).toBeNull();
         expect(ids).toContain(row.driveFileId);
         // From the sniff and from Drive, never from the browser.
-        const sent = files[ids.indexOf(row.driveFileId!)]!;
+        const sent = files[ids.indexOf(row.driveFileId)]!;
         expect(row.contentType).toBe(sent[0] === 0xff ? "image/jpeg" : "application/pdf");
         expect(row.byteSize).toBe(sent.length);
       }
@@ -216,9 +236,7 @@ describe("recording a line with its Drive receipts", () => {
         .from(schema.perjadin)
         .where(eq(schema.perjadin.id, trip.id));
       const perjadinFolder = (await drive.getFile(trip_!.driveFolderId!))!;
-      expect(perjadinFolder.name).toBe(
-        "Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12",
-      );
+      expect(perjadinFolder.name).toBe(perjadinFolderName);
       expect(perjadinFolder.parents).toEqual([folders.pelaksanaanOfflineFolderId]);
 
       const folder = (await drive.getFile(line!.driveFolderId!))!;
@@ -233,7 +251,7 @@ describe("recording a line with its Drive receipts", () => {
       });
 
       for (const row of evidence) {
-        const file = (await drive.getFile(row.driveFileId!))!;
+        const file = (await drive.getFile(row.driveFileId))!;
         expect(file.parents).toEqual([folder.id]);
         const ext = row.contentType === "image/jpeg" ? "jpg" : "pdf";
         expect(file.name).toBe(`${folder.name} · ${row.id.slice(0, 8)}.${ext}`);
@@ -260,9 +278,7 @@ describe("recording a line with its Drive receipts", () => {
       drive.getFile(second!.driveFolderId!),
     ]);
     expect(a!.parents).toEqual(b!.parents);
-    expect(
-      drive.named("Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12"),
-    ).toHaveLength(1);
+    expect(drive.named(perjadinFolderName)).toHaveLength(1);
   });
 });
 
@@ -292,7 +308,7 @@ describe("a receipt that is not what it claims records nothing", () => {
   it("refuses a file over the cap as Drive holds it", async () => {
     const { trip } = await scene();
     const [id] = await upload(trip.id, [jpeg()]);
-    drive.files.get(id!)!.size = MAX_RECEIPT_BYTES + 1;
+    drive.files.get(id!)!.size = MAX_UPLOAD_BYTES + 1;
 
     await expect(recordTransactionAction(aLine(trip.id, [id!]))).resolves.toMatchObject({
       outcome: "receipt-unverified",
@@ -365,7 +381,7 @@ describe("after the commit", () => {
     const [a, b] = await Promise.all([upload(trip.id, [jpeg()]), upload(trip.id, [jpeg()])]);
     // Hold each Perjadin-folder creation until both have started, so both reconciles have read "no
     // folder yet" before either claims one — the race itself, every run.
-    const perjadinFolder = "Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12";
+    const perjadinFolder = perjadinFolderName;
     const createFolder = drive.createFolder.bind(drive);
     let release!: () => void;
     const bothStarted = new Promise<void>((resolve) => (release = resolve));
@@ -409,9 +425,7 @@ describe("after the commit", () => {
       parents: [folders.stagingFolderId],
       trashed: false,
     });
-    expect(
-      drive.named("Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12"),
-    ).toHaveLength(1);
+    expect(drive.named(perjadinFolderName)).toHaveLength(1);
   });
 
   it("answers recorded, not an error, when the reconcile throws after the commit", async () => {

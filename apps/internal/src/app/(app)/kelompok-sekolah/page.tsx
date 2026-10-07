@@ -21,7 +21,7 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">Kelompok Sekolah</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           Kumpulan Sekolah dalam satu Cluster yang cukup dekat untuk dikunjungi dalam satu

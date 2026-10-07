@@ -44,6 +44,15 @@ export const driveConnection = pgTable(
     buktiTransaksiFolderId: text("bukti_transaksi_folder_id"),
     pelaksanaanOfflineFolderId: text("pelaksanaan_offline_folder_id"),
     readmeFileId: text("readme_file_id"),
+    // `Dokumen/` and its `Pelaksanaan Offline/` (ADR-0042). Kept apart from the five above: a
+    // connection made before them has neither, and receipts must not wait on them, so they are
+    // ensured where a document needs them — connect, Periksa koneksi, the document reconcile.
+    dokumenFolderId: text("dokumen_folder_id"),
+    dokumenPelaksanaanOfflineFolderId: text("dokumen_pelaksanaan_offline_folder_id"),
+    // `Foto & Video/` and its `Pelaksanaan Offline/` (ADR-0046), kept apart for the same reason and
+    // ensured the same way, where footage needs them.
+    footageFolderId: text("footage_folder_id"),
+    footagePelaksanaanOfflineFolderId: text("footage_pelaksanaan_offline_folder_id"),
     folderProblem: text("folder_problem").$type<DriveFolderProblem>(),
     status: text("status").$type<DriveConnectionStatus>().notNull(),
     brokenAt: timestamp("broken_at", { withTimezone: true }),

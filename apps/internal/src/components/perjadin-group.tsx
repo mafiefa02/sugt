@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -42,7 +43,7 @@ function PerjadinGroup({
   canEdit: boolean;
 }) {
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Group</h2>
         {canEdit && (
@@ -141,7 +142,7 @@ function EditGroup({
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent size="panel">
         <DialogHeader>
           <DialogTitle>Ubah Group</DialogTitle>
           <DialogDescription>
@@ -150,47 +151,49 @@ function EditGroup({
           </DialogDescription>
         </DialogHeader>
 
-        {refusal !== null && (
-          <Alert variant="destructive">
-            <AlertTitle>Group belum berubah.</AlertTitle>
-            <AlertDescription>{refusal}</AlertDescription>
-          </Alert>
-        )}
+        <DialogBody>
+          {refusal !== null && (
+            <Alert variant="destructive">
+              <AlertTitle>Group belum berubah.</AlertTitle>
+              <AlertDescription>{refusal}</AlertDescription>
+            </Alert>
+          )}
 
-        <div className="grid gap-3.5">
-          <div className="grid gap-1.5">
-            <Label htmlFor={picFieldId}>PIC</Label>
-            <PersonSelect
-              id={picFieldId}
-              people={staff}
-              value={pic}
-              placeholder="Pilih PIC"
-              onSelect={(personId) => {
-                setPic(personId);
-                setRefusal(null);
-              }}
-            />
-          </div>
+          <div className="grid gap-3.5">
+            <div className="grid gap-1.5">
+              <Label htmlFor={picFieldId}>PIC</Label>
+              <PersonSelect
+                id={picFieldId}
+                people={staff}
+                value={pic}
+                placeholder="Pilih PIC"
+                onSelect={(personId) => {
+                  setPic(personId);
+                  setRefusal(null);
+                }}
+              />
+            </div>
 
-          <div className="grid gap-1.5">
-            <Label htmlFor={staffFieldId}>Pendamping tambahan (opsional)</Label>
-            <p className="-mt-0.5 text-xs text-muted-foreground">
-              Selain PIC, hingga {MAX_EXTRA_STAFF_PER_GROUP} orang.
-            </p>
-            <MultiSelectCombobox
-              id={staffFieldId}
-              aria-label="Pendamping tambahan"
-              placeholder="Cari Pendamping…"
-              emptyLabel="Tidak ada Pendamping."
-              options={staffOptions}
-              value={extraStaff.filter((personId) => personId !== pic)}
-              onValueChange={(next) => {
-                if (next.length <= MAX_EXTRA_STAFF_PER_GROUP) setExtraStaff(next);
-                setRefusal(null);
-              }}
-            />
+            <div className="grid gap-1.5">
+              <Label htmlFor={staffFieldId}>Pendamping tambahan (opsional)</Label>
+              <p className="-mt-0.5 text-xs text-muted-foreground">
+                Selain PIC, hingga {MAX_EXTRA_STAFF_PER_GROUP} orang.
+              </p>
+              <MultiSelectCombobox
+                id={staffFieldId}
+                aria-label="Pendamping tambahan"
+                placeholder="Cari Pendamping…"
+                emptyLabel="Tidak ada Pendamping."
+                options={staffOptions}
+                value={extraStaff.filter((personId) => personId !== pic)}
+                onValueChange={(next) => {
+                  if (next.length <= MAX_EXTRA_STAFF_PER_GROUP) setExtraStaff(next);
+                  setRefusal(null);
+                }}
+              />
+            </div>
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button

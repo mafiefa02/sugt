@@ -1,6 +1,7 @@
 "use server";
 
 import { renamePerjadinFolder } from "-/lib/drive/rename-perjadin-folder";
+import { renameSessionFootage } from "-/lib/drive/rename-session-footage";
 import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
@@ -17,13 +18,13 @@ import {
   setPerjadinStaff,
   togglePreparationItem,
   updatePerjadinAdvance,
-  updatePerjadinLogistics,
+  updatePerjadinDates,
   type AddPerjadinSessionResult,
   type AddPerjadinTeacherResult,
   type CancelSessionResult,
   type ChangePerjadinPicResult,
   type EditPerjadinSessionResult,
-  type PerjadinLogisticsInput,
+  type PerjadinDatesInput,
   type PerjadinSessionInput,
   type RemovePerjadinTeacherResult,
   type RenamePerjadinTeacherResult,
@@ -31,7 +32,7 @@ import {
   type SetPerjadinStaffResult,
   type TogglePreparationItemResult,
   type UpdatePerjadinAdvanceResult,
-  type UpdatePerjadinLogisticsResult,
+  type UpdatePerjadinDatesResult,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
 import QRCode from "qrcode";
@@ -84,8 +85,8 @@ export async function setPerjadinPimpinanAction(
 }
 
 /**
- * **Add one trip-scoped teacher name.** The teacher writes clear the "Pengajar sudah lengkap"
- * Preparation tick, which shows on the `/perjadin` list's Persiapan `x/N` pill — so, like
+ * **Add one trip-scoped teacher name.** The teacher writes clear the system Preparation Item's
+ * tick (ADR-0045), which shows on the `/perjadin` list's Persiapan `x/N` pill — so, like
  * `togglePreparationItemAction`, this revalidates both routes.
  */
 export async function addPerjadinTeacherAction(
@@ -136,7 +137,10 @@ export async function removePerjadinTeacherAction(
   return result;
 }
 
-/** **Add one offline Session to the trip.** */
+/**
+ * **Add one offline Session to the trip.** A Session at a School not yet on the trip changes the
+ * trip's Schools, so it renames the trip's Drive folders (#407), after the commit and best effort.
+ */
 export async function addPerjadinSessionAction(
   perjadinId: string,
   input: PerjadinSessionInput,
@@ -144,11 +148,18 @@ export async function addPerjadinSessionAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => addPerjadinSession(person, perjadinId, input));
-  if (result.outcome === "added") revalidatePath(`/perjadin/${perjadinId}`);
+  if (result.outcome === "added") {
+    if (result.schoolsChanged) await renamePerjadinFolder(person, perjadinId);
+    revalidatePath(`/perjadin/${perjadinId}`);
+  }
   return result;
 }
 
-/** **Edit one arranged offline Session's School, date, time and "Diajar oleh".** */
+/**
+ * **Edit one arranged offline Session's School, date, time and "Diajar oleh".** Moving it to another
+ * School may add one to the trip's Schools and take one away, so it renames the trip's Drive folders
+ * when they changed (#407).
+ */
 export async function editPerjadinSessionAction(
   perjadinId: string,
   sessionId: string,
@@ -157,11 +168,20 @@ export async function editPerjadinSessionAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => editPerjadinSession(person, sessionId, input));
-  if (result.outcome === "edited") revalidatePath(`/perjadin/${perjadinId}`);
+  if (result.outcome === "edited") {
+    if (result.schoolsChanged) await renamePerjadinFolder(person, perjadinId);
+    // Its Foto & Video folder and files carry its date, time and School (ADR-0046).
+    await renameSessionFootage(person, sessionId);
+    revalidatePath(`/perjadin/${perjadinId}`);
+  }
   return result;
 }
 
-/** **Cancel one offline Session** — the way a Session is removed from the trip, kept visible. */
+/**
+ * **Cancel one offline Session** — the way a Session is removed from the trip, kept visible. When it
+ * was its School's last live Session on the trip, that School leaves the trip's Schools, so it
+ * renames the trip's Drive folders (#407).
+ */
 export async function cancelPerjadinSessionAction(
   perjadinId: string,
   sessionId: string,
@@ -170,7 +190,10 @@ export async function cancelPerjadinSessionAction(
   const person = await requirePerson();
 
   const result = await staffSurface(() => cancelSession(person, sessionId, reason));
-  if (result.outcome === "cancelled") revalidatePath(`/perjadin/${perjadinId}`);
+  if (result.outcome === "cancelled") {
+    if (result.schoolsChanged) await renamePerjadinFolder(person, perjadinId);
+    revalidatePath(`/perjadin/${perjadinId}`);
+  }
   return result;
 }
 
@@ -212,25 +235,25 @@ export async function issuePerjadinFeedbackTokenAction(
 }
 
 /**
- * **Correct a Perjadin's departure/return logistics** — and, with them, its date range.
+ * **Ubah tanggal — correct a Perjadin's typed date range** (ADR-0041).
  *
- * The range is the leg dates now (ADR-0021), so this write resizes `starts_on`/`ends_on` too. It
- * clamps rather than shifting: an edit that would strand an arranged Session comes back as
- * `would-strand` and nothing moves.
+ * It clamps rather than shifting: an edit that would strand an arranged Session comes back as
+ * `would-strand` and nothing moves; an inverted range comes back as `ends-before-starts`.
  *
- * **A correction that moves `starts_on` renames the trip's Drive folder** (#376), after the commit and
- * best effort: a failed rename never fails the correction, and the next reconcile on that trip
- * repairs it. Every refusal above comes back before anything reaches Drive.
+ * **A correction that moves either date renames the trip's Drive folders** (#376, #407) — both dates
+ * are in its name — after the commit and best effort: a failed rename never fails the correction,
+ * and the next reconcile on that trip repairs it. Every refusal above comes back before anything
+ * reaches Drive.
  */
-export async function updatePerjadinLogisticsAction(
+export async function updatePerjadinDatesAction(
   perjadinId: string,
-  input: PerjadinLogisticsInput,
-): Promise<UpdatePerjadinLogisticsResult> {
+  input: PerjadinDatesInput,
+): Promise<UpdatePerjadinDatesResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => updatePerjadinLogistics(person, perjadinId, input));
+  const result = await staffSurface(() => updatePerjadinDates(person, perjadinId, input));
   if (result.outcome === "updated") {
-    if (result.startsOnMoved) await renamePerjadinFolder(person, perjadinId);
+    if (result.datesMoved) await renamePerjadinFolder(person, perjadinId);
     revalidatePath(`/perjadin/${perjadinId}`);
   }
   return result;
@@ -269,17 +292,16 @@ export async function updatePerjadinAdvanceAction(
  */
 export async function togglePreparationItemAction(
   perjadinId: string,
-  itemKey: string,
+  itemId: string,
   checked: boolean,
 ): Promise<TogglePreparationItemResult> {
   const person = await requirePerson();
 
   const result = await staffSurface(() =>
-    togglePreparationItem(person, { perjadinId, itemKey, checked }),
+    togglePreparationItem(person, { perjadinId, itemId, checked }),
   );
-  if (result.outcome === "toggled") {
-    revalidatePath(`/perjadin/${perjadinId}`);
-    revalidatePath("/perjadin");
-  }
+  // A refused item is one the page should no longer show, so it is refreshed then too.
+  revalidatePath(`/perjadin/${perjadinId}`);
+  revalidatePath("/perjadin");
   return result;
 }

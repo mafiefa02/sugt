@@ -5,7 +5,9 @@ import {
   cancelPerjadinSessionAction,
   editPerjadinSessionAction,
 } from "-/app/(app)/perjadin/[id]/actions";
+import { CoveredSessionsNote } from "-/components/covered-sessions-note";
 import { MultiSelectCombobox } from "-/components/multi-select-combobox";
+import { SchoolBookedElsewhere } from "-/components/school-booked-elsewhere";
 import { SessionStatusBadge } from "-/components/session-labels";
 import type {
   AddPerjadinSessionResult,
@@ -18,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -68,7 +71,7 @@ function PerjadinSessions({
   canEdit: boolean;
 }) {
   return (
-    <div className="px-7 py-5">
+    <div className="px-4 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Sesi</h2>
         {canEdit && (
@@ -181,7 +184,7 @@ function SessionDialog({
   const [taughtBy, setTaughtBy] = useState<string[]>(
     () => session?.taughtBy.map((teacher) => teacher.id) ?? [],
   );
-  const [refusal, setRefusal] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<React.ReactNode>(null);
   const [saving, startSaving] = useTransition();
   const idPrefix = useId();
 
@@ -191,8 +194,8 @@ function SessionDialog({
   // The picked School's Time Zone, for the Jam Mulai label. In add mode it appears and flips as the
   // School is chosen (#165); in edit mode the seeded School's zone matches `session.timeZone`, and
   // that seed is the fallback for the rare case the seeded School is not among the eligible ones.
-  const timeZone =
-    eligibleSchools.find((option) => option.id === schoolId)?.timeZone ?? session?.timeZone;
+  const pickedSchool = eligibleSchools.find((option) => option.id === schoolId);
+  const timeZone = pickedSchool?.timeZone ?? session?.timeZone;
 
   function submit() {
     if (incomplete) return;
@@ -221,94 +224,107 @@ function SessionDialog({
       onOpenChange={setOpen}
     >
       <DialogTrigger render={trigger} />
-      <DialogContent>
+      <DialogContent size="panel">
         <DialogHeader>
           <DialogTitle>{session ? "Ubah Sesi" : "Tambah Sesi"}</DialogTitle>
           <DialogDescription>Sekolah, tanggal, jam dan siapa yang mengajar.</DialogDescription>
         </DialogHeader>
 
-        {refusal !== null && (
-          <Alert variant="destructive">
-            <AlertTitle>Sesi belum tersimpan.</AlertTitle>
-            <AlertDescription>{refusal}</AlertDescription>
-          </Alert>
-        )}
+        <DialogBody>
+          {refusal != null && (
+            <Alert variant="destructive">
+              <AlertTitle>Sesi belum tersimpan.</AlertTitle>
+              <AlertDescription>{refusal}</AlertDescription>
+            </Alert>
+          )}
 
-        <div className="grid gap-3.5">
-          <div className="grid gap-1.5">
-            <Label htmlFor={`${idPrefix}-school`}>Sekolah</Label>
-            <Select
-              items={Object.fromEntries(eligibleSchools.map((school) => [school.id, school.name]))}
-              value={schoolId === "" ? null : schoolId}
-              onValueChange={(value) => {
-                setSchoolId((value as string | null) ?? "");
-                setRefusal(null);
-              }}
-            >
-              <SelectTrigger
-                id={`${idPrefix}-school`}
-                aria-label="Sekolah"
-              >
-                <SelectValue placeholder="Pilih Sekolah" />
-              </SelectTrigger>
-              <SelectContent>
-                {eligibleSchools.map((school) => (
-                  <SelectItem
-                    key={school.id}
-                    value={school.id}
-                  >
-                    {school.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3.5">
             <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-date`}>Tanggal</Label>
-              <Input
-                id={`${idPrefix}-date`}
-                type="date"
-                min={startsOn}
-                max={endsOn}
-                value={date}
-                onChange={(event) => {
-                  setDate(event.target.value);
-                  setRefusal(null);
-                }}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              {/* Zone follows the picked School (#165): shown once one is chosen in add mode, seeded from the Session's School in edit mode, omitted when none is in scope. */}
-              <Label htmlFor={`${idPrefix}-time`}>Jam Mulai{timeZoneSuffix(timeZone)}</Label>
-              <TimeField
-                id={`${idPrefix}-time`}
-                value={time}
+              <Label htmlFor={`${idPrefix}-school`}>Sekolah</Label>
+              <Select
+                items={Object.fromEntries(
+                  eligibleSchools.map((school) => [school.id, school.name]),
+                )}
+                value={schoolId === "" ? null : schoolId}
                 onValueChange={(value) => {
-                  setTime(value);
+                  setSchoolId((value as string | null) ?? "");
+                  setRefusal(null);
+                }}
+              >
+                <SelectTrigger
+                  id={`${idPrefix}-school`}
+                  aria-label="Sekolah"
+                >
+                  <SelectValue placeholder="Pilih Sekolah" />
+                </SelectTrigger>
+                <SelectContent>
+                  {eligibleSchools.map((school) => (
+                    <SelectItem
+                      key={school.id}
+                      value={school.id}
+                    >
+                      {school.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {/* What the chosen School already has on other trips (#409) — shown, never blocking. */}
+              {pickedSchool && (
+                <CoveredSessionsNote
+                  sessions={pickedSchool.offlineSessionsElsewhere}
+                  empty="Belum ada Sesi luring di Perjadin lain"
+                />
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${idPrefix}-date`}>Tanggal</Label>
+                <Input
+                  id={`${idPrefix}-date`}
+                  type="date"
+                  min={startsOn}
+                  max={endsOn}
+                  value={date}
+                  onChange={(event) => {
+                    setDate(event.target.value);
+                    setRefusal(null);
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                {/* Zone follows the picked School (#165): shown once one is chosen in add mode, seeded from the Session's School in edit mode, omitted when none is in scope. */}
+                <Label htmlFor={`${idPrefix}-time`}>Jam Mulai{timeZoneSuffix(timeZone)}</Label>
+                <TimeField
+                  id={`${idPrefix}-time`}
+                  value={time}
+                  onValueChange={(value) => {
+                    setTime(value);
+                    setRefusal(null);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor={`${idPrefix}-taught`}>Diajar oleh</Label>
+              <MultiSelectCombobox
+                id={`${idPrefix}-taught`}
+                aria-label="Diajar oleh"
+                placeholder={
+                  teacherOptions.length === 0 ? "Belum ada narasumber" : "Pilih narasumber…"
+                }
+                emptyLabel="Tidak ada narasumber."
+                options={teacherOptions}
+                value={taughtBy}
+                onValueChange={(next) => {
+                  setTaughtBy(next);
                   setRefusal(null);
                 }}
               />
             </div>
           </div>
-
-          <div className="grid gap-1.5">
-            <Label htmlFor={`${idPrefix}-taught`}>Diajar oleh</Label>
-            <MultiSelectCombobox
-              id={`${idPrefix}-taught`}
-              aria-label="Diajar oleh"
-              placeholder={teacherOptions.length === 0 ? "Belum ada pengajar" : "Pilih pengajar…"}
-              emptyLabel="Tidak ada pengajar."
-              options={teacherOptions}
-              value={taughtBy}
-              onValueChange={(next) => {
-                setTaughtBy(next);
-                setRefusal(null);
-              }}
-            />
-          </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button
@@ -422,7 +438,7 @@ function CancelDialog({ perjadinId, sessionId }: { perjadinId: string; sessionId
 /** What each add/edit refusal says. Field-level messages; nothing was written. */
 function sessionRefusalMessage(
   result: AddPerjadinSessionResult | EditPerjadinSessionResult,
-): string {
+): React.ReactNode {
   switch (result.outcome) {
     case "not-arranged":
       return "Sesi ini tidak lagi berstatus terjadwal, jadi tidak bisa diubah.";
@@ -439,7 +455,9 @@ function sessionRefusalMessage(
     case "session-time-clash":
       return "Dua Sekolah yang berbeda tidak bisa berada di tanggal dan jam yang sama.";
     case "unknown-teacher":
-      return "Ada pengajar yang sudah tidak ada. Muat ulang halaman.";
+      return "Ada narasumber yang sudah tidak ada. Muat ulang halaman.";
+    case "school-booked-on-another-perjadin":
+      return <SchoolBookedElsewhere refusal={result} />;
     default:
       return "Perubahan gagal. Muat ulang halaman.";
   }

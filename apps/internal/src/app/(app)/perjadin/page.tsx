@@ -1,8 +1,8 @@
 import { PerjadinDirectoryList } from "-/components/perjadin-directory-list";
 import { requirePerson } from "-/lib/person";
-import { perjadinDirectory } from "@sugt/db/queries";
+import { hasGrant, perjadinDirectory } from "@sugt/db/queries";
 import { LinkButton } from "@sugt/ui/components/link-button";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -11,11 +11,14 @@ export const metadata: Metadata = { title: "Perjadin" };
 /**
  * **Perjadin** — every trip, newest first.
  *
- * One `requirePerson()`, one query, no role check: a trip's dates, its destination and how
+ * One `requirePerson()`, one query, no role check: a trip's name, its Schools and how
  * many Schools it reaches are delivery data, and ADR-0004 opens that to everyone signed in.
  * The Advance is not here at all — it is `perjadinAcquittal`'s, which any signed-in Person may
  * read now (ADR-0004 reversed by ADR-0026, #180); this list simply never fetches money, and
  * writing money stays Staff-only.
+ *
+ * **Pengaturan Perjadin** (#422) is a button here, beside Rencanakan Perjadin, for an Administrator
+ * only — not a sidebar entry. Anyone else is not shown it; the page itself answers them 403.
  *
  * The table lives in the `"use client"` `PerjadinDirectoryList`, which filters (#334) and sorts
  * (#343) the payload in the browser — the page stays a Server Component that fetches the full list
@@ -33,7 +36,7 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-7 py-5">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-5 sm:px-7">
         <div>
           <h1 className="font-heading text-lg font-medium">Perjadin</h1>
           <p className="text-sm text-muted-foreground">
@@ -41,18 +44,30 @@ export default async function Page() {
             Perjadin.
           </p>
         </div>
-        {/* Staff-only create action, moved off the sidebar onto its list page (#294). Non-Staff
-            render nothing — no disabled state. */}
-        {person.role === "Staff" && (
-          <LinkButton render={<Link href="/perjadin/baru" />}>
-            <Plus data-icon="inline-start" />
-            Rencanakan Perjadin
-          </LinkButton>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {/* Administrator only (#422); everyone else renders nothing — no disabled state. */}
+          {hasGrant(person, "Administrator") && (
+            <LinkButton
+              variant="outline"
+              render={<Link href="/perjadin/pengaturan" />}
+            >
+              <Settings data-icon="inline-start" />
+              Pengaturan Perjadin
+            </LinkButton>
+          )}
+          {/* Staff-only create action, moved off the sidebar onto its list page (#294). Non-Staff
+              render nothing — no disabled state. */}
+          {person.role === "Staff" && (
+            <LinkButton render={<Link href="/perjadin/baru" />}>
+              <Plus data-icon="inline-start" />
+              Rencanakan Perjadin
+            </LinkButton>
+          )}
+        </div>
       </header>
 
       {trips.length === 0 ? (
-        <p className="p-7 text-sm text-muted-foreground">
+        <p className="p-4 text-sm text-muted-foreground sm:p-7">
           Belum ada Perjadin. Buka Rencanakan Perjadin untuk merencanakan yang pertama.
         </p>
       ) : (

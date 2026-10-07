@@ -3,6 +3,7 @@ import Page from "-/app/(app)/pengaturan/page";
 import { GET } from "-/app/api/drive/callback/route";
 import { driveAccessToken } from "-/lib/drive/access-token";
 import { completeDriveConnection, DRIVE_STATE_COOKIE } from "-/lib/drive/connect";
+import { DOKUMEN_FOLDER_NAME } from "-/lib/drive/dokumen-folders";
 import { FakeDrive, MY_DRIVE } from "-/lib/drive/fake-drive";
 import {
   BUKTI_TRANSAKSI_FOLDER_NAME,
@@ -299,7 +300,11 @@ describe("a successful connect", () => {
     const root = drive.named(ROOT_FOLDER_NAME);
     const staging = drive.named(STAGING_FOLDER_NAME);
     const bukti = drive.named(BUKTI_TRANSAKSI_FOLDER_NAME);
-    const offline = drive.named(PELAKSANAAN_OFFLINE_FOLDER_NAME);
+    // `Pelaksanaan Offline` is the name of two folders now: one under each of Bukti Transaksi and
+    // Dokumen (ADR-0042).
+    const offline = drive
+      .named(PELAKSANAAN_OFFLINE_FOLDER_NAME)
+      .filter((folder) => folder.parents[0] === bukti[0]?.id);
     const readme = drive.named(README_NAME);
     for (const found of [root, staging, bukti, offline, readme]) expect(found).toHaveLength(1);
 
@@ -309,6 +314,13 @@ describe("a successful connect", () => {
     expect(offline[0]!.parents).toEqual([bukti[0]!.id]);
     expect(readme[0]!.parents).toEqual([root[0]!.id]);
     expect(new TextDecoder().decode(drive.files.get(readme[0]!.id)!.content)).toBe(README_TEXT);
+    // The names themselves, written out: the product owner renamed the production folders to these
+    // by hand, and a fresh connection must match them (#394).
+    expect(root[0]!.name).toBe("SUGT ITB 2026 Internal App Object Storage");
+    expect(staging[0]!.name).toBe("SUGT ITB 2026 _staging — jangan dibagikan");
+    expect(README_TEXT).toBe(
+      "Dikelola aplikasi SUGT ITB — jangan hapus, jangan ganti nama, jangan bagikan folder ini.",
+    );
 
     expect(row).toMatchObject({
       rootFolderId: root[0]!.id,
@@ -316,6 +328,19 @@ describe("a successful connect", () => {
       buktiTransaksiFolderId: bukti[0]!.id,
       pelaksanaanOfflineFolderId: offline[0]!.id,
       readmeFileId: readme[0]!.id,
+    });
+
+    // `Dokumen/` and its `Pelaksanaan Offline/` beside Bukti Transaksi, made by the same connect.
+    const dokumen = drive.named(DOKUMEN_FOLDER_NAME);
+    expect(dokumen).toHaveLength(1);
+    expect(dokumen[0]!.parents).toEqual([root[0]!.id]);
+    const dokumenOffline = drive
+      .named(PELAKSANAAN_OFFLINE_FOLDER_NAME)
+      .filter((folder) => folder.parents[0] === dokumen[0]!.id);
+    expect(dokumenOffline).toHaveLength(1);
+    expect(row).toMatchObject({
+      dokumenFolderId: dokumen[0]!.id,
+      dokumenPelaksanaanOfflineFolderId: dokumenOffline[0]!.id,
     });
   });
 

@@ -98,12 +98,12 @@ async function untilSomeoneWaitsOnALock() {
 }
 
 /**
- * `count` receipts as Storage would describe them once landed. Each has its own opaque key, since
- * `transaction_evidence.storage_path` is unique.
+ * `count` receipts as Drive would describe them once landed. Each has its own file id, since
+ * `transaction_evidence.drive_file_id` is unique.
  */
 function receipts(count: number): NewEvidence[] {
   return Array.from({ length: count }, () => ({
-    storagePath: randomUUID(),
+    driveFileId: randomUUID(),
     contentType: "image/jpeg",
     byteSize: 120_000,
   }));
@@ -500,8 +500,8 @@ describe("recording a line item with its receipts (ADR-0039)", () => {
       const { lines, evidence } = await rows();
       expect(lines).toHaveLength(1);
       expect(lines[0]?.id).toBe((result as { transactionId: string }).transactionId);
-      expect(evidence.map((row) => row.storagePath).sort()).toEqual(
-        input.evidence.map((file) => file.storagePath).sort(),
+      expect(evidence.map((row) => row.driveFileId).sort()).toEqual(
+        input.evidence.map((file) => file.driveFileId).sort(),
       );
       expect(evidence.every((row) => row.transactionId === lines[0]?.id)).toBe(true);
       expect(evidence.every((row) => row.uploadedByPersonId === staff.id)).toBe(true);
@@ -531,12 +531,12 @@ describe("recording a line item with its receipts (ADR-0039)", () => {
     input.evidence[1] = {
       contentType: "image/jpeg",
       byteSize: 10,
-      storagePath: first.evidence[0]!.storagePath!,
+      driveFileId: first.evidence[0]!.driveFileId,
     };
 
     const refusal = await refusedBy(recordTransaction(staff, input));
 
-    expect(refusal).toBe("transaction_evidence_storage_path_unique");
+    expect(refusal).toBe("transaction_evidence_drive_file_id_unique");
     const { lines, evidence } = await rows();
     expect(lines).toHaveLength(1);
     expect(evidence).toHaveLength(1);
@@ -555,7 +555,7 @@ describe("attaching evidence", () => {
     });
 
     const refusal = await attachTransactionEvidence(nonStaff(), trip.id, line.id, [
-      { storagePath: "a", contentType: "image/jpeg", byteSize: 10 },
+      { driveFileId: "a", contentType: "image/jpeg", byteSize: 10 },
     ]).catch((error: unknown) => error);
 
     expect(isNotStaffError(refusal)).toBe(true);
@@ -581,13 +581,13 @@ describe("attaching evidence", () => {
 
     await expect(
       attachTransactionEvidence(staff, trip.id, line.id, [
-        { storagePath: "forged", contentType: "image/jpeg", byteSize: 10 },
+        { driveFileId: "forged", contentType: "image/jpeg", byteSize: 10 },
       ]),
     ).resolves.toEqual({ outcome: "no-such-transaction" });
     await expect(db.select().from(schema.transactionEvidence)).resolves.toHaveLength(0);
   });
 
-  it("records what Storage said the file was", async () => {
+  it("records what the server read the file to be", async () => {
     const { staff, trip } = await aTrip();
     const line = await addTransaction({
       perjadinId: trip.id,
@@ -597,7 +597,7 @@ describe("attaching evidence", () => {
 
     const result = await attachTransactionEvidence(staff, trip.id, line.id, [
       {
-        storagePath: "9f2c1e00-0000-4000-8000-000000000001",
+        driveFileId: "1AbCdEfGhIjKlMnOpQrStUvWxYz012345",
         contentType: "image/webp",
         byteSize: 4096,
       },
@@ -612,19 +612,19 @@ describe("attaching evidence", () => {
     });
   });
 
-  it("refuses to attach one uploaded object twice", async () => {
+  it("refuses to attach one uploaded file twice", async () => {
     const { staff, trip } = await aTrip();
     const line = await addTransaction({
       perjadinId: trip.id,
       amountIdr: 50_000,
       createdByPersonId: staff.id,
     });
-    const file = { storagePath: "one-object", contentType: "image/jpeg", byteSize: 10 };
+    const file = { driveFileId: "one-file", contentType: "image/jpeg", byteSize: 10 };
 
     await attachTransactionEvidence(staff, trip.id, line.id, [file]);
     const refusal = await refusedBy(attachTransactionEvidence(staff, trip.id, line.id, [file]));
 
-    expect(refusal).toBe("transaction_evidence_storage_path_unique");
+    expect(refusal).toBe("transaction_evidence_drive_file_id_unique");
   });
 
   /** A line item already carrying `count` receipts. */

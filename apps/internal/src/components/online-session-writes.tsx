@@ -35,7 +35,7 @@ import { useId, useState, useTransition } from "react";
  */
 function OnlineSessionWrites({ session }: { session: OnlineSessionDetail }) {
   return (
-    <div className="flex flex-wrap gap-2.5 px-7 py-5">
+    <div className="flex flex-wrap gap-2.5 px-4 py-5 sm:px-7">
       {session.status === "arranged" && (
         <>
           <MarkDelivered session={session} />
@@ -136,8 +136,8 @@ function MarkDelivered({ session }: { session: OnlineSessionDetail }) {
         <DialogHeader>
           <DialogTitle>Tandai Sesi terlaksana</DialogTitle>
           <DialogDescription>
-            Tandai Sesi daring ini sebagai terlaksana. Pengajarnya dicatat di bagian Pengajar, bukan
-            di sini.
+            Tandai Sesi daring ini sebagai terlaksana. Narasumbernya dicatat di bagian Narasumber,
+            bukan di sini.
           </DialogDescription>
         </DialogHeader>
 

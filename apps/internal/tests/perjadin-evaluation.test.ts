@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   addPerjadin,
   addPerjadinFeedbackToken,
+  addSchoolOnTrip,
   addPerson,
   refusedBy,
   resetDatabase,
@@ -70,7 +71,7 @@ describe("filePerjadinEvaluation", () => {
     const trip = await aTrip(pic.id);
 
     const result = await filePerjadinEvaluation(asToken(trip.id), {
-      role: "Pengajar",
+      role: "Narasumber",
       name: "Pak Andi",
       ratings: FINE,
       comments: NO_COMMENTS,
@@ -82,7 +83,7 @@ describe("filePerjadinEvaluation", () => {
       .select()
       .from(schema.perjadinEvaluation)
       .where(eq(schema.perjadinEvaluation.perjadinId, trip.id));
-    expect(row?.filedByRole).toBe("Pengajar");
+    expect(row?.filedByRole).toBe("Narasumber");
     expect(row?.filedByName).toBe("Pak Andi");
   });
 
@@ -137,7 +138,7 @@ describe("filePerjadinEvaluation", () => {
     const trip = await aTrip(pic.id);
 
     const result = await filePerjadinEvaluation(asToken(trip.id), {
-      role: "Pengajar",
+      role: "Narasumber",
       name: "Pak Andi",
       ratings: { ...FINE, transport: 4 },
       comments: NO_COMMENTS,
@@ -152,7 +153,7 @@ describe("filePerjadinEvaluation", () => {
     const trip = await aTrip(pic.id);
 
     const result = await filePerjadinEvaluation(asToken(trip.id), {
-      role: "Pengajar",
+      role: "Narasumber",
       name: "Pak Andi",
       ratings: { ...FINE, transport: 4 },
       comments: { ...NO_COMMENTS, transport: "Mobil sewaan telat dua jam" },
@@ -232,10 +233,11 @@ describe("resolvePerjadinFeedbackToken", () => {
     const trip = await addPerjadin({
       advanceIdr: 5_000_000,
       picPersonId: pic.id,
-      destination: "Kabupaten Sleman",
+      subClusterName: "Kelompok 3",
       startsOn: "2026-09-01",
       endsOn: "2026-09-03",
     });
+    await addSchoolOnTrip({ perjadin: trip, name: "SMAN 1 Sleman" });
     const token = await addPerjadinFeedbackToken({ perjadinId: trip.id, issuedByPersonId: pic.id });
 
     const resolved = await resolvePerjadinFeedbackToken(token.token);
@@ -243,7 +245,12 @@ describe("resolvePerjadinFeedbackToken", () => {
     expect(resolved).toEqual({
       outcome: "open",
       caller: { kind: "perjadin", perjadinId: trip.id },
-      perjadin: { destination: "Kabupaten Sleman", startsOn: "2026-09-01", endsOn: "2026-09-03" },
+      perjadin: {
+        subClusterName: "Kelompok 3",
+        startsOn: "2026-09-01",
+        endsOn: "2026-09-03",
+        schoolNames: ["SMAN 1 Sleman"],
+      },
     });
   });
 
@@ -288,7 +295,7 @@ describe("submitPerjadinEvaluationAction", () => {
     const token = await addPerjadinFeedbackToken({ perjadinId: trip.id, issuedByPersonId: pic.id });
 
     const result = await submitPerjadinEvaluationAction(token.token, {
-      role: "Pengajar",
+      role: "Narasumber",
       name: "Pak Andi",
       ratings: FINE,
       comments: NO_COMMENTS,
@@ -360,7 +367,7 @@ describe("the nullable lodging invariant", () => {
       .insert(schema.perjadinEvaluation)
       .values({
         perjadinId: trip.id,
-        filedByRole: "Pengajar",
+        filedByRole: "Narasumber",
         filedByName: "Pak Andi",
         lodging: null,
         transport: 9,
@@ -378,7 +385,7 @@ describe("the nullable lodging invariant", () => {
     const refusal = await refusedBy(
       db.insert(schema.perjadinEvaluation).values({
         perjadinId: trip.id,
-        filedByRole: "Pengajar",
+        filedByRole: "Narasumber",
         filedByName: "Pak Andi",
         lodging: null,
         transport: 4,
@@ -427,8 +434,26 @@ describe("the nullable lodging invariant", () => {
     const refusal = await refusedBy(
       db.insert(schema.perjadinEvaluation).values({
         perjadinId: trip.id,
-        // Not one of Pengajar / Pendamping / Pimpinan — the CHECK refuses it (ADR-0024).
+        // Not one of Narasumber / Pendamping / Pimpinan — the CHECK refuses it (ADR-0024).
         filedByRole: "Staff" as never,
+        filedByName: "Pak Andi",
+        lodging: 9,
+        transport: 9,
+        meals: 9,
+        punctuality: 9,
+      }),
+    );
+
+    expect(refusal).toBe("perjadin_evaluation_filed_by_role_check");
+  });
+
+  it("refuses the retired role value 'Pengajar' — it is Narasumber now (#393)", async () => {
+    const trip = await aTripToFileAgainst();
+
+    const refusal = await refusedBy(
+      db.insert(schema.perjadinEvaluation).values({
+        perjadinId: trip.id,
+        filedByRole: "Pengajar" as never,
         filedByName: "Pak Andi",
         lodging: 9,
         transport: 9,

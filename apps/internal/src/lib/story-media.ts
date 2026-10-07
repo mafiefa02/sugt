@@ -13,9 +13,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * ([ADR-0011](../../../../docs/adr/0011-supabase-and-better-auth.md), and
  * `docs/research/supabase-storage-without-supabase-auth.md`).
  *
- * `story_photo` mirrors `transaction_evidence`, so this is the one upload pattern the whole app
- * shares — receipts will mint the same way against the private `receipts` bucket when they are
- * built.
+ * Receipts do not come through here: they go to the company Google Drive (ADR-0040, `lib/drive/`).
  */
 
 const BUCKET = "public-media";

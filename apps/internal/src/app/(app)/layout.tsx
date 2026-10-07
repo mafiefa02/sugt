@@ -1,7 +1,7 @@
 import { AppShell } from "-/components/app-shell";
 import { parseSidebarState, SIDEBAR_STATE_COOKIE } from "-/components/sidebar-state";
 import { SignOutButton } from "-/components/sign-out-button";
-import { receiptUploadGate } from "-/lib/drive/upload-gate";
+import { uploadGate } from "-/lib/drive/upload-gate";
 import { getPerson } from "-/lib/person";
 import { canViewDashboard, hasGrant } from "@sugt/db/queries";
 import { cookies } from "next/headers";
@@ -47,7 +47,7 @@ export default async function SignedInLayout({
   // The Pengaturan badge (#375): read only for an Administrator, the only viewer of that link — one
   // small single-row query, and none at all for anyone else.
   const canAdminister = hasGrant(person, "Administrator");
-  const driveNeedsAttention = canAdminister && !(await receiptUploadGate(person)).open;
+  const driveNeedsAttention = canAdminister && !(await uploadGate(person)).open;
 
   return (
     <AppShell

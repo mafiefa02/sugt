@@ -4,7 +4,6 @@ import {
   type SessionStatus,
   type Stream,
   type TimeZone,
-  type TransportMode,
 } from "@sugt/domain";
 import { and, asc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -12,17 +11,13 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "../client";
 import { session, sessionTeachingTeam } from "../schema/delivery";
 import { person } from "../schema/people";
-import { province, school } from "../schema/reference";
-import {
-  groupMember,
-  perjadin,
-  perjadinPimpinan,
-  perjadinPreparationItem,
-  perjadinTeacher,
-} from "../schema/travel";
+import { province, school, subCluster } from "../schema/reference";
+import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
+import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
+import { type CoveredSession, offlineSessionsElsewhere } from "./covered-sessions";
 import { duplicatedStaff } from "./group-rules";
-import { derivePreparationChecklist, type PreparationItem } from "./preparation-checklist";
+import { preparationChecklist, type PreparationItem } from "./preparation-checklist";
 import { unknownPimpinanIds } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
@@ -63,17 +58,6 @@ export type PerjadinSession = {
   taughtBy: { id: string; name: string }[];
 };
 
-/**
- * One leg's travel logistics, as the detail screen reads them. Null on every Perjadin planned
- * before the columns existed (#106) — the screen shows those legs as not recorded.
- */
-export type PerjadinTravelLeg = {
-  /** Wall-clock date and time, `YYYY-MM-DD HH:MM:SS`, meaningful only beside `zone`. */
-  at: string;
-  zone: TimeZone;
-  mode: TransportMode;
-};
-
 /** A School eligible to hold a Session on this trip — one of the trip's Sub-Cluster's Schools. */
 export type EligibleSchool = {
   id: string;
@@ -84,20 +68,22 @@ export type EligibleSchool = {
    * input with the zone the moment a School is picked (#165). A School always sits in one Province.
    */
   timeZone: TimeZone;
+  /**
+   * Its live offline Sessions on **other** Perjadins (#409), for the note the add/edit-Session
+   * picker shows once it is chosen — this trip's own are listed on the page already. Read-only.
+   */
+  offlineSessionsElsewhere: CoveredSession[];
 };
 
 /** Everything the Perjadin detail screen renders, and no money. */
 export type PerjadinDetail = {
   id: string;
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044), read live — never stored. */
+  subClusterName: string;
   startsOn: string;
   endsOn: string;
   picPersonId: string;
   picFullName: string;
-  /** Departure from Bandung; null when this trip predates the logistics columns. */
-  departure: PerjadinTravelLeg | null;
-  /** Return; null when this trip predates the logistics columns. */
-  return: PerjadinTravelLeg | null;
   /**
    * **The Report deadline is not here.** It is on `perjadinAcquittal`, because the Perjadin
    * Report *is* the acquittal — `docs/data-model.md` says so in as many words — and this payload
@@ -127,10 +113,9 @@ export type PerjadinDetail = {
   /** The Schools of the trip's Sub-Cluster, for the "add a Session" picker (ADR-0016's eligible set). */
   eligibleSchools: EligibleSchool[];
   /**
-   * The Preparation Checklist, each item with its tick state ([#114](https://github.com/mafiefa02/sugt/issues/114)).
-   * **Derived here, not stored**: `perjadin_preparation_item` holds only the ticks. Its per-teacher
-   * derivation is T4's ([#139](https://github.com/mafiefa02/sugt/issues/139)); this ticket leaves it
-   * as it stands. No money, so it rides on this payload rather than the separate acquittal read.
+   * The Preparation Checklist, each item with its tick state ([#114](https://github.com/mafiefa02/sugt/issues/114)),
+   * resolved from the items defined for every Perjadin, its Cluster and itself (ADR-0045). No money,
+   * so it rides on this payload rather than the separate acquittal read.
    */
   preparation: PreparationItem[];
 };
@@ -141,7 +126,9 @@ export type PerjadinDetail = {
  *
  * A header with several independent lists hanging off it, gathered concurrently with `Promise.all`
  * rather than joined at once — joining every list into one statement would multiply each list's rows
- * by the others'. The screen still makes one call and assembles nothing.
+ * by the others'. What each eligible School already has on other trips (#409) is one more round
+ * trip after them, keyed on the Schools the eligible-School list found. The screen still makes one
+ * call and assembles nothing.
  */
 export async function perjadinDetail(
   _caller: Person,
@@ -159,24 +146,19 @@ export async function perjadinDetail(
     staff,
     eligibleSchools,
     teachingLinks,
-    preparationTicks,
+    preparationList,
   ] = await Promise.all([
     db
       .select({
         id: perjadin.id,
-        destination: perjadin.destination,
+        subClusterName: subCluster.name,
         startsOn: perjadin.startsOn,
         endsOn: perjadin.endsOn,
         picPersonId: pic.id,
         picFullName: pic.fullName,
-        departureAt: perjadin.departureAt,
-        departureZone: perjadin.departureZone,
-        departureMode: perjadin.departureMode,
-        returnAt: perjadin.returnAt,
-        returnZone: perjadin.returnZone,
-        returnMode: perjadin.returnMode,
       })
       .from(perjadin)
+      .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
       .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
       .where(eq(perjadin.id, perjadinId)),
     db
@@ -259,14 +241,7 @@ export async function perjadinDetail(
       .innerJoin(perjadinTeacher, eq(perjadinTeacher.id, sessionTeachingTeam.perjadinTeacherId))
       .where(eq(perjadinTeacher.perjadinId, perjadinId))
       .orderBy(asc(perjadinTeacher.name)),
-    db
-      .select({
-        itemKey: perjadinPreparationItem.itemKey,
-        checkedBy: perjadinPreparationItem.checkedBy,
-        checkedAt: perjadinPreparationItem.checkedAt,
-      })
-      .from(perjadinPreparationItem)
-      .where(eq(perjadinPreparationItem.perjadinId, perjadinId)),
+    preparationChecklist(perjadinId),
   ]);
 
   if (!trip) return null;
@@ -280,25 +255,17 @@ export async function perjadinDetail(
     taughtBySession.set(link.sessionId, list);
   }
 
-  // The Preparation Checklist is a flat fixed seven now (amendment to ADR-0018) — no per-member
-  // derivation, so it does not read the Group at all.
-  const preparation = derivePreparationChecklist(preparationTicks);
+  // The trip's own Preparation Checklist (ADR-0045). It exists whenever the trip does.
+  const preparation = preparationList ?? [];
 
-  const { departureAt, departureZone, departureMode, returnAt, returnZone, returnMode, ...header } =
-    trip;
+  // What each eligible School already has on other trips (#409), this trip's own left out.
+  const covered = await offlineSessionsElsewhere(
+    eligibleSchools.map((row) => row.id),
+    perjadinId,
+  );
 
   return {
-    ...header,
-    // A leg reads as recorded only when all three of its columns are present. They are written
-    // together and the CHECKs pin the zone/mode, so in practice they are all-or-nothing.
-    departure:
-      departureAt !== null && departureZone !== null && departureMode !== null
-        ? { at: departureAt, zone: departureZone, mode: departureMode }
-        : null,
-    return:
-      returnAt !== null && returnZone !== null && returnMode !== null
-        ? { at: returnAt, zone: returnZone, mode: returnMode }
-        : null,
+    ...trip,
     group,
     sessions: sessions.map((row) => ({
       ...row,
@@ -308,7 +275,10 @@ export async function perjadinDetail(
     pimpinan: pimpinan.map((row) => ({ personId: row.personId, name: row.name })),
     pimpinanRoster,
     staff,
-    eligibleSchools,
+    eligibleSchools: eligibleSchools.map((row) => ({
+      ...row,
+      offlineSessionsElsewhere: covered.get(row.id) ?? [],
+    })),
     preparation,
   };
 }
@@ -482,81 +452,57 @@ export async function setPerjadinPimpinan(
   });
 }
 
-/**
- * The six logistics fields as the edit surface submits them. Unlike the plan form, the return
- * **zone is explicit here** — it was derived from the last School at plan time, but a correction
- * may be needed. The departure zone stays WIB (the origin is always Bandung), so it is not asked
- * for and not accepted: the query fixes it.
- */
-export type PerjadinLogisticsInput = {
-  departureDate: string;
-  departureTime: string;
-  departureMode: TransportMode;
-  returnDate: string;
-  returnTime: string;
-  returnMode: TransportMode;
-  returnZone: TimeZone;
+/** The trip's two typed dates as the **Ubah tanggal** editor submits them, `YYYY-MM-DD` each. */
+export type PerjadinDatesInput = {
+  startsOn: string;
+  endsOn: string;
 };
 
-export type UpdatePerjadinLogisticsResult =
+export type UpdatePerjadinDatesResult =
   /**
-   * `startsOnMoved`: the correction changed `starts_on` — the date the trip's Drive folder is named
-   * after (ADR-0040), so the caller renames it (#376).
+   * `datesMoved`: the correction changed `starts_on` or `ends_on` — both are in the trip's name and
+   * so in its Drive folder name (ADR-0044), so the caller renames the folders (#376, #407).
    */
-  | { outcome: "updated"; startsOnMoved: boolean }
+  | { outcome: "updated"; datesMoved: boolean }
   /**
-   * The return date lands before the departure date, so the derived `[starts_on … ends_on]` range
-   * would be inverted (ADR-0021). Same-day is allowed. Refused before the transaction opens.
+   * Tanggal selesai before Tanggal mulai, so the `[starts_on … ends_on]` range would be inverted.
+   * Same-day is allowed. Refused before the transaction opens.
    */
-  | { outcome: "return-before-departure" }
+  | { outcome: "ends-before-starts" }
   /**
-   * At least one **arranged** Session would fall outside the new `[departure … return]` window; the
-   * range is not resized and nothing is written. The same shape the retired `movePerjadinDates`
-   * used — this is the resize-and-clamp guard that replaced the auto-shift (ADR-0021).
+   * At least one **arranged** Session would fall outside the new `[starts_on … ends_on]` window; the
+   * range is not resized and nothing is written. The resize-and-clamp guard ADR-0021 introduced and
+   * ADR-0041 kept.
    */
   | { outcome: "would-strand"; strandedCount: number; startsOn: string; endsOn: string }
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" };
 
 /**
- * Correct a Perjadin's departure/return logistics after planning — and, with them, the trip's
- * range. Staff-only.
+ * **Ubah tanggal** — correct a Perjadin's typed date range after planning. Staff-only.
  *
- * **The range is the leg dates now (ADR-0021).** `starts_on`/`ends_on` are no longer typed; they
- * are `departure.date` and `return.date`, so editing a leg date *is* editing the range. This write
- * therefore sets all six logistics columns **plus** `starts_on`/`ends_on`, in one transaction.
- *
- * **Resize and clamp, never auto-shift.** Moving a leg date resizes the window; it does not move any
- * Session. If the new `[departure … return]` window would leave an **arranged** Session outside it,
- * the whole edit is refused (`would-strand`) rather than stranding it — the mirror of planning's
+ * **Resize and clamp, never auto-shift** (ADR-0021, kept by ADR-0041). Moving a date resizes the
+ * window; it does not move any Session. If the new window would leave an **arranged** Session outside
+ * it, the whole edit is refused (`would-strand`) rather than stranding it — the mirror of planning's
  * `session-outside-perjadin`. Only arranged Sessions are checked: a delivered or cancelled Session
  * records something that already happened and may legitimately sit outside the window its trip now
  * claims (`docs/data-model.md`, Delivery). Online Sessions carry no `perjadin_id` and are excluded.
- *
- * `departure_zone` is fixed to WIB and never taken from the caller; `return_zone` is the caller's,
- * because a return from a WITA/WIT city is read in that city's wall-clock and the derivation at plan
- * time can be wrong. The `*_at` values are wall-clock `date time` strings, the same shape planning
- * wrote — no instant, no conversion.
  */
-export async function updatePerjadinLogistics(
+export async function updatePerjadinDates(
   caller: Person,
   perjadinId: string,
-  input: PerjadinLogisticsInput,
-): Promise<UpdatePerjadinLogisticsResult> {
+  input: PerjadinDatesInput,
+): Promise<UpdatePerjadinDatesResult> {
   requireStaff(caller);
-
-  // The derived range: departure date opens it, return date closes it (ADR-0021).
-  const newStartsOn = input.departureDate;
-  const newEndsOn = input.returnDate;
 
   // An inverted range is refused before the transaction opens — same-day allowed. `perjadin_dates_check`
   // holds `ends_on >= starts_on` at the database too, but returning a value lets the edit surface point
-  // at the return field rather than surfacing a raw constraint violation.
-  if (newEndsOn < newStartsOn) return { outcome: "return-before-departure" };
+  // at Tanggal selesai rather than surfacing a raw constraint violation.
+  if (input.endsOn < input.startsOn) return { outcome: "ends-before-starts" };
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
-      .select({ id: perjadin.id, startsOn: perjadin.startsOn })
+      .select({ id: perjadin.id, startsOn: perjadin.startsOn, endsOn: perjadin.endsOn })
       .from(perjadin)
       .where(eq(perjadin.id, perjadinId))
       .for("update");
@@ -571,35 +517,27 @@ export async function updatePerjadinLogistics(
       .where(and(eq(session.perjadinId, perjadinId), eq(session.status, "arranged")))
       .for("update", { of: session });
 
-    const window = { startsOn: newStartsOn, endsOn: newEndsOn };
-    const stranded = arranged.filter((s) => !heldOnWithinPerjadin(s.heldOn, window));
+    const stranded = arranged.filter((s) => !heldOnWithinPerjadin(s.heldOn, input));
     if (stranded.length > 0) {
       // Return before any write: the transaction commits, but it carries only the locking reads, so
       // the trip and its Sessions are left exactly as they were. No Session is shifted.
       return {
         outcome: "would-strand",
         strandedCount: stranded.length,
-        startsOn: newStartsOn,
-        endsOn: newEndsOn,
+        startsOn: input.startsOn,
+        endsOn: input.endsOn,
       };
     }
 
     await tx
       .update(perjadin)
-      .set({
-        departureAt: `${input.departureDate} ${input.departureTime}`,
-        departureZone: "WIB",
-        departureMode: input.departureMode,
-        returnAt: `${input.returnDate} ${input.returnTime}`,
-        returnZone: input.returnZone,
-        returnMode: input.returnMode,
-        // The range rides along, derived from the leg dates it was just given (ADR-0021).
-        startsOn: newStartsOn,
-        endsOn: newEndsOn,
-      })
+      .set({ startsOn: input.startsOn, endsOn: input.endsOn })
       .where(eq(perjadin.id, perjadinId));
 
-    return { outcome: "updated", startsOnMoved: trip.startsOn !== newStartsOn };
+    return {
+      outcome: "updated",
+      datesMoved: trip.startsOn !== input.startsOn || trip.endsOn !== input.endsOn,
+    };
   });
 }
 
@@ -639,13 +577,25 @@ export async function updatePerjadinAdvance(
   // field rather than showing a raw constraint violation. Not coupled to spend on purpose.
   if (advanceIdr < 0) return { outcome: "negative-advance" };
 
-  const updated = await db
-    .update(perjadin)
-    .set({ advanceIdr })
-    .where(eq(perjadin.id, perjadinId))
-    .returning({ id: perjadin.id });
+  return db.transaction(async (tx) => {
+    // The old value is read under the row lock, so the Activity Log's from→to (#395) is the value
+    // this write replaced, not one a concurrent correction already moved.
+    const [trip] = await tx
+      .select({ advanceIdr: perjadin.advanceIdr })
+      .from(perjadin)
+      .where(eq(perjadin.id, perjadinId))
+      .for("update");
+    if (!trip) return { outcome: "no-such-perjadin" };
 
-  if (updated.length === 0) return { outcome: "no-such-perjadin" };
+    // Saving the figure it already holds is not a change, and logs nothing.
+    if (trip.advanceIdr === advanceIdr) return { outcome: "updated" };
 
-  return { outcome: "updated" };
+    await tx.update(perjadin).set({ advanceIdr }).where(eq(perjadin.id, perjadinId));
+    await logActivity(tx, caller, perjadinId, {
+      action: "advance_changed",
+      details: { fromIdr: trip.advanceIdr, toIdr: advanceIdr },
+    });
+
+    return { outcome: "updated" };
+  });
 }

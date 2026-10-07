@@ -39,6 +39,14 @@ export default async function setup() {
   const client = postgres(testDatabaseUrl, { prepare: false, max: 1 });
   try {
     await migrate(drizzle(client), { migrationsFolder });
+    // The Preparation Items the migrations wrote (0043, ADR-0045): the retired six and the company's
+    // 14. `resetDatabase` truncates `cluster` and `perjadin` with `cascade`, which empties
+    // `preparation_item` with them, so it puts these back from here — every test starts from the
+    // items a real database has, not from none. Kept outside `public`, where no cascade reaches.
+    await client.unsafe(`
+      create schema test_support;
+      create table test_support.preparation_item as select * from public.preparation_item;
+    `);
   } finally {
     await client.end();
   }

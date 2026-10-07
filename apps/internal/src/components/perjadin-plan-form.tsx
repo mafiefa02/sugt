@@ -1,10 +1,12 @@
 "use client";
 
 import { planPerjadinAction } from "-/app/(app)/perjadin/baru/actions";
+import { CoveredSessionsNote } from "-/components/covered-sessions-note";
 import { MultiSelectCombobox } from "-/components/multi-select-combobox";
 import { duplicateSessionRows } from "-/components/perjadin-plan-duplicates";
 import { PersonSelect } from "-/components/person-select";
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
+import { SchoolBookedElsewhere } from "-/components/school-booked-elsewhere";
 import type {
   PlannablePerson,
   PlannableSchool,
@@ -17,8 +19,6 @@ import {
   MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN,
   MAX_TEACHING_TEAM_PER_PERJADIN,
   timeZoneSuffix,
-  TRANSPORT_MODES,
-  type TransportMode,
 } from "@sugt/domain";
 import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
@@ -79,10 +79,11 @@ function PerjadinPlanForm({
 }) {
   const router = useRouter();
   const [subClusterId, setSubClusterId] = useState("");
-  // The trip's range is no longer typed here (ADR-0021): it is the departure→return span, derived
-  // at the write from the logistics leg dates. So Mulai/Selesai are gone and this holds only the
-  // Advance and the PIC.
+  // The trip's range is two typed dates (ADR-0041) — a Perjadin carries no travel legs to derive
+  // it from — beside the Advance and the PIC.
   const [trip, setTrip] = useState({
+    startsOn: "",
+    endsOn: "",
     advanceIdr: "",
     picPersonId: "",
   });
@@ -95,16 +96,6 @@ function PerjadinPlanForm({
   // The Pimpinan recorded on the trip — personIds chosen from the Pimpinan roster. Record-only
   // (ADR-0020, #181).
   const [pimpinan, setPimpinan] = useState<string[]>([]);
-  // Departure/return logistics, all six required to submit. The zones are the server's — WIB out,
-  // derived back.
-  const [logistics, setLogistics] = useState({
-    departureDate: "",
-    departureTime: "",
-    departureMode: "" as TransportMode | "",
-    returnDate: "",
-    returnTime: "",
-    returnMode: "" as TransportMode | "",
-  });
   // Sessions keyed by School id, seeded empty when a Sub-Cluster is picked. A School with no Sessions
   // is simply not kept, so there is no separate "include" toggle any more.
   const [sessions, setSessions] = useState<Record<string, SessionDraft[]>>({});
@@ -198,12 +189,8 @@ function PerjadinPlanForm({
     subClusterId === "" ||
     trip.advanceIdr === "" ||
     trip.picPersonId === "" ||
-    logistics.departureDate === "" ||
-    logistics.departureTime === "" ||
-    logistics.departureMode === "" ||
-    logistics.returnDate === "" ||
-    logistics.returnTime === "" ||
-    logistics.returnMode === "" ||
+    trip.startsOn === "" ||
+    trip.endsOn === "" ||
     totalSessions === 0 ||
     Object.values(sessions).some((list) =>
       list.some((draft) => draft.date === "" || draft.time === ""),
@@ -214,6 +201,8 @@ function PerjadinPlanForm({
     startSaving(async () => {
       const result = await planPerjadinAction({
         subClusterId,
+        startsOn: trip.startsOn,
+        endsOn: trip.endsOn,
         advanceIdr: Number(trip.advanceIdr),
         picPersonId: trip.picPersonId,
         extraStaffPersonIds: extraStaff,
@@ -228,17 +217,6 @@ function PerjadinPlanForm({
             taughtByTeacherIndexes: draft.taughtBy,
           })),
         ),
-        // The guard proves the six logistics fields are set, so the `mode` casts hold.
-        departure: {
-          date: logistics.departureDate,
-          time: logistics.departureTime,
-          mode: logistics.departureMode as TransportMode,
-        },
-        return: {
-          date: logistics.returnDate,
-          time: logistics.returnTime,
-          mode: logistics.returnMode as TransportMode,
-        },
       });
 
       if (result.outcome === "planned") {
@@ -258,11 +236,11 @@ function PerjadinPlanForm({
         />
       )}
 
-      <div className="px-7 pt-5">
+      <div className="px-4 pt-5 sm:px-7">
         <RequiredLegend />
       </div>
 
-      <div className="grid gap-4 border-b border-border px-7 py-5 sm:grid-cols-2">
+      <div className="grid gap-4 border-b border-border px-4 py-5 sm:grid-cols-2 sm:px-7">
         <Field
           id={subClusterFieldId}
           label="Kelompok Sekolah"
@@ -342,18 +320,18 @@ function PerjadinPlanForm({
         </Field>
       </div>
 
-      <div className="border-b border-border px-7 py-5">
-        <h2 className="font-heading text-sm font-medium">Teaching Team</h2>
+      <div className="border-b border-border px-4 py-5 sm:px-7">
+        <h2 className="font-heading text-sm font-medium">Narasumber</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Nama pengajar untuk Perjadin ini. Tambahkan satu per satu; hingga{" "}
+          Nama narasumber untuk Perjadin ini. Tambahkan satu per satu; hingga{" "}
           {MAX_TEACHING_TEAM_PER_PERJADIN} nama.
         </p>
 
         <div className="mt-3 flex max-w-md gap-2">
           <Input
             id={teacherDraftId}
-            aria-label="Nama pengajar"
-            placeholder="Nama pengajar"
+            aria-label="Nama narasumber"
+            placeholder="Nama narasumber"
             value={teacherDraft}
             disabled={teacherNames.length >= MAX_TEACHING_TEAM_PER_PERJADIN}
             onChange={(event) => {
@@ -374,7 +352,7 @@ function PerjadinPlanForm({
             }
             onClick={addTeacher}
           >
-            Tambah pengajar
+            Tambah narasumber
           </Button>
         </div>
 
@@ -470,43 +448,42 @@ function PerjadinPlanForm({
         </div>
       </div>
 
-      <div className="grid gap-4 border-b border-border px-7 py-5 sm:grid-cols-2">
-        <TravelLeg
-          idPrefix={`${idPrefix}-departure`}
-          heading="Keberangkatan"
-          note="Dari Bandung (WIB)."
-          date={logistics.departureDate}
-          time={logistics.departureTime}
-          mode={logistics.departureMode}
-          onChange={(patch) => {
-            setLogistics((previous) => ({
-              ...previous,
-              departureDate: patch.date ?? previous.departureDate,
-              departureTime: patch.time ?? previous.departureTime,
-              departureMode: patch.mode ?? previous.departureMode,
-            }));
-          }}
-        />
-        <TravelLeg
-          idPrefix={`${idPrefix}-return`}
-          heading="Kepulangan"
-          note="Zona waktu mengikuti Sekolah terakhir yang dikunjungi."
-          date={logistics.returnDate}
-          time={logistics.returnTime}
-          mode={logistics.returnMode}
-          onChange={(patch) => {
-            setLogistics((previous) => ({
-              ...previous,
-              returnDate: patch.date ?? previous.returnDate,
-              returnTime: patch.time ?? previous.returnTime,
-              returnMode: patch.mode ?? previous.returnMode,
-            }));
-          }}
-        />
+      <div className="grid gap-4 border-b border-border px-4 py-5 sm:grid-cols-2 sm:px-7">
+        <Field
+          id={`${idPrefix}-starts-on`}
+          label="Tanggal mulai"
+          required
+        >
+          <Input
+            id={`${idPrefix}-starts-on`}
+            aria-required="true"
+            type="date"
+            value={trip.startsOn}
+            onChange={(event) => {
+              setTrip((previous) => ({ ...previous, startsOn: event.target.value }));
+            }}
+          />
+        </Field>
+        <Field
+          id={`${idPrefix}-ends-on`}
+          label="Tanggal selesai"
+          required
+        >
+          <Input
+            id={`${idPrefix}-ends-on`}
+            aria-required="true"
+            type="date"
+            min={trip.startsOn || undefined}
+            value={trip.endsOn}
+            onChange={(event) => {
+              setTrip((previous) => ({ ...previous, endsOn: event.target.value }));
+            }}
+          />
+        </Field>
       </div>
 
       {selected === undefined ? (
-        <p className="px-7 py-6 text-sm text-muted-foreground">
+        <p className="px-4 py-6 text-sm text-muted-foreground sm:px-7">
           Pilih Kelompok Sekolah untuk menampilkan Sekolah-sekolahnya.
         </p>
       ) : (
@@ -516,12 +493,18 @@ function PerjadinPlanForm({
             return (
               <li
                 key={school.id}
-                className="border-b border-border px-7 py-4 last:border-b-0"
+                className="border-b border-border px-4 py-4 last:border-b-0 sm:px-7"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className={list.length === 0 ? "text-muted-foreground" : undefined}>
                     <p className="text-sm font-medium">{school.name}</p>
                     <p className="text-xs text-muted-foreground">{school.kabupatenKota}</p>
+                    <div className="mt-1">
+                      <CoveredSessionsNote
+                        sessions={school.offlineSessionsElsewhere}
+                        empty="Belum ada Sesi luring"
+                      />
+                    </div>
                   </div>
                   <Button
                     type="button"
@@ -558,10 +541,9 @@ function PerjadinPlanForm({
                               aria-required="true"
                               type="date"
                               className="w-44"
-                              // The range is the departure→return span now (ADR-0021), so a Session's
-                              // date is bounded by the leg dates rather than by typed Mulai/Selesai.
-                              min={logistics.departureDate || undefined}
-                              max={logistics.returnDate || undefined}
+                              // Bounded by the trip's typed range (ADR-0041).
+                              min={trip.startsOn || undefined}
+                              max={trip.endsOn || undefined}
                               aria-invalid={duplicate || undefined}
                               value={draft.date}
                               onChange={(event) => {
@@ -597,10 +579,10 @@ function PerjadinPlanForm({
                                 aria-label="Diajar oleh"
                                 placeholder={
                                   teacherOptions.length === 0
-                                    ? "Belum ada pengajar"
-                                    : "Pilih pengajar…"
+                                    ? "Belum ada narasumber"
+                                    : "Pilih narasumber…"
                                 }
-                                emptyLabel="Tidak ada pengajar."
+                                emptyLabel="Tidak ada narasumber."
                                 options={teacherOptions}
                                 value={draft.taughtBy.map(String)}
                                 onValueChange={(next) => {
@@ -644,7 +626,7 @@ function PerjadinPlanForm({
         </ul>
       )}
 
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-7 py-3.5 shadow-lg">
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-4 py-3.5 shadow-lg sm:px-7">
         <p className="text-sm">
           <b>{totalSessions}</b> Sesi luring di <b>{keptSchools.length}</b> Sekolah akan dijadwalkan
         </p>
@@ -679,12 +661,12 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
     schools.find((school) => school.id === schoolId)?.name ?? schoolId;
 
   return (
-    <div className="px-7 pt-5">
+    <div className="px-4 pt-5 sm:px-7">
       <Alert variant="destructive">
         <AlertTitle>Perjadin belum dibuat.</AlertTitle>
         <AlertDescription>
-          {result.outcome === "return-before-departure" && (
-            <p>Tanggal Kepulangan tidak boleh lebih awal dari Keberangkatan.</p>
+          {result.outcome === "ends-before-starts" && (
+            <p>Tanggal selesai tidak boleh lebih awal dari Tanggal mulai.</p>
           )}
           {result.outcome === "no-schools" && <p>Belum ada Sesi pada Perjadin ini.</p>}
           {result.outcome === "duplicate-staff" && (
@@ -697,7 +679,7 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
           )}
           {result.outcome === "too-many-teachers" && (
             <p>
-              Nama pengajar terlalu banyak: maksimal {result.limit}, bukan {result.count}.
+              Nama narasumber terlalu banyak: maksimal {result.limit}, bukan {result.count}.
             </p>
           )}
           {result.outcome === "too-many-sessions-per-school" && (
@@ -751,6 +733,11 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
               </ul>
             </>
           )}
+          {result.outcome === "school-booked-on-another-perjadin" && (
+            <p>
+              <SchoolBookedElsewhere refusal={result} />
+            </p>
+          )}
           {result.outcome === "session-time-clash" && (
             <>
               <p>Dua Sekolah yang berbeda tidak bisa berada di tanggal dan jam yang sama:</p>
@@ -794,100 +781,6 @@ function Field({
         {required && <RequiredMark />}
       </Label>
       {children}
-    </div>
-  );
-}
-
-/**
- * One travel leg on the plan form: a date, a wall-clock time and a transport mode, all three
- * required to submit. No zone picker — the departure zone is WIB and the return zone is derived
- * server-side from the last School, so a control for it would offer a choice the form does not make.
- */
-function TravelLeg({
-  idPrefix,
-  heading,
-  note,
-  date,
-  time,
-  mode,
-  onChange,
-}: {
-  idPrefix: string;
-  heading: string;
-  note: string;
-  date: string;
-  time: string;
-  mode: TransportMode | "";
-  onChange: (patch: { date?: string; time?: string; mode?: TransportMode }) => void;
-}) {
-  return (
-    <div className="grid gap-3">
-      <div>
-        <h2 className="font-heading text-sm font-medium">{heading}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{note}</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field
-          id={`${idPrefix}-date`}
-          label="Tanggal"
-          required
-        >
-          <Input
-            id={`${idPrefix}-date`}
-            aria-required="true"
-            type="date"
-            value={date}
-            onChange={(event) => {
-              onChange({ date: event.target.value });
-            }}
-          />
-        </Field>
-        <Field
-          id={`${idPrefix}-time`}
-          label="Jam"
-          required
-        >
-          <TimeField
-            id={`${idPrefix}-time`}
-            aria-required="true"
-            value={time}
-            onValueChange={(value) => {
-              onChange({ time: value });
-            }}
-          />
-        </Field>
-        <Field
-          id={`${idPrefix}-mode`}
-          label="Moda"
-          required
-        >
-          <Select
-            items={Object.fromEntries(TRANSPORT_MODES.map((entry) => [entry, entry]))}
-            value={mode === "" ? null : mode}
-            onValueChange={(value) => {
-              onChange({ mode: (value as TransportMode | null) ?? undefined });
-            }}
-          >
-            <SelectTrigger
-              id={`${idPrefix}-mode`}
-              aria-label={`Moda ${heading}`}
-              aria-required="true"
-            >
-              <SelectValue placeholder="Pilih moda" />
-            </SelectTrigger>
-            <SelectContent>
-              {TRANSPORT_MODES.map((entry) => (
-                <SelectItem
-                  key={entry}
-                  value={entry}
-                >
-                  {entry}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      </div>
     </div>
   );
 }

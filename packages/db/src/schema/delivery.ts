@@ -1,6 +1,12 @@
-import type { SessionMode, SessionStatus } from "@sugt/domain";
+import type {
+  SessionFootageContentType,
+  SessionFootageKind,
+  SessionMode,
+  SessionStatus,
+} from "@sugt/domain";
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   date,
   foreignKey,
@@ -14,6 +20,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { person } from "./people";
 import { school } from "./reference";
 import { perjadin, perjadinTeacher } from "./travel";
 
@@ -97,6 +104,9 @@ export const session = pgTable(
     // third-party LMS provider now runs online delivery (the Zoom host is in WIB), so SUGT no longer
     // tracks a PIC for online Sessions and they no longer produce a Session Record. Offline Sessions
     // still take their PIC from their Perjadin (`perjadin.pic_person_id`), never from a column here.
+    // The Session's own folder under its Perjadin's `Foto & Video/` folder (ADR-0046), claimed by
+    // compare-and-set the first time its footage is reconciled. Only an offline Session ever has one.
+    driveFootageFolderId: text("drive_footage_folder_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -143,28 +153,31 @@ export const session = pgTable(
     uniqueIndex("session_one_online_per_school_per_day")
       .on(t.schoolId, t.heldOn)
       .where(ONLINE_SESSION_STILL_STANDS),
-    // **One live offline Session per School per moment on a trip (#342, ADR-0038, reversing
-    // ADR-0019's "two at the same School and the same moment are allowed").** A School's participants
-    // are still too many for one room, so a period still splits into parallel rooms — but those rooms
-    // are now recorded as **one** Session whose Teaching Team lists everyone who taught. With Stream
-    // gone from the row, two Sessions at one School, date and start time would differ by nothing the
-    // row records, so the index keys on exactly those and forbids the pair. A School may still hold
-    // many Sessions on a trip at *different* moments; that count is an app-level cap
-    // (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule.
+    // **One live offline Session per School per moment, across every Perjadin (#408, ADR-0043;
+    // #342, ADR-0038).** A School's participants are still too many for one room, so a period still
+    // splits into parallel rooms — but those rooms are recorded as **one** Session whose Teaching
+    // Team lists everyone who taught. Two Sessions at one School, date and start time would differ by
+    // nothing the row records, so the index keys on exactly those and forbids the pair — **whichever
+    // trips carry them**. One Sub-Cluster may be covered by several Perjadins and the same School may
+    // sit on several (ADR-0043), so a second Session at that School and moment on another trip is a
+    // double-booking just as it would be on one trip. It replaced
+    // `session_no_duplicate_offline_per_school_per_perjadin`, whose key led with `perjadin_id` and so
+    // let two trips book one School at one moment unnoticed; this key is strictly wider. A School
+    // may still hold many Sessions at *different* moments; the per-trip count is an app-level cap
+    // (`MAX_OFFLINE_SESSIONS_PER_SCHOOL_PER_PERJADIN`), not a DB rule, and only an exact match on
+    // date and start time collides — overlapping start times do not.
     //
-    // The old `session_one_school_at_a_time_per_perjadin` — one that forbade two Sessions at
-    // one moment across the *whole* trip — was dropped by ADR-0019, because it also forbade the
-    // same-School pair ADR-0019 allowed. ADR-0038 forbids that pair again, so the two rules together
-    // now amount to one live offline Session per trip per moment, which that trip-wide index could
-    // hold once more. #342 specified this narrower per-School key instead, so "two DIFFERENT Schools
-    // cannot share a date and time" stays the application's (see T2) and is listed in
-    // `data-model.md`'s "what the database does not hold". Partial in the same way as the
-    // online index: cancelled rows accumulate and must not collide with their replacements —
-    // a cancelled Session never blocks its slot — and online Sessions are untouched because their
-    // `perjadin_id` is null, which alone keeps them distinct here.
-    uniqueIndex("session_no_duplicate_offline_per_school_per_perjadin")
-      .on(t.perjadinId, t.schoolId, t.heldOn, t.startsAt)
-      .where(sql`status <> 'cancelled'`),
+    // "Two DIFFERENT Schools cannot share a date and time" stays the application's, **per trip** —
+    // the Group cannot be in two places at once, but two Groups can — and is listed in
+    // `data-model.md`'s "what the database does not hold". The writes check this index's rule first
+    // (`slotHolder`), so a double-booking comes back as a sentence naming the other trip.
+    //
+    // Partial in two ways: cancelled rows accumulate and must not collide with their replacements —
+    // a cancelled Session never blocks its slot — and `perjadin_id is not null` keeps online
+    // Sessions out, as the `perjadin_id` column in the old key did (an online row's is null).
+    uniqueIndex("session_no_duplicate_offline_per_school")
+      .on(t.schoolId, t.heldOn, t.startsAt)
+      .where(sql`status <> 'cancelled' and perjadin_id is not null`),
     // The two partial-unique indexes above both carry a `WHERE` predicate, so the planner cannot use
     // either for a general equality lookup — a `perjadin_id =` or `school_id =` filter that must also
     // see cancelled rows falls through to a seq scan. These two plain indexes serve those paths:
@@ -222,5 +235,65 @@ export const sessionTeachingTeam = pgTable(
       columns: [t.perjadinTeacherId],
       foreignColumns: [perjadinTeacher.id],
     }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * **Session Footage** (#424, ADR-0046): the photos and videos documenting one offline Session, shown
+ * as "Foto & Video". Each row is one file in the company Google Drive under `Foto & Video/`, uploaded
+ * untouched and shared on its own; it is uploaded or deleted, never edited.
+ *
+ * `id` is generated before the insert, because the file's name carries it (`M-{footage8}`). The kind
+ * follows from the type the server sniffed, and the size is Drive's: both CHECKs below hold what
+ * the upload already checked, so no write path can store a 2 GB "photo".
+ *
+ * **Offline only, and not cancelled at upload time**, are the application's rules
+ * (`recordSessionFootage`); footage of a Session cancelled later stays. The foreign key to `session`
+ * has no cascade: offline Sessions are only ever cancelled, never deleted, and a delete that would
+ * orphan Drive files is refused rather than followed.
+ *
+ * The uploader is Staff by the composite `(id, role)` key, as a Perjadin's PIC is.
+ * `drive_synced_at` and `drive_sync_failed_at` mean what they mean on `perjadin_document`.
+ */
+export const sessionFootage = pgTable(
+  "session_footage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => session.id),
+    kind: text("kind").$type<SessionFootageKind>().notNull(),
+    contentType: text("content_type").$type<SessionFootageContentType>().notNull(),
+    // As the browser named it, for the list; the Drive name is the app's own.
+    originalFilename: text("original_filename").notNull(),
+    // Up to 1000 MiB fits an integer; a bigint leaves headroom should the cap ever grow.
+    byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+    driveFileId: text("drive_file_id").notNull().unique(),
+    uploadedByPersonId: uuid("uploaded_by_person_id").notNull(),
+    uploadedByRole: text("uploaded_by_role").notNull().default("Staff"),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+    driveSyncedAt: timestamp("drive_synced_at", { withTimezone: true }),
+    driveSyncFailedAt: timestamp("drive_sync_failed_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("session_footage_kind_check", sql`${t.kind} in ('foto', 'video')`),
+    check(
+      "session_footage_content_type_check",
+      sql`(${t.kind} = 'foto' and ${t.contentType} in ('image/jpeg', 'image/png', 'image/heic', 'image/webp')) or (${t.kind} = 'video' and ${t.contentType} in ('video/mp4', 'video/quicktime'))`,
+    ),
+    // `MAX_FOOTAGE_PHOTO_BYTES` and `MAX_FOOTAGE_VIDEO_BYTES`, as literals.
+    check(
+      "session_footage_byte_size_check",
+      sql`${t.byteSize} > 0 and ${t.byteSize} <= case ${t.kind} when 'foto' then 52428800 else 1048576000 end`,
+    ),
+    check("session_footage_original_filename_check", sql`length(${t.originalFilename}) > 0`),
+    check("session_footage_uploaded_by_role_check", sql`${t.uploadedByRole} = 'Staff'`),
+    foreignKey({
+      name: "session_footage_uploaded_by_is_staff",
+      columns: [t.uploadedByPersonId, t.uploadedByRole],
+      foreignColumns: [person.id, person.role],
+    }),
+    // A Session's footage is listed by Session; Postgres does not index the FK on its own (#270).
+    index("session_footage_session_id_idx").on(t.sessionId),
   ],
 );

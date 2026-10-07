@@ -29,16 +29,16 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">Catat Sesi daring</h1>
         <p className="text-sm text-muted-foreground">
           Catat satu Sesi daring yang sudah terlaksana — Sekolah, tanggalnya, jam mulai dan jam
-          selesainya, dan kedua Pengajar.
+          selesainya, dan kedua Narasumber.
         </p>
       </header>
 
       {form.schools.length === 0 ? (
-        <p className="p-7 text-sm text-muted-foreground">Belum ada Sekolah.</p>
+        <p className="p-4 text-sm text-muted-foreground sm:p-7">Belum ada Sekolah.</p>
       ) : (
         <ArrangeOnlineSessionForm schools={form.schools} />
       )}

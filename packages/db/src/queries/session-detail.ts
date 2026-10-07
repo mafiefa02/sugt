@@ -5,9 +5,15 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
-import { province, school } from "../schema/reference";
+import { province, school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
 import type { Person } from "./caller";
+import { snapshotTripSchools } from "./perjadin-naming";
+import {
+  bookedOnAnotherPerjadin,
+  type SchoolBookedOnAnotherPerjadin,
+  slotViolationRefusal,
+} from "./school-slot";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -43,6 +49,8 @@ export type OwedRecord = { kind: "session-record"; personId: string; fullName: s
 /** The Perjadin an offline Session happens on, and the window its date must sit inside. */
 export type SessionPerjadin = {
   id: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044). */
+  subClusterName: string;
   startsOn: string;
   endsOn: string;
 };
@@ -92,11 +100,11 @@ export type SessionDetail = {
  * **Exported from this module and deliberately not from `./index.ts`.** `docs/data-model.md`
  * says the rule belongs *wherever the date is written*, and there are three such places, all
  * three now calling this: the Session date edit below; `./perjadin-planning.ts`, which checks
- * every Session on a trip before it writes one; and `updatePerjadinLogistics` in
- * `./perjadin-detail.ts`, which resizes the trip's range to its new leg dates and refuses the
- * edit whole if any arranged Session would be stranded outside it (ADR-0021,
+ * every Session on a trip before it writes one; and `updatePerjadinDates` in
+ * `./perjadin-detail.ts`, which resizes the trip's range to its new typed dates and refuses the
+ * edit whole if any arranged Session would be stranded outside it (ADR-0021, kept by ADR-0041,
  * [#55](https://github.com/mafiefa02/sugt/issues/55)). That third one clamps rather than
- * shifting — a leg-date edit never moves a Session.
+ * shifting — a date edit never moves a Session.
  *
  * They are modules *inside* this package and import it from here directly. Putting it on
  * the package's public surface would break convention 3 — nothing is exported that a
@@ -143,6 +151,7 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
       picFullName: pic.fullName,
 
       perjadinId: perjadin.id,
+      perjadinSubClusterName: subCluster.name,
       perjadinStartsOn: perjadin.startsOn,
       perjadinEndsOn: perjadin.endsOn,
 
@@ -162,6 +171,7 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
     .innerJoin(province, eq(province.code, school.provinceCode))
     // Outer: six of every ten Sessions have no Perjadin.
     .leftJoin(perjadin, eq(perjadin.id, session.perjadinId))
+    .leftJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     // **The PIC is the Perjadin's, and only offline Sessions have one (#284).** A LEFT join, not
     // the old `coalesce(online_pic, perjadin.pic)` inner join: an online Session has no PIC now, so
     // it must resolve here with `pic` null rather than be dropped from the read — the page needs the
@@ -191,10 +201,14 @@ export async function sessionDetail(_caller: Person, id: string): Promise<Sessio
     picPersonId: row.picPersonId,
     picFullName: row.picFullName,
     perjadin:
-      row.perjadinId === null || row.perjadinStartsOn === null || row.perjadinEndsOn === null
+      row.perjadinId === null ||
+      row.perjadinSubClusterName === null ||
+      row.perjadinStartsOn === null ||
+      row.perjadinEndsOn === null
         ? null
         : {
             id: row.perjadinId,
+            subClusterName: row.perjadinSubClusterName,
             startsOn: row.perjadinStartsOn,
             endsOn: row.perjadinEndsOn,
           },
@@ -226,7 +240,12 @@ export type MarkDeliveredResult =
   | { outcome: "not-arranged"; status: PastArranged };
 
 export type CancelSessionResult =
-  | { outcome: "cancelled" }
+  /**
+   * `perjadinId` is the trip an offline Session sits on (`null` for an online one), and
+   * `schoolsChanged` says this was its School's last live Session there, so the trip's Schools —
+   * and its Drive folder name — changed, and the caller renames the folders (#407).
+   */
+  | { outcome: "cancelled"; perjadinId: string | null; schoolsChanged: boolean }
   | { outcome: "reason-required" }
   | { outcome: "not-arranged"; status: PastArranged };
 
@@ -242,8 +261,10 @@ export type MoveSessionDateResult =
       outcome: "collided";
       constraint:
         | "session_one_online_per_school_per_day"
-        | "session_no_duplicate_offline_per_school_per_perjadin";
+        | "session_no_duplicate_offline_per_school";
     }
+  /** Offline: another trip has a live Session at this School on the new date and time (#408). */
+  | SchoolBookedOnAnotherPerjadin
   /** An arranged offline Session may not leave the trip it happens on. */
   | { outcome: "outside-perjadin"; startsOn: string; endsOn: string };
 
@@ -263,9 +284,9 @@ export type MoveSessionDateResult =
 async function lockedSession(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   sessionId: string,
-): Promise<{ status: SessionStatus }> {
+): Promise<{ status: SessionStatus; perjadinId: string | null }> {
   const [row] = await tx
-    .select({ status: session.status })
+    .select({ status: session.status, perjadinId: session.perjadinId })
     .from(session)
     .where(eq(session.id, sessionId))
     .for("update");
@@ -334,15 +355,20 @@ export async function cancelSession(
   if (cancelledReason === "") return { outcome: "reason-required" };
 
   return db.transaction(async (tx) => {
-    const { status } = await lockedSession(tx, sessionId);
+    const { status, perjadinId } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
+    const schoolsChanged = perjadinId ? await snapshotTripSchools(tx, perjadinId) : null;
     await tx
       .update(session)
       .set({ status: "cancelled", cancelledReason })
       .where(eq(session.id, sessionId));
 
-    return { outcome: "cancelled" };
+    return {
+      outcome: "cancelled",
+      perjadinId,
+      schoolsChanged: schoolsChanged ? await schoolsChanged() : false,
+    };
   });
 }
 
@@ -379,9 +405,11 @@ function shiftTime(end: string, newStart: string, oldStart: string): string {
  *   write rather than pre-read: a pre-read is a race, and the index is not.
  * - **Offline** — the new date must stay inside the Perjadin's window. No CHECK can carry
  *   that, since the range sits on another table, so it is held here beside the write. And the
- *   new date and time must not land on another live Session at the same School on the trip —
- *   `session_no_duplicate_offline_per_school_per_perjadin` (ADR-0038), left to refuse the write
- *   for the same race-free reason as the online index.
+ *   new date and time must not land on another live Session at the same School — on the trip,
+ *   `session_no_duplicate_offline_per_school` (ADR-0038) is left to refuse the write for the same
+ *   race-free reason as the online index; on **another** trip it is read first (#408,
+ *   `bookedOnAnotherPerjadin`), so the refusal can name that trip, and a race past the read is named
+ *   the same way.
  *
  * **The start time moves with the date, in the same write** ([#72](https://github.com/mafiefa02/sugt/issues/72)):
  * moving a Session is one act, and a dialog that changed the date while silently keeping a
@@ -403,11 +431,16 @@ export async function moveSessionDate(
 ): Promise<MoveSessionDateResult> {
   requireStaff(caller);
 
+  // The moved Session's School and trip, kept for the catch below. Asserted rather than annotated,
+  // so the assignment inside the transaction's callback is not narrowed away to `null`.
+  let moving = null as { schoolId: string; perjadinId: string | null } | null;
   try {
     return await db.transaction(async (tx) => {
       const [row] = await tx
         .select({
           status: session.status,
+          schoolId: session.schoolId,
+          perjadinId: session.perjadinId,
           startsAt: session.startsAt,
           endsAt: session.endsAt,
           startsOn: perjadin.startsOn,
@@ -435,7 +468,14 @@ export async function moveSessionDate(
         if (!heldOnWithinPerjadin(heldOn, window)) {
           return { outcome: "outside-perjadin", ...window };
         }
+        const booked = await bookedOnAnotherPerjadin(
+          tx,
+          [{ schoolId: row.schoolId, heldOn, startsAt }],
+          { ownPerjadinId: row.perjadinId, excludeSessionId: sessionId },
+        );
+        if (booked) return booked;
       }
+      moving = { schoolId: row.schoolId, perjadinId: row.perjadinId };
 
       // Carry the end time with the start, preserving the duration, so an online Session's
       // `session_ends_after_starts_check` cannot reject the move. Null for an offline Session, which
@@ -449,12 +489,16 @@ export async function moveSessionDate(
     // those as "that date is taken" would report a bug as a user state. (The `session` table has no
     // composite foreign keys any more — the online PIC one was dropped in #284.)
     const constraint = (error as { cause?: { constraint_name?: string } }).cause?.constraint_name;
-    if (
-      constraint === "session_one_online_per_school_per_day" ||
-      constraint === "session_no_duplicate_offline_per_school_per_perjadin"
-    ) {
+    if (constraint === "session_one_online_per_school_per_day") {
       return { outcome: "collided", constraint };
     }
-    throw error;
+    if (!moving) throw error;
+    // A race past the read above is named the same way; on this same trip it is `collided`.
+    const raced = await slotViolationRefusal(
+      error,
+      [{ schoolId: moving.schoolId, heldOn, startsAt }],
+      { ownPerjadinId: moving.perjadinId, excludeSessionId: sessionId },
+    );
+    return raced ?? { outcome: "collided", constraint: "session_no_duplicate_offline_per_school" };
   }
 }

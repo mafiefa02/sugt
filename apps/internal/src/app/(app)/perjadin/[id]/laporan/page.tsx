@@ -1,10 +1,9 @@
 import { AcquittalTransactions } from "-/components/laporan-perjadin/acquittal-transactions";
 import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-report";
 import { driveFileUrl, driveFolderUrl } from "-/lib/drive/receipt-files";
-import { receiptUploadGate } from "-/lib/drive/upload-gate";
-import { shortenKabupaten } from "-/lib/format-destination";
+import { uploadGate } from "-/lib/drive/upload-gate";
+import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
-import { signedReceiptUrl } from "-/lib/receipt-media";
 import { perjadinAcquittal, type AcquittalTransaction } from "@sugt/db/queries";
 import { formatRupiah } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
@@ -15,8 +14,7 @@ import { notFound } from "next/navigation";
 import type { ViewableTransaction } from "./action-types";
 
 /**
- * The browser-tab title: `Laporan — <destination>`, reusing the same shortened destination the page
- * links back with; a not-found id falls back to the section label (#309). Reads `perjadinAcquittal`
+ * The browser-tab title: `Laporan — <name>`, the same name the page links back with (ADR-0044); a not-found id falls back to the section label (#309). Reads `perjadinAcquittal`
  * again — a minimal title query, as the ticket asks, not shared state.
  */
 export async function generateMetadata({
@@ -26,7 +24,7 @@ export async function generateMetadata({
   const { id } = await params;
   const acquittal = await perjadinAcquittal(person, id);
   return {
-    title: acquittal ? `Laporan — ${shortenKabupaten(acquittal.destination)}` : "Laporan Perjadin",
+    title: acquittal ? `Laporan — ${perjadinName(acquittal)}` : "Laporan Perjadin",
   };
 }
 
@@ -59,27 +57,22 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
   const acquittal = await perjadinAcquittal(person, id);
   if (!acquittal) notFound();
 
-  const [transactions, uploadGate] = await Promise.all([
-    Promise.all(acquittal.transactions.map(viewable)),
-    receiptUploadGate(person),
-  ]);
+  const transactions = acquittal.transactions.map(withLinks);
+  const gate = await uploadGate(person);
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <Link
           href={`/perjadin/${id}`}
           className="text-sm text-muted-foreground hover:underline"
         >
-          {shortenKabupaten(acquittal.destination)}
+          {perjadinName(acquittal)}
         </Link>
         <h1 className="mt-1 font-heading text-lg font-medium">Laporan Perjadin</h1>
-        <p className="text-sm text-muted-foreground tabular-nums">
-          {acquittal.startsOn} – {acquittal.endsOn}
-        </p>
       </header>
 
-      <div className="border-b border-border px-7 py-5">
+      <div className="border-b border-border px-4 py-5 sm:px-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-heading text-sm font-medium">Uang Perjalanan</h2>
@@ -141,7 +134,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
       </div>
 
       {acquittal.pimpinan.length > 0 && (
-        <section className="border-b border-border px-7 py-5">
+        <section className="border-b border-border px-4 py-5 sm:px-7">
           <h2 className="font-heading text-sm font-medium">Pimpinan yang turut serta</h2>
           <ul className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
             {acquittal.pimpinan.map((name) => (
@@ -154,7 +147,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
       <AcquittalTransactions
         perjadinId={id}
         transactions={transactions}
-        uploadGate={uploadGate}
+        uploadGate={gate}
       />
     </div>
   );
@@ -163,32 +156,23 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
 /**
  * One line item with a link per receipt, and to its Drive folder when it has one.
  *
- * **A Drive receipt** (ADR-0040) is a plain link to Drive, built from its id; the app renders nothing
- * of the file itself. **A legacy receipt** in the private `receipts` bucket renders only through a
- * signed URL, and signing is a network call per object; a `null` URL is an object whose bytes are
- * gone, which renders as a missing file rather than a broken page. Both happen here for any
- * signed-in reader, since `perjadinAcquittal` is an open money read (ADR-0026, #180).
+ * **Every receipt is a plain link to Drive** (ADR-0040), built from its id; the app renders nothing
+ * of the file itself and signs nothing. The links reach any signed-in reader, since
+ * `perjadinAcquittal` is an open money read (ADR-0026, #180).
  */
-async function viewable(line: AcquittalTransaction): Promise<ViewableTransaction> {
+function withLinks(line: AcquittalTransaction): ViewableTransaction {
   const { driveFolderId, driveSyncedAt, ...rest } = line;
-  const evidence = await Promise.all(
-    line.evidence.map(async (file) => ({
+  return {
+    ...rest,
+    evidence: line.evidence.map((file) => ({
       id: file.id,
       contentType: file.contentType,
       byteSize: file.byteSize,
-      url: file.driveFileId
-        ? driveFileUrl(file.driveFileId)
-        : file.storagePath
-          ? await signedReceiptUrl(file.storagePath)
-          : null,
+      url: driveFileUrl(file.driveFileId),
     })),
-  );
-  return {
-    ...rest,
-    evidence,
     folderUrl: driveFolderId ? driveFolderUrl(driveFolderId) : null,
-    // Unsynced: never finished, and holding a Drive receipt — a legacy or empty line never is.
-    unsynced: driveSyncedAt === null && line.evidence.some((file) => file.driveFileId !== null),
+    // Unsynced: never finished, and holding a receipt — an empty line never is.
+    unsynced: driveSyncedAt === null && line.evidence.length > 0,
   };
 }
 

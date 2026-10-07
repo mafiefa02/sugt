@@ -77,7 +77,14 @@ function SingleSelectCombobox({
               key={option.value}
               value={option}
             >
-              {option.label}
+              {option.description === undefined ? (
+                option.label
+              ) : (
+                <span className="flex min-w-0 flex-col">
+                  <span>{option.label}</span>
+                  <span className="text-xs text-muted-foreground">{option.description}</span>
+                </span>
+              )}
             </ComboboxItem>
           )}
         </ComboboxList>

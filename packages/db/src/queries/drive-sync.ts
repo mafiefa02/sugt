@@ -9,12 +9,15 @@ import {
   isNull,
   notExists,
   notInArray,
+  or,
   sql,
 } from "drizzle-orm";
 
 import { db } from "../client";
+import { subCluster } from "../schema/reference";
 import { perjadin, transaction, transactionEvidence } from "../schema/travel";
 import type { Person } from "./caller";
+import { perjadinFolderNaming, type PerjadinFolderNaming } from "./perjadin-naming";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -30,16 +33,33 @@ import { requireStaff } from "./staff-only";
  * a caller that lost reads back the winner's id and trashes the folder it made.
  */
 
-/** A Perjadin's Drive folder and the two facts it is named from. */
+/** A Perjadin's Drive folders and what they are named from. */
 export type PerjadinDriveFolder = {
   driveFolderId: string | null;
-  destination: string;
-  startsOn: string;
+  /** Its folder under `Dokumen/Pelaksanaan Offline` (ADR-0042), named the same way. */
+  driveDokumenFolderId: string | null;
+  /** Its folder under `Foto & Video/Pelaksanaan Offline` (ADR-0046), named the same way. */
+  driveFootageFolderId: string | null;
+  naming: PerjadinFolderNaming;
 };
 
+/** The select both reads of `PerjadinDriveFolder` share: the trip, joined to its Sub-Cluster. */
+function selectPerjadinDriveFolders() {
+  return db
+    .select({
+      driveFolderId: perjadin.driveFolderId,
+      driveDokumenFolderId: perjadin.driveDokumenFolderId,
+      driveFootageFolderId: perjadin.driveFootageFolderId,
+      naming: perjadinFolderNaming,
+    })
+    .from(perjadin)
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
+    .$dynamic();
+}
+
 /**
- * What renaming a Perjadin's Drive folder reads (#376) — after a start-date correction, and again in
- * the reconcile, fresh, just before it re-asserts the name. `null` when there is no such trip.
+ * What renaming a Perjadin's Drive folder reads (#376) — after a date correction, and again in the
+ * reconcile, fresh, just before it re-asserts the name. `null` when there is no such trip.
  */
 export async function perjadinDriveFolder(
   caller: Person,
@@ -47,18 +67,31 @@ export async function perjadinDriveFolder(
 ): Promise<PerjadinDriveFolder | null> {
   requireStaff(caller);
 
-  const [trip] = await db
-    .select({
-      driveFolderId: perjadin.driveFolderId,
-      destination: perjadin.destination,
-      startsOn: perjadin.startsOn,
-    })
-    .from(perjadin)
-    .where(eq(perjadin.id, perjadinId));
+  const [trip] = await selectPerjadinDriveFolders().where(eq(perjadin.id, perjadinId));
   return trip ?? null;
 }
 
-/** One Drive-backed receipt on the line, as the reconcile names and moves it. */
+/**
+ * **Every Perjadin that has a Drive folder** — receipts, Dokumen, Foto & Video, or several — with what its folders are
+ * named from, for Periksa koneksi's pass that re-asserts every folder name (#407). Ordered by trip
+ * id, so a press that stops early stops at the same place each time, and the next one re-reads the
+ * folders it already checked — right, or reported trashed or gone — before carrying on.
+ */
+export async function perjadinDriveFolders(caller: Person): Promise<PerjadinDriveFolder[]> {
+  requireStaff(caller);
+
+  return selectPerjadinDriveFolders()
+    .where(
+      or(
+        isNotNull(perjadin.driveFolderId),
+        isNotNull(perjadin.driveDokumenFolderId),
+        isNotNull(perjadin.driveFootageFolderId),
+      ),
+    )
+    .orderBy(asc(perjadin.id));
+}
+
+/** One receipt on the line, as the reconcile names and moves it. */
 export type ReconcileEvidence = { id: string; driveFileId: string; contentType: string };
 
 /** Everything the reconcile needs to put one transaction in place. */
@@ -67,14 +100,13 @@ export type ReconcileTarget = {
   spentOn: string;
   category: TransactionCategory;
   driveFolderId: string | null;
-  perjadinId: string;
-  destination: string;
-  startsOn: string;
+  /** Its Perjadin, and what that Perjadin's folder is named from. */
+  perjadin: PerjadinFolderNaming;
   perjadinDriveFolderId: string | null;
   evidence: ReconcileEvidence[];
 };
 
-/** The transaction, its Perjadin and its Drive-backed receipts. `null` when there is no such line. */
+/** The transaction, its Perjadin and its receipts. `null` when there is no such line. */
 export async function reconcileTarget(
   caller: Person,
   transactionId: string,
@@ -87,34 +119,24 @@ export async function reconcileTarget(
       spentOn: transaction.spentOn,
       category: transaction.category,
       driveFolderId: transaction.driveFolderId,
-      perjadinId: perjadin.id,
-      destination: perjadin.destination,
-      startsOn: perjadin.startsOn,
+      perjadin: perjadinFolderNaming,
       perjadinDriveFolderId: perjadin.driveFolderId,
     })
     .from(transaction)
     .innerJoin(perjadin, eq(perjadin.id, transaction.perjadinId))
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .where(eq(transaction.id, transactionId));
   if (!line) return null;
 
-  const rows = await db
+  const evidence = await db
     .select({
       id: transactionEvidence.id,
       driveFileId: transactionEvidence.driveFileId,
       contentType: transactionEvidence.contentType,
     })
     .from(transactionEvidence)
-    .where(
-      and(
-        eq(transactionEvidence.transactionId, transactionId),
-        isNotNull(transactionEvidence.driveFileId),
-      ),
-    )
+    .where(eq(transactionEvidence.transactionId, transactionId))
     .orderBy(asc(transactionEvidence.uploadedAt), asc(transactionEvidence.id));
-  // Legacy receipts in the Supabase bucket are not the reconcile's; the filter above dropped them.
-  const evidence = rows.flatMap((row) =>
-    row.driveFileId ? [{ ...row, driveFileId: row.driveFileId }] : [],
-  );
 
   return { ...line, evidence };
 }
@@ -176,7 +198,7 @@ export async function claimTransactionDriveFolder(
  * committed — and reset the line to unsynced — while that receipt's own reconcile failed. Marking the
  * line synced then would strand the new file in `_staging` under a line that claims to be done, and
  * the sweep only visits unsynced lines. So the mark is a compare-and-set: it lands only when no
- * Drive receipt on the line is outside `handledEvidenceIds`. If it does not land, the line is synced
+ * receipt on the line is outside `handledEvidenceIds`. If it does not land, the line is synced
  * only if some later reconcile already finished it.
  */
 export async function markTransactionSynced(
@@ -192,7 +214,6 @@ export async function markTransactionSynced(
     .where(
       and(
         eq(transactionEvidence.transactionId, transactionId),
-        isNotNull(transactionEvidence.driveFileId),
         handledEvidenceIds.length > 0
           ? notInArray(transactionEvidence.id, handledEvidenceIds)
           : undefined,
@@ -234,7 +255,7 @@ export type UnsyncedTransaction = { id: string; spentOn: string; description: st
 
 /**
  * **What the sweep owes**: every unsynced transaction — `drive_synced_at is null` and at least one
- * Drive-backed receipt; a legacy or zero-receipt line never is — at most `limit` of them, and how many
+ * receipt; a zero-receipt line never is — at most `limit` of them, and how many
  * there are in all. Periksa koneksi and a reconnect reconcile these in turn (#375), bounded so one
  * press fits a Vercel function's time limit.
  *
@@ -254,12 +275,7 @@ export async function unsyncedTransactions(
       db
         .select({ id: transactionEvidence.id })
         .from(transactionEvidence)
-        .where(
-          and(
-            eq(transactionEvidence.transactionId, transaction.id),
-            isNotNull(transactionEvidence.driveFileId),
-          ),
-        ),
+        .where(eq(transactionEvidence.transactionId, transaction.id)),
     ),
   );
   const [lines, [counted]] = await Promise.all([

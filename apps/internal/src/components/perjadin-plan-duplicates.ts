@@ -4,7 +4,7 @@
  * One live offline Session per School per date and start time: parallel rooms are recorded as one
  * Session whose Teaching Team lists everyone who taught, so a second row at the same School and
  * moment is a mistake. `planPerjadin` refuses that payload as `duplicate-session` and
- * `session_no_duplicate_offline_per_school_per_perjadin` refuses it at the database; this catches
+ * `session_no_duplicate_offline_per_school` refuses it at the database (#408); this catches
  * it before submit so the form can flag the row itself. A plain function rather than a hook so the
  * rule is testable without React, the same reason `acquittal-transactions-sort.ts` is one.
  *

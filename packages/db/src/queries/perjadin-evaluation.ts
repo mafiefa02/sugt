@@ -17,7 +17,7 @@ import type { PerjadinToken, Person } from "./caller";
  *
  * **Filed without signing in, through a short-lived token link (ADR-0024).** This used to be a
  * signed-in write gated on membership of the Group that travelled. That gate silently excluded
- * exactly the voices the evaluation wants — the name-based Pengajar and the record-only Pimpinan,
+ * exactly the voices the evaluation wants — the name-based Narasumber and the record-only Pimpinan,
  * neither of whom has a login — so #167 retargeted it onto the Participant Feedback token pattern
  * (ADR-0012). Two writes and no read, exactly as that ADR draws it: `issuePerjadinFeedbackToken`
  * is a normal signed-in write that mints the per-Perjadin token whose URL becomes a QR code, and
@@ -56,7 +56,7 @@ export type IssuePerjadinFeedbackTokenResult = {
  * Issue — or reissue — the feedback token for one Perjadin.
  *
  * **Anyone signed in may do this**, so there is no `requireStaff` (ADR-0004 — the Evaluation carries
- * no money); whoever has the trip's page open shares the QR with the Pengajar, Pendamping and
+ * no money); whoever has the trip's page open shares the QR with the Narasumber, Pendamping and
  * Pimpinan. Unlike the Session token there is **no cancelled bar**: a Perjadin is a real trip once
  * it exists and is never cancelled, so the token always has a live trip behind it and the write is
  * a plain upsert with no status to read or lock.

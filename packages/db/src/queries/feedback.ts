@@ -4,7 +4,7 @@ import { and, asc, desc, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm"
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { participantFeedback, perjadinEvaluation } from "../schema/evaluations";
-import { province, school } from "../schema/reference";
+import { province, school, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
 import type { Person } from "./caller";
 
@@ -289,13 +289,13 @@ export type PerjadinFeedbackRow = {
   filedByName: string;
   /** The self-declared role, stored as one of three Indonesian words — shown as-is. */
   filedByRole: PerjadinEvaluationRole;
-  /** The trip's destination line, from the joined `perjadin`. */
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044), from the joined `sub_cluster`. */
+  subClusterName: string;
   /** The trip's id, for the card's link to `/perjadin/[id]`. */
   perjadinId: string;
   /** The trip's start date as `YYYY-MM-DD`, from the joined `perjadin` — a `date` column, so a string. */
   startsOn: string;
-  /** The trip's end date as `YYYY-MM-DD`, from the joined `perjadin` — shown as a range beside the name. */
+  /** The trip's end date as `YYYY-MM-DD`, from the joined `perjadin` — the name's second date. */
   endsOn: string;
   /** `created_at` as `YYYY-MM-DD`, rendered in SQL — the "Diisi" date the card shows. */
   createdOn: string;
@@ -323,8 +323,8 @@ const perjadinRowAverageExpr = sql<number>`(${perjadinEvaluation.transport} + ${
 
 /**
  * One page of Perjadin Evaluations, filtered and sorted by the caller's `FeedbackSort`, OFFSET-paged
- * — the twin of `participantFeedbackPage`, over `perjadin_evaluation` joined to `perjadin` for the
- * destination, the date range and the link target.
+ * — the twin of `participantFeedbackPage`, over `perjadin_evaluation` joined to `perjadin` and its
+ * `sub_cluster` for the trip's name (ADR-0044) and the link target.
  *
  * **The five filters AND together and only the active ones appear in the WHERE.** Each `all` drops
  * out. `reviewType` gates on the present-ratings average so the cut matches the number the card
@@ -362,7 +362,7 @@ export async function perjadinFeedbackPage(
       id: perjadinEvaluation.id,
       filedByName: perjadinEvaluation.filedByName,
       filedByRole: perjadinEvaluation.filedByRole,
-      destination: perjadin.destination,
+      subClusterName: subCluster.name,
       perjadinId: perjadinEvaluation.perjadinId,
       // The trip's window, from the joined `perjadin` — both `date` columns, so already strings.
       startsOn: perjadin.startsOn,
@@ -385,6 +385,7 @@ export async function perjadinFeedbackPage(
     })
     .from(perjadinEvaluation)
     .innerJoin(perjadin, eq(perjadin.id, perjadinEvaluation.perjadinId))
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .where(and(...conditions.filter((c): c is SQL => c != null)))
     // Average primary, filed date secondary, id last for a total order OFFSET can page safely.
     .orderBy(

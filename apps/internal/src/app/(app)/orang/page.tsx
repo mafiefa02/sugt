@@ -25,7 +25,7 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">Orang</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Roster sekaligus daftar undangan. Siapa pun yang masuk bisa membacanya; hanya DITSAMA yang

@@ -1,13 +1,16 @@
+import { perjadinFolderName, perjadinName } from "-/lib/perjadin-name";
 import { db, schema } from "@sugt/db";
 import {
   cancelSession,
   isNotStaffError,
+  myPerjadin,
   perjadinAcquittal,
   perjadinDetail,
   perjadinDirectory,
+  perjadinDriveFolder,
   perjadinPlan,
   planPerjadin,
-  updatePerjadinLogistics,
+  updatePerjadinDates,
   type PlanPerjadinInput,
 } from "@sugt/db/queries";
 import type { Role } from "@sugt/domain";
@@ -92,12 +95,11 @@ async function twoSchools(kabupatenKota: [string, string] = ["Kota Bandung", "Ko
 }
 
 /**
- * The travel logistics a valid plan carries. The zones are the server's — WIB out, derived back. The
- * leg **dates** are also the trip's range now (ADR-0021): `starts_on = 2026-09-01`, `ends_on =
+ * The typed range a valid plan carries (ADR-0041): `starts_on = 2026-09-01`, `ends_on =
  * 2026-09-03`, so every in-window Session below sits between these two dates.
  */
-const DEPARTURE = { date: "2026-09-01", time: "07:30", mode: "Pesawat" } as const;
-const RETURN = { date: "2026-09-03", time: "18:00", mode: "Pesawat" } as const;
+const STARTS_ON = "2026-09-01";
+const ENDS_ON = "2026-09-03";
 
 /** Everything a valid trip needs, so each test below can spoil exactly one thing. */
 async function validPlan(kabupatenKota?: [string, string]) {
@@ -124,8 +126,8 @@ async function validPlan(kabupatenKota?: [string, string]) {
         taughtByTeacherIndexes: [],
       },
     ],
-    departure: DEPARTURE,
-    return: RETURN,
+    startsOn: STARTS_ON,
+    endsOn: ENDS_ON,
   };
 
   return { pic, cluster, subCluster, schools, input };
@@ -279,8 +281,8 @@ describe("Rencanakan Perjadin", () => {
           taughtByTeacherIndexes: [1],
         },
       ],
-      departure: DEPARTURE,
-      return: RETURN,
+      startsOn: STARTS_ON,
+      endsOn: ENDS_ON,
     });
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
@@ -612,18 +614,38 @@ describe("Rencanakan Perjadin", () => {
     expect(result.outcome).toBe("planned");
   });
 
-  it("refuses a return date earlier than the departure date, and writes nothing", async () => {
+  it("plans with the typed range, written straight to starts_on and ends_on", async () => {
     const { pic, input } = await validPlan();
 
-    // The range is the leg dates now (ADR-0021): a return before the departure would derive an
-    // inverted range. The departure stays 2026-09-01; the return is pulled back before it.
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const [row] = await db
+      .select({ startsOn: schema.perjadin.startsOn, endsOn: schema.perjadin.endsOn })
+      .from(schema.perjadin)
+      .where(eq(schema.perjadin.id, planned.perjadinId));
+    expect(row).toEqual({ startsOn: "2026-09-01", endsOn: "2026-09-03" });
+  });
+
+  it("refuses a Tanggal selesai earlier than the Tanggal mulai, and writes nothing", async () => {
+    const { pic, input } = await validPlan();
+
+    const result = await planPerjadin(pic, { ...input, endsOn: "2026-08-30" });
+
+    expect(result).toEqual({ outcome: "ends-before-starts" });
+    expect(await perjadinRows()).toEqual([]);
+  });
+
+  it("allows a one-day trip, Tanggal mulai and Tanggal selesai the same day", async () => {
+    const { pic, input } = await validPlan();
+
     const result = await planPerjadin(pic, {
       ...input,
-      return: { date: "2026-08-30", time: "18:00", mode: "Pesawat" },
+      endsOn: "2026-09-01",
+      sessions: [input.sessions[0]!],
     });
 
-    expect(result).toEqual({ outcome: "return-before-departure" });
-    expect(await perjadinRows()).toEqual([]);
+    expect(result.outcome).toBe("planned");
   });
 
   it("refuses a trip with no Session on it, and writes nothing", async () => {
@@ -662,7 +684,6 @@ describe("Rencanakan Perjadin", () => {
       .transaction(async (tx) => {
         await tx.insert(schema.perjadin).values({
           subClusterId: subCluster.id,
-          destination: "Bandung",
           startsOn: "2026-09-01",
           endsOn: "2026-09-03",
           advanceIdr: 5_000_000,
@@ -750,77 +771,80 @@ describe("Rencanakan Perjadin caps", () => {
   });
 });
 
-describe("the derived Perjadin destination", () => {
+describe("the Perjadin's name and its Schools (ADR-0044)", () => {
   beforeEach(resetDatabase);
 
-  it("names every Kabupaten/Kota in the Sub-Cluster, not only the visited Schools", async () => {
-    const { pic, input, schools } = await validPlan();
-    const planned = await planPerjadin(pic, {
-      ...input,
-      sessions: [
-        {
-          schoolId: schools[0]!.id,
-          heldOn: "2026-09-01",
-          startsAt: "09:00",
-          taughtByTeacherIndexes: [],
-        },
-      ],
-    });
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+  /** One planned Session at `school` on the plan's first day, so a trip may hold one School. */
+  const oneSession = (schoolId: string) => [
+    { schoolId, heldOn: "2026-09-01", startsAt: "09:00", taughtByTeacherIndexes: [] },
+  ];
 
-    const [row] = await db
-      .select({ destination: schema.perjadin.destination })
-      .from(schema.perjadin);
-    expect(row?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi");
+  it("plans two trips on one Sub-Cluster: one name, two School lines", async () => {
+    const { pic, input, schools } = await validPlan();
+    const first = await planPerjadin(pic, { ...input, sessions: oneSession(schools[0].id) });
+    const second = await planPerjadin(pic, { ...input, sessions: oneSession(schools[1].id) });
+    if (first.outcome !== "planned" || second.outcome !== "planned") {
+      throw new Error("fixture failed to plan");
+    }
+
+    const trips = await perjadinDirectory(nonStaff());
+
+    expect(trips.map((trip) => trip.subClusterName)).toEqual([
+      "Kelompok Sekolah Bandung",
+      "Kelompok Sekolah Bandung",
+    ]);
+    const byId = new Map(trips.map((trip) => [trip.id, trip.schoolNames]));
+    expect(byId.get(first.perjadinId)).toEqual(["SMAN 1 Bandung"]);
+    expect(byId.get(second.perjadinId)).toEqual(["SMAN 2 Bandung"]);
   });
 
-  it('collapses Schools in one Kabupaten/Kota to a single entry, with no "dan"', async () => {
-    const { pic, input } = await validPlan(["Kota Bandung", "Kota Bandung"]);
+  it("lists only Schools with a non-cancelled Session, alphabetically", async () => {
+    const { pic, input } = await validPlan();
+    // SMAN 2 first in the payload, so the order the read returns is its own.
+    const planned = await planPerjadin(pic, { ...input, sessions: [...input.sessions].reverse() });
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const live = async () => {
+      const [trip] = await perjadinDirectory(nonStaff());
+      return trip?.schoolNames;
+    };
+    expect(await live()).toEqual(["SMAN 1 Bandung", "SMAN 2 Bandung"]);
+
+    // Cancel SMAN 1's only Session: it drops out, from the count and from the line.
+    const [session] = await db
+      .select({ id: schema.session.id })
+      .from(schema.session)
+      .innerJoin(schema.school, eq(schema.school.id, schema.session.schoolId))
+      .where(eq(schema.school.name, "SMAN 1 Bandung"));
+    await cancelSession(pic, session!.id, "Sekolah meminta penjadwalan ulang");
+
+    expect(await live()).toEqual(["SMAN 2 Bandung"]);
+    const [trip] = await perjadinDirectory(nonStaff());
+    expect(trip?.schoolCount).toBe(1);
+  });
+
+  it("follows a Sub-Cluster rename on every read, a past trip's included", async () => {
+    const { pic, input, subCluster } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
-    const [row] = await db
-      .select({ destination: schema.perjadin.destination })
-      .from(schema.perjadin);
-    expect(row?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung");
-  });
+    await db
+      .update(schema.subCluster)
+      .set({ name: "Kelompok 10" })
+      .where(eq(schema.subCluster.id, subCluster.id));
 
-  it('joins three Kabupaten/Kota with commas and a final "dan"', async () => {
-    const pic = await staff();
-    const { cluster, subCluster, schools } = await twoSchools(["Kota Samarinda", "Kota Bontang"]);
-    await addSchool({
-      slug: "sman-3",
-      name: "SMAN 3 Bandung",
-      clusterId: cluster.id,
-      subClusterId: subCluster.id,
-      provinceCode: "JB",
-      kabupatenKota: "Kota Balikpapan",
-    });
-
-    const planned = await planPerjadin(pic, {
-      subClusterId: subCluster.id,
-      advanceIdr: 5_000_000,
-      picPersonId: pic.id,
-      teacherNames: [],
-      pimpinan: [],
-      sessions: [
-        {
-          schoolId: schools[0]!.id,
-          heldOn: "2026-09-01",
-          startsAt: "09:00",
-          taughtByTeacherIndexes: [],
-        },
-      ],
-      departure: DEPARTURE,
-      return: RETURN,
-    });
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
-
-    const [row] = await db
-      .select({ destination: schema.perjadin.destination })
-      .from(schema.perjadin);
-    expect(row?.destination).toBe(
-      "Kelompok Sekolah Bandung: Kota Samarinda, Kota Bontang dan Kota Balikpapan",
+    // A trip in the past: renaming relabels history, by design.
+    const named = "Kelompok 10 · 1–3 Sep 2026";
+    const [listed] = await perjadinDirectory(nonStaff());
+    const detail = await perjadinDetail(nonStaff(), planned.perjadinId);
+    const acquittal = await perjadinAcquittal(pic, planned.perjadinId);
+    const { previous } = await myPerjadin(pic);
+    const folder = await perjadinDriveFolder(pic, planned.perjadinId);
+    for (const read of [listed, detail, acquittal, previous[0], folder?.naming]) {
+      expect(read && perjadinName(read)).toBe(named);
+    }
+    expect(folder && perjadinFolderName(folder.naming)).toBe(
+      `${named} · SMAN 1 Bandung, SMAN 2 Bandung · P-${planned.perjadinId.slice(0, 8)}`,
     );
   });
 });
@@ -833,10 +857,9 @@ describe("the Perjadin list and detail", () => {
     await planPerjadin(pic, input);
     await planPerjadin(pic, {
       ...input,
-      // The range is the leg dates now (ADR-0021), so a later trip is a later departure/return, not
-      // a separately typed range. Its one Session sits inside the new window.
-      departure: { date: "2026-10-01", time: "07:30", mode: "Pesawat" },
-      return: { date: "2026-10-02", time: "18:00", mode: "Pesawat" },
+      // A later trip; its one Session sits inside the new window.
+      startsOn: "2026-10-01",
+      endsOn: "2026-10-02",
       sessions: [
         {
           schoolId: input.sessions[0]!.schoolId,
@@ -849,9 +872,9 @@ describe("the Perjadin list and detail", () => {
 
     const trips = await perjadinDirectory(nonStaff());
 
-    expect(trips.map((trip) => trip.destination)).toEqual([
-      "Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi",
-      "Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi",
+    expect(trips.map((trip) => trip.subClusterName)).toEqual([
+      "Kelompok Sekolah Bandung",
+      "Kelompok Sekolah Bandung",
     ]);
     expect(trips[0]?.schoolCount).toBe(1);
     expect(trips[1]?.schoolCount).toBe(2);
@@ -869,7 +892,7 @@ describe("the Perjadin list and detail", () => {
 
     const detail = await perjadinDetail(nonStaff(), planned.perjadinId);
 
-    expect(detail?.destination).toBe("Kelompok Sekolah Bandung: Kota Bandung dan Kota Cimahi");
+    expect(detail?.subClusterName).toBe("Kelompok Sekolah Bandung");
     expect(detail?.picFullName).toBe("Rina Nurhayati");
     expect(detail?.group).toHaveLength(1);
     expect(detail?.sessions).toHaveLength(2);
@@ -971,19 +994,12 @@ describe("the Perjadin list and detail", () => {
   });
 });
 
-describe("extra Staff and travel logistics", () => {
+describe("extra Staff and the date edit", () => {
   beforeEach(resetDatabase);
 
-  async function logisticsOf(perjadinId: string) {
+  async function datesOf(perjadinId: string) {
     const [row] = await db
-      .select({
-        departureAt: schema.perjadin.departureAt,
-        departureZone: schema.perjadin.departureZone,
-        departureMode: schema.perjadin.departureMode,
-        returnAt: schema.perjadin.returnAt,
-        returnZone: schema.perjadin.returnZone,
-        returnMode: schema.perjadin.returnMode,
-      })
+      .select({ startsOn: schema.perjadin.startsOn, endsOn: schema.perjadin.endsOn })
       .from(schema.perjadin)
       .where(eq(schema.perjadin.id, perjadinId));
     return row;
@@ -1043,115 +1059,49 @@ describe("extra Staff and travel logistics", () => {
     expect(await perjadinRows()).toEqual([]);
   });
 
-  it("writes the six logistics columns, WIB out and the wall-clock times back", async () => {
-    const { pic, input } = await validPlan();
-
-    const planned = await planPerjadin(pic, input);
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
-
-    const log = await logisticsOf(planned.perjadinId);
-    expect(log?.departureAt).toBe("2026-09-01 07:30:00");
-    expect(log?.departureZone).toBe("WIB");
-    expect(log?.departureMode).toBe("Pesawat");
-    expect(log?.returnAt).toBe("2026-09-03 18:00:00");
-    expect(log?.returnMode).toBe("Pesawat");
-  });
-
-  it("derives return_zone from the last-visited School's Province, not Bandung's", async () => {
-    const pic = await staff();
-    await addProvince("JB", "Jawa Barat", "WIB");
-    await addProvince("KT", "Kalimantan Timur", "WITA");
-    const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
-    const subCluster = await addSubCluster({
-      slug: "kalimantan",
-      name: "Kelompok Kalimantan",
-      clusterId: cluster.id,
-    });
-    const bandung = await addSchool({
-      slug: "sman-bandung",
-      name: "SMAN Bandung",
-      clusterId: cluster.id,
-      subClusterId: subCluster.id,
-      provinceCode: "JB",
-      kabupatenKota: "Kota Bandung",
-    });
-    const samarinda = await addSchool({
-      slug: "sman-samarinda",
-      name: "SMAN Samarinda",
-      clusterId: cluster.id,
-      subClusterId: subCluster.id,
-      provinceCode: "KT",
-      kabupatenKota: "Kota Samarinda",
-    });
-
-    const planned = await planPerjadin(pic, {
-      subClusterId: subCluster.id,
-      advanceIdr: 5_000_000,
-      picPersonId: pic.id,
-      teacherNames: [],
-      pimpinan: [],
-      sessions: [
-        {
-          schoolId: bandung.id,
-          heldOn: "2026-09-02",
-          startsAt: "09:00",
-          taughtByTeacherIndexes: [],
-        },
-        {
-          schoolId: samarinda.id,
-          heldOn: "2026-09-04",
-          startsAt: "09:00",
-          taughtByTeacherIndexes: [],
-        },
-      ],
-      departure: DEPARTURE,
-      return: { date: "2026-09-05", time: "20:00", mode: "Pesawat" },
-    });
-    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
-
-    const log = await logisticsOf(planned.perjadinId);
-    expect(log?.returnZone).toBe("WITA");
-    expect(log?.departureZone).toBe("WIB");
-  });
-
-  it("updates the logistics, fixing departure to WIB and taking the given return zone", async () => {
+  it("updates the typed dates and reports whether the dates moved", async () => {
     const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
-    const result = await updatePerjadinLogistics(pic, planned.perjadinId, {
-      departureDate: "2026-09-01",
-      departureTime: "06:00",
-      departureMode: "Kereta",
-      returnDate: "2026-09-03",
-      returnTime: "22:00",
-      returnMode: "Travel",
-      returnZone: "WIT",
+    const result = await updatePerjadinDates(pic, planned.perjadinId, {
+      startsOn: "2026-08-31",
+      endsOn: "2026-09-04",
     });
 
-    expect(result).toEqual({ outcome: "updated", startsOnMoved: false });
-    const log = await logisticsOf(planned.perjadinId);
-    expect(log?.departureAt).toBe("2026-09-01 06:00:00");
-    expect(log?.departureZone).toBe("WIB");
-    expect(log?.departureMode).toBe("Kereta");
-    expect(log?.returnZone).toBe("WIT");
-    expect(log?.returnMode).toBe("Travel");
+    expect(result).toEqual({ outcome: "updated", datesMoved: true });
+    expect(await datesOf(planned.perjadinId)).toEqual({
+      startsOn: "2026-08-31",
+      endsOn: "2026-09-04",
+    });
   });
 
-  it("refuses a non-Staff caller on the logistics edit", async () => {
+  it("refuses an inverted range on the date edit, and leaves the dates alone", async () => {
+    const { pic, input } = await validPlan();
+    const planned = await planPerjadin(pic, input);
+    if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
+
+    const result = await updatePerjadinDates(pic, planned.perjadinId, {
+      startsOn: "2026-09-03",
+      endsOn: "2026-09-01",
+    });
+
+    expect(result).toEqual({ outcome: "ends-before-starts" });
+    expect(await datesOf(planned.perjadinId)).toEqual({
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-03",
+    });
+  });
+
+  it("refuses a non-Staff caller on the date edit", async () => {
     const { pic, input } = await validPlan();
     const planned = await planPerjadin(pic, input);
     if (planned.outcome !== "planned") throw new Error("fixture failed to plan");
 
     await expect(
-      updatePerjadinLogistics(nonStaff(), planned.perjadinId, {
-        departureDate: "2026-09-01",
-        departureTime: "06:00",
-        departureMode: "Kereta",
-        returnDate: "2026-09-03",
-        returnTime: "22:00",
-        returnMode: "Travel",
-        returnZone: "WIT",
+      updatePerjadinDates(nonStaff(), planned.perjadinId, {
+        startsOn: "2026-09-01",
+        endsOn: "2026-09-03",
       }),
     ).rejects.toSatisfy(isNotStaffError);
   });

@@ -59,8 +59,8 @@ export default async function SignInPage({
         <GoogleSignInButton />
 
         <p className="text-xs text-muted-foreground">
-          Gunakan akun Google yang terdaftar. Baik Tim DITSAMA maupun Tim Pengajar memakai akun
-          Google apa pun yang sudah terdaftar.
+          Gunakan akun Google yang terdaftar. Tim DITSAMA memakai akun Google apa pun yang sudah
+          terdaftar.
         </p>
       </div>
     </main>

@@ -17,10 +17,11 @@ import {
 import { type ReactElement, useState, useTransition } from "react";
 
 /**
- * **Tandai, one offline Session from the dashboard card** ([#209](https://github.com/mafiefa02/sugt/issues/209),
- * per Session since [#349](https://github.com/sugt-itb/sugt-itb-26/issues/349)). Each `arranged`
- * Session on a trip's timeline opens this from its own Tandai pill, so a trip's Sessions are marked
- * without walking into each `/sesi/[id]`.
+ * **Tandai, one offline Session from its trip card**
+ * ([#209](https://github.com/mafiefa02/sugt/issues/209), per Session since
+ * [#349](https://github.com/sugt-itb/sugt-itb-26/issues/349)). Each `arranged` Session on a trip's
+ * timeline opens this from its own Tandai pill, so a trip's Sessions are marked without walking
+ * into each `/sesi/[id]`.
  *
  * **`delivered` is terminal** (`docs/data-model.md`; there is deliberately no un-deliver), so a
  * misclick here would be permanent. The dialog therefore **names the exact Session** before it

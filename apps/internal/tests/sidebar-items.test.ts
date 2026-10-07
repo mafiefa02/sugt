@@ -35,15 +35,16 @@ const FULL = [
 ];
 
 describe("sidebarItems", () => {
-  it("gives a Staff Administrator every link, Dashboard first and Pengaturan last", () => {
-    expect(hrefsFor("Staff", ["Administrator"])).toEqual([...FULL, "/pengaturan"]);
+  it("gives a Staff Administrator every link, Dashboard first and Log then Pengaturan last", () => {
+    expect(hrefsFor("Staff", ["Administrator"])).toEqual([...FULL, "/log", "/pengaturan"]);
     expect(hrefsFor("Staff", ["Administrator", "Dashboard Viewer"])).toEqual([
       ...FULL,
+      "/log",
       "/pengaturan",
     ]);
   });
 
-  it("gives a Staff Editor every link but Pengaturan, with or without Dashboard Viewer", () => {
+  it("gives a Staff Editor every link but Log and Pengaturan, with or without Dashboard Viewer", () => {
     expect(hrefsFor("Staff", ["Editor"])).toEqual(FULL);
     expect(hrefsFor("Staff", ["Editor", "Dashboard Viewer"])).toEqual(FULL);
   });

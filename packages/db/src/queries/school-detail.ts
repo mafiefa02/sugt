@@ -40,12 +40,12 @@ import { countsTowardsProgress } from "./delivered-sessions";
  * An Aspect any of the three Session-scoped rubrics can name. Most of them are never
  * a concern, which is why this is not called one.
  *
- * **Three sources, not the concerns list's four.** A Perjadin Evaluation is about the
- * journey rather than the teaching, and `docs/data-model.md` § *The concerns list in
- * full* shows what that costs it here: its branch of that query reports
- * `pj.destination` as its subject, because it has no Session and no School to report.
- * One Perjadin may carry several Schools, so attributing a bad hotel to each of their
- * Sessions would flag teaching nobody complained about.
+ * **Three sources, not the concerns list's four.** A Perjadin Evaluation is about the journey
+ * rather than the teaching, and `docs/data-model.md` § *The concerns list in full* shows what that
+ * costs it here: its branch of that query reports the trip's Kelompok and dates — its name
+ * (ADR-0044) — as its subject, because it has no Session and no School to report. One Perjadin may
+ * carry several Schools, so attributing a bad hotel to each of their Sessions would flag teaching
+ * nobody complained about.
  */
 export type SessionAspect = ClassRecordAspect | SessionRecordAspect | ParticipantFeedbackAspect;
 
