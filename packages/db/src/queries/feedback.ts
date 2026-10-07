@@ -143,7 +143,7 @@ const rowAverageExpr = sql<number>`(${participantFeedback.materials} + ${partici
 
 /**
  * Turn one filter into its predicate, or `null` when it is `all`. `le7` → `<= 7`, `gt7` → `> 7`,
- * against whatever expression the caller passes — an Aspect column for three of the filters, the
+ * against whatever expression the caller passes — an Aspect column for every filter but one, the
  * row-average expression for `reviewType`.
  */
 function bound(value: FeedbackFilterValue, expr: SQLWrapper): SQL | null {

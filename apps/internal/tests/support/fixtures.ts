@@ -398,7 +398,7 @@ export type PerjadinEvaluationFixture = {
    */
   role?: PerjadinEvaluationRole;
   name?: string;
-  /** The one nullable Rating — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
+  /** Nullable — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
   lodging?: number | null;
   ratings?: Partial<Record<"transport" | "meals" | "punctuality", number>>;
   /**

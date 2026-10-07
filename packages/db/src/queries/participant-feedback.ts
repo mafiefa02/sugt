@@ -165,6 +165,8 @@ export async function submitParticipantFeedback(
 
   // Each Aspect the Class is asked must be Rated, and no other. "Required for Siswa" lives here
   // rather than in a CHECK, because Student feedback filed before Hands-on RBL existed has none.
+  // The `?? []` is for a forged `classKind` from the unauthenticated form, which the types cannot
+  // rule out: it asks nothing, so it is refused here rather than failing the CHECK.
   const asked = PARTICIPANT_FEEDBACK_ASPECTS_BY_CLASS[input.classKind] ?? [];
   const matches = PARTICIPANT_FEEDBACK_ASPECTS.every(
     (aspect) => (input.ratings[aspect] != null) === asked.includes(aspect),
@@ -177,6 +179,9 @@ export async function submitParticipantFeedback(
     const value = comment?.trim() ?? "";
     return value === "" ? null : value;
   };
+  // A form loaded before #446 shipped sends no `answers` and no `hands_on_rbl`; a GTK or MS
+  // submission from one still lands, with neither, rather than throwing on the missing field.
+  const answers = input.answers ?? { knowledgeGain: null, suggestions: null };
   // A comment on an Aspect the Class is not asked is dropped, as the form drops it (#446).
   const comment = (aspect: ParticipantFeedbackAspect) =>
     asked.includes(aspect) ? trimmed(input.comments[aspect]) : null;
@@ -184,7 +189,7 @@ export async function submitParticipantFeedback(
     sessionId: caller.sessionId,
     classKind: input.classKind,
     name,
-    handsOnRbl: input.ratings.hands_on_rbl,
+    handsOnRbl: input.ratings.hands_on_rbl ?? null,
     materials: input.ratings.materials!,
     instructor: input.ratings.instructor!,
     relevance: input.ratings.relevance!,
@@ -192,8 +197,8 @@ export async function submitParticipantFeedback(
     materialsComment: comment("materials"),
     instructorComment: comment("instructor"),
     relevanceComment: comment("relevance"),
-    knowledgeGain: trimmed(input.answers.knowledgeGain),
-    suggestions: trimmed(input.answers.suggestions),
+    knowledgeGain: trimmed(answers.knowledgeGain),
+    suggestions: trimmed(answers.suggestions),
   });
 
   return { outcome: "submitted" };

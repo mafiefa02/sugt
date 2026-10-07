@@ -259,8 +259,8 @@ export const participantFeedback = pgTable(
 
     // One optional comment per Aspect, so a comment belongs to the Rating it explains and the
     // concerns list can show the prose for the Aspect that was actually Rated low — a single
-    // shared comment could not say which of the three it was about (#102). All three stay
-    // nullable: a Participant owes no elaboration, the CHECK forcing prose lives on
+    // shared comment could not say which Aspect it was about (#102). All of them stay nullable:
+    // a Participant owes no elaboration, the CHECK forcing prose lives on
     // `class_record`/`session_record` only, never here.
     handsOnRblComment: text("hands_on_rbl_comment"),
     materialsComment: text("materials_comment"),

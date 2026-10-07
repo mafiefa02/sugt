@@ -16,7 +16,7 @@ import {
 export type AspectAnswers<T> = Partial<Record<ParticipantFeedbackAspect, T>>;
 
 /** The Aspects every Class is asked — what the form shows before a Class is picked. */
-export const EVERY_CLASS_ASPECTS = PARTICIPANT_FEEDBACK_ASPECTS.filter((aspect) =>
+const EVERY_CLASS_ASPECTS = PARTICIPANT_FEEDBACK_ASPECTS.filter((aspect) =>
   CLASS_KINDS.every((kind) => PARTICIPANT_FEEDBACK_ASPECTS_BY_CLASS[kind].includes(aspect)),
 );
 

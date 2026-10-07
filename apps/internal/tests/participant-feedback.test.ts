@@ -465,6 +465,46 @@ describe("Hands-on RBL and the written questions (#446)", () => {
   });
 });
 
+describe("submitFeedbackAction, after #446", () => {
+  beforeEach(resetDatabase);
+
+  it("refuses a Siswa submission without a Hands-on RBL Rating, and writes nothing", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+    const token = await addFeedbackToken({ sessionId: session.id, issuedByPersonId: pic.id });
+
+    const result = await submitFeedbackAction(token.token, {
+      classKind: "Student",
+      name: "Rani",
+      ratings: FINE,
+      comments: NO_COMMENTS,
+      answers: NO_ANSWERS,
+    });
+
+    expect(result).toEqual({ outcome: "ratings-mismatch" });
+    expect(await feedbackRows(session.id)).toHaveLength(0);
+  });
+
+  it("still lands a GTK submission from a form loaded before #446, with no answers or RBL", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+    const token = await addFeedbackToken({ sessionId: session.id, issuedByPersonId: pic.id });
+
+    // The pre-#446 payload: three Ratings, three comments, no `answers`.
+    const result = await submitFeedbackAction(token.token, {
+      classKind: "GTK",
+      name: "Budi",
+      ratings: { materials: 9, instructor: 9, relevance: 9 },
+      comments: { materials: null, instructor: null, relevance: null },
+    } as never);
+
+    expect(result).toEqual({ outcome: "submitted" });
+    expect(await feedbackRows(session.id)).toEqual([
+      expect.objectContaining({ handsOnRbl: null, knowledgeGain: null, suggestions: null }),
+    ]);
+  });
+});
+
 describe("the form's answers (#446)", () => {
   it("asks a Siswa Hands-on RBL first, GTK and MS never, and every Class's three before one is picked", () => {
     expect(askedAspects("Student")).toEqual([

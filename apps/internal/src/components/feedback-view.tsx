@@ -4,6 +4,7 @@ import { loadParticipantFeedback, loadPerjadinFeedback } from "-/app/(app)/feedb
 import { MODE_LABELS } from "-/components/session-labels";
 import {
   PARTICIPANT_ASPECT_LABELS,
+  PARTICIPANT_CLASS_LABELS,
   PARTICIPANT_WRITTEN_QUESTIONS,
 } from "-/lib/participant-feedback-copy";
 import { perjadinName } from "-/lib/perjadin-name";
@@ -18,7 +19,7 @@ import type {
   PerjadinFeedbackFilters,
   PerjadinFeedbackRow,
 } from "@sugt/db/queries";
-import { formatSessionStartTime, type ClassKind } from "@sugt/domain";
+import { formatSessionStartTime, PARTICIPANT_FEEDBACK_ASPECTS_BY_CLASS } from "@sugt/domain";
 import { Badge } from "@sugt/ui/components/badge";
 import { Button } from "@sugt/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@sugt/ui/components/card";
@@ -102,13 +103,6 @@ const DATE_SORT_OPTIONS: Record<FeedbackSort["date"], string> = {
   asc: "Terlama",
 };
 
-/** GTK and MS keep their acronyms; a Participant of the student Class is a Siswa on screen. */
-const CLASS_KIND_LABELS: Record<ClassKind, string> = {
-  GTK: "GTK",
-  MS: "MS",
-  Student: "Siswa",
-};
-
 /** One filter's three options, in Indonesian. `label` prefixes name the column the filter gates. */
 type FilterOptions = Record<FeedbackFilterValue, string>;
 
@@ -126,23 +120,11 @@ function aspectOptions(label: string): FilterOptions {
 /** Hands-on RBL (#446): a row without one — GTK, MS or an older Siswa row — is in neither arm. */
 const HANDS_ON_RBL_OPTIONS = aspectOptions(PARTICIPANT_ASPECT_LABELS.hands_on_rbl);
 
-const INSTRUCTOR_OPTIONS: FilterOptions = {
-  all: "Semua: Narasumber",
-  le7: "Narasumber ≤ 7",
-  gt7: "Narasumber > 7",
-};
+const INSTRUCTOR_OPTIONS = aspectOptions(PARTICIPANT_ASPECT_LABELS.instructor);
 
-const MATERIALS_OPTIONS: FilterOptions = {
-  all: "Semua: Materi",
-  le7: "Materi ≤ 7",
-  gt7: "Materi > 7",
-};
+const MATERIALS_OPTIONS = aspectOptions(PARTICIPANT_ASPECT_LABELS.materials);
 
-const RELEVANCE_OPTIONS: FilterOptions = {
-  all: "Semua: Relevansi",
-  le7: "Relevansi ≤ 7",
-  gt7: "Relevansi > 7",
-};
+const RELEVANCE_OPTIONS = aspectOptions(PARTICIPANT_ASPECT_LABELS.relevance);
 
 const LODGING_OPTIONS: FilterOptions = {
   all: "Semua: Penginapan",
@@ -327,7 +309,7 @@ function ParticipantTab({
           }}
         />
         <FilterSelect
-          ariaLabel="Nilai Narasumber"
+          ariaLabel={`Nilai ${PARTICIPANT_ASPECT_LABELS.instructor}`}
           options={INSTRUCTOR_OPTIONS}
           value={filters.instructor}
           disabled={pending}
@@ -336,7 +318,7 @@ function ParticipantTab({
           }}
         />
         <FilterSelect
-          ariaLabel="Nilai Materi"
+          ariaLabel={`Nilai ${PARTICIPANT_ASPECT_LABELS.materials}`}
           options={MATERIALS_OPTIONS}
           value={filters.materials}
           disabled={pending}
@@ -345,7 +327,7 @@ function ParticipantTab({
           }}
         />
         <FilterSelect
-          ariaLabel="Nilai Relevansi"
+          ariaLabel={`Nilai ${PARTICIPANT_ASPECT_LABELS.relevance}`}
           options={RELEVANCE_OPTIONS}
           value={filters.relevance}
           disabled={pending}
@@ -354,7 +336,7 @@ function ParticipantTab({
           }}
         />
         <FilterSelect
-          ariaLabel="Nilai Hands-on RBL"
+          ariaLabel={`Nilai ${PARTICIPANT_ASPECT_LABELS.hands_on_rbl}`}
           options={HANDS_ON_RBL_OPTIONS}
           value={filters.handsOnRbl}
           disabled={pending}
@@ -698,7 +680,7 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
       <CardHeader>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-sm font-medium">{row.name}</span>
-          <Badge variant="secondary">{CLASS_KIND_LABELS[row.classKind]}</Badge>
+          <Badge variant="secondary">{PARTICIPANT_CLASS_LABELS[row.classKind]}</Badge>
           <span className="text-muted-foreground">·</span>
           <span className="text-sm text-muted-foreground">{row.schoolName}</span>
           <span className="text-muted-foreground">·</span>
@@ -743,7 +725,7 @@ function ParticipantCard({ row }: { row: ParticipantFeedbackRow }) {
           score={row.relevance}
           comment={row.relevanceComment}
         />
-        {row.classKind === "Student" && (
+        {PARTICIPANT_FEEDBACK_ASPECTS_BY_CLASS[row.classKind].includes("hands_on_rbl") && (
           <AspectRow
             label={PARTICIPANT_ASPECT_LABELS.hands_on_rbl}
             score={row.handsOnRbl}

@@ -2,6 +2,7 @@
 
 import {
   PARTICIPANT_ASPECT_QUESTIONS,
+  PARTICIPANT_CLASS_LABELS,
   PARTICIPANT_WRITTEN_QUESTIONS,
 } from "-/lib/participant-feedback-copy";
 import { CONCERN_AT_OR_BELOW, RATING_MAX, RATING_MIN, type ClassKind } from "@sugt/domain";
@@ -37,10 +38,7 @@ import { GoneNotice } from "./gone-notice";
  * under its label and description, so the form reads at 360px.
  */
 
-/** GTK and MS are Indonesian initialisms already; only *Student* translates, to *Siswa*. */
-const CLASS_LABELS: Record<ClassKind, string> = { GTK: "GTK", MS: "MS", Student: "Siswa" };
-
-const CLASS_KINDS_ORDERED = Object.keys(CLASS_LABELS) as ClassKind[];
+const CLASS_KINDS_ORDERED = Object.keys(PARTICIPANT_CLASS_LABELS) as ClassKind[];
 
 function FeedbackForm({ token }: { token: string }) {
   const [classKind, setClassKind] = useState<ClassKind | undefined>(undefined);
@@ -123,7 +121,7 @@ function FeedbackForm({ token }: { token: string }) {
                   chooseClass(kind);
                 }}
               >
-                {CLASS_LABELS[kind]}
+                {PARTICIPANT_CLASS_LABELS[kind]}
               </Button>
             ))}
           </div>
@@ -189,7 +187,7 @@ function FeedbackForm({ token }: { token: string }) {
         {/* The two written questions (#446): optional, and not Aspects — nothing Rates them. */}
         <div className="grid gap-1.5">
           <Label htmlFor={`${namePrefix}-knowledge-gain`}>
-            {PARTICIPANT_WRITTEN_QUESTIONS.knowledgeGain.question} (opsional)
+            {PARTICIPANT_WRITTEN_QUESTIONS.knowledgeGain.question}
           </Label>
           <Textarea
             id={`${namePrefix}-knowledge-gain`}
@@ -201,7 +199,7 @@ function FeedbackForm({ token }: { token: string }) {
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor={`${namePrefix}-suggestions`}>
-            {PARTICIPANT_WRITTEN_QUESTIONS.suggestions.question} (opsional)
+            {PARTICIPANT_WRITTEN_QUESTIONS.suggestions.question}
           </Label>
           <Textarea
             id={`${namePrefix}-suggestions`}

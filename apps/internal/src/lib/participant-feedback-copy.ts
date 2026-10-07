@@ -1,10 +1,17 @@
-import type { ParticipantFeedbackAspect } from "@sugt/domain";
+import type { ClassKind, ParticipantFeedbackAspect } from "@sugt/domain";
 
 /**
  * **Participant Feedback's words, in one place** (#446) — the form at `/f/[token]`, the Peserta tab
  * of `/feedback` and the School-detail concern chip all read them, so an Aspect is called the same
  * thing everywhere. Indonesian copy around the English domain terms (`CONTEXT.md`).
  */
+
+/** GTK and MS are Indonesian initialisms already; only *Student* translates, to *Siswa*. */
+export const PARTICIPANT_CLASS_LABELS: Record<ClassKind, string> = {
+  GTK: "GTK",
+  MS: "MS",
+  Student: "Siswa",
+};
 
 /** Each Aspect's short name: the `/feedback` cards and filters, and the concern chip. */
 export const PARTICIPANT_ASPECT_LABELS: Record<ParticipantFeedbackAspect, string> = {
@@ -27,15 +34,15 @@ export const PARTICIPANT_ASPECT_QUESTIONS: Record<
     description: "Apakah modul RBL yang dibuat mudah dilakukan?",
   },
   materials: {
-    label: "Materi",
+    label: PARTICIPANT_ASPECT_LABELS.materials,
     description: "Apakah materi yang diberikan mudah dipahami?",
   },
   instructor: {
-    label: "Narasumber",
+    label: PARTICIPANT_ASPECT_LABELS.instructor,
     description: "Apakah narasumber menyampaikan materi dengan jelas?",
   },
   relevance: {
-    label: "Relevansi",
+    label: PARTICIPANT_ASPECT_LABELS.relevance,
     description: "Apakah materi yang diberikan relevan?",
   },
 };
