@@ -722,16 +722,19 @@ export type PreparationItemLevel = (typeof PREPARATION_ITEM_LEVELS)[number];
 export const MAX_PREPARATION_ITEM_LABEL_LENGTH = 200;
 
 /**
- * **The three kinds of Perjadin Document**
- * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042): attendance sheets, one
- * PDF each. Indonesian because they are the names of paperwork, on the same footing as
- * `TRANSACTION_CATEGORIES`, and mirrored character for character by
+ * **The four kinds of Perjadin Document**
+ * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042): the trip's paperwork, one
+ * PDF each — three attendance sheets, and **SPPD**, one School's Surat Perintah Perjalanan Dinas
+ * for the trip ([#441](https://github.com/sugt-itb/sugt-itb-26/issues/441)). Indonesian because
+ * they are the names of paperwork, on the same footing as `TRANSACTION_CATEGORIES`; each is the
+ * stored value, the label and its Drive kind folder's name. Mirrored character for character by
  * `perjadin_document_kind_check` (see `packages/db/src/schema/travel.ts`).
  */
 export const PERJADIN_DOCUMENT_KINDS = [
   "Daftar Hadir Peserta",
   "Daftar Hadir Narasumber",
   "Daftar Hadir Pendamping",
+  "SPPD",
 ] as const;
 export type PerjadinDocumentKind = (typeof PERJADIN_DOCUMENT_KINDS)[number];
 

@@ -324,3 +324,8 @@ uploads a receipt to a trip ([ADR-0048](./0048-a-perjadin-is-written-by-its-grou
 check that runs before any Drive call (`staffOnTrip`) is that guard, so a Staff member off the trip is
 refused with a 403 before an upload session is opened. The account, `_staging`, the upload gate and the
 reconcile are unchanged.
+
+## Amendment (2026-10-08): an `SPPD/` kind folder under `Dokumen/`
+
+Each Perjadin's Dokumen folder gains a fourth kind folder, `SPPD/`, for each School's SPPD (#441);
+the whole tree is redrawn in [ADR-0042's amendment](./0042-perjadin-documents-are-stored-in-the-company-google-drive.md#amendment-2026-10-08-sppd-a-fourth-kind-one-per-school-per-perjadin).

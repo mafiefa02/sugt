@@ -554,7 +554,13 @@ describe("the actions answer a non-member with a 403", () => {
       ),
     ).resolves.toBe(FORBIDDEN);
     await expect(
-      digestOf(openDocumentSessionAction(a.id, { contentType: "application/pdf", size: 1_000 })),
+      digestOf(
+        openDocumentSessionAction(
+          a.id,
+          { contentType: "application/pdf", size: 1_000 },
+          { kind: "Daftar Hadir Pendamping", documentDate: "2026-10-12" },
+        ),
+      ),
     ).resolves.toBe(FORBIDDEN);
     await expect(
       digestOf(

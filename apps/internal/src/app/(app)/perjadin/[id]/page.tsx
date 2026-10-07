@@ -60,8 +60,8 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
   // Fetched for any signed-in Person: money reads are open now (ADR-0026, #180), so a Pimpinan
   // sees the money strip too. Writing it is the trip's writers', enforced in each query.
   const acquittal = await perjadinAcquittal(person, id);
-  // The trip's attendance sheets (#398): read-only here, for everyone who can see the page. Upload
-  // and Hapus live on the `/pendamping` card's Dokumen dialog.
+  // The trip's attendance sheets and SPPDs (#398, #441): read-only here, for everyone who can see
+  // the page. Upload and Hapus live on the `/pendamping` card's Dokumen dialog.
   const dokumen = await perjadinDokumen(person, id);
   // Who writes this trip (ADR-0048): its Group, an Editor or an Administrator. Everyone else reads
   // it with every write control hidden; each write's query refuses them again, which is the real gate.
@@ -217,9 +217,13 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
       <section className="border-t border-border px-4 py-5 sm:px-7">
         <h2 className="font-heading text-sm font-medium">Dokumen</h2>
         <p className="mt-1 mb-3 text-sm text-muted-foreground">
-          Daftar hadir perjalanan ini. Unggah dan hapus dari kartu perjalanan di Pendamping.
+          Daftar hadir dan SPPD perjalanan ini. Unggah dan hapus dari kartu perjalanan di
+          Pendamping.
         </p>
-        <PerjadinDokumenList documents={dokumen?.documents ?? []} />
+        <PerjadinDokumenList
+          documents={dokumen?.documents ?? []}
+          schools={dokumen?.schools ?? []}
+        />
       </section>
     </div>
   );

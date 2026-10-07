@@ -9,8 +9,10 @@ import { SEPARATOR, short } from "./receipt-files";
  * ```
  * Dokumen/Pelaksanaan Offline/
  * └── {name} · {the trip's Schools} · P-{perjadin8}/      ← the Perjadin's Dokumen folder, private
- *     └── Daftar Hadir Peserta/                          ← one folder per kind, private
- *         └── {date} · {school} · {Siswa|GTK-MS} · Daftar Hadir Peserta · D-{doc8}.pdf
+ *     ├── Daftar Hadir Peserta/                          ← one folder per kind, private
+ *     │   └── {date} · {school} · {Siswa|GTK-MS} · Daftar Hadir Peserta · D-{doc8}.pdf
+ *     └── SPPD/                                          ← #441
+ *         └── {school} · SPPD · D-{doc8}.pdf
  * ```
  *
  * The Perjadin's folder is named as its receipts folder is (`perjadinFolderName` in
@@ -19,24 +21,30 @@ import { SEPARATOR, short } from "./receipt-files";
  * re-upload, or two Peserta sheets for one School, date and cohort.
  */
 
-/** What a document's file name is built from. The School and cohort are a Peserta sheet's only. */
+/**
+ * What a document's file name is built from. The cohort is a Peserta sheet's only; the School is a
+ * Peserta sheet's or an SPPD's; the date is every kind's but an SPPD's.
+ */
 export type DocumentNameParts = {
   documentId: string;
   kind: PerjadinDocumentKind;
-  documentDate: string;
+  documentDate: string | null;
   schoolName: string | null;
   participantType: PerjadinDocumentParticipantType | null;
 };
 
 /**
- * `2026-10-14 · SMAN 1 Bontang · Siswa · Daftar Hadir Peserta · D-1a2b3c4d.pdf`, or
- * `2026-10-14 · Daftar Hadir Pendamping · D-1a2b3c4d.pdf`. A `/` in a School's name becomes `-`.
+ * `2026-10-14 · SMAN 1 Bontang · Siswa · Daftar Hadir Peserta · D-1a2b3c4d.pdf`,
+ * `2026-10-14 · Daftar Hadir Pendamping · D-1a2b3c4d.pdf`, or `SMAN 1 Bontang · SPPD ·
+ * D-1a2b3c4d.pdf`: each part the document has, in that order. A `/` in a School's name becomes `-`.
  */
 export function documentFileName(parts: DocumentNameParts): string {
-  const peserta =
-    parts.schoolName && parts.participantType
-      ? [parts.schoolName.replaceAll("/", "-"), parts.participantType]
-      : [];
-  const stem = [parts.documentDate, ...peserta, parts.kind, `D-${short(parts.documentId)}`];
+  const stem = [
+    parts.documentDate,
+    parts.schoolName?.replaceAll("/", "-"),
+    parts.participantType,
+    parts.kind,
+    `D-${short(parts.documentId)}`,
+  ].filter((part) => part != null);
   return `${stem.join(SEPARATOR)}.pdf`;
 }

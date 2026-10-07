@@ -152,7 +152,8 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
               ),
               ...sweep.documents.failures.map(
                 (failure) =>
-                  `${failure.documentDate} · ${failure.kind}: ${DOCUMENT_FAILURE_REASONS[failure.reason]}.`,
+                  // An SPPD has no date: it reads `SPPD · {School}` (#441).
+                  `${failure.documentDate === null ? `${failure.kind} · ${failure.schoolName}` : `${failure.documentDate} · ${failure.kind}`}: ${DOCUMENT_FAILURE_REASONS[failure.reason]}.`,
               ),
               ...sweep.footage.failures.map(
                 (failure) =>

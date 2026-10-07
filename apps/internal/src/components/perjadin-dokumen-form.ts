@@ -5,7 +5,7 @@ import type {
 } from "-/app/(app)/perjadin/[id]/dokumen/action-types";
 import { MAX_UPLOAD_MEGABYTES, UPLOAD_TOO_LARGE } from "-/lib/drive/receipt-upload";
 import { driveRefusalText, STALE_PAGE } from "-/lib/drive/upload-messages";
-import type { DocumentFields, PerjadinDocumentRow } from "@sugt/db/queries";
+import type { DocumentFields, DocumentFieldsRefusal, PerjadinDocumentRow } from "@sugt/db/queries";
 import {
   formatTimeRange,
   MAX_UPLOAD_BYTES,
@@ -40,8 +40,12 @@ export function pickDocument(file: File): File | string {
   return file;
 }
 
-/** One sheet as its row reads: the date, and for a Peserta sheet its School, cohort and span. */
+/**
+ * One document as its row reads: the date, for a Peserta sheet its School, cohort and span, and for
+ * an SPPD its School alone (#441).
+ */
 export function documentRowText(row: PerjadinDocumentRow): string {
+  if (row.documentDate === null) return row.schoolName ?? "";
   if (row.schoolName && row.participantType && row.startsAt && row.endsAt && row.timeZone) {
     return [
       row.documentDate,
@@ -52,6 +56,17 @@ export function documentRowText(row: PerjadinDocumentRow): string {
   }
   return row.documentDate;
 }
+
+/**
+ * **`SPPD: x/y sekolah`** (#441): how many of the trip's Schools have their SPPD, so a missing one
+ * shows. An SPPD for a School that has since left the trip still stands, but is not counted.
+ */
+export function sppdSummary(schools: { hasSppd: boolean }[]): string {
+  return `SPPD: ${schools.filter((school) => school.hasSppd).length}/${schools.length} sekolah`;
+}
+
+/** What the SPPD picker marks a School that already has its SPPD on this trip. */
+export const SPPD_EXISTS_MARK = "sudah ada";
 
 /** The Unggah dokumen form as typed: every field a string, empty until chosen. */
 export type DocumentForm = {
@@ -74,10 +89,15 @@ export const EMPTY_DOCUMENT_FORM: DocumentForm = {
 
 /**
  * The form's fields as the server takes them, or `null` while one is missing — so Unggah stays
- * disabled, and a sheet the server would refuse for a blank is never uploaded first. A Peserta
- * sheet needs all four of its own fields; the other two need only the date.
+ * disabled, and a document the server would refuse for a blank is never uploaded first. A Peserta
+ * sheet needs all four of its own fields and the date; an SPPD only its School, and never a date;
+ * Narasumber and Pendamping sheets need only the date.
  */
 export function documentFields(form: DocumentForm): DocumentFields | null {
+  if (form.kind === "SPPD") {
+    if (form.schoolId === "") return null;
+    return { kind: form.kind, documentDate: null, sppd: { schoolId: form.schoolId } };
+  }
   if (form.kind === "" || form.documentDate === "") return null;
   if (form.kind !== "Daftar Hadir Peserta") {
     return { kind: form.kind, documentDate: form.documentDate };
@@ -102,26 +122,8 @@ export function documentFields(form: DocumentForm): DocumentFields | null {
   };
 }
 
-/** Why no upload session opened. Nothing has been uploaded yet. */
-export function sessionRefusalText(
-  result: Exclude<OpenDocumentSessionResult, { outcome: "ready" }>,
-): string {
-  switch (result.outcome) {
-    case "no-such-perjadin":
-      return STALE_PAGE;
-    case "not-pdf":
-      return ONLY_PDF;
-    case "too-large":
-      return UPLOAD_TOO_LARGE;
-    default:
-      return driveRefusalText(result);
-  }
-}
-
-/** Why the sheet was not recorded. Nothing was written, so the form keeps every value. */
-export function recordRefusalText(
-  result: Exclude<RecordDocumentActionResult, { outcome: "recorded" }>,
-): string {
+/** Why the document's fields are refused — before the upload opens, or again at the record. */
+function fieldsRefusalText(result: DocumentFieldsRefusal): string {
   switch (result.outcome) {
     case "no-such-perjadin":
       return STALE_PAGE;
@@ -133,6 +135,44 @@ export function recordRefusalText(
       return "Sekolah ini tidak punya Sesi di Perjadin ini.";
     case "times-out-of-order":
       return "Waktu Selesai harus setelah Waktu Mulai.";
+    case "sppd-exists":
+      return `${result.schoolName} sudah punya SPPD untuk Perjadin ini. Hapus dulu untuk menggantinya.`;
+  }
+}
+
+/** Why no upload session opened. Nothing has been uploaded yet. */
+export function sessionRefusalText(
+  result: Exclude<OpenDocumentSessionResult, { outcome: "ready" }>,
+): string {
+  switch (result.outcome) {
+    case "not-pdf":
+      return ONLY_PDF;
+    case "too-large":
+      return UPLOAD_TOO_LARGE;
+    case "no-such-perjadin":
+    case "invalid-fields":
+    case "date-outside-perjadin":
+    case "school-not-on-perjadin":
+    case "times-out-of-order":
+    case "sppd-exists":
+      return fieldsRefusalText(result);
+    default:
+      return driveRefusalText(result);
+  }
+}
+
+/** Why the document was not recorded. Nothing was written, so the form keeps every value. */
+export function recordRefusalText(
+  result: Exclude<RecordDocumentActionResult, { outcome: "recorded" }>,
+): string {
+  switch (result.outcome) {
+    case "no-such-perjadin":
+    case "invalid-fields":
+    case "date-outside-perjadin":
+    case "school-not-on-perjadin":
+    case "times-out-of-order":
+    case "sppd-exists":
+      return fieldsRefusalText(result);
     case "file-unverified":
       return "Berkas tidak dapat diperiksa di Google Drive — unggah ulang.";
     case "not-pdf":

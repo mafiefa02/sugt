@@ -10,10 +10,13 @@ import type { DocumentFields, DocumentFieldsRefusal } from "@sugt/db/queries";
 /** The one PDF the dialog is about to upload: its size and the browser's word for its type. */
 export type DocumentToOpen = { size: number; contentType: string };
 
-/** What `openDocumentSessionAction` did: a session URI, or why none. */
+/**
+ * What `openDocumentSessionAction` did: a session URI, or why none — the fields' refusals included,
+ * so a document the record would refuse is never uploaded first.
+ */
 export type OpenDocumentSessionResult =
   | { outcome: "ready"; sessionUri: string }
-  | { outcome: "no-such-perjadin" }
+  | DocumentFieldsRefusal
   /** Not a PDF, by the browser's word. The server sniffs the bytes again once they land. */
   | { outcome: "not-pdf" }
   | { outcome: "too-large"; limit: number }
