@@ -511,7 +511,8 @@ export type PerjadinFixture = {
   subClusterName?: string;
   startsOn?: string;
   endsOn?: string;
-  advanceIdr: number;
+  /** Uang Perjalanan; `null` is a trip planned without one, not yet filled in (#437). */
+  advanceIdr: number | null;
   /**
    * Where the trip goes. A Perjadin needs one, so `addPerjadin` builds a throwaway Cluster
    * and Sub-Cluster when a test does not supply this — the Schools-belong-to-the-Sub-Cluster

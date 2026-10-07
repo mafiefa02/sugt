@@ -60,7 +60,11 @@ const tripFolderName = (trip: { id: string }, dates = "12–16 Okt 2026") =>
  * connected — with its Dokumen folders, unless `dokumen` is false: a connection made before them.
  */
 async function scene(
-  options: { connection?: "connected" | "broken" | "none"; dokumen?: boolean } = {},
+  options: {
+    connection?: "connected" | "broken" | "none";
+    dokumen?: boolean;
+    advanceIdr?: number | null;
+  } = {},
 ) {
   const staff = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
   await addGrant(staff.id, "Administrator");
@@ -80,7 +84,7 @@ async function scene(
     provinceCode: "KT",
   });
   const trip = await addPerjadin({
-    advanceIdr: 5_000_000,
+    advanceIdr: options.advanceIdr === undefined ? 5_000_000 : options.advanceIdr,
     picPersonId: staff.id,
     subClusterId: subCluster.id,
     startsOn: "2026-10-12",
@@ -220,6 +224,18 @@ describe("an upload, recorded and reconciled", () => {
       action: "document_uploaded",
       details: { documentId: result.documentId, schoolName: "SMAN 1/Bontang", timeZone: "WITA" },
     });
+  });
+
+  it("records a sheet while Uang Perjalanan is not filled in yet (#437)", async () => {
+    const { trip, school } = await scene({ advanceIdr: null });
+    const fileId = await upload(trip.id, pdf());
+
+    await expect(recordDocumentAction(pesertaSheet(trip.id, school.id, fileId))).resolves.toEqual({
+      outcome: "recorded",
+      documentId: expect.any(String),
+      synced: true,
+    });
+    await expect(documents()).resolves.toHaveLength(1);
   });
 
   it("reuses the trip's folders for the next sheet, and makes a folder per kind", async () => {

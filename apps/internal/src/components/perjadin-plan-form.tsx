@@ -184,10 +184,12 @@ function PerjadinPlanForm({
     }));
   }
 
-  /** Every field the database needs before a trip can be written. Teaching Team, Staff, Pimpinan are optional. */
+  /**
+   * Every field the database needs before a trip can be written. Teaching Team, Staff, Pimpinan and
+   * Uang Perjalanan (#437) are optional.
+   */
   const incomplete =
     subClusterId === "" ||
-    trip.advanceIdr === "" ||
     trip.picPersonId === "" ||
     trip.startsOn === "" ||
     trip.endsOn === "" ||
@@ -203,7 +205,8 @@ function PerjadinPlanForm({
         subClusterId,
         startsOn: trip.startsOn,
         endsOn: trip.endsOn,
-        advanceIdr: Number(trip.advanceIdr),
+        // Empty is "not filled in yet" (#437) and sends `null` — never `Number("")`, which is Rp 0.
+        advanceIdr: trip.advanceIdr === "" ? null : Number(trip.advanceIdr),
         picPersonId: trip.picPersonId,
         extraStaffPersonIds: extraStaff,
         teacherNames: teacherNames.map((name) => name.trim()).filter((name) => name !== ""),
@@ -294,12 +297,12 @@ function PerjadinPlanForm({
 
         <Field
           id={advanceId}
-          label="Uang Perjalanan (Rp)"
-          required
+          label="Uang Perjalanan (Rp) — opsional"
         >
           {/*
-            Fixed at planning and transferred before departure, so a Perjadin is never in an
-            unfunded state — which is why this is on the planning form rather than the acquittal.
+            Optional (#437): a trip is often planned before anyone knows its Uang Perjalanan. Left
+            empty it is stored as null — "Belum diisi", never Rp 0 — and filled in later on the
+            Perjadin page; only filing the Laporan waits for it.
 
             A masked text input, not `type="number"`: it groups the thousands as they type so
             a seven-figure advance's magnitude is legible at the point of entry. `advanceIdr` stays
@@ -308,7 +311,6 @@ function PerjadinPlanForm({
           */}
           <Input
             id={advanceId}
-            aria-required="true"
             type="text"
             inputMode="numeric"
             value={trip.advanceIdr === "" ? "" : formatIdr(Number(trip.advanceIdr))}
@@ -669,6 +671,9 @@ function Refused({ result, schools }: { result: PlanPerjadinResult; schools: Pla
             <p>Tanggal selesai tidak boleh lebih awal dari Tanggal mulai.</p>
           )}
           {result.outcome === "no-schools" && <p>Belum ada Sesi pada Perjadin ini.</p>}
+          {result.outcome === "negative-advance" && (
+            <p>Uang Perjalanan tidak boleh kurang dari nol.</p>
+          )}
           {result.outcome === "duplicate-staff" && (
             <p>Setiap Pendamping tambahan harus berbeda, dan bukan PIC.</p>
           )}

@@ -66,7 +66,7 @@ list below exists so nobody later "completes" the schema by adding the rest.
 | Participant                                                  | Not a table. Nobody enrols Participants; one exists in the records only as a name they typed on their own feedback.                                        |
 | Project Team, Final Project                                  | Not stored at all. [ADR-0009](./adr/0009-the-tool-tracks-delivery-not-outcomes.md) is explicit; they reach the public as curated pieces, never as records. |
 | Treasurer                                                    | Not a role. A Treasurer is Staff; what is stored is that an Advance was returned, not to whom.                                                             |
-| Advance                                                      | A column on `perjadin`, not a row. It is fixed at planning and never exists independently.                                                                 |
+| Advance                                                      | A column on `perjadin`, not a row. Set at planning or later (null until then, #437) and never exists independently.                                        |
 | Report deadline                                              | Not a column. Two days after the Group returns, derived from `perjadin.ends_on` and a constant.                                                            |
 | Aspect                                                       | Not a table and not a value. Every Aspect on all four evaluations is a **column**; `@sugt/domain` names each rubric.                                       |
 | Rating                                                       | Not a table. A Rating is one Aspect column on one row of an evaluation.                                                                                    |
@@ -1186,7 +1186,7 @@ create table perjadin (
   starts_on                   date not null,
   ends_on                     date not null,
 
-  advance_idr                 bigint not null check (advance_idr >= 0),
+  advance_idr                 bigint check (advance_idr >= 0),
 
   pic_person_id               uuid not null,
   pic_role                    text not null default 'Staff' check (pic_role = 'Staff'),
@@ -1234,8 +1234,12 @@ alter table perjadin
   deferrable initially deferred;
 ```
 
-`advance_idr` is NOT NULL because the Advance is fixed at planning and transferred before
-departure — a Perjadin is never in an unfunded state, so there is no nullable phase to model.
+`advance_idr` is **nullable** (#437, migration 0045). Null means "not filled in yet": a trip is often
+planned before anyone knows its Advance. It is never the same as 0, which stays a real amount, and
+`perjadin_advance_check` passes for null. Three rules the application holds, not the database:
+once set it can be changed but not cleared (`updatePerjadinAdvance` answers `advance-required`);
+the remainder is null while it is (never `null − spend`); and `filePerjadinReport` refuses with
+`advance-missing` — the one write that waits for it. Rows that existed before kept their values.
 
 **There is no `report_deadline` column.** The Report is due two days after the Group gets back,
 always, so the deadline is `ends_on + REPORT_DEADLINE_DAYS_AFTER_RETURN` and nothing stores it.
@@ -1792,7 +1796,8 @@ or failed write logs nothing. Five writes log today, each through `logActivity` 
 
 | Write                       | `action`               | `details`                                                                         |
 | --------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
-| `planPerjadin`              | `advance_set`          | `{ amountIdr }`                                                                   |
+| `planPerjadin`              | `advance_set`          | `{ amountIdr }`; only when planned with one (#437)                                |
+| `updatePerjadinAdvance`     | `advance_set`          | `{ amountIdr }`, when it fills an unset Advance in for the first time (#437)      |
 | `updatePerjadinAdvance`     | `advance_changed`      | `{ fromIdr, toIdr }`; the old value is read under `for update`; no change, no row |
 | `recordTransaction`         | `transaction_recorded` | `{ transactionId, category, amountIdr, participantType, spentOn, receiptCount }`  |
 | `attachTransactionEvidence` | `evidence_uploaded`    | `{ transactionId, category, amountIdr, spentOn, added, total }`                   |

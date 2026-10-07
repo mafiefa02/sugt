@@ -54,7 +54,11 @@ let folders: ReadyFolders;
 
 /** A Staff PIC, a Pimpinan, a trip, and a line on it holding `held` receipts and no folder yet. */
 async function scene(
-  options: { connection?: "connected" | "broken" | "none"; held?: number } = {},
+  options: {
+    connection?: "connected" | "broken" | "none";
+    held?: number;
+    advanceIdr?: number | null;
+  } = {},
 ) {
   const staff = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
   const pimpinan = await addPerson({
@@ -63,7 +67,7 @@ async function scene(
     role: "Pimpinan",
   });
   const trip = await addPerjadin({
-    advanceIdr: 5_000_000,
+    advanceIdr: options.advanceIdr === undefined ? 5_000_000 : options.advanceIdr,
     picPersonId: staff.id,
     subClusterName: "Kelompok 3",
     startsOn: "2026-10-12",
@@ -168,6 +172,19 @@ describe("five receipts per line, in total", () => {
       synced: true,
     });
     await expect(evidenceOf(line.id)).resolves.toHaveLength(5);
+  });
+
+  it("attaches a receipt while Uang Perjalanan is not filled in yet (#437)", async () => {
+    const { trip, line } = await scene({ held: 1, advanceIdr: null });
+    const ids = await upload(trip.id, [jpeg()], line.id);
+
+    await expect(finalizeReceiptsAction(trip.id, line.id, asReceipts(ids))).resolves.toEqual({
+      outcome: "attached",
+      attached: 1,
+      failed: 0,
+      synced: true,
+    });
+    await expect(evidenceOf(line.id)).resolves.toHaveLength(2);
   });
 
   it("refuses 3 to 6, and anything from 5, before Drive", async () => {

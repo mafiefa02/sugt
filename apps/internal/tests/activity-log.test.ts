@@ -83,8 +83,8 @@ function searchTextOf(entry: ActivityLogEntry, backfilled = false) {
 describe("each money write logs one entry with the change", () => {
   beforeEach(resetDatabase);
 
-  it("planPerjadin logs advance_set with the planned Advance", async () => {
-    const pic = await staff();
+  /** A one-School plan on a real Sub-Cluster, with the Advance a test names. */
+  async function plan(pic: Person, advanceIdr: number | null) {
     await addProvince("JB", "Jawa Barat");
     const cluster = await addCluster({ slug: "alpha", name: "Cluster Alpha" });
     const subCluster = await addSubCluster({
@@ -101,9 +101,9 @@ describe("each money write logs one entry with the change", () => {
       kabupatenKota: "Kota Bandung",
     });
 
-    const result = await planPerjadin(pic, {
+    return planPerjadin(pic, {
       subClusterId: subCluster.id,
-      advanceIdr: 15_000_000,
+      advanceIdr,
       picPersonId: pic.id,
       teacherNames: [],
       pimpinan: [],
@@ -118,6 +118,11 @@ describe("each money write logs one entry with the change", () => {
       startsOn: "2026-10-12",
       endsOn: "2026-10-15",
     });
+  }
+
+  it("planPerjadin logs advance_set with the planned Advance", async () => {
+    const pic = await staff();
+    const result = await plan(pic, 15_000_000);
     if (result.outcome !== "planned") throw new Error(result.outcome);
 
     const logged = await entries();
@@ -131,6 +136,37 @@ describe("each money write logs one entry with the change", () => {
       searchText: "uang perjalanan ditetapkan · rp15.000.000",
       backfilled: false,
     });
+  });
+
+  it("planPerjadin logs advance_set for Rp 0 — zero is an amount, not an empty field (#437)", async () => {
+    const pic = await staff();
+    const result = await plan(pic, 0);
+    if (result.outcome !== "planned") throw new Error(result.outcome);
+
+    await expect(entries()).resolves.toMatchObject([
+      { action: "advance_set", details: { amountIdr: 0 } },
+    ]);
+  });
+
+  it("planPerjadin without an Advance stores null and logs nothing about it (#437)", async () => {
+    const pic = await staff();
+    const result = await plan(pic, null);
+    if (result.outcome !== "planned") throw new Error(result.outcome);
+
+    const [row] = await db
+      .select({ advanceIdr: schema.perjadin.advanceIdr })
+      .from(schema.perjadin)
+      .where(eq(schema.perjadin.id, result.perjadinId));
+    expect(row).toEqual({ advanceIdr: null });
+    await expect(entries()).resolves.toEqual([]);
+  });
+
+  it("planPerjadin refuses a negative Advance, writing and logging nothing (#437)", async () => {
+    const pic = await staff();
+
+    await expect(plan(pic, -1)).resolves.toEqual({ outcome: "negative-advance" });
+    await expect(db.select().from(schema.perjadin)).resolves.toEqual([]);
+    await expect(entries()).resolves.toEqual([]);
   });
 
   it("planPerjadin's refusal logs nothing", async () => {
@@ -172,6 +208,29 @@ describe("each money write logs one entry with the change", () => {
       details: { fromIdr: 15_000_000, toIdr: 18_500_000 },
       searchText: "uang perjalanan diubah · rp15.000.000 → rp18.500.000",
     });
+  });
+
+  it("updatePerjadinAdvance logs advance_set when it fills an unset Advance in, then advance_changed (#437)", async () => {
+    const pic = await staff();
+    const budi = await staff("budi@ditsama.itb.ac.id", "Budi");
+    const trip = await addPerjadin({ picPersonId: pic.id, advanceIdr: null });
+
+    await expect(updatePerjadinAdvance(budi, trip.id, 12_000_000)).resolves.toEqual({
+      outcome: "updated",
+    });
+    await expect(updatePerjadinAdvance(budi, trip.id, 0)).resolves.toEqual({
+      outcome: "updated",
+    });
+
+    await expect(entries()).resolves.toMatchObject([
+      {
+        actorPersonId: budi.id,
+        action: "advance_set",
+        details: { amountIdr: 12_000_000 },
+        searchText: "uang perjalanan ditetapkan · rp12.000.000",
+      },
+      { action: "advance_changed", details: { fromIdr: 12_000_000, toIdr: 0 } },
+    ]);
   });
 
   it("updatePerjadinAdvance logs nothing when it refuses", async () => {

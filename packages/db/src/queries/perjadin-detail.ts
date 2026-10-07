@@ -549,13 +549,24 @@ export type UpdatePerjadinAdvanceResult =
    * constraint violation. **Zero is allowed** — an unfunded trip is a real state.
    */
   | { outcome: "negative-advance" }
+  /**
+   * An attempt to clear a set Advance back to empty (#437). Once Uang Perjalanan is filled in it can
+   * be changed to any amount, zero included, but never unset — the UI never offers it; this refuses a
+   * hand-made request.
+   */
+  | { outcome: "advance-required" }
   /** The id names no Perjadin — a stale link, which is reachable. */
   | { outcome: "no-such-perjadin" };
 
 /**
- * **Correct a Perjadin's Advance after planning.** Staff-only (money writes stay Staff-only,
- * ADR-0026); reading it is open, so this write is the only place the figure changes after
- * `planPerjadin` set it once.
+ * **Fill in or correct a Perjadin's Advance after planning.** Staff-only (money writes stay
+ * Staff-only, ADR-0026); reading it is open, so this write is the only place the figure changes after
+ * `planPerjadin`.
+ *
+ * **Filling it in for the first time logs `advance_set`** (#437): a Perjadin may be planned without
+ * one, and its first figure is a setting, not a change. A later change logs `advance_changed`.
+ * `null` is accepted only as a no-op on a trip that has none yet; **clearing a set value is refused**
+ * (`advance-required`).
  *
  * **No lifecycle gate.** The correction is allowed at any time, *including after the Perjadin
  * Report is filed* — it is a correction affordance, and the acquittal derives the remainder live
@@ -569,13 +580,13 @@ export type UpdatePerjadinAdvanceResult =
 export async function updatePerjadinAdvance(
   caller: Person,
   perjadinId: string,
-  advanceIdr: number,
+  advanceIdr: number | null,
 ): Promise<UpdatePerjadinAdvanceResult> {
   requireStaff(caller);
 
   // The DB CHECK is the floor; reject a negative value up front so the surface can point at the
   // field rather than showing a raw constraint violation. Not coupled to spend on purpose.
-  if (advanceIdr < 0) return { outcome: "negative-advance" };
+  if (advanceIdr !== null && advanceIdr < 0) return { outcome: "negative-advance" };
 
   return db.transaction(async (tx) => {
     // The old value is read under the row lock, so the Activity Log's from→to (#395) is the value
@@ -587,14 +598,21 @@ export async function updatePerjadinAdvance(
       .for("update");
     if (!trip) return { outcome: "no-such-perjadin" };
 
-    // Saving the figure it already holds is not a change, and logs nothing.
+    // Saving the figure it already holds is not a change, and logs nothing — empty to empty included.
     if (trip.advanceIdr === advanceIdr) return { outcome: "updated" };
 
+    // Once set, it can be changed but never cleared (#437).
+    if (advanceIdr === null) return { outcome: "advance-required" };
+
     await tx.update(perjadin).set({ advanceIdr }).where(eq(perjadin.id, perjadinId));
-    await logActivity(tx, caller, perjadinId, {
-      action: "advance_changed",
-      details: { fromIdr: trip.advanceIdr, toIdr: advanceIdr },
-    });
+    await logActivity(
+      tx,
+      caller,
+      perjadinId,
+      trip.advanceIdr === null
+        ? { action: "advance_set", details: { amountIdr: advanceIdr } }
+        : { action: "advance_changed", details: { fromIdr: trip.advanceIdr, toIdr: advanceIdr } },
+    );
 
     return { outcome: "updated" };
   });

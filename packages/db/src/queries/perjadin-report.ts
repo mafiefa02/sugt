@@ -77,8 +77,11 @@ export type PerjadinAcquittal = {
   schoolNames: string[];
   startsOn: string;
   endsOn: string;
-  /** Fixed at planning and transferred before departure, so never null and never absent. */
-  advanceIdr: number;
+  /**
+   * Uang Perjalanan, or `null` while it is not filled in yet (#437) — never the same as Rp 0. A
+   * Perjadin may be planned before anyone knows it; the Laporan cannot be filed until it is set.
+   */
+  advanceIdr: number | null;
   /**
    * The sum of **every** transaction against the Advance — the "Terpakai" total and the full spend
    * log. Zero when none has been entered. Not the same as what draws the float down (ADR-0029): the
@@ -93,9 +96,10 @@ export type PerjadinAcquittal = {
    * What is left of the **travel float** to hand back: `advance − drawn-down`, where only
    * `ADVANCE_DRAWDOWN_CATEGORIES` (Konsumsi, Lainnya) draw down (ADR-0029). Not `advance − spentIdr`
    * — other categories are recorded but paid outside the float. Negative means the Group overspent
-   * the float.
+   * the float. `null` while the Advance is not set (#437): there is nothing to subtract from, and
+   * `null - x` would silently read as `-x`.
    */
-  remainderIdr: number;
+  remainderIdr: number | null;
   /**
    * **Derived, never stored.** Two days after the Group gets back, so it cannot be typed
    * wrong and it moves by itself if the trip's dates are corrected.
@@ -211,7 +215,7 @@ export async function perjadinAcquittal(
     spentIdr,
     siswaSpentIdr,
     gtkMsSpentIdr,
-    remainderIdr: trip.advanceIdr - drawnDownIdr,
+    remainderIdr: trip.advanceIdr === null ? null : trip.advanceIdr - drawnDownIdr,
     transactions,
     pimpinan,
   };
@@ -538,6 +542,11 @@ export type FilePerjadinReportResult =
   /** Filed already. Re-filing would move the timestamp and lose when it actually happened. */
   | { outcome: "already-filed"; filedAt: Date }
   /**
+   * Uang Perjalanan is not filled in yet (#437). The Laporan accounts for the Advance, so it cannot
+   * be filed without one; nothing else on the trip waits for it.
+   */
+  | { outcome: "advance-missing" }
+  /**
    * At least one line item has no receipt against it. The ids come back so the screen can
    * point at the rows rather than say "something is missing".
    */
@@ -555,6 +564,9 @@ export type FilePerjadinReportResult =
  * A Perjadin with no transactions at all files cleanly. A trip that spent nothing is a real
  * trip, and the vacuous truth is the right answer rather than an edge case to refuse.
  *
+ * **Uang Perjalanan must be set** (#437). A Perjadin may be planned without it, and every other write
+ * on the trip works while it is empty — this is the one place that waits for it.
+ *
  * Nothing else is gated. The deadline is not checked, because DITSAMA sets it for itself and
  * the tool is never stricter than the process it serves.
  */
@@ -566,12 +578,13 @@ export async function filePerjadinReport(
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
-      .select({ reportFiledAt: perjadin.reportFiledAt })
+      .select({ reportFiledAt: perjadin.reportFiledAt, advanceIdr: perjadin.advanceIdr })
       .from(perjadin)
       .where(eq(perjadin.id, perjadinId))
       .for("update");
     if (!trip) return { outcome: "no-such-perjadin" };
     if (trip.reportFiledAt) return { outcome: "already-filed", filedAt: trip.reportFiledAt };
+    if (trip.advanceIdr === null) return { outcome: "advance-missing" };
 
     const unevidenced = await tx
       .select({ id: transaction.id })

@@ -26,6 +26,10 @@ import { useId, useState, useTransition } from "react";
  * `updatePerjadinAdvance` re-checks the role because a Server Action is a public endpoint, so a
  * Pimpinan's page simply never renders it (`canEdit` false → nothing).
  *
+ * **It may be unset** (#437): a Perjadin can be planned without one. The trigger then reads "Isi Uang
+ * Perjalanan" and the field starts empty; the first figure saved is logged as `advance_set`. Once set
+ * it can be changed to any amount, zero included, but not cleared — an empty field cannot be saved.
+ *
  * There is no lifecycle gate — the correction is allowed even after the Report is filed — and no
  * coupling to what has already been spent: an Advance below current spend is a real overspend, so
  * the only floor is `>= 0`.
@@ -36,13 +40,14 @@ function EditAdvance({
   canEdit,
 }: {
   perjadinId: string;
-  advanceIdr: number;
+  advanceIdr: number | null;
   canEdit: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  // A plain digit string, seeded with the current Advance — the masked input strips every non-digit
-  // back out on change, so `Number(...)` and the empty guard stay simple, exactly as the plan form.
-  const [amount, setAmount] = useState(String(advanceIdr));
+  // A plain digit string, seeded with the current Advance (empty while unset, never "null") — the
+  // masked input strips every non-digit back out on change, so `Number(...)` and the empty guard stay
+  // simple, exactly as the plan form.
+  const [amount, setAmount] = useState(advanceIdr === null ? "" : String(advanceIdr));
   const [refusal, setRefusal] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const fieldId = useId();
@@ -50,6 +55,7 @@ function EditAdvance({
   if (!canEdit) return null;
 
   const empty = amount === "";
+  const verb = advanceIdr === null ? "Isi" : "Ubah";
 
   function submit() {
     if (empty) return;
@@ -61,6 +67,10 @@ function EditAdvance({
       }
       if (result.outcome === "negative-advance") {
         setRefusal("Uang Perjalanan tidak boleh kurang dari nol.");
+        return;
+      }
+      if (result.outcome === "advance-required") {
+        setRefusal("Uang Perjalanan yang sudah diisi tidak bisa dikosongkan.");
         return;
       }
       setRefusal("Perjadin ini sudah tidak ada. Muat ulang halaman untuk melihat keadaannya.");
@@ -78,23 +88,25 @@ function EditAdvance({
             variant="outline"
             size="sm"
           >
-            Ubah Uang Perjalanan
+            {verb} Uang Perjalanan
           </Button>
         }
       />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Ubah Uang Perjalanan</DialogTitle>
+          <DialogTitle>{verb} Uang Perjalanan</DialogTitle>
           <DialogDescription>
-            Koreksi jumlah Uang Perjalanan yang diterima. Sisa dihitung ulang otomatis (Uang
-            Perjalanan dikurangi pengeluaran) dan boleh menjadi negatif jika pengeluaran melebihi
-            Uang Perjalanan.
+            {advanceIdr === null ? "Isi" : "Koreksi"} jumlah Uang Perjalanan yang diterima. Sisa
+            dihitung ulang otomatis (Uang Perjalanan dikurangi pengeluaran) dan boleh menjadi
+            negatif jika pengeluaran melebihi Uang Perjalanan.
           </DialogDescription>
         </DialogHeader>
 
         {refusal !== null && (
           <Alert variant="destructive">
-            <AlertTitle>Uang Perjalanan belum diubah.</AlertTitle>
+            <AlertTitle>
+              Uang Perjalanan belum {advanceIdr === null ? "diisi" : "diubah"}.
+            </AlertTitle>
             <AlertDescription>{refusal}</AlertDescription>
           </Alert>
         )}

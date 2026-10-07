@@ -123,11 +123,6 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
   // same way. This one stays a button (the checklist opens from it).
   const preparationTone = progressTone(preparationDone, preparationTotal);
 
-  // The same travel-float remainder the acquittal derives (`advanceIdr - drawnDownIdr`, only
-  // ADVANCE_DRAWDOWN_CATEGORIES draw down — ADR-0029), pinned equal by a query test so the two
-  // screens never show two answers. Shown as is, negative included; only the bar clamps.
-  const remainingIdr = trip.advanceIdr - trip.drawnDownIdr;
-
   return (
     <AccordionItem
       value={trip.id}
@@ -182,21 +177,10 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
       <AccordionPanel className="text-foreground *:px-3 sm:*:px-4">
         <div className="grid gap-6 pt-2 pb-1 lg:grid-cols-[11fr_9fr]">
           <div className="flex min-w-0 flex-col gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Uang Perjalanan</p>
-              <p className="mt-1 font-heading text-lg tabular-nums">
-                Tersisa {formatRupiah(remainingIdr)}
-              </p>
-              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
-                <span>Terpakai {formatRupiah(trip.drawnDownIdr)}</span>
-                <span>{formatRupiah(trip.advanceIdr)}</span>
-              </div>
-              <Progress
-                value={spentPercent(trip.advanceIdr, trip.drawnDownIdr)}
-                aria-label="Uang Perjalanan terpakai"
-                className="mt-2 *:data-[slot=progress-track]:h-3"
-              />
-            </div>
+            <TripMoney
+              advanceIdr={trip.advanceIdr}
+              drawnDownIdr={trip.drawnDownIdr}
+            />
 
             {/* A full-width two-column grid on a phone, each button stretched to its cell. */}
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
@@ -262,6 +246,55 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
         </div>
       </AccordionPanel>
     </AccordionItem>
+  );
+}
+
+/**
+ * **The card's Uang Perjalanan**: Tersisa, Terpakai against the Advance, and the bar.
+ *
+ * Unset (`null`, #437) it reads "Uang Perjalanan belum diisi", with Terpakai but no Tersisa and no
+ * bar — there is nothing to measure against, and `null - x` would silently read as `-x`.
+ */
+function TripMoney({
+  advanceIdr,
+  drawnDownIdr,
+}: {
+  advanceIdr: number | null;
+  drawnDownIdr: number;
+}) {
+  return (
+    <div>
+      {advanceIdr === null ? (
+        // Not filled in yet (#437): no Tersisa and no bar, since there is nothing to
+        // measure against. Terpakai stays — spending does not wait for the Advance.
+        <>
+          <p className="font-heading text-lg">Uang Perjalanan belum diisi</p>
+          <p className="mt-1 text-sm tabular-nums">Terpakai {formatRupiah(drawnDownIdr)}</p>
+        </>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">Uang Perjalanan</p>
+          {/*
+          The same travel-float remainder the acquittal derives (`advanceIdr -
+          drawnDownIdr`, only ADVANCE_DRAWDOWN_CATEGORIES draw down — ADR-0029), pinned
+          equal by a query test so the two screens never show two answers. Shown as is,
+          negative included; only the bar clamps.
+        */}
+          <p className="mt-1 font-heading text-lg tabular-nums">
+            Tersisa {formatRupiah(advanceIdr - drawnDownIdr)}
+          </p>
+          <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
+            <span>Terpakai {formatRupiah(drawnDownIdr)}</span>
+            <span>{formatRupiah(advanceIdr)}</span>
+          </div>
+          <Progress
+            value={spentPercent(advanceIdr, drawnDownIdr)}
+            aria-label="Uang Perjalanan terpakai"
+            className="mt-2 *:data-[slot=progress-track]:h-3"
+          />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -435,4 +468,4 @@ function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: Upl
   );
 }
 
-export { MyPerjadinSection, TripTimeline };
+export { MyPerjadinSection, TripMoney, TripTimeline };

@@ -89,7 +89,11 @@ function isoBmff(brand: string, size = 4096) {
  * 08:00 at "SMAN 1/Bontang", a cancelled one, an online one, and Drive connected.
  */
 async function scene(
-  options: { connection?: "connected" | "broken" | "none"; footage?: boolean } = {},
+  options: {
+    connection?: "connected" | "broken" | "none";
+    footage?: boolean;
+    advanceIdr?: number | null;
+  } = {},
 ) {
   const staff = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
   await addGrant(staff.id, "Administrator");
@@ -109,7 +113,7 @@ async function scene(
     provinceCode: "KT",
   });
   const trip = await addPerjadin({
-    advanceIdr: 5_000_000,
+    advanceIdr: options.advanceIdr === undefined ? 5_000_000 : options.advanceIdr,
     picPersonId: staff.id,
     subClusterId: subCluster.id,
     startsOn: "2026-10-12",
@@ -459,6 +463,13 @@ describe("an upload, recorded and reconciled", () => {
       ["video", "video/quicktime"],
       ["foto", "image/jpeg"],
     ]);
+  });
+
+  it("records footage while Uang Perjalanan is not filled in yet (#437)", async () => {
+    const { session } = await scene({ advanceIdr: null });
+
+    await expect(uploadAndRecord(session.id)).resolves.toMatchObject({ synced: true });
+    await expect(footage()).resolves.toHaveLength(1);
   });
 
   it("commits the row and its Log entry together: the Log refused, the row undone", async () => {

@@ -250,7 +250,7 @@ describe("myPerjadin carries the same money as the acquittal", () => {
     expect(mine.drawnDownIdr).toBe(1_200_000);
     // The acquittal still logs the full 1.5M spend, but its remainder draws down only the 1.2M.
     expect(acquittal.spentIdr).toBe(1_500_000);
-    expect(mine.advanceIdr - mine.drawnDownIdr).toBe(acquittal.remainderIdr);
+    expect(mine.advanceIdr! - mine.drawnDownIdr).toBe(acquittal.remainderIdr);
   });
 
   it("draws nothing down for a trip with no transactions", async () => {

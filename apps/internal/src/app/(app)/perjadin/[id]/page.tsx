@@ -1,3 +1,4 @@
+import { MoneyFigure } from "-/components/money-figure";
 import { EditAdvance } from "-/components/perjadin-advance";
 import { PerjadinDates } from "-/components/perjadin-dates";
 import { PerjadinDokumenList } from "-/components/perjadin-dokumen-list";
@@ -10,7 +11,6 @@ import { PerjadinTeachingTeam } from "-/components/perjadin-teaching-team";
 import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail, perjadinDokumen } from "@sugt/db/queries";
-import { formatRupiah } from "@sugt/domain";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -123,11 +123,12 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
             Laporan jatuh tempo <span className="tabular-nums">{acquittal.reportDueOn}</span>
           </p>
           <dl className="mt-2.5 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-            <Figure
+            <MoneyFigure
               label="Diterima"
               amountIdr={acquittal.advanceIdr}
+              unset="Belum diisi"
             />
-            <Figure
+            <MoneyFigure
               label="Terpakai"
               amountIdr={acquittal.spentIdr}
             />
@@ -136,7 +137,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
               and Lainnya draw down (ADR-0029), so this can differ from Diterima − Terpakai.
               Negative means the Group overspent the float, which is a real state and not an error.
             */}
-            <Figure
+            <MoneyFigure
               label="Sisa"
               amountIdr={acquittal.remainderIdr}
             />
@@ -210,19 +211,6 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         </p>
         <PerjadinDokumenList documents={dokumen?.documents ?? []} />
       </section>
-    </div>
-  );
-}
-
-/**
- * Money in whole rupiah, which is what it is stored as — `numeric(_, 2)` would imply a
- * subunit nobody uses, so there is no cent to render and none is invented here.
- */
-function Figure({ label, amountIdr }: { label: string; amountIdr: number }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="tabular-nums">{formatRupiah(amountIdr)}</dd>
     </div>
   );
 }
