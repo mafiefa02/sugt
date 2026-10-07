@@ -580,7 +580,7 @@ export type TransactionParticipantType = (typeof TRANSACTION_PARTICIPANT_TYPES)[
 
 /**
  * The **Jenis** a Preparation **Checklist Item** carries — the kind of preparation that item tracks,
- * on the Dashboard (`/`) Persiapan tab. Moved down from the Card to each item (#292). A closed set of
+ * on the Dashboard (`/`) Persiapan Program tab. Moved down from the Card to each item (#292). A closed set of
  * four, mirrored by `preparation_checklist_item_jenis_check` character for character (see
  * `packages/db/src/schema/monitoring.ts`).
  *

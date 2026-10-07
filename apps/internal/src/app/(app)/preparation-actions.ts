@@ -31,7 +31,7 @@ import { revalidatePath } from "next/cache";
  * translation the Staff-only surfaces use — because a layout does not run before a Server Action, so
  * hiding the tab's controls (sibling UI ticket) is only a courtesy and the guard is the real gate.
  *
- * Every write that changed something revalidates `/` (the Dashboard, where the Persiapan tab lives)
+ * Every write that changed something revalidates `/` (the Dashboard, where the Persiapan Program tab lives)
  * so the tab re-reads the cards. The
  * reachable refusals (`no-such-card`, `title-required`, `too-many-items`, …) come back as values for
  * the form to place on a field; only the missing Grant throws.

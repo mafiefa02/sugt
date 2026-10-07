@@ -32,7 +32,7 @@ const PREPARATION_WARNING_LEAD_DAYS = 5;
  * never drifts by an hour across a clock change; the result is another `YYYY-MM-DD` that compares
  * lexically against a card's `startsOn` exactly as it compares chronologically.
  */
-function addDays(isoDate: string, days: number): string {
+export function addDays(isoDate: string, days: number): string {
   const ms = Date.parse(`${isoDate}T00:00:00Z`) + days * 86_400_000;
   return new Date(ms).toISOString().slice(0, 10);
 }
