@@ -1,10 +1,12 @@
 import { FeedbackTokenDialog } from "-/components/feedback-token";
+import { FotoVideoSection } from "-/components/foto-video-section";
 import { MODE_LABELS, SessionStatusBadge } from "-/components/session-labels";
 import { SessionRecords } from "-/components/session-records";
 import { SessionWrites } from "-/components/session-writes";
+import { uploadGate } from "-/lib/drive/upload-gate";
 import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
-import { sessionDetail } from "@sugt/db/queries";
+import { sessionDetail, sessionFootageList } from "@sugt/db/queries";
 import { formatSessionStartTimeWithWib } from "@sugt/domain";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -108,6 +110,22 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
           <FeedbackTokenDialog session={session} />
         </div>
       )}
+
+      {/*
+        Foto & Video (#425, ADR-0046): the list for everyone signed in, a Pimpinan included; Hapus
+        and the upload popup for Staff, the upload hidden on a cancelled Session.
+      */}
+      <FotoVideoSection
+        sessionId={session.id}
+        heldOn={session.heldOn}
+        schoolName={session.schoolName}
+        footage={await sessionFootageList(person, session.id)}
+        isStaff={person.role === "Staff"}
+        cancelled={session.status === "cancelled"}
+        uploadGate={
+          person.role === "Staff" ? await uploadGate(person) : { open: false, reason: "" }
+        }
+      />
 
       {person.role === "Staff" && <SessionWrites session={session} />}
     </div>

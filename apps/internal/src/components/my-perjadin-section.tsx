@@ -1,6 +1,7 @@
 "use client";
 
 import { FeedbackTokenDialog } from "-/components/feedback-token";
+import { FotoVideoDialog } from "-/components/foto-video-dialog";
 import { RecordTransaction } from "-/components/laporan-perjadin/acquittal-transactions";
 import { PerjadinDokumenDialog } from "-/components/perjadin-dokumen-dialog";
 import { PerjadinFeedbackTokenDialog } from "-/components/perjadin-feedback-token";
@@ -251,7 +252,10 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               <p className="-mt-2 text-xs text-muted-foreground">{uploadGate.reason}</p>
             )}
 
-            <TripTimeline nodes={tripTimeline(trip)} />
+            <TripTimeline
+              nodes={tripTimeline(trip)}
+              uploadGate={uploadGate}
+            />
           </div>
 
           <AnggotaRoster anggota={trip.anggota} />
@@ -309,7 +313,7 @@ function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
  * with a primary dot. The rail segment below a node is primary only when that node is done; every
  * other segment is muted.
  */
-function TripTimeline({ nodes }: { nodes: TimelineNode[] }) {
+function TripTimeline({ nodes, uploadGate }: { nodes: TimelineNode[]; uploadGate: UploadGate }) {
   if (nodes.length === 0) return null;
 
   return (
@@ -332,7 +336,10 @@ function TripTimeline({ nodes }: { nodes: TimelineNode[] }) {
             className={`flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 ${index < nodes.length - 1 ? "pb-4" : ""}`}
           >
             <span className="sr-only">{node.done ? "Selesai: " : "Belum: "}</span>
-            <SessionNode node={node} />
+            <SessionNode
+              node={node}
+              uploadGate={uploadGate}
+            />
           </div>
         </li>
       ))}
@@ -361,10 +368,12 @@ function TimelineMarker({ done }: { done: boolean }) {
 
 /**
  * `{heldOn} · {start time} · {School}`, then the Session's own controls: **Tandai** only while it is
- * `arranged` (a delivered Session has no transition left, so the pill goes once it lands), and
- * **Feedback** — the Participant-Feedback QR — which stays after delivery.
+ * `arranged` (a delivered Session has no transition left, so the pill goes once it lands),
+ * **Feedback** — the Participant-Feedback QR — which stays after delivery, and **Foto & Video**
+ * (#425), the Session's photos and videos, in both sections since footage is often uploaded after
+ * the trip. It opens even while Drive is down, so the files can be viewed; uploading is closed then.
  */
-function SessionNode({ node }: { node: TimelineNode }) {
+function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: UploadGate }) {
   const { school, session } = node;
   const text = `${session.heldOn} · ${formatSessionStartTimeWithWib(session.startsAt, school.timeZone)} · ${school.name}`;
 
@@ -399,6 +408,25 @@ function SessionNode({ node }: { node: TimelineNode }) {
               aria-label={`Feedback ${text}`}
             >
               Feedback
+            </Button>
+          }
+        />
+        <FotoVideoDialog
+          sessionId={session.sessionId}
+          heldOn={session.heldOn}
+          schoolName={school.name}
+          uploadGate={uploadGate}
+          // `/pendamping` is Staff-only, and the timeline holds no cancelled Session.
+          canUpload
+          canDelete
+          trigger={
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full"
+              aria-label={`Foto & Video ${text}`}
+            >
+              Foto & Video
             </Button>
           }
         />
