@@ -16,6 +16,7 @@ import {
   type Person,
 } from "@sugt/db/queries";
 import type { Grant } from "@sugt/domain";
+import { eq } from "drizzle-orm";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -47,13 +48,26 @@ import {
  */
 
 vi.mock("-/lib/person", () => ({ requirePerson: vi.fn() }));
+// The two Administrator queries, wrapped so a test can assert they never run for anyone else.
+vi.mock("@sugt/db/queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@sugt/db/queries")>();
+  return {
+    ...actual,
+    pendampingOptions: vi.fn(actual.pendampingOptions),
+    pendampingPerjadin: vi.fn(actual.pendampingPerjadin),
+  };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ push: () => undefined, refresh: () => undefined }),
 }));
 
-beforeEach(resetDatabase);
+beforeEach(async () => {
+  await resetDatabase();
+  vi.mocked(pendampingOptions).mockClear();
+  vi.mocked(pendampingPerjadin).mockClear();
+});
 
 async function staffWith(grants: Grant[], fullName: string): Promise<Person> {
   const email = `${fullName.split(" ")[0]!.toLowerCase()}@itb.ac.id`;
@@ -160,14 +174,8 @@ describe("the two queries are an Administrator's", () => {
     );
   });
 
-  it("offers every active Staff Person but the Administrator, by name, with their email", async () => {
+  it("offers every Staff Person but the Administrator, by name, with their email", async () => {
     const who = await people();
-    await addPerson({
-      fullName: "Yudi Lama",
-      email: "yudi@itb.ac.id",
-      role: "Staff",
-      active: false,
-    });
 
     const options = await pendampingOptions(who.sari);
 
@@ -219,6 +227,8 @@ describe("the page", () => {
       expect(html).not.toContain("Rina Nurhayati");
       expect(html).not.toContain("Kelompok 10");
     }
+    expect(pendampingOptions).not.toHaveBeenCalled();
+    expect(pendampingPerjadin).not.toHaveBeenCalled();
 
     // Rina's own page is unchanged by the same URL.
     const forRina = await render(who.rina, url);
@@ -293,6 +303,8 @@ describe("a write on Pendamping Lain is the Administrator's", () => {
     const [tick] = await db.select().from(schema.perjadinPreparationTick);
     expect(tick?.checkedBy).toBe(who.sari.id);
 
+    // Tandai is status-only: it writes no Log entry and the Session stores no actor, so what holds
+    // for it is that the Administrator's own call lands.
     await expect(markSessionDelivered(who.sari, a.sessionId)).resolves.toEqual({
       outcome: "delivered",
     });
@@ -307,7 +319,10 @@ describe("a write on Pendamping Lain is the Administrator's", () => {
         documentDate: "2026-10-12",
       }),
     ).resolves.toEqual({ outcome: "recorded" });
-    const [entry] = await db.select().from(schema.activityLog);
-    expect(entry?.actorPersonId).toBe(who.sari.id);
+    const entries = await db
+      .select()
+      .from(schema.activityLog)
+      .where(eq(schema.activityLog.action, "document_uploaded"));
+    expect(entries.map((entry) => entry.actorPersonId)).toEqual([who.sari.id]);
   });
 });

@@ -198,6 +198,7 @@ export {
   type MyPerjadinStaff,
   type MyPerjadinTrip,
   type PendampingOption,
+  type PendampingPerjadinResult,
 } from "./my-perjadin";
 export {
   togglePreparationItem,

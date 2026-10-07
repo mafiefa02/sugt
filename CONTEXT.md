@@ -160,7 +160,7 @@ An optional, revocable, **Staff-only** capability a **Person** may hold — a **
 _Avoid_: role (a Role is the one write-once axis; a Grant is the second, additive one), permission, scope, claim
 
 **Administrator**:
-The **Grant** that administers Grants — an Administrator assigns and revokes any Grant on any **Staff** Person, including making another Administrator — and that **implies every other Grant**, so an Administrator can do anything a Grant gates. The first Administrator is seeded outside the tool (the founding-Staff seed grants it), because there is otherwise no one who could grant it. It alone also views another Staff Person's `/pendamping` (#440), writing there as itself. Held only by Staff, like every Grant.
+The **Grant** that administers Grants — an Administrator assigns and revokes any Grant on any **Staff** Person, including making another Administrator — and that **implies every other Grant**, so an Administrator can do anything a Grant gates. The first Administrator is seeded outside the tool (the founding-Staff seed grants it), because there is otherwise no one who could grant it. Held only by Staff, like every Grant.
 _Avoid_: admin, superuser, owner (it is a Grant a Staff Person holds, not a Role or an account tier)
 
 **Editor**:

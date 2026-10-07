@@ -30,7 +30,7 @@ export const metadata: Metadata = { title: "Pendamping" };
  * carries is open to read (ADR-0026), so it needs no Staff choke point.
  *
  * **An Administrator gets two tabs** (#440): **Anda**, which is this page, and **Pendamping Lain**,
- * where they pick any other active Staff Person and see that Person's two sections exactly as that
+ * where they pick any other Staff Person and see that Person's two sections exactly as that
  * Person does, with no greeting — to show someone how to use their own page. The tab and the Person
  * are in the URL (`?tab=lain&pendamping=<id>`); for anyone else the server never reads them.
  */
@@ -38,44 +38,34 @@ export default async function Page({ searchParams }: PageProps<"/pendamping">) {
   const person = await requirePerson();
   if (person.role !== "Staff") redirect("/");
 
-  // Each trip card's Catat Transaksi is closed, with the reason, while Drive is (ADR-0040). Always
-  // the viewer's gate, on Pendamping Lain too: the viewer is who uploads.
-  const gate = await uploadGate(person);
-
   // **Anyone but an Administrator gets today's page**, and `searchParams` is never read for them:
   // `?tab=lain&pendamping=<id>` changes nothing, and nothing of anyone else is loaded or sent.
-  if (!hasGrant(person, "Administrator")) {
-    return (
+  const params = hasGrant(person, "Administrator") ? await searchParams : null;
+  const tab: PendampingTab = params?.tab === "lain" ? "lain" : "anda";
+
+  // Each trip card's Catat Transaksi is closed, with the reason, while Drive is (ADR-0040). Always
+  // the viewer's gate, on Pendamping Lain too: the viewer is who uploads.
+  if (params === null || tab === "anda") {
+    const [trips, gate] = await Promise.all([myPerjadin(person), uploadGate(person)]);
+    const own = (
       <OwnPage
         person={person}
-        trips={await myPerjadin(person)}
+        trips={trips}
         gate={gate}
       />
     );
-  }
-
-  const params = await searchParams;
-  const tab: PendampingTab = params.tab === "lain" ? "lain" : "anda";
-
-  if (tab === "anda") {
     return (
       <PageFrame>
-        <PendampingTabs tab="anda">
-          <OwnPage
-            person={person}
-            trips={await myPerjadin(person)}
-            gate={gate}
-            framed={false}
-          />
-        </PendampingTabs>
+        {params === null ? own : <PendampingTabs tab="anda">{own}</PendampingTabs>}
       </PageFrame>
     );
   }
 
   const chosen = typeof params.pendamping === "string" ? params.pendamping : null;
-  const [options, viewed] = await Promise.all([
+  const [options, viewed, gate] = await Promise.all([
     pendampingOptions(person),
     chosen === null ? null : pendampingPerjadin(person, chosen),
+    uploadGate(person),
   ]);
 
   return (
@@ -109,19 +99,9 @@ function PageFrame({ children }: { children: ReactNode }) {
   return <div className="flex min-h-full flex-col gap-6 px-4 py-5 sm:p-7">{children}</div>;
 }
 
-/** Today's page: the greeting, then the viewer's own trips. `framed` is false inside the tabs. */
-function OwnPage({
-  person,
-  trips,
-  gate,
-  framed = true,
-}: {
-  person: Person;
-  trips: MyPerjadin;
-  gate: UploadGate;
-  framed?: boolean;
-}) {
-  const content = (
+/** Today's page: the greeting, then the viewer's own trips. */
+function OwnPage({ person, trips, gate }: { person: Person; trips: MyPerjadin; gate: UploadGate }) {
+  return (
     <>
       <h1 className="font-heading text-lg font-semibold">
         Selamat datang kembali, {person.fullName}
@@ -137,7 +117,6 @@ function OwnPage({
       />
     </>
   );
-  return framed ? <PageFrame>{content}</PageFrame> : content;
 }
 
 /**

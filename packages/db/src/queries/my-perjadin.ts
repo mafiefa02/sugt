@@ -142,6 +142,11 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
   return perjadinOf(caller.id);
 }
 
+export type PendampingPerjadinResult =
+  | { outcome: "ok"; fullName: string; perjadin: MyPerjadin }
+  /** A Pimpinan's id, an unknown one or a malformed one: no Staff Person to show. */
+  | { outcome: "no-such-pendamping" };
+
 /**
  * **One Staff Person's `/pendamping`, for an Administrator** (#440): the trips that Person sees as
  * theirs, exactly as `myPerjadin` gives them to that Person, for the "Pendamping Lain" tab — the
@@ -156,9 +161,7 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
 export async function pendampingPerjadin(
   caller: Person,
   personId: string,
-): Promise<
-  { outcome: "ok"; fullName: string; perjadin: MyPerjadin } | { outcome: "no-such-pendamping" }
-> {
+): Promise<PendampingPerjadinResult> {
   requireStaff(caller);
   requireGrant(caller, "Administrator");
 
@@ -176,21 +179,18 @@ export async function pendampingPerjadin(
 export type PendampingOption = { id: string; fullName: string; email: string };
 
 /**
- * **Whom "Pendamping Lain" offers** (#440): every active Staff Person but the caller, by name, with
+ * **Whom "Pendamping Lain" offers** (#440): every Staff Person but the caller, by name, with
  * the email the picker also searches. Administrator only, like `pendampingPerjadin`.
  */
 export async function pendampingOptions(caller: Person): Promise<PendampingOption[]> {
   requireStaff(caller);
   requireGrant(caller, "Administrator");
 
-  return (
-    db
-      .select({ id: person.id, fullName: person.fullName, email: person.email })
-      .from(person)
-      // A revoked Person is not offered: they no longer sign in, so there is no page of theirs to show.
-      .where(and(eq(person.role, "Staff"), eq(person.active, true), ne(person.id, caller.id)))
-      .orderBy(asc(person.fullName), asc(person.id))
-  );
+  return db
+    .select({ id: person.id, fullName: person.fullName, email: person.email })
+    .from(person)
+    .where(and(eq(person.role, "Staff"), ne(person.id, caller.id)))
+    .orderBy(asc(person.fullName), asc(person.id));
 }
 
 /**

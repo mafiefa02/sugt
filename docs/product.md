@@ -195,7 +195,7 @@ signing in.
 Staff member how to use `/pendamping` means a screenshot of _their_ page:
 
 - **Anda** is the page described below, greeting included.
-- **Pendamping Lain** has a searchable picker, "Pilih pendamping…", over every active Staff Person
+- **Pendamping Lain** has a searchable picker, "Pilih pendamping…", over every Staff Person
   but the viewer, matching name and email. Choosing one shows that Person's **Perjalanan Dinas
   Anda** and **Perjalanan Dinas Sebelumnya** exactly as they see them — the same titles,
   descriptions and empty state ("Anda belum tergabung dalam Perjalanan Dinas.") — with **no
