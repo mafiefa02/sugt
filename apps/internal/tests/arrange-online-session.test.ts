@@ -15,6 +15,7 @@ import {
   addProvince,
   addSchool,
   addSession,
+  asEditor,
   refusedBy,
   resetDatabase,
 } from "./support/fixtures";
@@ -47,7 +48,8 @@ function nonStaff() {
 }
 
 async function staffCaller(email = "rina@ditsama.itb.ac.id") {
-  return addPerson({ fullName: "Rina Nurhayati", email, role: "Staff" });
+  // Recording an online Session needs the Editor Grant (ADR-0047).
+  return asEditor(await addPerson({ fullName: "Rina Nurhayati", email, role: "Staff" }));
 }
 
 async function oneSchool(slug = "sman-8", name = "SMAN 8") {

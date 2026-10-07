@@ -6,6 +6,7 @@ import {
   cancelSession,
   deleteOnlineSession,
   markSessionDelivered,
+  requireGrant,
   updateOnlineSession,
   type CancelSessionResult,
   type DeleteOnlineSessionResult,
@@ -21,9 +22,9 @@ import { revalidatePath } from "next/cache";
  * it to `@sugt/db`, return what came back.
  *
  * None opens a transaction — the boundary is convention 5's and lives in the query function. None
- * re-checks Staff: `requireStaff` inside each query is the only thing that closes this path, since a
- * layout does not run before a Server Action. `staffSurface` turns that thrown `NotStaffError` into a
- * **403** server-side rather than a crash; every other refusal comes back as a value the client
+ * re-checks Staff: `requireStaff` inside each query — and `requireGrant(…, "Editor")` for the edit and
+ * delete (ADR-0047) — is the only thing that closes this path, since a layout does not run before a
+ * Server Action. `staffSurface` turns a thrown `NotStaffError` or `NotGrantedError` into a **403** server-side rather than a crash; every other refusal comes back as a value the client
  * renders. `revalidatePath` clears the client router cache for the page just written — called only on
  * the outcome that wrote something, since a refused write left the page correct.
  *
@@ -63,25 +64,38 @@ export async function deleteOnlineSessionAction(
  * **Tandai terlaksana** — status only (#152). Legacy for online now (#318): an online Session is born
  * `delivered`, so this reaches only a Session arranged before #318. The shared write with the offline
  * surface; this action revalidates its own route, as convention keeps honest.
+ *
+ * **Editor-only here** (ADR-0047). The query is shared with offline Sessions, where who may write is
+ * ADR-0048's question, so the Grant is checked in this online-only action rather than in the query —
+ * the same panel's edit and delete need it, and a status write must not stay open to whoever cannot.
  */
 export async function markOnlineSessionDeliveredAction(
   sessionId: string,
 ): Promise<MarkDeliveredResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => markSessionDelivered(person, sessionId));
+  const result = await staffSurface(() => {
+    requireGrant(person, "Editor");
+    return markSessionDelivered(person, sessionId);
+  });
   if (result.outcome === "delivered") revalidatePath(`/sesi-daring/${sessionId}`);
   return result;
 }
 
-/** **Batalkan Sesi** — the shared cancel write; the reason travels in the same call, by CHECK. Legacy for online (#318). */
+/**
+ * **Batalkan Sesi** — the shared cancel write; the reason travels in the same call, by CHECK. Legacy
+ * for online (#318). Editor-only here, for the reason Tandai terlaksana above is (ADR-0047).
+ */
 export async function cancelOnlineSessionAction(
   sessionId: string,
   reason: string,
 ): Promise<CancelSessionResult> {
   const person = await requirePerson();
 
-  const result = await staffSurface(() => cancelSession(person, sessionId, reason));
+  const result = await staffSurface(() => {
+    requireGrant(person, "Editor");
+    return cancelSession(person, sessionId, reason);
+  });
   if (result.outcome === "cancelled") revalidatePath(`/sesi-daring/${sessionId}`);
   return result;
 }

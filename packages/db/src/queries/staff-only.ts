@@ -14,7 +14,7 @@ import type { Person } from "./caller";
  * What this choke point guards is money **WRITES** — recording, attaching, settling and filing a
  * transaction, plus the treasurer return — and delivery-*arranging* writes: Jadwalkan Sesi daring
  * and Rencanakan Perjadin are Staff-only because [#9](https://github.com/mafiefa02/sugt/issues/9)
- * says so, and ADR-0004 is silent on it (that ADR opens delivery data to both roles for **reading**
+ * says so (and since ADR-0047 also need the Editor Grant, through `requireGrant` below), and ADR-0004 is silent on it (that ADR opens delivery data to both roles for **reading**
  * and leaves writes with "the record's owner", which a Session nobody has arranged yet does not
  * have). So the guard is one guard and the reasons are two, and neither of them is "this function
  * reads money".
@@ -132,8 +132,8 @@ export class NotGrantedError extends Error {
   constructor(person: Person, grant: Grant) {
     super(
       `A ${grant}-granted surface was handed ${person.role} caller ${person.id}, who holds ` +
-        `[${person.grants.join(", ") || "no grants"}]. A Grant is Staff-only and additive ` +
-        `(ADR-0028); the write that reaches one is refused server-side, so this is a bug in ` +
+        `[${person.grants.join(", ") || "no grants"}]. A Grant is Staff-only ` +
+        `(ADR-0028, ADR-0047); the write that reaches one is refused server-side, so this is a bug in ` +
         `whoever offered the write, not a state a user can reach.`,
     );
   }

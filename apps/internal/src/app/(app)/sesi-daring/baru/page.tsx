@@ -15,9 +15,9 @@ export const metadata: Metadata = { title: "Catat Sesi Daring" };
  * from the nav. The same action also appears on Detail Sekolah, where you already are when thinking
  * about one School.
  *
- * **Staff-only, so the read is too.** `staffSurface` turns `@sugt/db`'s typed refusal into a 403
- * server-side. Without it on the read, a Teaching Team member who reached this URL directly would
- * be shown the whole form and refused only on submit.
+ * **Editor-only (ADR-0047), so the read is too.** `staffSurface` turns `@sugt/db`'s typed refusal
+ * into a 403 server-side. Without it on the read, a Staff member without the Grant who reached this
+ * URL directly would be shown the whole form and refused only on submit.
  *
  * The route sits under its list route as `/sesi-daring/baru`, the way `/perjadin/baru` and the
  * `/cerita/baru` house pattern do (#308).

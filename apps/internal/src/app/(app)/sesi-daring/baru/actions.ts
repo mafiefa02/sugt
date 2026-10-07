@@ -16,8 +16,8 @@ import {
  * - **It opens no transaction.** `arrangeOnlineSession` is a single insert now (#318), and the
  *   boundary rule (convention 5) lives in the query anyway — a Server Action that opened one would
  *   put it somewhere a second caller cannot reuse.
- * - **It re-checks nothing the query checks.** `arrangeOnlineSession` opens with `requireStaff`,
- *   which is what actually closes this path: the signed-in layout does not run before a Server
+ * - **It re-checks nothing the query checks.** `arrangeOnlineSession` opens with `requireStaff`
+ *   and `requireGrant(…, "Editor")` (ADR-0047), which are what actually close this path: the signed-in layout does not run before a Server
  *   Action, so a check written here and not there would protect nothing.
  * - **It does not turn a collision (or a future date) into an error.** Both are user states and come
  *   back as values, which the form renders beside the fields that caused them.
