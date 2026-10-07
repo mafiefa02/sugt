@@ -170,8 +170,9 @@ export async function recordDocumentAction(
  * **Hapus — delete one Perjadin Document** (#398, ADR-0042). **The file is trashed first, then the
  * row**, so a row never vanishes while its public file stays live:
  *
- * 1. **Guard** — Staff, the document and its trip's writer (ADR-0048) — then the connection, before any Drive call. While
- *    Drive is not connected or is broken, Hapus is refused with the upload gate's reason.
+ * 1. **Guard** — Staff, the document and its trip's writer (ADR-0048) — then the connection,
+ *    before any Drive call. While Drive is not connected or is broken, Hapus is refused with the
+ *    upload gate's reason.
  * 2. **Trash the file.** One already in the trash, or gone, counts as done: a retry is safe.
  * 3. **Delete the row and log `document_deleted`**, in one transaction (`deletePerjadinDocument`).
  *    If that fails after the trash, the row stays, pointing at a trashed file; Hapus again ends it.

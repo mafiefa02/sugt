@@ -2,6 +2,15 @@ import { randomUUID } from "node:crypto";
 
 import { markSessionDeliveredFromPendampingAction } from "-/app/(app)/actions";
 import {
+  addPerjadinSessionAction,
+  addPerjadinTeacherAction,
+  cancelPerjadinSessionAction,
+  changePerjadinPicAction,
+  editPerjadinSessionAction,
+  removePerjadinTeacherAction,
+  renamePerjadinTeacherAction,
+  setPerjadinPimpinanAction,
+  setPerjadinStaffAction,
   togglePreparationItemAction,
   updatePerjadinAdvanceAction,
   updatePerjadinDatesAction,
@@ -9,18 +18,27 @@ import {
 import {
   deleteDocumentAction,
   openDocumentSessionAction,
+  recordDocumentAction,
 } from "-/app/(app)/perjadin/[id]/dokumen/actions";
 import {
   filePerjadinReportAction,
+  finalizeReceiptsAction,
   openReceiptSessionsAction,
+  recordTransactionAction,
 } from "-/app/(app)/perjadin/[id]/laporan/actions";
 import LaporanPage from "-/app/(app)/perjadin/[id]/laporan/page";
 import PerjadinDetailPage from "-/app/(app)/perjadin/[id]/page";
 import PerjadinPage from "-/app/(app)/perjadin/page";
-import { markSessionDeliveredAction } from "-/app/(app)/sesi/[id]/actions";
+import {
+  cancelSessionAction,
+  fileSessionRecordAction,
+  markSessionDeliveredAction,
+  moveSessionDateAction,
+} from "-/app/(app)/sesi/[id]/actions";
 import {
   deleteFootageAction,
   openFootageUploadAction,
+  recordFootageAction,
 } from "-/app/(app)/sesi/[id]/foto-video/actions";
 import SesiPage from "-/app/(app)/sesi/[id]/page";
 import { driveAccessToken } from "-/lib/drive/access-token";
@@ -477,6 +495,52 @@ describe("the actions answer a non-member with a 403", () => {
       FORBIDDEN,
     );
     await expect(digestOf(filePerjadinReportAction(a.id))).resolves.toBe(FORBIDDEN);
+  });
+
+  it("on every other write in the ticket's table, each action of its own", async () => {
+    const who = await people();
+    const where = await place();
+    const a = await perjadinA(who, where);
+    signedInAs(who.fajar);
+    const session = {
+      schoolId: where.bontang.id,
+      heldOn: "2026-10-13",
+      startsAt: nextTime(),
+      taughtByTeacherIds: [],
+    };
+
+    const calls: [string, () => Promise<unknown>][] = [
+      ["Group Staff", () => setPerjadinStaffAction(a.id, [])],
+      ["Change PIC", () => changePerjadinPicAction(a.id, who.andi.id)],
+      ["Pimpinan", () => setPerjadinPimpinanAction(a.id, [])],
+      ["Narasumber add", () => addPerjadinTeacherAction(a.id, "Dr. Sari")],
+      ["Narasumber rename", () => renamePerjadinTeacherAction(a.id, a.teacherId, "Dr. Baru")],
+      ["Narasumber remove", () => removePerjadinTeacherAction(a.id, a.teacherId)],
+      ["Session add", () => addPerjadinSessionAction(a.id, session)],
+      ["Session edit", () => editPerjadinSessionAction(a.id, a.arrangedId, session)],
+      ["Session cancel", () => cancelPerjadinSessionAction(a.id, a.arrangedId, "Libur")],
+      ["/sesi cancel", () => cancelSessionAction(a.arrangedId, "Libur")],
+      ["/sesi move", () => moveSessionDateAction(a.arrangedId, "2026-10-13", nextTime())],
+      [
+        "Session Record",
+        () =>
+          fileSessionRecordAction({
+            sessionId: a.deliveredId,
+            ratings: { facilities: 9, turnout: 9, school_support: 9, timing: 9, coordination: 9 },
+            problems: null,
+            suggestions: null,
+          }),
+      ],
+      ["Catat transaksi", () => recordTransactionAction({ perjadinId: a.id } as never)],
+      ["Unggah bukti", () => finalizeReceiptsAction(a.id, a.transactionId, [])],
+      ["Dokumen record", () => recordDocumentAction({ perjadinId: a.id } as never)],
+      ["Foto & Video record", () => recordFootageAction({ sessionId: a.arrangedId } as never)],
+    ];
+
+    for (const [name, call] of calls) {
+      expect([name, await digestOf(call())]).toEqual([name, FORBIDDEN]);
+    }
+    expect(driveAccessToken).not.toHaveBeenCalled();
   });
 
   it("before Drive is asked anything, on every upload opener and both Hapus", async () => {

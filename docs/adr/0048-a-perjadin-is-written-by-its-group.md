@@ -54,7 +54,10 @@ writes. `/pendamping` lists only trips whose Group the viewer is in, so its card
 computed from the viewer.
 
 **Not guarded:** issuing the Evaluasi Perjadin link stays open to anyone signed in, a Pimpinan included
-([ADR-0024](./0024-perjadin-evaluation-is-filed-through-an-unauthenticated-token-link.md)). Reads stay open
+([ADR-0024](./0024-perjadin-evaluation-is-filed-through-an-unauthenticated-token-link.md)). So
+does a Session's **Participant Feedback** QR, on an offline Session as on an online one: it is the
+same kind of act — a token issued, or reissued in place of the last, by whoever is standing in the
+room when the Session ends — and it records nothing about the trip. Reads stay open
 ([ADR-0026](./0026-money-is-open-to-read-and-staff-only-to-write.md)). The Drive bookkeeping that files
 a recorded file into its folder, renames a trip's folders after a write, or reconciles the Drive from
 Periksa koneksi stays Staff-only: it runs after a guarded write, or across every trip at once, and

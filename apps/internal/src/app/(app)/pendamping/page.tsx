@@ -31,7 +31,8 @@ export default async function Page() {
     uploadGate(person),
   ]);
   // The viewer writes every trip listed here (ADR-0048): `myPerjadin` lists only trips whose Group
-  // they are in. Computed from the viewer, so a view of someone else's trips can pass its own.
+  // they are in. Threaded from the viewer as #439 asks, so #440's Pendamping Lain — an
+  // Administrator viewing another person's trips — passes the Administrator's answer.
   const canWrite = true;
 
   return (

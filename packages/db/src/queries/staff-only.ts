@@ -1,10 +1,11 @@
 import type { Grant } from "@sugt/domain";
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
+import type { Executor } from "./preparation-checklist";
 
 /**
  * The Staff-only choke point. **The boundary is now read (any signed-in Person) vs write
@@ -247,43 +248,45 @@ export function isNotOnPerjadinError(error: unknown): error is NotOnPerjadinErro
   );
 }
 
-/** The database or a transaction on it: what the Group membership is read through. */
-type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+/**
+ * **The Perjadin-writer rule as one SQL boolean** (ADR-0048), correlated to the `perjadin` row of
+ * the query it sits in: Staff only, then the Editor Grant (an Administrator implies it) writes every
+ * Perjadin, then anyone else only a trip whose Group — a `group_member` row, the PIC included —
+ * they are in. A Pimpinan recorded on a trip is not in its Group (ADR-0020). The one statement of
+ * the rule: `requirePerjadinWriter`, `canWritePerjadin` and the `/perjadin` directory's per-row
+ * answer all read it. Not exported from the package.
+ */
+export function perjadinWriterSql(person: Person): SQL<boolean> {
+  if (person.role !== "Staff") return sql<boolean>`false`;
+  if (hasGrant(person, "Editor")) return sql<boolean>`true`;
+  return sql<boolean>`exists (
+    select 1 from ${groupMember} gm
+    where gm.perjadin_id = ${perjadin.id} and gm.person_id::text = ${person.id}
+  )`;
+}
 
 /**
- * Is this Person in this Perjadin's Group — a `group_member` row, the PIC included? A Pimpinan
- * recorded on the trip is not (ADR-0020). **`null` when no such Perjadin exists**, so a write on a
- * stale id still answers its own `no-such-perjadin` rather than a refusal — nobody is in a deleted
- * trip's Group, and a stale screen is a state a member can honestly reach. Text compares, so a
- * malformed id is simply no Perjadin rather than a cast error.
+ * May this Person write this Perjadin — or `null` when no such Perjadin exists. A text compare, so
+ * a malformed id is simply no Perjadin rather than a cast error.
  */
-async function inGroup(
+async function writesPerjadin(
   executor: Executor,
   person: Person,
   perjadinId: string,
 ): Promise<boolean | null> {
   const [row] = await executor
-    .select({
-      member: sql<boolean>`exists (
-        select 1 from ${groupMember} gm
-        where gm.perjadin_id = ${perjadin.id} and gm.person_id::text = ${person.id}
-      )`,
-    })
+    .select({ writer: perjadinWriterSql(person) })
     .from(perjadin)
     .where(sql`${perjadin.id}::text = ${perjadinId}`);
-  return row ? row.member : null;
+  return row ? row.writer : null;
 }
 
 /**
  * **May this Person write this Perjadin?** (ADR-0048) The non-throwing twin of
- * `requirePerjadinWriter`, for the UI to decide which write controls to show: Staff only, then
- * Editor (an Administrator implies it) writes every Perjadin, then anyone else only a trip whose
- * Group they are in.
+ * `requirePerjadinWriter`, for the UI to decide which write controls to show.
  */
 export async function canWritePerjadin(person: Person, perjadinId: string): Promise<boolean> {
-  if (person.role !== "Staff") return false;
-  if (hasGrant(person, "Editor")) return true;
-  return (await inGroup(db, person, perjadinId)) === true;
+  return (await writesPerjadin(db, person, perjadinId)) === true;
 }
 
 /**
@@ -296,6 +299,10 @@ export async function canWritePerjadin(person: Person, perjadinId: string): Prom
  * 3. Anyone else writes only a Perjadin whose Group they are in, and is otherwise refused with
  *    `NotOnPerjadinError`.
  *
+ * **A Perjadin that does not exist passes**, so a write on a stale id still answers its own
+ * `no-such-perjadin` as a value: nobody is in a deleted trip's Group, and a stale screen is a state
+ * a member can honestly reach.
+ *
  * Pass the write's own transaction where it has one, so the membership it reads is the state the
  * write commits against: a member who has just left the Group is refused on their next write.
  * Membership is application-enforced, not a database rule (`docs/data-model.md`).
@@ -306,10 +313,9 @@ export async function requirePerjadinWriter(
   executor: Executor = db,
 ): Promise<void> {
   requireStaff(person);
-  if (hasGrant(person, "Editor")) return;
-  // A member passes; so does a Perjadin that does not exist, which the write refuses as a value.
-  if ((await inGroup(executor, person, perjadinId)) !== false) return;
-  throw new NotOnPerjadinError(person, perjadinId);
+  if ((await writesPerjadin(executor, person, perjadinId)) === false) {
+    throw new NotOnPerjadinError(person, perjadinId);
+  }
 }
 
 /**

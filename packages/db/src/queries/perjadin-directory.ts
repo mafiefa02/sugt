@@ -8,7 +8,7 @@ import { groupMember, perjadin, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
 import { tripSchoolNames } from "./perjadin-naming";
 import { preparationChecklists, type PreparationItem } from "./preparation-checklist";
-import { hasGrant } from "./staff-only";
+import { perjadinWriterSql } from "./staff-only";
 
 /**
  * **The Perjadin list** — every trip, open to anyone signed in.
@@ -124,15 +124,6 @@ const sessionsTotal = sql<number>`(
  * so the order is total.
  */
 export async function perjadinDirectory(caller: Person): Promise<DirectoryPerjadin[]> {
-  // Who writes each row (ADR-0048): a Staff Editor or Administrator writes every one; any other Staff
-  // member only those whose Group they are in; a Pimpinan none.
-  const writesEvery = hasGrant(caller, "Editor");
-  const writesOwn = caller.role === "Staff";
-  const inGroup = sql<boolean>`exists (
-    select 1 from ${groupMember} gm
-    where gm.perjadin_id = ${perjadin.id} and gm.person_id::text = ${caller.id}
-  )`;
-
   const trips = await db
     .select({
       id: perjadin.id,
@@ -145,7 +136,8 @@ export async function perjadinDirectory(caller: Person): Promise<DirectoryPerjad
       pengajarNames,
       groupMemberNames,
       schoolNames: tripSchoolNames(perjadin.id),
-      inGroup,
+      // Who writes each row (ADR-0048): the trip's Group, an Editor or an Administrator.
+      canWrite: perjadinWriterSql(caller),
     })
     .from(perjadin)
     .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
@@ -159,11 +151,10 @@ export async function perjadinDirectory(caller: Person): Promise<DirectoryPerjad
   // so the two agree, and `N` is each trip's own.
   const checklists = await preparationChecklists(trips.map((trip) => trip.id));
 
-  return trips.map(({ inGroup: member, ...trip }) => {
+  return trips.map((trip) => {
     const preparation = checklists.get(trip.id) ?? [];
     return {
       ...trip,
-      canWrite: writesEvery || (writesOwn && member),
       // Counted off the trip's Schools (#343, ADR-0044) — one definition for the count, the School
       // line and the search, so the three cannot disagree. A School whose every Session here was
       // cancelled is no longer visited, and counts toward none of them.

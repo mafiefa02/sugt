@@ -21,7 +21,8 @@ import { requirePerjadinWriter, requireSessionWriter, requireStaff } from "./sta
  * and edit one that exists, on `/perjadin/[id]`, so the schedule can be corrected after the trip is
  * planned. Removing a Session is `cancelSession` in `./session-detail.ts`, reused unchanged.
  *
- * Both are **Staff-only**, by the surface list. Every rule the plan form checks against the whole
+ * Both are **Staff-only**, by the surface list, and the trip's Group's, an Editor's or an
+ * Administrator's (`requirePerjadinWriter`, ADR-0048). Every rule the plan form checks against the whole
  * payload — a Session inside the trip's window, at a School of its Sub-Cluster, no two *different*
  * Schools sharing a moment, the ten-per-School ceiling — is re-checked here against the trip's
  * **existing** Sessions plus the one being written, because that is now the whole set. The
