@@ -5,11 +5,12 @@ import {
   DOCUMENT_UNSYNCED_TOOLTIP,
   deleteRefusalText,
   documentRowText,
+  sppdSummary,
 } from "-/components/perjadin-dokumen-form";
 import { UnsyncedMarker } from "-/components/unsynced-marker";
 import { driveFileUrl } from "-/lib/drive/receipt-files";
 import type { UploadGate } from "-/lib/drive/upload-gate";
-import type { PerjadinDocumentRow } from "@sugt/db/queries";
+import type { DocumentSchool, PerjadinDocumentRow } from "@sugt/db/queries";
 import { PERJADIN_DOCUMENT_KINDS } from "@sugt/domain";
 import { Button } from "@sugt/ui/components/button";
 import {
@@ -24,18 +25,22 @@ import {
 import { useState, useTransition } from "react";
 
 /**
- * **A trip's Perjadin Documents, grouped by kind** (ADR-0042): three headings, each sheet with a
+ * **A trip's Perjadin Documents, grouped by kind** (ADR-0042): four headings, each document with a
  * **Buka** link to its PDF in Drive and "belum tersinkron" while it is not yet in place. One list
  * for both places that show it — the Dokumen dialog on a `/pendamping` card, and the read-only
- * section on `/perjadin/[id]` (#398).
+ * section on `/perjadin/[id]` (#398). The SPPD heading carries **SPPD: x/y sekolah** (#441), so a
+ * School still missing its SPPD shows.
  *
  * With `hapus`, each row also carries **Hapus** — the dialog passes it, the trip page does not.
  */
 function PerjadinDokumenList({
   documents,
+  schools,
   hapus,
 }: {
   documents: PerjadinDocumentRow[];
+  /** The trip's Schools, which the SPPD summary counts against. */
+  schools: DocumentSchool[];
   /** Hapus on every row: closed with the gate's reason while Drive cannot take it. */
   hapus?: { gate: UploadGate; onDeleted: () => void };
 }) {
@@ -45,7 +50,14 @@ function PerjadinDokumenList({
         const rows = documents.filter((row) => row.kind === kind);
         return (
           <section key={kind}>
-            <h3 className="text-sm font-medium">{kind}</h3>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <h3 className="text-sm font-medium">{kind}</h3>
+              {kind === "SPPD" && (
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  {sppdSummary(schools)}
+                </span>
+              )}
+            </div>
             {rows.length === 0 ? (
               <p className="mt-1 text-sm text-muted-foreground">Belum ada</p>
             ) : (
@@ -85,7 +97,7 @@ function PerjadinDokumenList({
 
 /**
  * **Hapus** behind a confirmation (#398). The file goes to the Drive trash first, then the row; a
- * refusal — Drive disconnected, or unreachable — leaves the sheet listed and says why.
+ * refusal — Drive disconnected, or unreachable — leaves the document listed and says why.
  */
 function Hapus({
   row,

@@ -1491,8 +1491,8 @@ create table perjadin_document (
   perjadin_id            uuid not null references perjadin (id) on delete cascade,
   kind                   text not null check (kind in
                            ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber',
-                            'Daftar Hadir Pendamping')),
-  document_date          date not null,
+                            'Daftar Hadir Pendamping', 'SPPD')),
+  document_date          date,
   school_id              uuid references school (id),
   participant_type       text check (participant_type in ('Siswa', 'GTK-MS')),
   starts_at              time,
@@ -1504,16 +1504,24 @@ create table perjadin_document (
   uploaded_at            timestamptz not null default now(),
   drive_synced_at        timestamptz,
   drive_sync_failed_at   timestamptz,
-  check ((kind = 'Daftar Hadir Peserta') = (school_id is not null and participant_type is not null
-                                            and starts_at is not null and ends_at is not null)),
-  check (kind = 'Daftar Hadir Peserta' or (school_id is null and participant_type is null
-                                           and starts_at is null and ends_at is null)),
+  -- One CHECK per kind, each that kind's exact shape.
+  check (kind <> 'Daftar Hadir Peserta' or (document_date is not null and school_id is not null
+          and participant_type is not null and starts_at is not null and ends_at is not null)),
+  check (kind not in ('Daftar Hadir Narasumber', 'Daftar Hadir Pendamping')
+          or (document_date is not null and school_id is null and participant_type is null
+              and starts_at is null and ends_at is null)),
+  check (kind <> 'SPPD' or (school_id is not null and document_date is null
+          and participant_type is null and starts_at is null and ends_at is null)),
   check (ends_at > starts_at)
 );
 
+-- At most one SPPD per School on one Perjadin (#441).
+create unique index perjadin_document_sppd_unique
+  on perjadin_document (perjadin_id, school_id) where kind = 'SPPD';
+
 create table perjadin_document_folder (
   perjadin_id      uuid not null references perjadin (id) on delete cascade,
-  kind             text not null check (kind in (…the three…)),
+  kind             text not null check (kind in (…the four…)),
   drive_folder_id  text not null,
   primary key (perjadin_id, kind)
 );
@@ -1521,25 +1529,35 @@ create table perjadin_document_folder (
 alter table perjadin add column drive_dokumen_folder_id text;
 ```
 
-**A Perjadin's attendance sheets, one PDF each** (#397,
-[ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)). `kind` is
+**A Perjadin's paperwork, one PDF each** (#397,
+[ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)): three
+attendance sheets, and each School's **SPPD** (#441). `kind` is
 character for character `PERJADIN_DOCUMENT_KINDS`, and `participant_type` is
 `PERJADIN_DOCUMENT_PARTICIPANT_TYPES`, a const of its own as `PRETEST_PARTICIPANT_TYPES` is.
 
-**The database holds which fields a sheet carries.** A Daftar Hadir Peserta, and only it, has a
-School, a cohort and a session's local start and end; the other two kinds have none of the four.
-The two CHECKs hold that both ways round, and a third holds `ends_at` after `starts_at`. The
+**The database holds which fields a document carries**, one CHECK per kind. A Daftar Hadir
+Peserta has a date, a School, a cohort and a session's local start and end; a Narasumber or
+Pendamping sheet has a date and none of the four; an SPPD has a School and nothing else, not even a
+date — so `document_date` is nullable. Another CHECK holds `ends_at` after `starts_at`, and the
 content type is pinned to PDF.
+
+**At most one SPPD per (Perjadin, School)** is the partial unique index
+`perjadin_document_sppd_unique`. It is per Perjadin, never per School alone: the same School on
+another trip gets its own. `checkDocumentFields` checks it first — the upload opener asks it, so a
+second SPPD is refused before a byte moves (`sppd-exists`) — and `recordPerjadinDocument` asks again
+in its transaction; the index is what holds two uploads racing, the loser's violation coming back
+as the same `sppd-exists`.
 
 **The application holds the rest**, in `recordPerjadinDocument`: `document_date` lies inside the
 trip, and a Peserta sheet's School is one of **the trip's Schools** — it has a non-cancelled
 Session on this Perjadin (`isTripSchool`, the same rule `tripSchoolNames` reads names through) —
 refused as `school-not-on-perjadin` ([#410](https://github.com/sugt-itb/sugt-itb-26/issues/410)).
+An SPPD's School is held to the same rule.
 It used to be the trip's Sub-Cluster, but a Sub-Cluster may be covered by several trips (ADR-0043),
 so that offered Schools this trip never visits. The Dokumen dialog's picker offers exactly that set.
 The rule is checked on a new upload only: a sheet recorded for a School whose Sessions on the trip
 were all cancelled later stays listed and deletable. It cannot be a constraint: it reads the
-Sessions, which change after the sheet is written. There is **no duplicate
+Sessions, which change after the sheet is written. The three attendance kinds have **no duplicate
 rule**: two sheets of one kind and date are two rows, told apart in Drive by `D-{doc8}`.
 
 **The row and its Activity Log entry are written in one transaction**, and the row lands with
@@ -1547,7 +1565,7 @@ rule**: two sheets of one kind and date are two rows, told apart in Drive by `D-
 generated before the insert, because the file's name carries it.
 
 **Folders.** `perjadin.drive_dokumen_folder_id` is the trip's folder under `Dokumen/Pelaksanaan
-Offline`, and `perjadin_document_folder` holds its three kind folders, each made on first use. Both
+Offline`, and `perjadin_document_folder` holds its four kind folders, each made on first use. Both
 are claimed by compare-and-set: the first by `where drive_dokumen_folder_id is null`, the second by
 the primary key, `on conflict do nothing`. A caller that lost trashes its own folder and uses the
 winner's.

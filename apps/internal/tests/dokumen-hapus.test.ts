@@ -82,21 +82,25 @@ async function scene({ synced = true }: { synced?: boolean } = {}) {
   vi.mocked(requirePerson).mockResolvedValue(staff);
 
   const bytes = pdf();
-  const opened = await openDocumentSessionAction(trip.id, {
-    size: bytes.length,
-    contentType: "application/pdf",
-  });
+  const fields = {
+    kind: "Daftar Hadir Peserta",
+    documentDate: "2026-10-14",
+    peserta: { schoolId: school.id, participantType: "Siswa", startsAt: "08:00", endsAt: "11:30" },
+  } as const;
+  const opened = await openDocumentSessionAction(
+    trip.id,
+    { size: bytes.length, contentType: "application/pdf" },
+    fields,
+  );
   if (opened.outcome !== "ready") throw new Error(opened.outcome);
   const fileId = drive.land(opened.sessionUri, bytes).id;
   if (!synced) {
     vi.spyOn(drive, "updateFile").mockRejectedValueOnce(new DriveRequestError("files.update", 500));
   }
   const recorded = await recordDocumentAction({
+    ...fields,
     perjadinId: trip.id,
     driveFileId: fileId,
-    kind: "Daftar Hadir Peserta",
-    documentDate: "2026-10-14",
-    peserta: { schoolId: school.id, participantType: "Siswa", startsAt: "08:00", endsAt: "11:30" },
   });
   if (recorded.outcome !== "recorded") throw new Error(recorded.outcome);
   drive.calls = 0;

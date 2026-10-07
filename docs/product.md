@@ -270,12 +270,14 @@ described "Upload dokumentasi kegiatan luring untuk sesi ini"
   with the reason said as text.
 
 **Dokumen**, beside Catat Transaksi on every card in both sections, opens **"Dokumen —
-{name}"**: the trip's attendance sheets
+{name}"**: the trip's attendance sheets and each School's SPPD
 ([ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)).
 
-- **The list**, under three headings: Daftar Hadir Peserta, Daftar Hadir Narasumber and Daftar
-  Hadir Pendamping. A Peserta sheet reads `2026-10-14 · SMA Y · Siswa · 08.00–11.30 WITA`; the
-  other two read their date. Each has a **Buka** link that opens the PDF in Drive in a new tab, and
+- **The list**, under four headings: Daftar Hadir Peserta, Daftar Hadir Narasumber, Daftar Hadir
+  Pendamping and SPPD. A Peserta sheet reads `2026-10-14 · SMA Y · Siswa · 08.00–11.30 WITA`; the
+  Narasumber and Pendamping sheets read their date; an SPPD reads its School. The SPPD heading
+  carries **"SPPD: x/y sekolah"** — how many of the trip's Schools have their SPPD — so a missing
+  one shows. Each has a **Buka** link that opens the PDF in Drive in a new tab, and
   "belum tersinkron" while it is not yet in place there. An empty heading says "Belum ada".
 - **Unggah dokumen**: pick the **Jenis dokumen**, then its fields.
   - A Peserta sheet asks for **Tanggal Sesi**, **Waktu Mulai** and **Waktu Selesai** (with the
@@ -286,6 +288,11 @@ described "Upload dokumentasi kegiatan luring untuk sesi ini"
     School that has since left the trip stays listed and can still be deleted.
   - A Narasumber or Pendamping sheet asks for **Tanggal Dokumen**.
   - Both dates are limited to the trip's.
+  - An **SPPD** asks only for **Sekolah**: the trip's Schools, each one that already has its SPPD
+    on this trip marked **"sudah ada"** and not selectable. One School has at most one SPPD per
+    Perjadin; a second is refused before the upload starts with "{School} sudah punya SPPD untuk
+    Perjadin ini. Hapus dulu untuk menggantinya." Hapus then a new upload replaces it. The same
+    School on another Perjadin has its own.
   - **File**: one PDF, "1 file .pdf, maks. 50 MB". Anything else is refused with "Hanya file .pdf",
     and a larger file with the 50 MB message, before anything is uploaded.
 - **Unggah** uploads the PDF straight to Drive and records it. Any refusal keeps every field and
@@ -521,9 +528,9 @@ trip's own.
 
 The levels are edited on [Pengaturan Perjadin](#pengaturan-perjadin--the-preparation-checklist).
 
-**A Perjadin's screen ends with its Dokumen**: the attendance sheets uploaded from the
-`/pendamping` card, under the three kinds, each with a **Buka** link and "belum tersinkron" while it
-is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
+**A Perjadin's screen ends with its Dokumen**: the attendance sheets and SPPDs uploaded from the
+`/pendamping` card, under the four kinds with the "SPPD: x/y sekolah" summary, each with a **Buka**
+link and "belum tersinkron" while it is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
 uploading and Hapus happen in the card's Dokumen dialog.
 
 **The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):
@@ -931,8 +938,10 @@ SUGT ITB 2026 Internal App Object Storage/
 │       └── 2026-10-12 · Konsumsi · T-9f8e7d6c/          shared by link (the whole folder)
 ├── Dokumen/Pelaksanaan Offline/
 │   └── Kelompok 12 · 11–14 Okt 2026 · … · P-1a2b3c4d/
-│       └── Daftar Hadir Peserta/
-│           └── 2026-10-12 · SMA Pradita Dirgantara · Siswa · Daftar Hadir Peserta · D-5c6d7e8f.pdf   shared
+│       ├── Daftar Hadir Peserta/
+│       │   └── 2026-10-12 · SMA Pradita Dirgantara · Siswa · Daftar Hadir Peserta · D-5c6d7e8f.pdf   shared
+│       └── SPPD/
+│           └── SMA Pradita Dirgantara · SPPD · D-1a2b3c4d.pdf   shared
 └── Foto & Video/Pelaksanaan Offline/
     └── Kelompok 12 · 11–14 Okt 2026 · … · P-1a2b3c4d/
         └── 2026-10-12 · 08.00 · SMA Pradita Dirgantara · S-3e4f5a6b/   one per offline Session

@@ -13,7 +13,7 @@ import { PELAKSANAAN_OFFLINE_FOLDER_NAME, type ReadyFolders } from "-/lib/drive/
 import { DriveRequestError, openDrive } from "-/lib/drive/google";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
-import { claimDokumenFolder, type Person } from "@sugt/db/queries";
+import { claimDokumenFolder, type DocumentFields, type Person } from "@sugt/db/queries";
 import { MAX_UPLOAD_BYTES } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -103,11 +103,32 @@ async function scene(
   return { staff: admin, pimpinan, trip, school };
 }
 
-/** The dialog's upload: open the session, then the browser's `PUT`. Answers the file's id. */
-async function upload(perjadinId: string, bytes: Uint8Array, contentType = "application/pdf") {
-  const opened = await openDocumentSessionAction(perjadinId, { size: bytes.length, contentType });
+/** A Narasumber sheet's fields: valid on every trip here, whatever the file is then recorded as. */
+const NARASUMBER: DocumentFields = { kind: "Daftar Hadir Narasumber", documentDate: "2026-10-13" };
+
+/**
+ * The dialog's upload: open the session for the document's fields, then the browser's `PUT`.
+ * Answers the file's id.
+ */
+async function upload(perjadinId: string, bytes: Uint8Array, fields = NARASUMBER) {
+  const opened = await openDocumentSessionAction(
+    perjadinId,
+    { size: bytes.length, contentType: "application/pdf" },
+    fields,
+  );
   if (opened.outcome !== "ready") throw new Error(`Session refused: ${opened.outcome}`);
   return drive.land(opened.sessionUri, bytes).id;
+}
+
+/** An SPPD for `schoolId` (#441): a School, no date. */
+function sppd(perjadinId: string, schoolId: string, driveFileId: string): DocumentToRecord {
+  return {
+    perjadinId,
+    driveFileId,
+    kind: "SPPD",
+    documentDate: null,
+    sppd: { schoolId },
+  };
 }
 
 function pesertaSheet(perjadinId: string, schoolId: string, driveFileId: string): DocumentToRecord {
@@ -139,7 +160,13 @@ describe("no Drive call before the guard", () => {
     vi.mocked(requirePerson).mockResolvedValue(pimpinan as Person);
 
     await expect(
-      digestOf(openDocumentSessionAction(trip.id, { size: 10, contentType: "application/pdf" })),
+      digestOf(
+        openDocumentSessionAction(
+          trip.id,
+          { size: 10, contentType: "application/pdf" },
+          NARASUMBER,
+        ),
+      ),
     ).resolves.toBe(FORBIDDEN);
     await expect(
       digestOf(
@@ -158,13 +185,14 @@ describe("no Drive call before the guard", () => {
     const { trip } = await scene();
 
     await expect(
-      openDocumentSessionAction(trip.id, { size: 10, contentType: "image/jpeg" }),
+      openDocumentSessionAction(trip.id, { size: 10, contentType: "image/jpeg" }, NARASUMBER),
     ).resolves.toEqual({ outcome: "not-pdf" });
     await expect(
-      openDocumentSessionAction(trip.id, {
-        size: MAX_UPLOAD_BYTES + 1,
-        contentType: "application/pdf",
-      }),
+      openDocumentSessionAction(
+        trip.id,
+        { size: MAX_UPLOAD_BYTES + 1, contentType: "application/pdf" },
+        NARASUMBER,
+      ),
     ).resolves.toEqual({ outcome: "too-large", limit: MAX_UPLOAD_BYTES });
     expect(drive.calls).toBe(0);
   });
@@ -173,7 +201,7 @@ describe("no Drive call before the guard", () => {
     const { trip } = await scene({ connection: "none" });
 
     await expect(
-      openDocumentSessionAction(trip.id, { size: 10, contentType: "application/pdf" }),
+      openDocumentSessionAction(trip.id, { size: 10, contentType: "application/pdf" }, NARASUMBER),
     ).resolves.toEqual({
       outcome: "drive-disconnected",
       reason: expect.stringMatching(/^Google Drive belum terhubung/),
@@ -332,6 +360,103 @@ describe("an upload, recorded and reconciled", () => {
     expect(report.documents).toEqual({ synced: 1, waiting: 0, failures: [] });
     const [synced] = await documents();
     expect(synced!.driveSyncedAt).toBeInstanceOf(Date);
+    expect(drive.files.get(fileId)!.permissions).toHaveLength(1);
+  });
+});
+
+describe("an SPPD (#441)", () => {
+  it("is filed as {school} · SPPD · D-{doc8}.pdf in its own SPPD folder, the file shared and logged", async () => {
+    const { staff, trip, school } = await scene();
+    const fields = sppd(trip.id, school.id, "");
+    const fileId = await upload(trip.id, pdf(), fields);
+
+    const result = await recordDocumentAction({ ...fields, driveFileId: fileId });
+
+    expect(result).toEqual({ outcome: "recorded", documentId: expect.any(String), synced: true });
+    if (result.outcome !== "recorded") return;
+    const doc8 = result.documentId.replaceAll("-", "").slice(0, 8);
+    const file = drive.files.get(fileId)!;
+    expect(file.name).toBe(`SMAN 1-Bontang · SPPD · D-${doc8}.pdf`);
+    const kindFolder = drive.files.get(file.parents[0]!)!;
+    expect(kindFolder.name).toBe("SPPD");
+    const tripFolder = drive.files.get(kindFolder.parents[0]!)!;
+    expect(tripFolder.name).toBe(tripFolderName(trip));
+    expect(file.permissions).toEqual([expect.objectContaining({ type: "anyone", role: "reader" })]);
+    for (const folder of [kindFolder, tripFolder]) expect(folder.permissions).toEqual([]);
+
+    await expect(documents()).resolves.toMatchObject([
+      { kind: "SPPD", schoolId: school.id, documentDate: null, participantType: null },
+    ]);
+    const [entry] = await logged();
+    expect(entry).toMatchObject({
+      actorPersonId: staff.id,
+      action: "document_uploaded",
+      details: { kind: "SPPD", documentDate: null, schoolName: "SMAN 1/Bontang" },
+      searchText: "dokumen diunggah · sppd · sman 1/bontang",
+    });
+  });
+
+  it("refuses a second one for the same School on this trip before the upload opens", async () => {
+    const { trip, school } = await scene();
+    const fields = sppd(trip.id, school.id, "");
+    await recordDocumentAction({ ...fields, driveFileId: await upload(trip.id, pdf(), fields) });
+    drive.calls = 0;
+
+    await expect(
+      openDocumentSessionAction(
+        trip.id,
+        { size: 40 * 1024 * 1024, contentType: "application/pdf" },
+        fields,
+      ),
+    ).resolves.toEqual({ outcome: "sppd-exists", schoolName: "SMAN 1/Bontang" });
+    // No session opened: nothing was asked of Drive at all.
+    expect(drive.calls).toBe(0);
+  });
+
+  it("is refused at the record too, leaving the loser's file unnamed in _staging", async () => {
+    const { trip, school } = await scene();
+    const fields = sppd(trip.id, school.id, "");
+    // Both opened before either recorded: the open's early answer could not refuse the second.
+    const first = await upload(trip.id, pdf(), fields);
+    const second = await upload(trip.id, pdf(), fields);
+    await recordDocumentAction({ ...fields, driveFileId: first });
+
+    await expect(recordDocumentAction({ ...fields, driveFileId: second })).resolves.toEqual({
+      outcome: "sppd-exists",
+      schoolName: "SMAN 1/Bontang",
+    });
+    expect(drive.files.get(second)!.parents).toEqual([folders.stagingFolderId]);
+    expect(drive.files.get(second)!.permissions).toEqual([]);
+    await expect(documents()).resolves.toHaveLength(1);
+    await expect(logged()).resolves.toHaveLength(1);
+  });
+
+  it("is finished by Periksa koneksi's sweep with no special case, and named by School if it fails", async () => {
+    const { staff, trip, school } = await scene();
+    const fields = sppd(trip.id, school.id, "");
+    const fileId = await upload(trip.id, pdf(), fields);
+    vi.spyOn(drive, "createPermission").mockRejectedValueOnce(
+      new DriveRequestError("permissions.create", 500),
+    );
+    await expect(recordDocumentAction({ ...fields, driveFileId: fileId })).resolves.toMatchObject({
+      outcome: "recorded",
+      synced: false,
+    });
+
+    // Periksa koneksi, failing again, names the SPPD by its School: it has no date.
+    vi.spyOn(drive, "createPermission").mockRejectedValueOnce(
+      new DriveRequestError("permissions.create", 500),
+    );
+    const check = await checkDriveConnectionAction();
+    expect(describeDriveCheck(check).failures).toEqual([
+      expect.stringMatching(/^SPPD · SMAN 1\/Bontang: /),
+    ]);
+
+    const report = await sweepUnsynced(staff, drive, folders);
+    expect(report.documents).toEqual({ synced: 1, waiting: 0, failures: [] });
+    const [row] = await documents();
+    expect(row!.driveSyncedAt).toBeInstanceOf(Date);
+    expect(drive.files.get(fileId)!.name).toMatch(/^SMAN 1-Bontang · SPPD · D-[0-9a-f]{8}\.pdf$/);
     expect(drive.files.get(fileId)!.permissions).toHaveLength(1);
   });
 });

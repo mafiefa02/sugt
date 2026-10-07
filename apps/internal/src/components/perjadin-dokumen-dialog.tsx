@@ -14,6 +14,7 @@ import {
   pickDocument,
   recordRefusalText,
   sessionRefusalText,
+  SPPD_EXISTS_MARK,
   type DocumentForm,
 } from "-/components/perjadin-dokumen-form";
 import { PerjadinDokumenList } from "-/components/perjadin-dokumen-list";
@@ -59,11 +60,13 @@ import { TimeField } from "@sugt/ui/components/time-field";
 import { type ReactElement, useId, useRef, useState, useTransition } from "react";
 
 /**
- * **Dokumen — one trip's attendance sheets** (ADR-0042, #397), opened from a `/pendamping` trip
- * card. The sheets uploaded so far (`PerjadinDokumenList`), each with a Buka link to its file in
- * Drive and **Hapus** (#398); and the **Unggah dokumen** form: the kind, its fields, one PDF.
+ * **Dokumen — one trip's paperwork** (ADR-0042, #397): its attendance sheets and each School's
+ * SPPD (#441), opened from a `/pendamping` trip card. The documents uploaded so far
+ * (`PerjadinDokumenList`), each with a Buka link to its file in Drive and **Hapus** (#398); and the
+ * **Unggah dokumen** form: the kind, its fields, one PDF. An SPPD asks only for its School, and a
+ * School that already has one on this trip is offered marked "sudah ada" and not selectable.
  *
- * The trip's sheets and Schools are fetched when the dialog opens (`perjadinDokumenAction`), and
+ * The trip's documents and Schools are fetched when the dialog opens (`perjadinDokumenAction`), and
  * again after each upload or Hapus, rather than riding on every card's payload. The upload is Catat
  * transaksi's: a session, the browser's `PUT` straight to Drive, then the record. **Any failure
  * keeps every value and the picked file**, so Unggah again retries against a fresh session.
@@ -99,6 +102,7 @@ function PerjadinDokumenDialog({
 
   const fields = documentFields(form);
   const isPeserta = form.kind === "Daftar Hadir Peserta";
+  const isSppd = form.kind === "SPPD";
   const school = dokumen?.schools.find((option) => option.id === form.schoolId) ?? null;
 
   async function load() {
@@ -120,18 +124,27 @@ function PerjadinDokumenDialog({
     setRefusal(null);
     setUnsynced(false);
     startSaving(async () => {
-      const session = await openDocumentSessionAction(perjadinId, {
-        size: file.size,
-        contentType: file.type,
-      });
-      if (session.outcome !== "ready") return setRefusal(sessionRefusalText(session));
+      const session = await openDocumentSessionAction(
+        perjadinId,
+        { size: file.size, contentType: file.type },
+        fields,
+      );
+      if (session.outcome !== "ready") {
+        // Someone else's SPPD for this School landed since the dialog opened: reload, so the
+        // picker marks it "sudah ada" too.
+        if (session.outcome === "sppd-exists") await load();
+        return setRefusal(sessionRefusalText(session));
+      }
 
       const driveFileId = await putToDriveSession(session.sessionUri, file);
       if (!driveFileId) return setRefusal("Berkas gagal diunggah — coba lagi.");
 
       setProgress({ phase: "saving" });
       const result = await recordDocumentAction({ ...fields, perjadinId, driveFileId });
-      if (result.outcome !== "recorded") return setRefusal(recordRefusalText(result));
+      if (result.outcome !== "recorded") {
+        if (result.outcome === "sppd-exists") await load();
+        return setRefusal(recordRefusalText(result));
+      }
 
       setForm(EMPTY_DOCUMENT_FORM);
       setFile(null);
@@ -164,7 +177,7 @@ function PerjadinDokumenDialog({
         <DialogHeader>
           <DialogTitle>Dokumen — {name}</DialogTitle>
           <DialogDescription>
-            Daftar hadir perjalanan ini, satu file PDF masing-masing.
+            Daftar hadir dan SPPD perjalanan ini, satu file PDF masing-masing.
           </DialogDescription>
         </DialogHeader>
 
@@ -178,8 +191,9 @@ function PerjadinDokumenDialog({
           {dokumen && (
             <PerjadinDokumenList
               documents={dokumen.documents}
+              schools={dokumen.schools}
               hapus={{
-                // Closed too while a sheet uploads, so nothing else changes the list under it.
+                // Closed too while a document uploads, so nothing else changes the list under it.
                 gate: saving ? { open: false, reason: UPLOAD_RUNNING } : uploadGate,
                 onDeleted: () => void load(),
               }}
@@ -217,7 +231,9 @@ function PerjadinDokumenDialog({
                 value={form.kind}
                 disabled={saving}
                 onValueChange={(value) => {
-                  update({ kind: value as PerjadinDocumentKind });
+                  // A School chosen for one kind is not carried to another: an SPPD's picker
+                  // refuses Schools a Peserta sheet's offers.
+                  update({ kind: value as PerjadinDocumentKind, schoolId: "" });
                 }}
               >
                 <SelectTrigger
@@ -239,7 +255,7 @@ function PerjadinDokumenDialog({
               </Select>
             </div>
 
-            {form.kind !== "" && (
+            {form.kind !== "" && !isSppd && (
               <div className="grid gap-1.5">
                 <Label
                   htmlFor={`${ids}-date`}
@@ -263,43 +279,54 @@ function PerjadinDokumenDialog({
               </div>
             )}
 
-            {isPeserta && (
-              <>
-                <div className="grid gap-1.5">
-                  <Label
-                    htmlFor={`${ids}-school`}
-                    className="gap-1"
+            {(isPeserta || isSppd) && (
+              <div className="grid gap-1.5">
+                <Label
+                  htmlFor={`${ids}-school`}
+                  className="gap-1"
+                >
+                  Sekolah
+                  <RequiredMark />
+                </Label>
+                {/* A plain select: a trip has few Schools, so nothing to search. */}
+                <Select
+                  value={form.schoolId}
+                  disabled={saving}
+                  onValueChange={(value) => {
+                    update({ schoolId: (value as string | null) ?? "" });
+                  }}
+                >
+                  <SelectTrigger
+                    id={`${ids}-school`}
+                    aria-required="true"
                   >
-                    Sekolah
-                    <RequiredMark />
-                  </Label>
-                  {/* A plain select: a trip has few Schools, so nothing to search. */}
-                  <Select
-                    value={form.schoolId}
-                    disabled={saving}
-                    onValueChange={(value) => {
-                      update({ schoolId: (value as string | null) ?? "" });
-                    }}
-                  >
-                    <SelectTrigger
-                      id={`${ids}-school`}
-                      aria-required="true"
-                    >
-                      <SelectValue placeholder="Pilih sekolah">{school?.name}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(dokumen?.schools ?? []).map((option) => (
+                    <SelectValue placeholder="Pilih sekolah">{school?.name}</SelectValue>
+                  </SelectTrigger>
+                  {/* As wide as its longest School, so a "sudah ada" mark is never cut off. */}
+                  <SelectContent className="w-auto min-w-(--anchor-width)">
+                    {(dokumen?.schools ?? []).map((option) => {
+                      // One SPPD per School on this trip (#441): Hapus frees it for a new one.
+                      const taken = isSppd && option.hasSppd;
+                      return (
                         <SelectItem
                           key={option.id}
                           value={option.id}
+                          disabled={taken}
                         >
                           {option.name}
+                          {taken && (
+                            <span className="text-muted-foreground">· {SPPD_EXISTS_MARK}</span>
+                          )}
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
+            {isPeserta && (
+              <>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-1.5">
                     <Label
@@ -433,7 +460,7 @@ function PerjadinDokumenDialog({
   );
 }
 
-/** Why Hapus waits while a sheet uploads. */
+/** Why Hapus waits while a document uploads. */
 const UPLOAD_RUNNING = "Tunggu sampai unggahan selesai.";
 
 export { PerjadinDokumenDialog };

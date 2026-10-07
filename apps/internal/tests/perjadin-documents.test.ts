@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   addCluster,
+  addGroupMember,
   addOfflineSession,
   addPerjadin,
   addPerson,
@@ -25,10 +26,10 @@ import {
 } from "./support/fixtures";
 
 /**
- * **Perjadin Documents, the database half** (#397, ADR-0042): the CHECKs that keep a Peserta
- * sheet's four fields on Peserta sheets only, the rules the application holds — the date inside the
- * trip, the School one of the trip's Schools (#410) — and the record and its Activity Log entry,
- * written together.
+ * **Perjadin Documents, the database half** (#397, ADR-0042): the CHECKs that hold each kind's exact
+ * shape, the rules the application holds — the date inside the trip, the School one of the trip's
+ * Schools (#410), one SPPD per School per Perjadin (#441) — and the record and its Activity Log
+ * entry, written together.
  */
 
 /**
@@ -157,17 +158,70 @@ describe("the CHECKs", () => {
         insert(trip.id, staff.id, { kind: "Daftar Hadir Peserta", ...all, startsAt: null }),
       ),
     ).resolves.toBe("perjadin_document_peserta_fields_check");
-    // All four on another kind breaks both CHECKs; Postgres names whichever it evaluates first.
+    await expect(
+      refusedBy(
+        insert(trip.id, staff.id, { kind: "Daftar Hadir Peserta", ...all, documentDate: null }),
+      ),
+    ).resolves.toBe("perjadin_document_peserta_fields_check");
     await expect(
       refusedBy(insert(trip.id, staff.id, { kind: "Daftar Hadir Pendamping", ...all })),
-    ).resolves.toMatch(/^perjadin_document_(peserta_fields|other_fields_null)_check$/);
+    ).resolves.toBe("perjadin_document_day_sheet_fields_check");
     await expect(refusedBy(insert(trip.id, staff.id, { schoolId: inside.id }))).resolves.toBe(
-      "perjadin_document_other_fields_null_check",
+      "perjadin_document_day_sheet_fields_check",
+    );
+    await expect(refusedBy(insert(trip.id, staff.id, { documentDate: null }))).resolves.toBe(
+      "perjadin_document_day_sheet_fields_check",
     );
     await expect(
       refusedBy(insert(trip.id, staff.id, { kind: "Daftar Hadir Peserta", ...all })),
     ).resolves.toBeNull();
     await expect(refusedBy(insert(trip.id, staff.id, {}))).resolves.toBeNull();
+  });
+
+  it("holds an SPPD to a School and nothing else (#441)", async () => {
+    const { staff, trip, inside } = await scene();
+    const sppd = { kind: "SPPD" as const, schoolId: inside.id, documentDate: null };
+
+    for (const spoil of [
+      { documentDate: "2026-10-13" },
+      { schoolId: null },
+      { participantType: "Siswa" as const },
+      { startsAt: "08:00", endsAt: "11:30" },
+    ]) {
+      await expect(refusedBy(insert(trip.id, staff.id, { ...sppd, ...spoil }))).resolves.toBe(
+        "perjadin_document_sppd_fields_check",
+      );
+    }
+    await expect(refusedBy(insert(trip.id, staff.id, sppd))).resolves.toBeNull();
+  });
+
+  it("holds one SPPD per School per Perjadin, and leaves the attendance kinds unbounded", async () => {
+    const { staff, trip, inside } = await scene();
+    const other = await addPerjadin({
+      advanceIdr: 1,
+      picPersonId: staff.id,
+      subClusterId: trip.subClusterId,
+      startsOn: "2026-11-09",
+      endsOn: "2026-11-10",
+    });
+    const sppd = { kind: "SPPD" as const, schoolId: inside.id, documentDate: null };
+
+    await expect(refusedBy(insert(trip.id, staff.id, sppd))).resolves.toBeNull();
+    await expect(refusedBy(insert(trip.id, staff.id, sppd))).resolves.toBe(
+      "perjadin_document_sppd_unique",
+    );
+    // The same School on another Perjadin gets its own.
+    await expect(refusedBy(insert(other.id, staff.id, sppd))).resolves.toBeNull();
+    // Peserta sheets for that School are no SPPD, and are not counted against it.
+    const peserta = {
+      kind: "Daftar Hadir Peserta" as const,
+      schoolId: inside.id,
+      participantType: "Siswa" as const,
+      startsAt: "08:00",
+      endsAt: "11:30",
+    };
+    await expect(refusedBy(insert(trip.id, staff.id, peserta))).resolves.toBeNull();
+    await expect(refusedBy(insert(trip.id, staff.id, peserta))).resolves.toBeNull();
   });
 
   it("holds Waktu Selesai after Waktu Mulai, and the PDF-only type", async () => {
@@ -317,6 +371,177 @@ describe("recordPerjadinDocument", () => {
   });
 });
 
+/** An SPPD for `schoolId` on `perjadinId` (#441): a School, no date. */
+function sppd(perjadinId: string, schoolId: string): NewPerjadinDocument {
+  return {
+    perjadinId,
+    documentId: randomUUID(),
+    driveFileId: randomUUID(),
+    byteSize: 2048,
+    kind: "SPPD",
+    documentDate: null,
+    sppd: { schoolId },
+  };
+}
+
+describe("an SPPD (#441)", () => {
+  /**
+   * The ticket's T5 table: SMAN 1 Bontang has a Session on Perjadin A and on Perjadin B; Rina and
+   * Andi are A's Group, Dimas is B's. A also visits SMAN 2 Samarinda.
+   */
+  async function t5() {
+    const { staff: rina, trip: a, inside: bontang, outside: samarinda } = await scene();
+    await addOfflineSession({ schoolId: samarinda.id, heldOn: "2026-10-14", perjadinId: a.id });
+    const andi = (await addPerson({
+      fullName: "Andi",
+      email: "andi@itb.ac.id",
+      role: "Staff",
+    })) as Person;
+    await addGroupMember(a.id, andi.id);
+    const dimas = (await addPerson({
+      fullName: "Dimas",
+      email: "dimas@itb.ac.id",
+      role: "Staff",
+    })) as Person;
+    const b = await addPerjadin({
+      advanceIdr: 1_000_000,
+      picPersonId: dimas.id,
+      subClusterId: a.subClusterId,
+      startsOn: "2026-11-09",
+      endsOn: "2026-11-10",
+    });
+    await addOfflineSession({ schoolId: bontang.id, heldOn: "2026-11-09", perjadinId: b.id });
+    return { rina, andi, dimas, a, b, bontang, samarinda };
+  }
+
+  it("holds every row of the T5 table", async () => {
+    const { rina, andi, dimas, a, b, bontang, samarinda } = await t5();
+
+    // 1. Rina uploads A's Bontang SPPD.
+    const first = sppd(a.id, bontang.id);
+    await expect(recordPerjadinDocument(rina, first)).resolves.toEqual({ outcome: "recorded" });
+    // 2. Andi, also on A, cannot add a second for Bontang on A — and A's read marks it.
+    await expect(recordPerjadinDocument(andi, sppd(a.id, bontang.id))).resolves.toEqual({
+      outcome: "sppd-exists",
+      schoolName: "SMAN 1 Bontang",
+    });
+    expect((await perjadinDokumen(andi, a.id))?.schools).toEqual([
+      expect.objectContaining({ name: "SMAN 1 Bontang", hasSppd: true }),
+      expect.objectContaining({ name: "SMAN 2 Samarinda", hasSppd: false }),
+    ]);
+    // 3. Andi uploads Samarinda's on A: another School.
+    await expect(recordPerjadinDocument(andi, sppd(a.id, samarinda.id))).resolves.toEqual({
+      outcome: "recorded",
+    });
+    // 4. Dimas uploads Bontang's on B: A's does not count.
+    const onB = sppd(b.id, bontang.id);
+    await expect(recordPerjadinDocument(dimas, onB)).resolves.toEqual({ outcome: "recorded" });
+    expect((await perjadinDokumen(dimas, b.id))?.schools).toEqual([
+      expect.objectContaining({ name: "SMAN 1 Bontang", hasSppd: true }),
+    ]);
+    // 5. Rina deletes A's Bontang SPPD and uploads a corrected one; B's is untouched.
+    await expect(deletePerjadinDocument(rina, first.documentId)).resolves.toMatchObject({
+      outcome: "deleted",
+    });
+    await expect(recordPerjadinDocument(rina, sppd(a.id, bontang.id))).resolves.toEqual({
+      outcome: "recorded",
+    });
+
+    const rows = await documents();
+    expect(rows).toHaveLength(3);
+    expect(rows.find((row) => row.perjadinId === b.id)?.id).toBe(onB.documentId);
+  });
+
+  it("leaves exactly one row when two records for one School race; the loser gets sppd-exists", async () => {
+    const { rina, andi, a, bontang } = await t5();
+
+    const results = await Promise.all([
+      recordPerjadinDocument(rina, sppd(a.id, bontang.id)),
+      recordPerjadinDocument(andi, sppd(a.id, bontang.id)),
+    ]);
+
+    expect(results).toEqual(
+      expect.arrayContaining([
+        { outcome: "recorded" },
+        { outcome: "sppd-exists", schoolName: "SMAN 1 Bontang" },
+      ]),
+    );
+    await expect(documents()).resolves.toHaveLength(1);
+    await expect(logged()).resolves.toHaveLength(1);
+  });
+
+  it("is logged as SPPD · {School}, uploaded and deleted", async () => {
+    const { staff, trip, inside } = await scene();
+    const input = sppd(trip.id, inside.id);
+
+    await recordPerjadinDocument(staff, input);
+    await deletePerjadinDocument(staff, input.documentId);
+
+    const entries = await logged();
+    expect(entries.map((entry) => entry.details)).toEqual([
+      {
+        documentId: input.documentId,
+        kind: "SPPD",
+        documentDate: null,
+        schoolName: "SMAN 1 Bontang",
+      },
+      {
+        documentId: input.documentId,
+        kind: "SPPD",
+        documentDate: null,
+        schoolName: "SMAN 1 Bontang",
+      },
+    ]);
+    expect(entries.map((entry) => entry.searchText).sort()).toEqual(
+      [
+        "dokumen diunggah · sppd · sman 1 bontang",
+        "dokumen dihapus · sppd · sman 1 bontang",
+      ].sort(),
+    );
+  });
+
+  it("refuses a School that is not one of the trip's, a date, and the wrong fields", async () => {
+    const { staff, trip, inside, outside, offTrip } = await scene();
+    const input = sppd(trip.id, inside.id);
+
+    for (const schoolId of [outside.id, offTrip.id, "not-a-uuid"]) {
+      await expect(recordPerjadinDocument(staff, sppd(trip.id, schoolId))).resolves.toEqual({
+        outcome: "school-not-on-perjadin",
+      });
+    }
+    await expect(
+      recordPerjadinDocument(staff, { ...input, documentDate: "2026-10-13" }),
+    ).resolves.toEqual({ outcome: "invalid-fields" });
+    await expect(recordPerjadinDocument(staff, { ...input, sppd: undefined })).resolves.toEqual({
+      outcome: "invalid-fields",
+    });
+    await expect(
+      recordPerjadinDocument(staff, { ...pendamping(trip.id), sppd: { schoolId: inside.id } }),
+    ).resolves.toEqual({ outcome: "invalid-fields" });
+    await expect(documents()).resolves.toHaveLength(0);
+    await expect(logged()).resolves.toHaveLength(0);
+  });
+
+  it("stays, listed after the dated sheets, once its School leaves the trip", async () => {
+    const { staff, trip, inside, live } = await scene();
+    const input = sppd(trip.id, inside.id);
+    await recordPerjadinDocument(staff, input);
+    await recordPerjadinDocument(staff, pendamping(trip.id));
+    await db
+      .update(schema.session)
+      .set({ status: "cancelled", cancelledReason: "Sekolah libur" })
+      .where(eq(schema.session.id, live.id));
+
+    const read = await perjadinDokumen(staff, trip.id);
+
+    expect(read?.schools).toEqual([]);
+    expect(read?.documents.map((row) => [row.kind, row.documentDate, row.schoolName])).toEqual([
+      ["Daftar Hadir Pendamping", "2026-10-13", null],
+      ["SPPD", null, "SMAN 1 Bontang"],
+    ]);
+  });
+});
+
 describe("perjadinDokumen — the dialog's read", () => {
   it("lists the trip's window, the trip's Schools and its sheets, unsynced flagged", async () => {
     const { staff, trip, inside } = await scene();
@@ -335,7 +560,7 @@ describe("perjadinDokumen — the dialog's read", () => {
       perjadinId: trip.id,
       startsOn: "2026-10-12",
       endsOn: "2026-10-15",
-      schools: [{ id: inside.id, name: "SMAN 1 Bontang", timeZone: "WITA" }],
+      schools: [{ id: inside.id, name: "SMAN 1 Bontang", timeZone: "WITA", hasSppd: false }],
     });
     expect(read?.documents).toEqual([
       expect.objectContaining({
