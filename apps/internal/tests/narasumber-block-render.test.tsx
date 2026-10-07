@@ -4,8 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 /**
- * **The `/pendamping` card's Narasumber block, folded by School** (#447), rendered closed — as every
- * page load starts — with no database. The query test owns who lands under which School; this owns
+ * **The `/pendamping` card's Narasumber block, folded by School** (#447), rendered closed — as
+ * every page load starts — with no database. The query test owns who lands under which School; this owns
  * the words, the order on screen, and that each toggle is a real button wired to its panel.
  */
 
@@ -26,14 +26,14 @@ const people = (...names: string[]): MyPerjadinPengajar[] =>
 
 function roster(
   pengajar: MyPerjadinPengajar[],
-  narasumber: MyPerjadinTrip["anggota"]["narasumber"],
+  pengajarBySchool: MyPerjadinTrip["anggota"]["pengajarBySchool"],
 ): string {
   return renderToStaticMarkup(
     <AnggotaRoster
       anggota={{
         staff: [{ personId: "p-1", fullName: "Rina", isPic: true }],
         pengajar,
-        narasumber,
+        pengajarBySchool,
         pimpinan: [{ personId: "p-2", name: "Pak Joko" }],
         anggotaTotal: pengajar.length + 2,
       }}

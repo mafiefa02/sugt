@@ -326,9 +326,9 @@ function TripMoney({
 
 /**
  * Who is on the trip, inline: Pendamping (the Staff Group), Narasumber (the trip-scoped teacher
- * names) and Pimpinan (record-only), in that order. Pendamping and Pimpinan are plain lists, left out
- * when empty — the PIC is already named in the header. Narasumber is always there, folded by School
- * (#447): a trip's dozen-and-more titled names would otherwise crowd the card.
+ * names) and Pimpinan (record-only), in that order. Pendamping and Pimpinan are plain lists, left
+ * out when empty — the PIC is already named in the header. Narasumber is always there, folded by
+ * School (#447): a trip's dozen-and-more titled names would otherwise crowd the card.
  */
 function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
   return (
@@ -339,7 +339,7 @@ function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
       />
       <NarasumberBlock
         total={anggota.pengajar.length}
-        narasumber={anggota.narasumber}
+        pengajarBySchool={anggota.pengajarBySchool}
       />
       <NameList
         label="Pimpinan"
@@ -369,22 +369,22 @@ function NameList({ label, names }: { label: string; names: { key: string; name:
  * **Narasumber (n), folded by School** (#447). n is the trip's distinct Narasumber, the unassigned
  * included, so someone listed under two Schools counts once; with none it is `Narasumber (0)` and
  * nothing beneath. Each School with a list gets its own toggle; one with none says "belum
- * ditugaskan" with nothing to open; the unassigned get a last toggle when there are any. The order —
- * Schools by their earliest live Session, names A–Z — is the query's.
+ * ditugaskan" with nothing to open; the unassigned get a last toggle when there are any. The order
+ * — Schools by their earliest live Session, names A–Z — is the query's.
  */
 function NarasumberBlock({
   total,
-  narasumber,
+  pengajarBySchool,
 }: {
   total: number;
-  narasumber: MyPerjadinTrip["anggota"]["narasumber"];
+  pengajarBySchool: MyPerjadinTrip["anggota"]["pengajarBySchool"];
 }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground">Narasumber ({total})</p>
       {total > 0 && (
         <ul className="mt-1 flex flex-col">
-          {narasumber.bySchool.map((school) => (
+          {pengajarBySchool.bySchool.map((school) => (
             <li key={school.schoolId}>
               {school.pengajar.length > 0 ? (
                 <NarasumberToggle
@@ -398,11 +398,11 @@ function NarasumberBlock({
               )}
             </li>
           ))}
-          {narasumber.unassigned.length > 0 && (
+          {pengajarBySchool.unassigned.length > 0 && (
             <li>
               <NarasumberToggle
                 label="Narasumber belum ditugaskan"
-                names={narasumber.unassigned}
+                names={pengajarBySchool.unassigned}
               />
             </li>
           )}

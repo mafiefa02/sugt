@@ -549,14 +549,14 @@ describe("myPerjadin lists the Narasumber by School (#447)", () => {
 
     /** The block as names: each School's list, and the unassigned, for a readable comparison. */
     async function names() {
-      const { narasumber, pengajar } = await card();
+      const { pengajarBySchool, pengajar } = await card();
       return {
         total: pengajar.length,
-        bySchool: narasumber.bySchool.map((school) => [
+        bySchool: pengajarBySchool.bySchool.map((school) => [
           school.name,
           school.pengajar.map((person) => person.name),
         ]),
-        unassigned: narasumber.unassigned.map((person) => person.name),
+        unassigned: pengajarBySchool.unassigned.map((person) => person.name),
       };
     }
 
@@ -703,13 +703,33 @@ describe("myPerjadin lists the Narasumber by School (#447)", () => {
     });
   });
 
+  it("tells two Narasumber of one name apart by their trip-scoped row", async () => {
+    const a = await perjadinA();
+    await a.narasumber("Dr. Sari");
+    // A second `perjadin_teacher` row of the same name: a different person who taught nowhere.
+    await a.narasumber("Dr. Sari");
+    const [first] = (await a.card()).pengajar;
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: [] });
+    await db.insert(schema.sessionTeachingTeam).values({
+      sessionId: (await db.select({ id: schema.session.id }).from(schema.session))[0]!.id,
+      perjadinTeacherId: first!.id,
+    });
+
+    const { pengajar, pengajarBySchool } = await a.card();
+    expect(pengajar).toHaveLength(2);
+    expect(pengajarBySchool.bySchool[0]?.pengajar.map((person) => person.id)).toEqual([first!.id]);
+    expect(pengajarBySchool.unassigned.map((person) => person.id)).toEqual(
+      pengajar.filter((person) => person.id !== first!.id).map((person) => person.id),
+    );
+  });
+
   it("carries each School's id and each Narasumber's trip-scoped id", async () => {
     const a = await perjadinA();
     await a.narasumber("Bu Ani");
     await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: ["Bu Ani"] });
 
-    const { narasumber, pengajar } = await a.card();
-    expect(narasumber.bySchool[0]?.schoolId).toEqual(expect.any(String));
-    expect(narasumber.bySchool[0]?.pengajar).toEqual(pengajar);
+    const { pengajarBySchool, pengajar } = await a.card();
+    expect(pengajarBySchool.bySchool[0]?.schoolId).toEqual(expect.any(String));
+    expect(pengajarBySchool.bySchool[0]?.pengajar).toEqual(pengajar);
   });
 });

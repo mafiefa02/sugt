@@ -50,25 +50,28 @@ export type MyPerjadinPengajar = {
   name: string;
 };
 
-/** One School's Narasumber on the card (#447): whoever is in "Diajar oleh" of a live Session there. */
-export type MyPerjadinNarasumberSchool = {
+/**
+ * One School's Narasumber on the card (#447): whoever is in "Diajar oleh" of a live Session there.
+ * Named for the code's `pengajar`, as CONTEXT.md keeps it; Narasumber is the UI label.
+ */
+export type MyPerjadinPengajarSchool = {
   schoolId: string;
   name: string;
-  /** A–Z, each once however many of the School's Sessions they taught; empty is "belum ditugaskan". */
+  /** A–Z, each once however many of its Sessions they taught; empty reads "belum ditugaskan". */
   pengajar: MyPerjadinPengajar[];
 };
 
 /**
- * **The trip's Narasumber by School** (#447), the card's folded Narasumber block. The Schools are the
- * ones with a live (non-cancelled) offline Session on the trip, by their earliest live Session and
- * then by name — the timeline's order. Each School's list stands alone, so someone who taught at two
- * Schools is under both. `unassigned` is everyone in no live Session's "Diajar oleh", including
+ * **The trip's Narasumber by School** (#447), the card's folded Narasumber block. The Schools are
+ * the ones with a live (non-cancelled) offline Session on the trip, by their earliest live Session
+ * and then by name — the timeline's order. Each School's list stands alone, so someone who taught
+ * at two Schools is under both. `unassigned` is everyone in no live Session's "Diajar oleh", including
  * someone whose only Session was cancelled. Identity is the `perjadin_teacher` row, not the name.
  *
  * A usual practice shown, not a rule: nothing here constrains who may teach where.
  */
-export type MyPerjadinNarasumber = {
-  bySchool: MyPerjadinNarasumberSchool[];
+export type MyPerjadinPengajarBySchool = {
+  bySchool: MyPerjadinPengajarSchool[];
   unassigned: MyPerjadinPengajar[];
 };
 
@@ -136,13 +139,13 @@ export type MyPerjadinTrip = {
    * Who is on the trip, in three lists the way `docs/data-model.md` splits them: the Staff Group,
    * the trip-scoped teacher names, and the record-only Pimpinan. `anggotaTotal` is their combined
    * head count, summed here so the strip does not re-add three lengths at the render site.
-   * `narasumber` is `pengajar` again, grouped by School for the card (#447); the trip's distinct
-   * Narasumber — the block's heading count — is still `pengajar.length`.
+   * `pengajarBySchool` is `pengajar` again, grouped by School for the card's Narasumber block
+   * (#447); the trip's distinct Narasumber — the block's heading count — is still `pengajar.length`.
    */
   anggota: {
     staff: MyPerjadinStaff[];
     pengajar: MyPerjadinPengajar[];
-    narasumber: MyPerjadinNarasumber;
+    pengajarBySchool: MyPerjadinPengajarBySchool;
     pimpinan: MyPerjadinPimpinan[];
     anggotaTotal: number;
   };
@@ -444,7 +447,7 @@ async function perjadinOf(personId: string): Promise<MyPerjadin> {
       anggota: {
         staff,
         pengajar,
-        narasumber: narasumberBySchool(schools, pengajar, taughtByTrip.get(trip.id) ?? []),
+        pengajarBySchool: groupPengajarBySchool(schools, pengajar, taughtByTrip.get(trip.id) ?? []),
         pimpinan,
         anggotaTotal: staff.length + pengajar.length + pimpinan.length,
       },
@@ -461,19 +464,20 @@ async function perjadinOf(personId: string): Promise<MyPerjadin> {
 }
 
 /**
- * One trip's `MyPerjadinNarasumber`, from what `perjadinOf` already holds: its Schools with every
+ * One trip's `MyPerjadinPengajarBySchool`, from what `perjadinOf` already holds: its Schools with every
  * Session, its Narasumber A–Z, and who taught at which School on a live Session. Filtering the A–Z
  * list, rather than collecting from `taught`, keeps each list in that order and each name once.
  */
-function narasumberBySchool(
+function groupPengajarBySchool(
   schools: MyPerjadinSchool[],
   pengajar: MyPerjadinPengajar[],
   taught: { schoolId: string; perjadinTeacherId: string }[],
-): MyPerjadinNarasumber {
+): MyPerjadinPengajarBySchool {
   const live = schools.flatMap((school) => {
     const sessions = school.sessions.filter((each) => each.status !== "cancelled");
     if (sessions.length === 0) return [];
-    // `heldOn` is `YYYY-MM-DD` and `startsAt` `HH:MM:SS`, so the joined strings order as the values do.
+    // `heldOn` is `YYYY-MM-DD` and `startsAt` `HH:MM:SS`, so the joined strings order as the
+    // values do.
     const earliest = sessions.map((each) => `${each.heldOn} ${each.startsAt}`).sort()[0]!;
     return [{ school, earliest }];
   });
