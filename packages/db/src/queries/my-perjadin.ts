@@ -2,7 +2,7 @@ import type { SessionStatus, TimeZone } from "@sugt/domain";
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { db } from "../client";
-import { session } from "../schema/delivery";
+import { session, sessionTeachingTeam } from "../schema/delivery";
 import { person } from "../schema/people";
 import { province, school, subCluster } from "../schema/reference";
 import {
@@ -48,6 +48,28 @@ export type MyPerjadinStaff = {
 export type MyPerjadinPengajar = {
   id: string;
   name: string;
+};
+
+/** One School's Narasumber on the card (#447): whoever is in "Diajar oleh" of a live Session there. */
+export type MyPerjadinNarasumberSchool = {
+  schoolId: string;
+  name: string;
+  /** A–Z, each once however many of the School's Sessions they taught; empty is "belum ditugaskan". */
+  pengajar: MyPerjadinPengajar[];
+};
+
+/**
+ * **The trip's Narasumber by School** (#447), the card's folded Narasumber block. The Schools are the
+ * ones with a live (non-cancelled) offline Session on the trip, by their earliest live Session and
+ * then by name — the timeline's order. Each School's list stands alone, so someone who taught at two
+ * Schools is under both. `unassigned` is everyone in no live Session's "Diajar oleh", including
+ * someone whose only Session was cancelled. Identity is the `perjadin_teacher` row, not the name.
+ *
+ * A usual practice shown, not a rule: nothing here constrains who may teach where.
+ */
+export type MyPerjadinNarasumber = {
+  bySchool: MyPerjadinNarasumberSchool[];
+  unassigned: MyPerjadinPengajar[];
 };
 
 /** One Pimpinan recorded on the trip — record-only, the name of a real Pimpinan-Person (#181). */
@@ -114,10 +136,13 @@ export type MyPerjadinTrip = {
    * Who is on the trip, in three lists the way `docs/data-model.md` splits them: the Staff Group,
    * the trip-scoped teacher names, and the record-only Pimpinan. `anggotaTotal` is their combined
    * head count, summed here so the strip does not re-add three lengths at the render site.
+   * `narasumber` is `pengajar` again, grouped by School for the card (#447); the trip's distinct
+   * Narasumber — the block's heading count — is still `pengajar.length`.
    */
   anggota: {
     staff: MyPerjadinStaff[];
     pengajar: MyPerjadinPengajar[];
+    narasumber: MyPerjadinNarasumber;
     pimpinan: MyPerjadinPimpinan[];
     anggotaTotal: number;
   };
@@ -239,84 +264,108 @@ async function perjadinOf(personId: string): Promise<MyPerjadin> {
 
   const tripIds = rows.map((trip) => trip.id);
 
-  // The six hanging lists, gathered concurrently and each scoped to just these trips.
-  const [drawnDownRows, staffRows, pengajarRows, pimpinanRows, sessionRows, checklists] =
-    await Promise.all([
-      // Travel-float draw-down per trip (ADR-0029): `sum(amount_idr) filter (where category in …)`
-      // over only `ADVANCE_DRAWDOWN_CATEGORIES`, grouped by `perjadin_id`. A trip with no drawdown
-      // spend (or none at all) is absent or sums to 0 and defaults to 0 below. The `in (…)` list is
-      // built from the domain constant so it cannot drift; the acquittal reduces its loaded rows
-      // through `sumAdvanceDrawdownIdr` for the identical rule, and a test pins the UI's
-      // `advanceIdr - drawnDownIdr` equal to the acquittal's `remainderIdr`.
-      db
-        .select({
-          perjadinId: transaction.perjadinId,
-          drawnDownIdr:
-            sql<number>`coalesce(sum(${transaction.amountIdr}) filter (where ${transaction.category} in (${advanceDrawdownCategoryList()})), 0)`.mapWith(
-              Number,
-            ),
-        })
-        .from(transaction)
-        .where(inArray(transaction.perjadinId, tripIds))
-        .groupBy(transaction.perjadinId),
-      // The Staff Group, joined to `person` for the name, in name order. `isPic` is derived per row
-      // below rather than joined, since the PIC id is already on each trip.
-      db
-        .select({
-          perjadinId: groupMember.perjadinId,
-          personId: groupMember.personId,
-          fullName: person.fullName,
-        })
-        .from(groupMember)
-        .innerJoin(person, eq(person.id, groupMember.personId))
-        .where(and(inArray(groupMember.perjadinId, tripIds), eq(groupMember.role, "Staff")))
-        .orderBy(asc(person.fullName)),
-      // The trip-scoped teacher names (ADR-0020), in name order.
-      db
-        .select({
-          perjadinId: perjadinTeacher.perjadinId,
-          id: perjadinTeacher.id,
-          name: perjadinTeacher.name,
-        })
-        .from(perjadinTeacher)
-        .where(inArray(perjadinTeacher.perjadinId, tripIds))
-        .orderBy(asc(perjadinTeacher.name)),
-      // The record-only Pimpinan (#181), joined to `person` for the display name, in name order.
-      db
-        .select({
-          perjadinId: perjadinPimpinan.perjadinId,
-          personId: perjadinPimpinan.personId,
-          name: person.fullName,
-        })
-        .from(perjadinPimpinan)
-        .innerJoin(person, eq(person.id, perjadinPimpinan.personId))
-        .where(inArray(perjadinPimpinan.perjadinId, tripIds))
-        .orderBy(asc(person.fullName)),
-      // Every offline Session on these trips, with its School and the School's Province zone.
-      // Cancelled ones are **included** — this is the trip's shape, the Schools it visited, not how
-      // much teaching it delivered. Ordered by School name, then within a School by (held_on,
-      // starts_at, id) for a total order.
-      db
-        .select({
-          perjadinId: session.perjadinId,
-          schoolId: session.schoolId,
-          schoolName: school.name,
-          kabupatenKota: school.kabupatenKota,
-          timeZone: province.timeZone,
-          sessionId: session.id,
-          heldOn: session.heldOn,
-          startsAt: session.startsAt,
-          status: session.status,
-        })
-        .from(session)
-        .innerJoin(school, eq(school.id, session.schoolId))
-        .innerJoin(province, eq(province.code, school.provinceCode))
-        .where(and(inArray(session.perjadinId, tripIds), eq(session.mode, "offline")))
-        .orderBy(asc(school.name), asc(session.heldOn), asc(session.startsAt), asc(session.id)),
-      // Every trip's checklist in one batched read (ADR-0045): the card's Persiapan dialog toggles
-      // the boxes, so it needs each item whole, not a count.
-      preparationChecklists(tripIds),
-    ]);
+  // The seven hanging lists, gathered concurrently and each scoped to just these trips.
+  const [
+    drawnDownRows,
+    staffRows,
+    pengajarRows,
+    pimpinanRows,
+    sessionRows,
+    taughtRows,
+    checklists,
+  ] = await Promise.all([
+    // Travel-float draw-down per trip (ADR-0029): `sum(amount_idr) filter (where category in …)`
+    // over only `ADVANCE_DRAWDOWN_CATEGORIES`, grouped by `perjadin_id`. A trip with no drawdown
+    // spend (or none at all) is absent or sums to 0 and defaults to 0 below. The `in (…)` list is
+    // built from the domain constant so it cannot drift; the acquittal reduces its loaded rows
+    // through `sumAdvanceDrawdownIdr` for the identical rule, and a test pins the UI's
+    // `advanceIdr - drawnDownIdr` equal to the acquittal's `remainderIdr`.
+    db
+      .select({
+        perjadinId: transaction.perjadinId,
+        drawnDownIdr:
+          sql<number>`coalesce(sum(${transaction.amountIdr}) filter (where ${transaction.category} in (${advanceDrawdownCategoryList()})), 0)`.mapWith(
+            Number,
+          ),
+      })
+      .from(transaction)
+      .where(inArray(transaction.perjadinId, tripIds))
+      .groupBy(transaction.perjadinId),
+    // The Staff Group, joined to `person` for the name, in name order. `isPic` is derived per row
+    // below rather than joined, since the PIC id is already on each trip.
+    db
+      .select({
+        perjadinId: groupMember.perjadinId,
+        personId: groupMember.personId,
+        fullName: person.fullName,
+      })
+      .from(groupMember)
+      .innerJoin(person, eq(person.id, groupMember.personId))
+      .where(and(inArray(groupMember.perjadinId, tripIds), eq(groupMember.role, "Staff")))
+      .orderBy(asc(person.fullName)),
+    // The trip-scoped teacher names (ADR-0020), in name order.
+    db
+      .select({
+        perjadinId: perjadinTeacher.perjadinId,
+        id: perjadinTeacher.id,
+        name: perjadinTeacher.name,
+      })
+      .from(perjadinTeacher)
+      .where(inArray(perjadinTeacher.perjadinId, tripIds))
+      .orderBy(asc(perjadinTeacher.name)),
+    // The record-only Pimpinan (#181), joined to `person` for the display name, in name order.
+    db
+      .select({
+        perjadinId: perjadinPimpinan.perjadinId,
+        personId: perjadinPimpinan.personId,
+        name: person.fullName,
+      })
+      .from(perjadinPimpinan)
+      .innerJoin(person, eq(person.id, perjadinPimpinan.personId))
+      .where(inArray(perjadinPimpinan.perjadinId, tripIds))
+      .orderBy(asc(person.fullName)),
+    // Every offline Session on these trips, with its School and the School's Province zone.
+    // Cancelled ones are **included** — this is the trip's shape, the Schools it visited, not how
+    // much teaching it delivered. Ordered by School name, then within a School by (held_on,
+    // starts_at, id) for a total order.
+    db
+      .select({
+        perjadinId: session.perjadinId,
+        schoolId: session.schoolId,
+        schoolName: school.name,
+        kabupatenKota: school.kabupatenKota,
+        timeZone: province.timeZone,
+        sessionId: session.id,
+        heldOn: session.heldOn,
+        startsAt: session.startsAt,
+        status: session.status,
+      })
+      .from(session)
+      .innerJoin(school, eq(school.id, session.schoolId))
+      .innerJoin(province, eq(province.code, school.provinceCode))
+      .where(and(inArray(session.perjadinId, tripIds), eq(session.mode, "offline")))
+      .orderBy(asc(school.name), asc(session.heldOn), asc(session.startsAt), asc(session.id)),
+    // "Diajar oleh" on the trips' live offline Sessions (#447): which Narasumber taught at which
+    // School. A cancelled Session's team is left out, so whoever taught only there is unassigned.
+    db
+      .selectDistinct({
+        perjadinId: session.perjadinId,
+        schoolId: session.schoolId,
+        perjadinTeacherId: sessionTeachingTeam.perjadinTeacherId,
+      })
+      .from(sessionTeachingTeam)
+      .innerJoin(session, eq(session.id, sessionTeachingTeam.sessionId))
+      .where(
+        and(
+          inArray(session.perjadinId, tripIds),
+          eq(session.mode, "offline"),
+          ne(session.status, "cancelled"),
+        ),
+      ),
+    // Every trip's checklist in one batched read (ADR-0045): the card's Persiapan dialog toggles
+    // the boxes, so it needs each item whole, not a count.
+    preparationChecklists(tripIds),
+  ]);
 
   // Float draw-down keyed by trip; a trip absent from the grouped sum drew nothing down.
   const drawnDownByTrip = new Map(drawnDownRows.map((row) => [row.perjadinId, row.drawnDownIdr]));
@@ -372,6 +421,14 @@ async function perjadinOf(personId: string): Promise<MyPerjadin> {
     });
   }
 
+  const taughtByTrip = new Map<string, { schoolId: string; perjadinTeacherId: string }[]>();
+  for (const row of taughtRows) {
+    if (row.perjadinId === null) continue;
+    const list = taughtByTrip.get(row.perjadinId) ?? [];
+    list.push(row);
+    taughtByTrip.set(row.perjadinId, list);
+  }
+
   const built = rows.map(({ isCurrent, ...trip }) => {
     const staff = (staffByTrip.get(trip.id) ?? []).map((member) => ({
       ...member,
@@ -379,6 +436,7 @@ async function perjadinOf(personId: string): Promise<MyPerjadin> {
     }));
     const pengajar = pengajarByTrip.get(trip.id) ?? [];
     const pimpinan = pimpinanByTrip.get(trip.id) ?? [];
+    const schools = schoolsByTrip.get(trip.id) ?? [];
     const card: MyPerjadinTrip = {
       ...trip,
       drawnDownIdr: drawnDownByTrip.get(trip.id) ?? 0,
@@ -386,10 +444,11 @@ async function perjadinOf(personId: string): Promise<MyPerjadin> {
       anggota: {
         staff,
         pengajar,
+        narasumber: narasumberBySchool(schools, pengajar, taughtByTrip.get(trip.id) ?? []),
         pimpinan,
         anggotaTotal: staff.length + pengajar.length + pimpinan.length,
       },
-      schools: schoolsByTrip.get(trip.id) ?? [],
+      schools,
     };
     return { isCurrent, trip: card };
   });
@@ -398,5 +457,43 @@ async function perjadinOf(personId: string): Promise<MyPerjadin> {
   return {
     current: built.filter((entry) => entry.isCurrent).map((entry) => entry.trip),
     previous: built.filter((entry) => !entry.isCurrent).map((entry) => entry.trip),
+  };
+}
+
+/**
+ * One trip's `MyPerjadinNarasumber`, from what `perjadinOf` already holds: its Schools with every
+ * Session, its Narasumber A–Z, and who taught at which School on a live Session. Filtering the A–Z
+ * list, rather than collecting from `taught`, keeps each list in that order and each name once.
+ */
+function narasumberBySchool(
+  schools: MyPerjadinSchool[],
+  pengajar: MyPerjadinPengajar[],
+  taught: { schoolId: string; perjadinTeacherId: string }[],
+): MyPerjadinNarasumber {
+  const live = schools.flatMap((school) => {
+    const sessions = school.sessions.filter((each) => each.status !== "cancelled");
+    if (sessions.length === 0) return [];
+    // `heldOn` is `YYYY-MM-DD` and `startsAt` `HH:MM:SS`, so the joined strings order as the values do.
+    const earliest = sessions.map((each) => `${each.heldOn} ${each.startsAt}`).sort()[0]!;
+    return [{ school, earliest }];
+  });
+  // The sort is stable and `schools` arrive in name order, so a tie stays by name.
+  live.sort((a, b) => a.earliest.localeCompare(b.earliest));
+
+  const assigned = new Set(taught.map((row) => row.perjadinTeacherId));
+  return {
+    bySchool: live.map(({ school }) => {
+      const here = new Set(
+        taught
+          .filter((row) => row.schoolId === school.schoolId)
+          .map((row) => row.perjadinTeacherId),
+      );
+      return {
+        schoolId: school.schoolId,
+        name: school.name,
+        pengajar: pengajar.filter((person) => here.has(person.id)),
+      };
+    }),
+    unassigned: pengajar.filter((person) => !assigned.has(person.id)),
   };
 }
