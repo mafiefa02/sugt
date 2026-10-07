@@ -84,8 +84,8 @@ export async function setPerjadinPimpinanAction(
 }
 
 /**
- * **Add one trip-scoped teacher name.** The teacher writes clear the "Narasumber sudah lengkap"
- * Preparation tick, which shows on the `/perjadin` list's Persiapan `x/N` pill — so, like
+ * **Add one trip-scoped teacher name.** The teacher writes clear the system Preparation Item's
+ * tick (ADR-0045), which shows on the `/perjadin` list's Persiapan `x/N` pill — so, like
  * `togglePreparationItemAction`, this revalidates both routes.
  */
 export async function addPerjadinTeacherAction(
@@ -289,17 +289,16 @@ export async function updatePerjadinAdvanceAction(
  */
 export async function togglePreparationItemAction(
   perjadinId: string,
-  itemKey: string,
+  itemId: string,
   checked: boolean,
 ): Promise<TogglePreparationItemResult> {
   const person = await requirePerson();
 
   const result = await staffSurface(() =>
-    togglePreparationItem(person, { perjadinId, itemKey, checked }),
+    togglePreparationItem(person, { perjadinId, itemId, checked }),
   );
-  if (result.outcome === "toggled") {
-    revalidatePath(`/perjadin/${perjadinId}`);
-    revalidatePath("/perjadin");
-  }
+  // A refused item is one the page should no longer show, so it is refreshed then too.
+  revalidatePath(`/perjadin/${perjadinId}`);
+  revalidatePath("/perjadin");
   return result;
 }

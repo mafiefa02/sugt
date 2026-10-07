@@ -2,6 +2,7 @@ import type {
   ActivityLogAction,
   PerjadinDocumentKind,
   PerjadinDocumentParticipantType,
+  PreparationItemLevel,
   Role,
   Stream,
   TransactionCategory,
@@ -22,11 +23,12 @@ import {
   text,
   time,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
 import { person } from "./people";
-import { school, subCluster } from "./reference";
+import { cluster, school, subCluster } from "./reference";
 
 /**
  * Travel: the Perjadin, its Group, and the acquittal state.
@@ -272,40 +274,184 @@ export const transaction = pgTable(
 );
 
 /**
- * The Preparation Checklist's ticks — **one row per ticked item, and nothing else**
- * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
+ * **The Preparation Checklist's items, at three levels** (ADR-0045). A `semua` item applies to every
+ * Perjadin, a `cluster` item to the Perjadins of one Cluster (a Perjadin's Cluster is its
+ * Sub-Cluster's), a `perjadin` item to one Perjadin; `preparation_item_scope_matches_level` holds
+ * that each names exactly the scope its level needs. Order is `semua` first, then the Cluster's, then
+ * the Perjadin's own, each by its own `position`.
  *
- * The *set of items that exists* is not stored: since the amendment to ADR-0018 it is a **flat
- * fixed six** — `sk_perjalanan`, `tiket_pp`, lodging, local transport, `staff`, and
- * `pengajar_lengkap` — derived at read time in the query layer with no per-member part. This table
- * holds only which of those a Staff member has hand-ticked, so an un-tick is a `DELETE` and there is
- * no "unchecked" row to keep in sync.
+ * **A `semua` or `cluster` item is dated, and the dates are what freeze finished Perjadins.** It
+ * applies to Perjadin P iff `added_on <= P.ends_on` and `removed_on` is null or later than
+ * `P.ends_on` — each date is the WIB day of the change, so a change reaches only the Perjadins that
+ * had not ended by then. Removing one is a dated soft-remove. A `perjadin` item is undated
+ * (`preparation_item_dated_iff_wide`): it always applies to its Perjadin, and removing it deletes it,
+ * its ticks with it. `label` is not dated: rewording keeps the item, its id and its ticks, everywhere.
  *
- * `itemKey` is one of those six fixed keys. `pengajar_lengkap` is the one box the tool clears by
- * itself: the Teaching-Team mutation queries (`./queries/perjadin-teachers.ts`) delete its tick on
- * any add/rename/remove, so each change forces a fresh manual confirmation the team is complete.
- * `dosen:{personId}` ticks the **old** per-teacher model left behind are orphans — no item derives
- * them, so they are silently ignored and never cleaned up; so are ticks on `tiket_keberangkatan`
- * and `tiket_kepulangan`, the two ticket boxes ADR-0041 folded into `tiket_pp`. See ADR-0018 and
- * `docs/data-model.md`.
- *
- * The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent: the
- * write upserts on it, so ticking twice is one row. `checked_by`/`checked_at` record who and when
- * for later use; nothing renders them yet.
+ * **`clears_on_teaching_team_change` marks the system item** — "Fiksasi Dosen/Narasumber oleh PIC
+ * Dosen" at the cutover — whose tick any Teaching-Team change deletes (`./queries/perjadin-teachers.ts`).
+ * The flag, not an id or a label, is what the coupling reads, so it survives a rewording. At most one
+ * item carries it (`preparation_item_one_system_item`), and it is a `semua` item never removed
+ * (`preparation_item_system_item_kept`). Hiding it is refused in the query layer.
  */
-export const perjadinPreparationItem = pgTable(
-  "perjadin_preparation_item",
+export const preparationItem = pgTable(
+  "preparation_item",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    level: text("level").$type<PreparationItemLevel>().notNull(),
+    clusterId: uuid("cluster_id").references(() => cluster.id),
+    perjadinId: uuid("perjadin_id").references(() => perjadin.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    position: integer("position").notNull(),
+    addedOn: date("added_on"),
+    removedOn: date("removed_on"),
+    clearsOnTeachingTeamChange: boolean("clears_on_teaching_team_change").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("preparation_item_level_check", sql`${t.level} in ('semua', 'cluster', 'perjadin')`),
+    check(
+      "preparation_item_scope_matches_level",
+      sql`(${t.level} = 'semua' and ${t.clusterId} is null and ${t.perjadinId} is null)
+        or (${t.level} = 'cluster' and ${t.clusterId} is not null and ${t.perjadinId} is null)
+        or (${t.level} = 'perjadin' and ${t.perjadinId} is not null and ${t.clusterId} is null)`,
+    ),
+    check(
+      "preparation_item_dated_iff_wide",
+      sql`(${t.level} = 'perjadin' and ${t.addedOn} is null and ${t.removedOn} is null)
+        or (${t.level} <> 'perjadin' and ${t.addedOn} is not null)`,
+    ),
+    check(
+      "preparation_item_removed_after_added",
+      sql`${t.removedOn} is null or ${t.removedOn} >= ${t.addedOn}`,
+    ),
+    check("preparation_item_label_not_empty", sql`length(trim(${t.label})) > 0`),
+    check(
+      "preparation_item_system_item_kept",
+      sql`not ${t.clearsOnTeachingTeamChange} or (${t.level} = 'semua' and ${t.removedOn} is null)`,
+    ),
+    uniqueIndex("preparation_item_one_system_item")
+      .on(t.clearsOnTeachingTeamChange)
+      .where(sql`${t.clearsOnTeachingTeamChange}`),
+    index("preparation_item_cluster_id_idx").on(t.clusterId),
+    index("preparation_item_perjadin_id_idx").on(t.perjadinId),
+  ],
+);
+
+/**
+ * **A wider Preparation Item hidden for one Cluster or one Perjadin** (ADR-0045) — removed there only,
+ * its ticks kept, so showing it again brings them back. Exactly one scope
+ * (`preparation_item_hide_one_scope`).
+ *
+ * **A Cluster-level hide is dated like a wider item**: each hide is its own row, `hidden_on` the WIB
+ * day of the hide and `shown_on` that of showing it again, so the item is hidden for Perjadin P iff
+ * some row has `hidden_on <= P.ends_on` and `shown_on` null or later. A Cluster can hide, show and
+ * hide again, one row per spell, and the rule stays a pure function of the dates; one spell is open
+ * at a time (`preparation_item_hide_one_open_per_cluster`). **A Perjadin-level hide is undated** and
+ * always applies; showing it again deletes the row (`preparation_item_hide_dated_iff_cluster`).
+ *
+ * Which items may be hidden where — a `semua` item for a Cluster or a Perjadin, a `cluster` item for
+ * one of its Perjadins, never the system item — is the query layer's rule (`./queries/preparation-items.ts`).
+ */
+export const preparationItemHide = pgTable(
+  "preparation_item_hide",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    preparationItemId: uuid("preparation_item_id").notNull(),
+    clusterId: uuid("cluster_id").references(() => cluster.id),
+    perjadinId: uuid("perjadin_id").references(() => perjadin.id, { onDelete: "cascade" }),
+    hiddenOn: date("hidden_on"),
+    shownOn: date("shown_on"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Named: the generated name runs past Postgres's 63 characters and would be cut.
+    foreignKey({
+      name: "preparation_item_hide_item_fk",
+      columns: [t.preparationItemId],
+      foreignColumns: [preparationItem.id],
+    }).onDelete("cascade"),
+    check(
+      "preparation_item_hide_one_scope",
+      sql`(${t.clusterId} is null) <> (${t.perjadinId} is null)`,
+    ),
+    check(
+      "preparation_item_hide_dated_iff_cluster",
+      sql`(${t.clusterId} is not null and ${t.hiddenOn} is not null)
+        or (${t.perjadinId} is not null and ${t.hiddenOn} is null and ${t.shownOn} is null)`,
+    ),
+    check(
+      "preparation_item_hide_shown_after_hidden",
+      sql`${t.shownOn} is null or ${t.shownOn} >= ${t.hiddenOn}`,
+    ),
+    uniqueIndex("preparation_item_hide_one_open_per_cluster")
+      .on(t.preparationItemId, t.clusterId)
+      .where(sql`${t.clusterId} is not null and ${t.shownOn} is null`),
+    uniqueIndex("preparation_item_hide_one_per_perjadin")
+      .on(t.preparationItemId, t.perjadinId)
+      .where(sql`${t.perjadinId} is not null`),
+  ],
+);
+
+/**
+ * **A wider Preparation Item reworded for one Cluster or one Perjadin** (ADR-0045). Undated, like
+ * every wording: it shows on every Perjadin in its scope, finished ones included, and deleting it
+ * restores the wider wording. The most specific wording wins. One per item per scope.
+ */
+export const preparationItemWording = pgTable(
+  "preparation_item_wording",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    preparationItemId: uuid("preparation_item_id").notNull(),
+    clusterId: uuid("cluster_id").references(() => cluster.id),
+    perjadinId: uuid("perjadin_id").references(() => perjadin.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+  },
+  (t) => [
+    foreignKey({
+      name: "preparation_item_wording_item_fk",
+      columns: [t.preparationItemId],
+      foreignColumns: [preparationItem.id],
+    }).onDelete("cascade"),
+    check(
+      "preparation_item_wording_one_scope",
+      sql`(${t.clusterId} is null) <> (${t.perjadinId} is null)`,
+    ),
+    check("preparation_item_wording_label_not_empty", sql`length(trim(${t.label})) > 0`),
+    uniqueIndex("preparation_item_wording_one_per_cluster")
+      .on(t.preparationItemId, t.clusterId)
+      .where(sql`${t.clusterId} is not null`),
+    uniqueIndex("preparation_item_wording_one_per_perjadin")
+      .on(t.preparationItemId, t.perjadinId)
+      .where(sql`${t.perjadinId} is not null`),
+  ],
+);
+
+/**
+ * **One ticked Preparation Item on one Perjadin** — only the ticks are stored, so an un-tick is a
+ * `DELETE` (ADR-0018). Keyed by the item's id (ADR-0045), so a reworded item keeps its ticks, and a
+ * hidden one keeps them too until it is shown again. Removing a Perjadin-level item deletes it and,
+ * by cascade, its ticks. The primary key is what makes a toggle idempotent.
+ */
+export const perjadinPreparationTick = pgTable(
+  "perjadin_preparation_tick",
   {
     perjadinId: uuid("perjadin_id")
       .notNull()
       .references(() => perjadin.id, { onDelete: "cascade" }),
-    itemKey: text("item_key").notNull(),
+    preparationItemId: uuid("preparation_item_id").notNull(),
     checkedBy: uuid("checked_by")
       .notNull()
       .references(() => person.id),
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.perjadinId, t.itemKey] })],
+  (t) => [
+    primaryKey({ columns: [t.perjadinId, t.preparationItemId] }),
+    foreignKey({
+      name: "perjadin_preparation_tick_item_fk",
+      columns: [t.preparationItemId],
+      foreignColumns: [preparationItem.id],
+    }).onDelete("cascade"),
+  ],
 );
 
 /**

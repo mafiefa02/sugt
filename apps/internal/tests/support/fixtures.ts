@@ -716,6 +716,10 @@ export async function addActivityLogEntry(fixture: ActivityLogFixture) {
  * `addPerjadinFeedbackToken` writes it (ADR-0024), even though `cascade` from `public."perjadin"`
  * already reaches it.
  *
+ * `preparation_item` is named, and then refilled from `test_support`: `cascade` from `cluster` and
+ * `perjadin` empties it anyway, and with it the items migration 0043 wrote, which every test should
+ * see as a real database does. Its hides, wordings and ticks go with it by cascade.
+ *
  * `public."session"` and `better_auth."session"` are both here and both qualified.
  * That collision is the whole reason Better Auth was given a Postgres schema of its
  * own — `session` is a teaching occasion at one School.
@@ -750,9 +754,13 @@ export async function resetDatabase() {
       public."drive_connection",
       public."activity_log",
       public."perjadin_document",
-      public."perjadin_document_folder"
+      public."perjadin_document_folder",
+      public."preparation_item"
     restart identity cascade
   `);
+  await db.execute(
+    sql`insert into public."preparation_item" select * from test_support."preparation_item"`,
+  );
 }
 
 /**
@@ -777,3 +785,42 @@ export function constraintOf(error: unknown): string | null {
 export async function refusedBy(write: Promise<unknown>): Promise<string | null> {
   return write.then(() => null, constraintOf);
 }
+
+/**
+ * `offset` days from today **in WIB**, `YYYY-MM-DD` — the calendar every dated rule is reckoned in
+ * (`todayInDeadlineZone`), so a fixture on a boundary lands exactly on it. `en-CA` renders ISO.
+ */
+export function wibDaysFromToday(offset: number): string {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
+  const day = new Date(`${today}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + offset);
+  return day.toISOString().slice(0, 10);
+}
+
+/** The company's 14 Preparation Items (0043, ADR-0045), in order, word for word. */
+export const COMPANY_PREPARATION_ITEMS = [
+  "Pembagian keberangkatan/Pendamping",
+  "Fiksasi Dosen/Narasumber oleh PIC Dosen",
+  "Pembuatan grup koordinasi keberangkatan",
+  "Fiksasi itinerary oleh Ibu Direktur",
+  "Komunikasi dengan pihak sekolah oleh Pak Rahmat/Fandy di antaranya terkait kesiapan sekolah, fasilitas, dan lainnya",
+  "Menginformasikan kepada Ketua Rombongan (Dosen) oleh Pak Rahmat/Fandy",
+  "Itinerary disebarkan kepada dosen kelompok melalui Grup Keberangkatan",
+  "Pemesanan Hotel",
+  "Pemesanan Tiket Pesawat/Kereta/Travel",
+  "Barang bawaan sudah aman (RBL/Modul)",
+  "Kelengkapan dokumen sudah aman (SPPD dan Daftar Hadir Peserta/Pendamping/Narasumber)",
+  "Uang pegangan konsumsi sudah diterima",
+  "Kirim CV Narasumber ke pihak sekolah",
+  "Drive dokumentasi kegiatan dan laporan keuangan harian berupa spreadsheet/lainnya beserta dengan drive upload bukti pembelian",
+];
+
+/** The six items 0043 retired, in their old order, for a Perjadin that ended before the cutover. */
+export const RETIRED_PREPARATION_ITEMS = [
+  "SK Perjalanan",
+  "Tiket / transportasi PP",
+  "Booking penginapan",
+  "Konfirmasi dengan pihak transportasi lokal",
+  "Konfirmasi dengan para Pendamping",
+  "Narasumber sudah lengkap",
+];

@@ -173,7 +173,7 @@ Group of:
 or future and whether or not the person is its PIC:
 
 ```
-Kelompok 12 · 11–14 Okt 2026                                   PIC: Aziz Satrio   [Persiapan 0/6]   ⌄
+Kelompok 12 · 11–14 Okt 2026                                  PIC: Aziz Satrio   [Persiapan 0/14]   ⌄
 SMA Pradita Dirgantara, SMA Trensains Muhammadiyah Sragen
 ```
 
@@ -379,13 +379,44 @@ of every eight Sessions are invisible to anything trip-shaped.
 
 **A Perjadin's screen carries a Preparation Checklist** — a private, hand-ticked list of
 pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid and nothing more:
-no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Every trip has
-the same six fixed boxes — SK Perjalanan, "Tiket / transportasi PP", lodging, local transport, one
-"confirmed with the Pendamping" and "Narasumber sudah lengkap" — and no per-member ones. Any Staff
-member may tick any box; the boxes flip optimistically. The checklist's state also shows off the trip's own
-screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is done: in
-the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. For Staff
+no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Any Staff
+member may tick any box; the boxes flip optimistically. The checklist's state also shows off the
+trip's own screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is
+done: in the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. For Staff
 the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
+
+**Which boxes a trip has** is set by an Administrator at three levels: every Perjadin, one Cluster,
+or one Perjadin ([ADR-0045](./adr/0045-the-preparation-checklist-is-stored-per-level-and-frozen-for-finished-perjadins.md)).
+`N` is each trip's own. The list reads every-Perjadin items first, then the Cluster's, then the
+trip's own.
+
+- **Every trip that had not ended when the company's 14 came in has them**, in this order:
+  1. Pembagian keberangkatan/Pendamping
+  2. Fiksasi Dosen/Narasumber oleh PIC Dosen
+  3. Pembuatan grup koordinasi keberangkatan
+  4. Fiksasi itinerary oleh Ibu Direktur
+  5. Komunikasi dengan pihak sekolah oleh Pak Rahmat/Fandy di antaranya terkait kesiapan sekolah,
+     fasilitas, dan lainnya
+  6. Menginformasikan kepada Ketua Rombongan (Dosen) oleh Pak Rahmat/Fandy
+  7. Itinerary disebarkan kepada dosen kelompok melalui Grup Keberangkatan
+  8. Pemesanan Hotel
+  9. Pemesanan Tiket Pesawat/Kereta/Travel
+  10. Barang bawaan sudah aman (RBL/Modul)
+  11. Kelengkapan dokumen sudah aman (SPPD dan Daftar Hadir Peserta/Pendamping/Narasumber)
+  12. Uang pegangan konsumsi sudah diterima
+  13. Kirim CV Narasumber ke pihak sekolah
+  14. Drive dokumentasi kegiatan dan laporan keuangan harian berupa spreadsheet/lainnya beserta
+      dengan drive upload bukti pembelian
+- **A trip that had already ended by then keeps the old six**, with its ticks: SK Perjalanan, "Tiket /
+  transportasi PP", lodging, local transport, "confirmed with the Pendamping" and "Narasumber
+  sudah lengkap".
+- **A finished trip's list does not change.** Adding, removing or hiding a box for every Perjadin or
+  for a Cluster reaches only the trips ending that day or later. Moving a trip's dates re-decides
+  this against its new end date. A change made for one Perjadin
+  always reaches it. A box's wording, once changed, shows everywhere, finished trips included.
+- **"Fiksasi Dosen/Narasumber oleh PIC Dosen" unticks itself** whenever the trip's Narasumber change
+  (a name added, renamed or removed), so each change has to be confirmed again by hand. It can be
+  reworded but never removed or hidden.
 
 **A Perjadin's screen ends with its Dokumen**: the attendance sheets uploaded from the
 `/pendamping` card, under the three kinds, each with a **Buka** link and "belum tersinkron" while it
