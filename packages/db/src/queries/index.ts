@@ -224,6 +224,12 @@ export {
   type RewordPreparationItemResult,
 } from "./preparation-items";
 export {
+  preparationWeek,
+  type PreparationWeek,
+  type WeekPerjadin,
+  type WeekPreparationItem,
+} from "./preparation-week";
+export {
   preparationSettings,
   preparationSettingsClusters,
   preparationSettingsPerjadins,

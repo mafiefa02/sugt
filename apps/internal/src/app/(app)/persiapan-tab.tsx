@@ -44,7 +44,7 @@ import {
 import { preparationPercent } from "./preparation-derive";
 
 /**
- * **The Dashboard (`/`) Persiapan tab** — the free-standing Preparation Cards (#221, ADR-0028), a Card
+ * **The Dashboard (`/`) Persiapan Program tab** (Persiapan until #423) — the free-standing Preparation Cards (#221, ADR-0028), a Card
  * being a title, a Jenis, a date or date-range, and a hand-ticked checklist that is *not* the
  * Perjadin Preparation Checklist (ADR-0018). The cards arrive read from the server; nothing here
  * fetches.

@@ -54,7 +54,10 @@ function usePreparationChecklist(perjadinId: string, items: PreparationItem[]) {
   return { items: optimisticItems, toggle };
 }
 
-/** The checkbox list itself — presentational, over the optimistic items and toggle the hook owns. */
+/**
+ * The checkbox list itself — presentational, over the optimistic items and toggle the hook owns. The
+ * Dashboard's Persiapan Luring tab (#423) renders it read-only, `canToggle` false, every box disabled.
+ */
 function PreparationChecklist({
   items,
   canToggle,
@@ -171,4 +174,4 @@ function PerjadinPreparationDialog({
   );
 }
 
-export { PerjadinPreparation, PerjadinPreparationDialog };
+export { PerjadinPreparation, PerjadinPreparationDialog, PreparationChecklist };

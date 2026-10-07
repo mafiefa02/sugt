@@ -4,28 +4,36 @@ import { Tabs, TabsList, TabsTrigger } from "@sugt/ui/components/tabs";
 import { type ReactNode, useState } from "react";
 
 /**
- * **The Dashboard (`/`) tab switch.** Two tabs — Pelaksanaan (the delivery-and-budget overview that has
- * always been this screen) and Persiapan (the free-standing Preparation Cards, #221) — with
- * Pelaksanaan the default and first.
+ * **The Dashboard (`/`) tab switch.** Three tabs, left to right — Pelaksanaan (the delivery-and-budget
+ * overview that has always been this screen), Persiapan Program (the free-standing Preparation
+ * Cards, #221, named Persiapan until #423) and Persiapan Luring (one week's Perjadin Preparation
+ * Checklists, #423) — with Pelaksanaan the default and first.
  *
- * **A thin client shell, so the two tabs stay server-composed.** Both panels are built in the server
- * `page.tsx` — one reads `monitoringData`, the other `preparationCards` — and handed in as ready
- * nodes; this only chooses which to show. Keeping the composition on the server means the existing
- * `DashboardView` and its data path are untouched (the parent still passes it the identical props),
- * and the Persiapan tab's cards are fetched in the same request rather than through a client round
- * trip. Only the active node is rendered, mirroring `feedback-view.tsx`; the tab is local state, not
- * a URL param, because which tab you last looked at is nobody else's business.
+ * **A thin client shell, so the tabs stay server-composed.** Every panel is built in the server
+ * `page.tsx` — from `monitoringData`, `preparationCards` and `preparationWeek` — and handed in as
+ * ready nodes; this only chooses which to show. Only the active node is rendered, mirroring
+ * `feedback-view.tsx`.
+ *
+ * **The tab is local state, not a URL param**, because which tab you last looked at is nobody else's
+ * business. Persiapan Luring's *week* is in the URL (`?minggu=`) — a week is worth bookmarking — and
+ * a URL carrying one opens on that tab (`initialTab`). Moving between weeks is a soft navigation, so
+ * this component keeps its state and the tab stays put; switching tabs leaves the URL, and so the
+ * week, alone.
  */
-type Tab = "pelaksanaan" | "persiapan";
+type Tab = "pelaksanaan" | "persiapan-program" | "persiapan-luring";
 
 function DashboardTabs({
+  initialTab = "pelaksanaan",
   pelaksanaan,
-  persiapan,
+  persiapanProgram,
+  persiapanLuring,
 }: {
+  initialTab?: Tab;
   pelaksanaan: ReactNode;
-  persiapan: ReactNode;
+  persiapanProgram: ReactNode;
+  persiapanLuring: ReactNode;
 }) {
-  const [tab, setTab] = useState<Tab>("pelaksanaan");
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -36,14 +44,19 @@ function DashboardTabs({
             setTab(value as Tab);
           }}
         >
-          <TabsList>
+          <TabsList className="max-w-full overflow-x-auto">
             <TabsTrigger value="pelaksanaan">Pelaksanaan</TabsTrigger>
-            <TabsTrigger value="persiapan">Persiapan</TabsTrigger>
+            <TabsTrigger value="persiapan-program">Persiapan Program</TabsTrigger>
+            <TabsTrigger value="persiapan-luring">Persiapan Luring</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      {tab === "pelaksanaan" ? pelaksanaan : persiapan}
+      {tab === "pelaksanaan"
+        ? pelaksanaan
+        : tab === "persiapan-program"
+          ? persiapanProgram
+          : persiapanLuring}
     </div>
   );
 }

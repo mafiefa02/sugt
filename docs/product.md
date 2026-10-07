@@ -154,6 +154,37 @@ screen instead of inside the form you launched from it. Since one Sub-Cluster ma
 ([ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)), the reading is per
 School: _which Schools are next_, and the trip is planned around the Sub-Cluster they share.
 
+**The Dashboard has three tabs**, left to right: **Pelaksanaan** (delivery and budget, the default),
+**Persiapan Program** (the free-standing Preparation Cards, named Persiapan until #423) and
+**Persiapan Luring**.
+
+#### Persiapan Luring — one week's Preparation Checklists
+
+**Persiapan Luring** follows, week by week, how far each Perjadin's Preparation Checklist has got
+(#423). It is open to everyone who can read the Dashboard and is **read-only for all of them**,
+Staff included: nothing on it ticks or unticks a box.
+
+- **A week is Monday to Saturday.** It opens on the current week by today in WIB; on a Sunday, on the
+  week that starts the next day. The arrows step a week back or forward, **Minggu ini** returns to
+  the current week, and a date field jumps to the week of any date picked. The week is in the URL
+  (`/?minggu=2026-10-12`), so it survives a reload and switching tabs; such a link opens on this tab.
+- **A Perjadin belongs to the week its start date falls in**, and one starting on a Sunday to the
+  week that follows: "Kelompok 12 · 11–14 Okt 2026" starts on Sunday 11 Okt and is in the week of
+  12–17 Okt.
+
+It shows three things, all worked out afresh on every load:
+
+1. **A summary** titled "Persiapan Luring 12–17 Okt 2026" (or "28 Sep – 3 Okt 2026", "28 Des 2026 – 2
+   Jan 2027"): the share of boxes ticked over all boxes, summed across the week's Perjadins each with
+   its own list, as a whole percent, with "{ticked}/{all} item · {n} Perjadin" beside it. A week with
+   none reads "Tidak ada Perjadin minggu ini".
+2. **Per item**: one row for every item on at least one of the week's lists, under the item's own
+   wording (a Cluster's or a Perjadin's rewording is the same item), with a bar, "{x}/{y} Perjadin" (y
+   being the trips it is on) and the percent. The lowest percent comes first; equal ones keep the
+   checklist's order. On a phone a long label wraps above its bar.
+3. **One card per Perjadin**, by start date: its name, Schools, "PIC: …" and its own percent in the
+   usual tones. Opened, it lists its checklist with every box disabled.
+
 ### Pendamping — your own trips
 
 `/pendamping` is a Staff member's own trips and nothing else. A Pimpinan is sent to the Dashboard
