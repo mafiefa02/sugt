@@ -241,6 +241,36 @@ spill sideways. Each section shows three cards with **Tampilkan lebih banyak** f
 left out when it has none. With neither, the page says "Anda belum tergabung dalam Perjalanan
 Dinas."
 
+**Who is on the trip** lists Pendamping and Pimpinan by name, as plain lists, and folds the
+Narasumber away by School (#447) — a trip done PP over several Schools often carries a different
+six or so at each, full names with titles, which listed flat crowd the card:
+
+```
+Narasumber (11)
+› Tampilkan Narasumber SMAN 1 Bontang (6)
+› Tampilkan Narasumber SMAN 2 Bontang (6)
+  Narasumber SMAN 3 Bontang: belum ditugaskan
+› Tampilkan Narasumber belum ditugaskan (1)
+```
+
+- **The heading counts the trip's Narasumber once each**, the unassigned included. A trip with none
+  reads `Narasumber (0)` and nothing beneath it.
+- **A Narasumber belongs to a School** when they are in the "Diajar oleh" of one of its live
+  Sessions on this trip. Each School's list stands alone: someone who taught at two Schools is under
+  both, and someone who taught two of one School's Sessions is there once.
+- **A School with nobody in "Diajar oleh"** says "Narasumber {School}: belum ditugaskan", with
+  nothing to open. Whoever is in no live Session's "Diajar oleh" — someone whose only Session was
+  cancelled included — is under a last toggle, "Narasumber belum ditugaskan", shown only when there
+  is someone.
+- **Schools go by their earliest live Session**, then by name — the timeline's order. Names inside
+  a list go A–Z, one per line.
+- **Each toggle opens on its own** to "Sembunyikan Narasumber {School} (n)", and every one starts
+  closed on each page load. The height animates, and snaps under reduced motion. On a phone each
+  toggle is a full-width tap target, and a long School name wraps.
+
+This is how the trip is usually staffed, shown, not a rule: nothing about entering Narasumber or
+"Diajar oleh" changes, and `/perjadin/[id]` still names them per Session.
+
 **Each Session row of the timeline has its own buttons**: **Tandai** while it is still arranged,
 **Feedback**, and **Foto & Video** (#425) — in both sections, since footage is often uploaded after
 the trip. A cancelled Session is not in the timeline, so it has none. There is no Foto & Video

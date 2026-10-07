@@ -21,11 +21,16 @@ import {
   AccordionPlainTrigger,
 } from "@sugt/ui/components/accordion";
 import { Button } from "@sugt/ui/components/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@sugt/ui/components/collapsible";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import { Progress } from "@sugt/ui/components/progress";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 /**
  * **One section of `/pendamping`'s own trips** (#199) — Perjalanan Dinas Anda or Perjalanan Dinas
@@ -321,39 +326,142 @@ function TripMoney({
 
 /**
  * Who is on the trip, inline: Pendamping (the Staff Group), Narasumber (the trip-scoped teacher
- * names) and Pimpinan (record-only), in that order. A group with nobody in it is left out rather
- * than labelled over an empty list, and the names are plain — the PIC is already named in the
- * header.
+ * names) and Pimpinan (record-only), in that order. Pendamping and Pimpinan are plain lists, left
+ * out when empty — the PIC is already named in the header. Narasumber is always there, folded by
+ * School (#447): a trip's dozen-and-more titled names would otherwise crowd the card.
  */
 function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
-  const groups = [
-    {
-      label: "Pendamping",
-      names: anggota.staff.map((person) => ({ key: person.personId, name: person.fullName })),
-    },
-    {
-      label: "Narasumber",
-      names: anggota.pengajar.map((person) => ({ key: person.id, name: person.name })),
-    },
-    {
-      label: "Pimpinan",
-      names: anggota.pimpinan.map((person) => ({ key: person.personId, name: person.name })),
-    },
-  ].filter((group) => group.names.length > 0);
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <NameList
+        label="Pendamping"
+        names={anggota.staff.map((person) => ({ key: person.personId, name: person.fullName }))}
+      />
+      <NarasumberBlock
+        total={anggota.pengajar.length}
+        pengajarBySchool={anggota.pengajarBySchool}
+      />
+      <NameList
+        label="Pimpinan"
+        names={anggota.pimpinan.map((person) => ({ key: person.personId, name: person.name }))}
+      />
+    </div>
+  );
+}
+
+/** One labelled list of names, one per line; absent when nobody is in it. */
+function NameList({ label, names }: { label: string; names: { key: string; name: string }[] }) {
+  if (names.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      {groups.map((group) => (
-        <div key={group.label}>
-          <p className="text-xs text-muted-foreground">{group.label}</p>
-          <ul className="mt-1 grid gap-0.5 text-sm">
-            {group.names.map((person) => (
-              <li key={person.key}>{person.name}</li>
-            ))}
-          </ul>
-        </div>
-      ))}
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <ul className="mt-1 grid gap-0.5 text-sm">
+        {names.map((person) => (
+          <li key={person.key}>{person.name}</li>
+        ))}
+      </ul>
     </div>
+  );
+}
+
+/**
+ * **Narasumber (n), folded by School** (#447). n is the trip's distinct Narasumber, the unassigned
+ * included, so someone listed under two Schools counts once; with none it is `Narasumber (0)` and
+ * nothing beneath. Each School with a list gets its own toggle; one with none says "belum
+ * ditugaskan" with nothing to open; the unassigned get a last toggle when there are any. The order
+ * — Schools by their earliest live Session, names A–Z — is the query's.
+ */
+function NarasumberBlock({
+  total,
+  pengajarBySchool,
+}: {
+  total: number;
+  pengajarBySchool: MyPerjadinTrip["anggota"]["pengajarBySchool"];
+}) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">Narasumber ({total})</p>
+      {total > 0 && (
+        <ul className="mt-1 flex flex-col">
+          {pengajarBySchool.bySchool.map((school) => (
+            <li key={school.schoolId}>
+              {school.pengajar.length > 0 ? (
+                <NarasumberToggle
+                  label={`Narasumber ${school.name}`}
+                  names={school.pengajar}
+                />
+              ) : (
+                <p className="py-2.5 pl-6 text-sm text-muted-foreground">
+                  Narasumber {school.name}: belum ditugaskan
+                </p>
+              )}
+            </li>
+          ))}
+          {pengajarBySchool.unassigned.length > 0 && (
+            <li>
+              <NarasumberToggle
+                label="Narasumber belum ditugaskan"
+                names={pengajarBySchool.unassigned}
+              />
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One fold: "Tampilkan {label} (n)" closed, "Sembunyikan {label} (n)" open, the names one per line
+ * beneath. Closed on every load and on its own — nothing remembers it. The panel stays mounted
+ * (hidden) so `aria-controls` names a real element even while closed, which Base UI only sets while
+ * open. Its height animates over 200 ms and snaps under `prefers-reduced-motion`.
+ */
+function NarasumberToggle({
+  label,
+  names,
+}: {
+  label: string;
+  names: { id: string; name: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <CollapsibleTrigger
+        aria-controls={panelId}
+        className="group/fold flex min-h-11 w-full items-center gap-2 rounded-md text-left text-sm outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <ChevronRight
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-panel-open/fold:rotate-90 motion-reduce:transition-none"
+        />
+        <span className="min-w-0 break-words">
+          {open ? "Sembunyikan" : "Tampilkan"} {label} ({names.length})
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent
+        id={panelId}
+        keepMounted
+        className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none"
+      >
+        <ul className="grid gap-0.5 pb-2 pl-6 text-sm">
+          {names.map((person) => (
+            <li
+              key={person.id}
+              className="break-words"
+            >
+              {person.name}
+            </li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -507,4 +615,4 @@ function SessionNode({
   );
 }
 
-export { MyPerjadinSection, TripMoney, TripTimeline };
+export { AnggotaRoster, MyPerjadinSection, TripMoney, TripTimeline };
