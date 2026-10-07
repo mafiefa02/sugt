@@ -219,11 +219,21 @@ export const sessionFeedbackToken = pgTable(
  * student's submission beside it would mean a professor can no longer be sure who
  * else is in the table.
  *
- * **Three Aspects, none of which ask a Participant to rate themselves.**
+ * **Three Aspects for every Class, none of which ask a Participant to rate themselves.**
  * Comprehension, Participation and Readiness are on the Class Record precisely
  * because they are judgements about the room. `materials` and `instructor` overlap
  * with the Class Record on purpose — that overlap is what lets the professor's view
  * be set against the room's.
+ *
+ * **A fourth, `hands_on_rbl`, for the Student Class only** (#446): how the hands-on
+ * Research-Based Learning module went. Nullable, because a GTK or MS Participant is never
+ * asked it and Student feedback filed before it existed has none; a CHECK keeps it (and its
+ * comment) off every other Class. "Required for Siswa" is the application's rule
+ * (`submitParticipantFeedback`), not a constraint, for those older Student rows. `least()`
+ * ignores a null, so the concerns index still works across all of them.
+ *
+ * **Two written answers that are not Aspects** — `knowledge_gain` and `suggestions` — no
+ * Rating, never counted, never on the concerns list.
  *
  * **No elaboration rule applies here.** A Participant owes nothing and is not signed
  * in; refusing their 3 because they did not justify it would simply lose the 3.
@@ -241,30 +251,44 @@ export const participantFeedback = pgTable(
     classKind: text("class_kind").$type<ClassKind>().notNull(),
     name: text("name").notNull(),
 
+    // The Student Class's alone, and nullable for that reason (see the table comment).
+    handsOnRbl: smallint("hands_on_rbl"),
     materials: rating("materials"),
     instructor: rating("instructor"),
     relevance: rating("relevance"),
 
     // One optional comment per Aspect, so a comment belongs to the Rating it explains and the
     // concerns list can show the prose for the Aspect that was actually Rated low — a single
-    // shared comment could not say which of the three it was about (#102). All three stay
-    // nullable: a Participant owes no elaboration, the CHECK forcing prose lives on
+    // shared comment could not say which Aspect it was about (#102). All of them stay nullable:
+    // a Participant owes no elaboration, the CHECK forcing prose lives on
     // `class_record`/`session_record` only, never here.
+    handsOnRblComment: text("hands_on_rbl_comment"),
     materialsComment: text("materials_comment"),
     instructorComment: text("instructor_comment"),
     relevanceComment: text("relevance_comment"),
+    // The two written questions (#446): did the class add to what they know, and their
+    // suggestions. Both optional; neither is an Aspect.
+    knowledgeGain: text("knowledge_gain"),
+    suggestions: text("suggestions"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("participant_feedback_class_kind_check", sql`${t.classKind} in ('GTK', 'MS', 'Student')`),
     ...ratingBounds("participant_feedback", {
+      hands_on_rbl: t.handsOnRbl,
       materials: t.materials,
       instructor: t.instructor,
       relevance: t.relevance,
     }),
+    check(
+      "participant_feedback_hands_on_rbl_student_check",
+      sql`${t.classKind} = 'Student' or (${t.handsOnRbl} is null and ${t.handsOnRblComment} is null)`,
+    ),
     index("participant_feedback_concerns_idx")
-      .on(sql`least(materials, instructor, relevance)`)
-      .where(sql`least(materials, instructor, relevance) <= ${sql.raw(String(CONCERN))}`),
+      .on(sql`least(hands_on_rbl, materials, instructor, relevance)`)
+      .where(
+        sql`least(hands_on_rbl, materials, instructor, relevance) <= ${sql.raw(String(CONCERN))}`,
+      ),
   ],
 );
 
@@ -297,12 +321,12 @@ export const perjadinEvaluation = pgTable(
     filedByRole: text("filed_by_role").$type<PerjadinEvaluationRole>().notNull(),
     filedByName: text("filed_by_name").notNull(),
 
-    // **The one nullable Rating in the system.** Not every Perjadin involves a night away —
-    // a School close enough for a day trip has no hotel to rate — so `lodging` is not the
-    // `rating()` helper's NOT NULL. It keeps its `between 1 and 10` bound below; `NULL between
-    // 1 and 10` is NULL, which a CHECK accepts. Postgres `least()` ignores NULLs, so the
-    // elaboration CHECK and the concerns index both still behave: a skipped `lodging` drops
-    // out of the minimum rather than forcing prose or reaching the concerns list.
+    // **A nullable Rating**, as `participant_feedback.hands_on_rbl` is too. Not every Perjadin
+    // involves a night away — a School close enough for a day trip has no hotel to rate — so
+    // `lodging` is not the `rating()` helper's NOT NULL. It keeps its `between 1 and 10` bound
+    // below; `NULL between 1 and 10` is NULL, which a CHECK accepts. Postgres `least()` ignores
+    // NULLs, so the elaboration CHECK and the concerns index both still behave: a skipped
+    // `lodging` drops out of the minimum rather than forcing prose or reaching the concerns list.
     lodging: smallint("lodging"),
     transport: rating("transport"),
     meals: rating("meals"),

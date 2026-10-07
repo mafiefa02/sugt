@@ -346,7 +346,13 @@ export type ParticipantFeedbackFixture = {
   name?: string;
   /** Optional comment per Aspect, as the form is — a Participant owes no prose. Null by default. */
   comments?: Partial<Record<ParticipantFeedbackAspect, string>>;
-  ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>>;
+  /** The three every Class has default to a fine Rating; `handsOnRbl` (Siswa only, #446) to none. */
+  ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>> & {
+    handsOnRbl?: number | null;
+  };
+  /** The two written answers (#446). Null by default. */
+  knowledgeGain?: string;
+  suggestions?: string;
   /**
    * When it was submitted. Defaults to the schema's `now()`. The Feedback list orders on this
    * and pages by it, so a test that asserts on the order supplies distinct values; existing
@@ -367,6 +373,7 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
       sessionId: fixture.sessionId,
       classKind: fixture.classKind,
       name: fixture.name ?? "Siti",
+      handsOnRblComment: fixture.comments?.hands_on_rbl ?? null,
       materialsComment: fixture.comments?.materials ?? null,
       instructorComment: fixture.comments?.instructor ?? null,
       relevanceComment: fixture.comments?.relevance ?? null,
@@ -374,6 +381,8 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
       instructor: FINE,
       relevance: FINE,
       ...fixture.ratings,
+      knowledgeGain: fixture.knowledgeGain ?? null,
+      suggestions: fixture.suggestions ?? null,
       ...(fixture.submittedAt ? { submittedAt: fixture.submittedAt } : {}),
     })
     .returning();
@@ -389,7 +398,7 @@ export type PerjadinEvaluationFixture = {
    */
   role?: PerjadinEvaluationRole;
   name?: string;
-  /** The one nullable Rating — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
+  /** Nullable — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
   lodging?: number | null;
   ratings?: Partial<Record<"transport" | "meals" | "punctuality", number>>;
   /**

@@ -149,12 +149,14 @@ function ratingsFrom(table: PgTable, aspects: readonly string[]): SQL {
  * belonging to the other forty-one.
  *
  * With no `group by` the aggregates always return exactly one row, so a Session nobody
- * has filed anything about yields `0` and two nulls rather than no row at all. The
+ * has filed anything about yields `0` and two nulls rather than no row at all. It counts
+ * Ratings, not unpivoted rows: a Participant not asked Hands-on RBL (#446) unpivots a null
+ * for it, which `count(r.rating)` and `min` skip and the `array_agg` order puts last. The
  * `order by` inside `array_agg` carries a tie-break on the Aspect name, so two equally
  * low Ratings pick the same one every time instead of whichever the plan reached first.
  */
 const RATINGS_ON_THIS_SESSION = sql`(
-  select count(*)::int as ratings_filed,
+  select count(r.rating)::int as ratings_filed,
          min(r.rating) as lowest_rating,
          (array_agg(r.aspect order by r.rating asc, r.aspect asc))[1] as lowest_aspect
     from (

@@ -707,14 +707,35 @@ Separate from every internal record, deliberately and permanently — see
 [ADR-0012](./adr/0012-participants-write-through-a-short-lived-session-token.md).
 
 At the end of a Session a link or QR code is shown, live for **24 hours**. Anyone taught there
-can open it without signing in, say which Class they sat in, Rate three things, leave a comment
-and type their name:
+can open it without signing in — almost always on a phone, so the form is laid out for ~360px —
+say which Class they sat in, type their name, then answer, in this order (#446):
 
-| Aspect         | What a low score means  |
-| -------------- | ----------------------- |
-| **Materials**  | It was not clear.       |
-| **Instructor** | It was not well taught. |
-| **Relevance**  | It will not help us.    |
+| Label on the form                                                                  | Description under it                                | Input                                     |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------- |
+| **Pengalaman hands-on RBL** — Siswa only                                           | Apakah modul RBL yang dibuat mudah dilakukan?       | Rating 1–10, required + optional Komentar |
+| **Materi**                                                                         | Apakah materi yang diberikan mudah dipahami?        | Rating 1–10, required + optional Komentar |
+| **Narasumber**                                                                     | Apakah narasumber menyampaikan materi dengan jelas? | Rating 1–10, required + optional Komentar |
+| **Relevansi**                                                                      | Apakah materi yang diberikan relevan?               | Rating 1–10, required + optional Komentar |
+| **Melalui kegiatan kelas ini apakah meningkatkan atau menambah pengetahuan Anda?** | —                                                   | Free text, optional                       |
+| **Saran dan masukan untuk kegiatan kelas**                                         | —                                                   | Free text, optional                       |
+
+- **Hands-on RBL** (Research-Based Learning) appears, first, once the Participant picks **Siswa**,
+  and disappears for GTK and MS. Rating it and then switching to GTK or MS drops that Rating and
+  its Komentar; nothing about it is sent. Before a Class is picked the form shows the three every
+  Class is asked.
+- It is a full Aspect: a Rating of 7 or below puts it on the concerns list like the others.
+- The two written questions are **not Aspects**: no Rating, never counted, never averaged, never
+  on the concerns list.
+- The descriptions are on the form only. Everywhere else the Aspects keep their short names —
+  Hands-on RBL, Materi, Narasumber, Relevansi.
+
+**On `/feedback`'s Peserta tab**, Hands-on RBL has its own average card and its own filter beside
+Narasumber, Materi and Relevansi. Its average is over the rows that have one — GTK, MS and Siswa
+rows filed before it existed never count as 0 — and reads "—" while none do; a Siswa card filed
+before it reads "—" for it too, and a GTK or MS card has no such line. A row's average is the mean
+of the Ratings it has. Each card shows the two written answers under **"Peningkatan
+pengetahuan"** and **"Saran dan masukan"**, clamped like the comments ("selengkapnya" /
+"sembunyikan"); an empty one shows no heading.
 
 **Nothing asks them to rate themselves.** Comprehension, Participation and Readiness sit on the
 Class Record precisely because they are judgements about the room, and a room grading its own

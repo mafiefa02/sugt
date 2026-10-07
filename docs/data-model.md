@@ -724,7 +724,7 @@ rubric, because each asks a question only that person can answer.
 | ---------------------- | ------------- | --------------------- | -------------------------------------------------------------------------------- |
 | `class_record`         | Teaching Team | Class, per professor  | Comprehension, Participation, Readiness, Materials, Delivery, Facilities, Timing |
 | `session_record`       | PIC / Staff   | Session               | Facilities, Turnout, School support, Timing, Coordination                        |
-| `participant_feedback` | Participants  | Class, per respondent | Materials, Instructor, Relevance                                                 |
+| `participant_feedback` | Participants  | Class, per respondent | Materials, Instructor, Relevance; Hands-on RBL for the Student Class only        |
 | `perjadin_evaluation`  | Token link    | Perjadin (no dedup)   | Lodging, Transport, Meals, Punctuality                                           |
 
 They share a scale (1–10), a threshold (`CONCERN_AT_OR_BELOW`, 7), and one rule — **a Rating at
@@ -888,42 +888,61 @@ create table participant_feedback (
   class_kind  text not null check (class_kind in ('GTK', 'MS', 'Student')),
   name        text not null,
 
+  hands_on_rbl smallint        check (hands_on_rbl between 1 and 10),   -- Student Class only (#446)
   materials   smallint not null check (materials  between 1 and 10),
   instructor  smallint not null check (instructor between 1 and 10),
   relevance   smallint not null check (relevance  between 1 and 10),
 
-  materials_comment   text,
-  instructor_comment  text,
-  relevance_comment   text,
-  submitted_at        timestamptz not null default now()
+  hands_on_rbl_comment text,
+  materials_comment    text,
+  instructor_comment   text,
+  relevance_comment    text,
+  knowledge_gain       text,                                         -- written answers (#446),
+  suggestions          text,                                         -- not Aspects
+  submitted_at         timestamptz not null default now(),
+
+  check (class_kind = 'Student' or (hands_on_rbl is null and hands_on_rbl_comment is null))
 );
 
 create index participant_feedback_concerns_idx
-  on participant_feedback (least(materials, instructor, relevance))
-  where least(materials, instructor, relevance) <= 7;
+  on participant_feedback (least(hands_on_rbl, materials, instructor, relevance))
+  where least(hands_on_rbl, materials, instructor, relevance) <= 7;
 ```
 
-**Three Aspects, and none of them ask a Participant to rate themselves.** Comprehension,
-Participation and Readiness are on the Class Record precisely because they are judgements about
-the room, and a room grading its own readiness is not evidence. Materials and Instructor overlap
-deliberately with the Class Record's `materials` and `delivery` — that overlap is the point,
-because it lets what the professor thought be set against what the room thought.
+**Three Aspects for every Class — four for the Student Class, with Hands-on RBL — and none of them
+ask a Participant to rate themselves.** Comprehension, Participation and Readiness are on the
+Class Record precisely because they are judgements about the room, and a room grading its own
+readiness is not evidence. Materials and Instructor overlap deliberately with the Class Record's
+`materials` and `delivery` — that overlap is the point, because it lets what the professor thought
+be set against what the room thought.
 
 `class_kind` says which Class the respondent sat in. It is what makes their Rating comparable to
 the Class Record for that same cohort.
+
+**Hands-on RBL is the Student Class's alone** ([#446](https://github.com/sugt-itb/sugt-itb-26/issues/446)):
+`hands_on_rbl` and its `hands_on_rbl_comment`. A CHECK holds both null on every GTK and MS row.
+The column is nullable, and **"required for Siswa" is the application's rule**
+(`submitParticipantFeedback`, which refuses a Siswa submission without one as `ratings-mismatch`),
+not a constraint: Student feedback filed before the column existed has none, and is not
+backfilled. `least()` ignores a null, so the rebuilt concerns index still covers GTK, MS and those
+older rows, and a Hands-on RBL Rating of 7 or below reaches the concerns list like any other.
+Where a row's Ratings are averaged (the `/feedback` row average), it is over the Ratings present.
+
+**Two written answers that are not Aspects**, `knowledge_gain` and `suggestions`: optional, no
+Rating, never counted, never on the concerns list.
 
 **No elaboration rule applies to Participants.** The `CHECK` forcing prose on a low Rating is on
 `class_record` and `session_record` only. A Participant owes nothing and is not signed in;
 refusing their 3 because they did not justify it would simply lose the 3.
 
 **One optional comment per Aspect**, `materials_comment` / `instructor_comment` /
-`relevance_comment`, rather than one shared `comment`
+`relevance_comment` / `hands_on_rbl_comment`, rather than one shared `comment`
 ([#102](https://github.com/mafiefa02/sugt/issues/102),
 [ADR-0017](./adr/0017-participant-feedback-has-a-comment-per-aspect.md)). A single comment could
-not say which of the three Aspects it was about, so the concerns list could show a low
+not say which Aspect it was about, so the concerns list could show a low
 `instructor` Rating beside prose that was really about the materials. Pairing each comment with its
 Aspect lets the list show the comment for the Aspect that was actually Rated low — or none, when
-that box was left blank. All three stay nullable; the no-elaboration rule above is unchanged.
+that box was left blank. All of them stay nullable; the no-elaboration rule above is unchanged.
 
 **One token per Session, shared.** The primary key is `session_id`, so issuing a new one replaces
 it. `expires_at` defaults 24 hours out and is stored rather than derived: the token is issued at
@@ -1037,11 +1056,12 @@ box is retired outright — advice with no per-Aspect home now lives inside the 
 nowhere. This mirrors the #102 reversal on `participant_feedback`, plus the per-Aspect CHECK that
 Participant Feedback (which owes no prose) never needed.
 
-**`lodging` is the one nullable Rating in the system, because a day-trip has no hotel.** Not
-every Perjadin involves a night away — the programme budget carries at least one group visiting
-two Schools and returning the same day, with accommodation, flights and airport transfer all at
-zero. A `not null` column would require those travellers to rate a hotel they never saw, and
-inventing a Rating to satisfy a constraint is worse than the missing row.
+**`lodging` is nullable, because a day-trip has no hotel** — one of two nullable Ratings, with
+`participant_feedback.hands_on_rbl` (#446). Not every Perjadin involves a night away — the
+programme budget carries at least one group visiting two Schools and returning the same day, with
+accommodation, flights and airport transfer all at zero. A `not null` column would require those
+travellers to rate a hotel they never saw, and inventing a Rating to satisfy a constraint is worse
+than the missing row.
 
 **Nothing constrains when it may be null**, deliberately. A Group that did stay somewhere and
 skipped the Aspect is a filer being unhelpful, not a state worth preventing, and the CHECK that
@@ -1118,10 +1138,11 @@ select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
   from participant_feedback f
   join session sn on sn.id = f.session_id
   join school sch on sch.id = sn.school_id
-  cross join lateral (values ('materials',  f.materials,  f.materials_comment),
-                             ('instructor', f.instructor, f.instructor_comment),
-                             ('relevance',  f.relevance,  f.relevance_comment))
-                     as r(aspect, rating, said)
+  cross join lateral (values ('hands_on_rbl', f.hands_on_rbl, f.hands_on_rbl_comment),
+                             ('materials',    f.materials,    f.materials_comment),
+                             ('instructor',   f.instructor,   f.instructor_comment),
+                             ('relevance',    f.relevance,    f.relevance_comment))
+                     as r(aspect, rating, said)   -- a null hands_on_rbl fails `<= 7` and drops out
  where r.rating <= 7
 
 union all
@@ -2470,7 +2491,8 @@ cascade and the deferred PIC foreign key resolve against each other rather than 
   but it is the Aspect most likely to be noise.
 - **Whether a Perjadin Evaluation is required of anyone.** Nothing currently is — unlike a
   Session Record, where the PIC's is expected. The PIC is the obvious candidate.
-- **What else the Participant form asks for.** Right now: Class, three Ratings, a comment on each Aspect, name.
+- **What else the Participant form asks for.** Right now: Class, name, three Ratings (four for
+  Siswa, with Hands-on RBL), a comment on each Aspect, and two optional written answers (#446).
   A role or year group would be a column, not a redesign.
 - **The four Cluster Problems are placeholders.** Invented here to be plausible per Cluster and
   workable from both Streams; they are not DITSAMA's. Replace them by editing

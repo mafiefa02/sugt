@@ -205,7 +205,7 @@ What a Teaching Team member says about one **Class** they taught at one Session.
 _Avoid_: Session Record (that is the PIC's, and covers the visit), part (the old six-part structure is gone), class evaluation
 
 **Aspect**:
-One of the named things an evaluation scores. Each of the four evaluations has its own list, because each asks a question only that filer can answer — the PIC never saw comprehension, a Participant cannot grade their own readiness, and nobody but the Group slept in the hotel.
+One of the named things an evaluation scores. Each of the four evaluations has its own list, because each asks a question only that filer can answer — the PIC never saw comprehension, a Participant cannot grade their own readiness, and nobody but the Group slept in the hotel. Participant Feedback's list also depends on the Class: the Student Class is asked one Aspect the others are not.
 _Avoid_: category, criterion, dimension, metric, section
 
 **Rating**:
@@ -221,7 +221,7 @@ Someone taught at a Session — a member of a GTK, MS or Student Class. The Prog
 _Avoid_: attendee, student (only one of the three Classes is students), user, respondent
 
 **Participant Feedback**:
-What one Participant says about the Class they sat in: a Rating of **Materials**, **Instructor** and **Relevance**, an optional comment on each of the three Aspects, and a name they type themselves. Left without signing in, through a link live only briefly. Nothing asks them to rate themselves — Comprehension, Participation and Readiness are on the Class Record precisely because they are judgements about the room. Deliberately not part of any internal record; the two are filed by different people who expect different readers.
+What one Participant says about the Class they sat in: a Rating of **Materials**, **Instructor** and **Relevance** from every Class, plus **Hands-on RBL** from the Student Class only — how the hands-on **RBL** (Research-Based Learning) module went; an optional comment on each Aspect they Rate; two optional written answers that are not Aspects and are never counted (whether the class added to what they know, and their suggestions); and a name they type themselves. Left without signing in, through a link live only briefly. Nothing asks them to rate themselves — Comprehension, Participation and Readiness are on the Class Record precisely because they are judgements about the room. Deliberately not part of any internal record; the two are filed by different people who expect different readers.
 _Avoid_: review, survey, evaluation (unqualified), Class Record, Session Record
 
 **Final Project**:

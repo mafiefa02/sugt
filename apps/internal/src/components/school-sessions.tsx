@@ -1,4 +1,5 @@
 import { MODE_LABELS, SessionStatusBadge } from "-/components/session-labels";
+import { PARTICIPANT_ASPECT_LABELS } from "-/lib/participant-feedback-copy";
 import type { SchoolSession, SessionAspect } from "@sugt/db/queries";
 import {
   CONCERN_AT_OR_BELOW,
@@ -126,8 +127,10 @@ const ASPECT_LABELS: Record<SessionAspect, string> = {
   turnout: "Kehadiran",
   school_support: "Dukungan Sekolah",
   coordination: "Koordinasi",
-  instructor: "Narasumber",
-  relevance: "Relevansi",
+  // Participant Feedback's own Aspects, named as the form and `/feedback` name them (#446).
+  instructor: PARTICIPANT_ASPECT_LABELS.instructor,
+  relevance: PARTICIPANT_ASPECT_LABELS.relevance,
+  hands_on_rbl: PARTICIPANT_ASPECT_LABELS.hands_on_rbl,
 };
 
 export { SchoolSessions };
