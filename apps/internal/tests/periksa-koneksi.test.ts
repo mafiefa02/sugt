@@ -148,12 +148,14 @@ describe("the check, in order", () => {
       ],
       exposed: [],
       dokumen: "ok",
+      footage: "ok",
       sweep: {
         ran: true,
         synced: 0,
         waiting: 0,
         failures: [],
         documents: { synced: 0, waiting: 0, failures: [] },
+        footage: { synced: 0, waiting: 0, failures: [] },
       },
       names: { ran: true, renamed: 0, remaining: 0, failures: [] },
     });
@@ -219,11 +221,12 @@ describe("the check, in order", () => {
       token: "ok",
       folders: expect.arrayContaining([{ folder: "bukti-transaksi", state: "trashed" }]),
       dokumen: "skipped",
-      sweep: { ran: false, waiting: 1, documentsWaiting: 0 },
+      footage: "skipped",
+      sweep: { ran: false, waiting: 1, documentsWaiting: 0, footageWaiting: 0 },
       names: { ran: false },
     });
     expect(describeDriveCheck(report).lines).toContain(
-      "Sinkronisasi dilewati sampai folder di atas beres; 1 transaksi dan 0 dokumen masih menunggu.",
+      "Sinkronisasi dilewati sampai folder di atas beres; 1 transaksi, 0 dokumen dan 0 foto/video masih menunggu.",
     );
   });
 });
@@ -329,6 +332,7 @@ describe("the sweep", () => {
       waiting: 0,
       failures: [],
       documents: { synced: 0, waiting: 0, failures: [] },
+      footage: { synced: 0, waiting: 0, failures: [] },
     });
   });
 
@@ -431,7 +435,7 @@ describe("the folder names (#407)", () => {
     await expect(nameOf(receipts)).resolves.toBe(name);
     await expect(nameOf(dokumen)).resolves.toBe(name);
     expect(describeDriveCheck(report).lines).toContain(
-      "2 folder Perjadin diganti namanya, 0 tersisa.",
+      "2 nama folder dan berkas diganti, 0 folder tersisa.",
     );
   });
 

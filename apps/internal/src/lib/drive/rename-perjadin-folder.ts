@@ -24,10 +24,13 @@ import { openDrive } from "./google";
 export async function renamePerjadinFolder(person: Person, perjadinId: string): Promise<void> {
   try {
     const trip = await perjadinDriveFolder(person, perjadinId);
-    // The receipts folder and the Dokumen folder (ADR-0042) carry the same name.
-    const folderIds = [trip?.driveFolderId, trip?.driveDokumenFolderId].filter((id): id is string =>
-      Boolean(id),
-    );
+    // The receipts folder, the Dokumen folder (ADR-0042) and the Foto & Video folder (ADR-0046)
+    // carry the same name.
+    const folderIds = [
+      trip?.driveFolderId,
+      trip?.driveDokumenFolderId,
+      trip?.driveFootageFolderId,
+    ].filter((id): id is string => Boolean(id));
     if (!trip || folderIds.length === 0) return;
 
     const credentials = await driveCredentials(person);

@@ -1,6 +1,7 @@
 "use server";
 
 import { renamePerjadinFolder } from "-/lib/drive/rename-perjadin-folder";
+import { renameSessionFootage } from "-/lib/drive/rename-session-footage";
 import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
@@ -169,6 +170,8 @@ export async function editPerjadinSessionAction(
   const result = await staffSurface(() => editPerjadinSession(person, sessionId, input));
   if (result.outcome === "edited") {
     if (result.schoolsChanged) await renamePerjadinFolder(person, perjadinId);
+    // Its Foto & Video folder and files carry its date, time and School (ADR-0046).
+    await renameSessionFootage(person, sessionId);
     revalidatePath(`/perjadin/${perjadinId}`);
   }
   return result;

@@ -185,12 +185,16 @@ The acquittal of one Perjadin — every transaction that consumed the Advance, e
 _Avoid_: report (unqualified), expense report, reimbursement (nothing is claimed back; the money was transferred upfront)
 
 **Activity Log**:
-The append-only record of who changed money, evidence or documents on a **Perjadin**, and when — one entry per act, written with the act itself. Read only by an **Administrator**. The UI says _Log_.
+The append-only record of who changed money, evidence, documents or **Session Footage** on a **Perjadin**, and when — one entry per act, written with the act itself. Read only by an **Administrator**. The UI says _Log_.
 _Avoid_: audit log ("audit" means the external auditor of ADR-0040), history, journal
 
 **Perjadin Document**:
 A paper record of attendance on a **Perjadin**, uploaded as one PDF — one of three types: **Daftar Hadir Peserta** (one School's attendance at one session, for one cohort, `Siswa` or `GTK-MS`), **Daftar Hadir Narasumber** (the Teaching Team's attendance for one day) and **Daftar Hadir Pendamping** (the Group's attendance for one day). The UI says _Dokumen_. The type names stay Indonesian because they are names of paperwork, the same footing as the transaction categories. Uploaded or deleted, never edited ([ADR-0042](./docs/adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)).
 _Avoid_: file, attachment, evidence (that is a transaction's receipt), Narsum
+
+**Session Footage**:
+The photos and videos documenting one **offline Session**, shown in the UI as _Foto & Video_. Photos up to 50 MB, videos up to 1000 MB, each kept as it was taken. Footage is uploaded or deleted, never edited; any **Staff** member uploads and deletes it, and anyone signed in, a **Pimpinan** included, views it. It may be added to a **Session** that is not cancelled, delivered or not, and footage of a **Session** cancelled later stays. Uploading and deleting it are written to the **Activity Log** (see [ADR-0046](./docs/adr/0046-session-footage-is-stored-in-the-company-google-drive.md)).
+_Avoid_: Dokumen / Perjadin Document (attendance paperwork, a different thing), attachment, evidence (that is a transaction's receipt)
 
 **Session Record**:
 What the PIC says about one **offline** Session as a whole — the visit rather than the teaching. Rates five Aspects: **Facilities**, **Turnout**, **School support**, **Timing** and **Coordination**. Filed by Staff, who organised the Session and taught none of it, so it asks nothing about how a cohort got on. **Only offline Sessions produce one** ([ADR-0035](./docs/adr/0035-online-sessions-track-no-pic-and-file-no-session-record.md)): an online Session has no PIC and files none — a third-party LMS runs online delivery.
@@ -261,6 +265,7 @@ _Avoid_: showcase (that is the section, not the piece), case study, portfolio it
 - **A Person is Staff or Pimpinan** — the `Teaching Team` **Person** role was retired in T3 ([#153](https://github.com/mafiefa02/sugt/issues/153)) once both modes named their teachers as plain names (dropping the old online `session_teacher` table), leaving Staff alone; **[#179](https://github.com/mafiefa02/sugt/issues/179)** then added **Pimpinan**, one signed-in read-only leadership role. **Pimpinan** who join a trip are recorded but do not travel as working members
 - A **Session** records who taught it as **names**, filing nothing: an **online Session** carries **two cohort-named Narasumber** — one Siswa, one GTK-MS, one name each ([ADR-0036](./docs/adr/0036-online-sessions-carry-two-cohort-named-pengajar-and-are-recorded-delivered.md), superseding [ADR-0022](./docs/adr/0022-online-sessions-carry-a-stream-and-name-teachers-as-session-scoped-names.md)); an **offline Session** records the set of the **Perjadin**'s trip-scoped **Teaching Team** names who taught it in parallel
 - Offline **Sessions** happen during a **Perjadin**; online **Sessions** have no **Perjadin** at all
+- An offline **Session** may carry **Session Footage**; an online **Session** carries none
 - A **Perjadin** goes to exactly one **Sub-Cluster**, and every **School** it teaches at belongs to that **Sub-Cluster**
 - A **Perjadin** need not reach every **School** in its **Sub-Cluster** — the **Sub-Cluster** says which **Schools** are eligible, the plan says which are visited this time
 - A **Sub-Cluster** may be covered by several **Perjadins**

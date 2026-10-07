@@ -242,11 +242,11 @@ function LogRow({ row }: { row: ActivityLogRow }) {
             </a>
           </>
         )}
-        {row.documentFileId && (
+        {(row.documentFileId ?? row.footageFileId) && (
           <>
             {" · "}
             <a
-              href={driveFileUrl(row.documentFileId)}
+              href={driveFileUrl((row.documentFileId ?? row.footageFileId)!)}
               target="_blank"
               rel="noreferrer"
               className="underline underline-offset-4"

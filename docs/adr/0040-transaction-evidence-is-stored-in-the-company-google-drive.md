@@ -303,3 +303,13 @@ changes, not only `starts_on` (#376):
   how many it renamed and how many it did not reach. A folder in the Drive trash or gone is reported
   and skipped, never recreated. This is how folders made before ADR-0044 take the new name: the
   product owner presses it after deploy until none is left.
+
+## Amendment (2026-10-07): a third tree, `Foto & Video/`
+
+The root now holds a third tree beside `Bukti Transaksi/` and `Dokumen/`: `Foto & Video/`, with its
+own `Pelaksanaan Offline/`, a folder per Perjadin named as its receipts folder is, and inside it a
+folder per offline Session ([ADR-0046](./0046-session-footage-is-stored-in-the-company-google-drive.md),
+#424). It reuses this ADR's account, `_staging`, upload gate and reconcile; only a large file's
+transport differs, sent to the resumable session in 16 MiB pieces rather than one `PUT`. A Perjadin
+folder rename now renames all three of a trip's folders together, and Periksa koneksi ensures the
+third tree, sweeps its unsynced files and re-asserts its names.

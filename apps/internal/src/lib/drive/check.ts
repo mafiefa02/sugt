@@ -3,7 +3,9 @@ import {
   driveFolderIds,
   perjadinDriveFolders,
   recordDriveFolders,
+  sessionFootageFolders,
   unsyncedDocuments,
+  unsyncedFootage,
   unsyncedTransactions,
   type DriveFolderProblem,
   type Person,
@@ -11,11 +13,14 @@ import {
 
 import { perjadinFolderName } from "../perjadin-name";
 import { refreshDriveToken } from "./access-token";
-import { ensureDokumenFolders } from "./dokumen-folders";
+import { ensureDokumenFolders, ensureFootageFolders } from "./dokumen-folders";
 import { readyFolders, type ReadyFolders } from "./fixed-folders";
+import { sessionFootageFolderName } from "./footage-files";
 import { type DriveClient, isDriveFailure, openDrive } from "./google";
 import { reconcileTransaction, type UnsyncedReason } from "./reconcile";
 import { type DocumentUnsyncedReason, reconcileDocument } from "./reconcile-document";
+import { type FootageUnsyncedReason, reconcileFootage } from "./reconcile-footage";
+import { reassertSessionFootageNames } from "./rename-session-footage";
 
 /**
  * **Periksa koneksi** (ADR-0040, #375): whether the company Drive connection works, whether its tree
@@ -52,12 +57,21 @@ export type DocumentSweepFailure = {
   reason: DocumentUnsyncedReason | "no-such-document";
 };
 
+export type FootageSweepFailure = {
+  footageId: string;
+  kind: string;
+  originalFilename: string;
+  reason: FootageUnsyncedReason | "no-such-footage";
+};
+
 export type SweepReport = {
   synced: number;
   waiting: number;
   failures: SweepFailure[];
   /** The same for Perjadin Documents, swept after the transactions within the same budget. */
   documents: { synced: number; waiting: number; failures: DocumentSweepFailure[] };
+  /** And for Session Footage (ADR-0046), last, within the same budget. */
+  footage: { synced: number; waiting: number; failures: FootageSweepFailure[] };
 };
 
 /**
@@ -108,6 +122,23 @@ export async function sweepUnsynced(
     }
   }
 
+  const owedFootage = await unsyncedFootage(person, limit);
+  const footageFailures: FootageSweepFailure[] = [];
+  let footageSynced = 0;
+  for (const footage of owedFootage.footage) {
+    if (Date.now() - startedAt > budgetMs) break;
+    const result = await reconcileFootage(person, drive, folders, footage.id);
+    if (result.outcome === "synced") footageSynced += 1;
+    else {
+      footageFailures.push({
+        footageId: footage.id,
+        kind: footage.kind,
+        originalFilename: footage.originalFilename,
+        reason: result.outcome === "unsynced" ? result.reason : result.outcome,
+      });
+    }
+  }
+
   return {
     synced,
     waiting: owed.total - synced,
@@ -117,6 +148,11 @@ export async function sweepUnsynced(
       waiting: owedDocuments.total - documentsSynced,
       failures: documentFailures,
     },
+    footage: {
+      synced: footageSynced,
+      waiting: owedFootage.total - footageSynced,
+      failures: footageFailures,
+    },
   };
 }
 
@@ -125,7 +161,8 @@ export type FolderNameFailure = {
   perjadinId: string;
   /** The name it should carry — the one Periksa koneksi tells the Administrator about. */
   name: string;
-  folder: "bukti-transaksi" | "dokumen";
+  /** A Perjadin's three folders, then a Session's footage folder (ADR-0046) with its files. */
+  folder: "bukti-transaksi" | "dokumen" | "foto-video" | "sesi-foto-video";
   reason: "folder-trashed" | "folder-missing" | "drive-failed";
 };
 
@@ -137,8 +174,9 @@ export type FolderNameReport = {
 };
 
 /**
- * **Re-assert every Perjadin folder's name** (#407): both Drive folders of every Perjadin that has
- * one, receipts then Dokumen, in trip-id order. Each folder is read and renamed only when its name
+ * **Re-assert every Perjadin folder's name** (#407): the Drive folders of every Perjadin that has
+ * one, receipts then Dokumen then Foto & Video, in trip-id order — and then every Session's footage
+ * folder and its files (ADR-0046), named for the Session's date, time and School. Each folder is read and renamed only when its name
  * is not `perjadinFolderName` — an out-of-date one from before ADR-0044, a Sub-Cluster renamed since,
  * or a rename after a write that did not happen. A folder already right costs a read and no write.
  *
@@ -157,6 +195,7 @@ export async function reassertPerjadinFolderNames(
     const owned = [
       ["bukti-transaksi", trip.driveFolderId],
       ["dokumen", trip.driveDokumenFolderId],
+      ["foto-video", trip.driveFootageFolderId],
     ] as const;
     return owned.flatMap(([folder, id]) =>
       id ? [{ perjadinId: trip.naming.id, folder, id, name }] : [],
@@ -184,7 +223,31 @@ export async function reassertPerjadinFolderNames(
     }
   }
 
-  return { renamed, remaining: folders.length - checked, failures };
+  const sessions = await sessionFootageFolders(person);
+  let sessionsChecked = 0;
+  for (const folder of sessions) {
+    if (renamed >= limit || Date.now() - startedAt > budgetMs) break;
+    sessionsChecked += 1;
+    const failure = {
+      perjadinId: folder.perjadinId,
+      name: sessionFootageFolderName(folder.naming),
+      folder: "sesi-foto-video" as const,
+    };
+    try {
+      const named = await reassertSessionFootageNames(drive, folder);
+      renamed += named.renamed;
+      if (named.problem) failures.push({ ...failure, reason: named.problem });
+    } catch (error) {
+      if (!isDriveFailure(error)) throw error;
+      failures.push({ ...failure, reason: "drive-failed" });
+    }
+  }
+
+  return {
+    renamed,
+    remaining: folders.length - checked + (sessions.length - sessionsChecked),
+    failures,
+  };
 }
 
 /** One of the four fixed folders, as Periksa koneksi found it. */
@@ -216,10 +279,12 @@ export type DriveCheckReport =
        * `skipped` while the tree is not usable.
        */
       dokumen: "ok" | "created" | "busy" | "skipped";
+      /** `Foto & Video/` and its `Pelaksanaan Offline/` (ADR-0046), the same way. */
+      footage: "ok" | "created" | "busy" | "skipped";
       /** The sweep — or, when the tree is not usable and it did not run, how much waits. */
       sweep:
         | ({ ran: true } & SweepReport)
-        | { ran: false; waiting: number; documentsWaiting: number };
+        | { ran: false; waiting: number; documentsWaiting: number; footageWaiting: number };
       /** The Perjadin folder names re-asserted (#407) — skipped, like the sweep, while the tree is not usable. */
       names: ({ ran: true } & FolderNameReport) | { ran: false };
     };
@@ -290,6 +355,16 @@ export async function checkDriveConnection(person: Person): Promise<DriveCheckRe
         : ensured.created
           ? ("created" as const)
           : ("ok" as const);
+    const ensuredFootage = ready
+      ? await ensureFootageFolders(person, drive, ready.rootFolderId)
+      : null;
+    const footage = !ready
+      ? ("skipped" as const)
+      : !ensuredFootage
+        ? ("busy" as const)
+        : ensuredFootage.created
+          ? ("created" as const)
+          : ("ok" as const);
     const sweptFrom = Date.now();
     const sweep = ready
       ? { ran: true as const, ...(await sweepUnsynced(person, drive, ready)) }
@@ -297,6 +372,7 @@ export async function checkDriveConnection(person: Person): Promise<DriveCheckRe
           ran: false as const,
           waiting: (await unsyncedTransactions(person, 0)).total,
           documentsWaiting: (await unsyncedDocuments(person, 0)).total,
+          footageWaiting: (await unsyncedFootage(person, 0)).total,
         };
     const names = ready
       ? {
@@ -306,7 +382,7 @@ export async function checkDriveConnection(person: Person): Promise<DriveCheckRe
           })),
         }
       : { ran: false as const };
-    return { token: "ok", folders, exposed, dokumen, sweep, names };
+    return { token: "ok", folders, exposed, dokumen, footage, sweep, names };
   } catch (error) {
     if (isDriveFailure(error)) return { token: "unreachable" };
     throw error;

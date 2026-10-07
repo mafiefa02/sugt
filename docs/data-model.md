@@ -1556,6 +1556,55 @@ trashed, so if the delete fails after the trash, the row stays, pointing at a tr
 Hapus again finishes it. Hapus is refused while the connection is not usable. An emptied kind folder
 is left in place, and nothing is ever edited: a wrong upload is a Hapus and a new upload.
 
+### Session Footage
+
+```sql
+create table session_footage (
+  id                     uuid primary key default gen_random_uuid(),
+  session_id             uuid not null references session (id),
+  kind                   text not null check (kind in ('foto', 'video')),
+  content_type           text not null,
+  original_filename      text not null check (length(original_filename) > 0),
+  byte_size              bigint not null,
+  drive_file_id          text not null unique,
+  uploaded_by_person_id  uuid not null,
+  uploaded_by_role       text not null default 'Staff' check (uploaded_by_role = 'Staff'),
+  uploaded_at            timestamptz not null default now(),
+  drive_synced_at        timestamptz,
+  drive_sync_failed_at   timestamptz,
+  check ((kind = 'foto'  and content_type in ('image/jpeg', 'image/png', 'image/heic', 'image/webp'))
+      or (kind = 'video' and content_type in ('video/mp4', 'video/quicktime'))),
+  check (byte_size > 0 and byte_size <= case kind when 'foto' then 52428800 else 1048576000 end),
+  foreign key (uploaded_by_person_id, uploaded_by_role) references person (id, role)
+);
+
+alter table perjadin add column drive_footage_folder_id text;
+alter table session  add column drive_footage_folder_id text;
+```
+
+**One offline Session's photos and videos, one file each** (#424,
+[ADR-0046](./adr/0046-session-footage-is-stored-in-the-company-google-drive.md)), shown as "Foto &
+Video". **The database holds** each file's kind against its type and its kind's cap
+(`MAX_FOOTAGE_PHOTO_BYTES`, `MAX_FOOTAGE_VIDEO_BYTES` as literals), so no write can store a 2 GB
+"photo", and that the uploader is Staff, by the composite key a PIC's is held by. `content_type` is
+the type the server **sniffed**; a HEIF file is stored as `image/heic`.
+
+**The application holds the rest**, in `recordSessionFootage`: the Session is offline and not
+cancelled when the footage is added — checked again under a row lock inside the commit — and the
+declared kind matches the sniffed one. Footage of a Session cancelled later stays. The key to
+`session` has **no cascade**: offline Sessions are only ever cancelled, so a delete that would orphan
+Drive files is refused rather than followed.
+
+**The row and its Activity Log entry are written in one transaction** (`footage_uploaded`), with
+`drive_synced_at` null until the reconcile names, files and shares the file. `id` is generated before
+the insert, because the file's name carries it (`M-{footage8}`). **Hapus** is the Dokumen order: the
+file to the Drive trash first, then the row and a `footage_deleted` entry in one transaction.
+
+**Folders.** `perjadin.drive_footage_folder_id` is the trip's folder under `Foto & Video/Pelaksanaan
+Offline`, named as its other two; `session.drive_footage_folder_id` is the Session's folder inside it,
+`{held_on} · {HH.MM} · {School} · S-{session8}`. Both are claimed by compare-and-set
+(`where … is null`). A Session's folder and files are renamed when its date or time moves.
+
 ## Money
 
 **There is no `perjadin_report` table.** A Perjadin yields exactly one Report, always, so the
@@ -1721,7 +1770,8 @@ create table activity_log (
   action           text not null check (action in (
                      'advance_set', 'advance_changed', 'transaction_recorded',
                      'evidence_uploaded', 'report_filed',
-                     'document_uploaded', 'document_deleted')),
+                     'document_uploaded', 'document_deleted',
+                     'footage_uploaded', 'footage_deleted')),
   details          jsonb not null,
   search_text      text not null,
   backfilled       boolean not null default false
@@ -2007,6 +2057,8 @@ create table drive_connection (
   readme_file_id                 text,
   dokumen_folder_id              text,
   dokumen_pelaksanaan_offline_folder_id text,
+  footage_folder_id              text,
+  footage_pelaksanaan_offline_folder_id text,
   folder_problem                 text check (folder_problem in
                                    ('root-trashed', 'root-missing',
                                     'staging-trashed', 'staging-missing',
@@ -2046,7 +2098,9 @@ Terhubung. Uploads and the card read one rule: usable means no `folder_problem` 
 `Pelaksanaan Offline/` (ADR-0042), beside `Bukti Transaksi`. They are not part of the five: a
 connection made before them has neither, and a receipt must not wait on them. A connect, Periksa
 koneksi and the document reconcile each make whichever is unset, missing or trashed, and claim it by
-compare-and-set, so no Administrator has to reconnect for them.
+compare-and-set, so no Administrator has to reconnect for them. **`footage_folder_id` and
+`footage_pelaksanaan_offline_folder_id`** are `Foto & Video/` and its `Pelaksanaan Offline/`
+(ADR-0046), kept and ensured the same way, by the footage reconcile instead.
 
 **Who reaches it.** The card's read and the connect writes need the Administrator Grant. The
 credential read, and the two writes a token refresh makes (`last_used_at`, broken), need Staff,
@@ -2356,6 +2410,8 @@ trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive n
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
 links go with the names. `activity_log` cascades too, so the trip's Activity Log entries go with it.
 So do `perjadin_document` and `perjadin_document_folder`; the files and folders stay in Drive.
+`session_footage` does not cascade from `session`, which an offline Session's `perjadin_id` keeps
+from being deleted anyway.
 
 `session.perjadin_id` deliberately does **not** cascade and has no `on delete` action at all,
 so an offline Session blocks the delete. A trip that produced teaching cannot be quietly

@@ -86,6 +86,9 @@ export const perjadin = pgTable(
     // The Perjadin's folder under `Dokumen/Pelaksanaan Offline` (ADR-0042), claimed by the same
     // compare-and-set the first time one of its Perjadin Documents is reconciled. Null until then.
     driveDokumenFolderId: text("drive_dokumen_folder_id"),
+    // The Perjadin's folder under `Foto & Video/Pelaksanaan Offline` (ADR-0046), claimed the same way
+    // the first time footage of one of its Sessions is reconciled. Named as the two above.
+    driveFootageFolderId: text("drive_footage_folder_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -527,7 +530,7 @@ export const activityLog = pgTable(
   (t) => [
     check(
       "activity_log_action_check",
-      sql`${t.action} in ('advance_set', 'advance_changed', 'transaction_recorded', 'evidence_uploaded', 'report_filed', 'document_uploaded', 'document_deleted')`,
+      sql`${t.action} in ('advance_set', 'advance_changed', 'transaction_recorded', 'evidence_uploaded', 'report_filed', 'document_uploaded', 'document_deleted', 'footage_uploaded', 'footage_deleted')`,
     ),
     // `/log` reads newest first, 50 at a time; this serves that order without a sort.
     index("activity_log_occurred_at_id_idx").on(t.occurredAt.desc(), t.id.desc()),

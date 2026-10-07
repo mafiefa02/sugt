@@ -38,6 +38,8 @@ export type PerjadinDriveFolder = {
   driveFolderId: string | null;
   /** Its folder under `Dokumen/Pelaksanaan Offline` (ADR-0042), named the same way. */
   driveDokumenFolderId: string | null;
+  /** Its folder under `Foto & Video/Pelaksanaan Offline` (ADR-0046), named the same way. */
+  driveFootageFolderId: string | null;
   naming: PerjadinFolderNaming;
 };
 
@@ -47,6 +49,7 @@ function selectPerjadinDriveFolders() {
     .select({
       driveFolderId: perjadin.driveFolderId,
       driveDokumenFolderId: perjadin.driveDokumenFolderId,
+      driveFootageFolderId: perjadin.driveFootageFolderId,
       naming: perjadinFolderNaming,
     })
     .from(perjadin)
@@ -69,7 +72,7 @@ export async function perjadinDriveFolder(
 }
 
 /**
- * **Every Perjadin that has a Drive folder** — receipts, Dokumen, or both — with what its folders are
+ * **Every Perjadin that has a Drive folder** — receipts, Dokumen, Foto & Video, or several — with what its folders are
  * named from, for Periksa koneksi's pass that re-asserts every folder name (#407). Ordered by trip
  * id, so a press that stops early stops at the same place each time, and the next one re-reads the
  * folders it already checked — right, or reported trashed or gone — before carrying on.
@@ -78,7 +81,13 @@ export async function perjadinDriveFolders(caller: Person): Promise<PerjadinDriv
   requireStaff(caller);
 
   return selectPerjadinDriveFolders()
-    .where(or(isNotNull(perjadin.driveFolderId), isNotNull(perjadin.driveDokumenFolderId)))
+    .where(
+      or(
+        isNotNull(perjadin.driveFolderId),
+        isNotNull(perjadin.driveDokumenFolderId),
+        isNotNull(perjadin.driveFootageFolderId),
+      ),
+    )
     .orderBy(asc(perjadin.id));
 }
 
