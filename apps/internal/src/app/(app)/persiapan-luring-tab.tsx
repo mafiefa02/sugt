@@ -3,6 +3,7 @@
 import { PreparationChecklist } from "-/components/perjadin-preparation";
 import { progressTone } from "-/components/progress-tone";
 import { perjadinName, perjadinSchoolsLine } from "-/lib/perjadin-name";
+import type { PreparationItem } from "@sugt/db/queries";
 import {
   Accordion,
   AccordionItem,
@@ -18,7 +19,14 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import { addWeeks, weekHref, weekOf, weekTitle, type WeekFigures } from "./persiapan-luring-derive";
+import {
+  addWeeks,
+  calendarDate,
+  weekHref,
+  weekOf,
+  weekTitle,
+  type WeekFigures,
+} from "./persiapan-luring-derive";
 
 /**
  * **The Dashboard's Persiapan Luring tab** (#423): how far the Preparation Checklists of one
@@ -29,7 +37,9 @@ import { addWeeks, weekHref, weekOf, weekTitle, type WeekFigures } from "./persi
  *
  * **The week is in the URL** (`?minggu=`, its Monday), so it survives a reload and switching tabs.
  * The arrows, "Minggu ini" and the date field navigate; the server reads the week and folds it with
- * `deriveWeek`.
+ * `deriveWeek`. The controls stay enabled while a week loads — disabling the focused one would drop
+ * keyboard focus on every step — and the date field navigates only on Enter or **Lihat**, since a
+ * date field reports a whole date after every digit typed into it.
  */
 function PersiapanLuringTab({
   monday,
@@ -55,14 +65,14 @@ function PersiapanLuringTab({
 
   return (
     <div className="flex flex-col gap-4 px-4 py-6 sm:px-7">
-      <Card>
+      <Card aria-busy={navigating}>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle className="text-base tabular-nums">{weekTitle(monday)}</CardTitle>
           <div className="flex flex-wrap items-center gap-1">
             <Button
               variant="outline"
               size="sm"
-              disabled={navigating || monday === currentWeek}
+              disabled={monday === currentWeek}
               onClick={() => {
                 go(currentWeek);
               }}
@@ -73,7 +83,6 @@ function PersiapanLuringTab({
               variant="outline"
               size="icon"
               aria-label="Minggu sebelumnya"
-              disabled={navigating}
               onClick={() => {
                 go(addWeeks(monday, -1));
               }}
@@ -84,24 +93,40 @@ function PersiapanLuringTab({
               variant="outline"
               size="icon"
               aria-label="Minggu berikutnya"
-              disabled={navigating}
               onClick={() => {
                 go(addWeeks(monday, 1));
               }}
             >
               <ChevronRight className="size-4" />
             </Button>
-            <Input
-              type="date"
-              aria-label="Pilih tanggal"
-              className="w-auto"
-              value={monday}
-              disabled={navigating}
-              onChange={(event) => {
-                // A cleared field reads ""; a date jumps to its week, a Sunday to the next one.
-                if (event.target.value) go(weekOf(event.target.value));
+            <form
+              className="flex items-center gap-1"
+              onSubmit={(event) => {
+                event.preventDefault();
+                // A date jumps to its week, a Sunday to the next one; an empty or unreal one does nothing.
+                const date = calendarDate(
+                  new FormData(event.currentTarget).get("tanggal")?.toString(),
+                );
+                if (date) go(weekOf(date));
               }}
-            />
+            >
+              <Input
+                // Re-seeded with the week's Monday each time the week changes.
+                key={monday}
+                type="date"
+                name="tanggal"
+                aria-label="Pilih tanggal"
+                className="w-auto"
+                defaultValue={monday}
+              />
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+              >
+                Lihat
+              </Button>
+            </form>
           </div>
         </CardHeader>
         <CardContent>
@@ -188,11 +213,7 @@ function PersiapanLuringTab({
                   </span>
                 </AccordionTrigger>
                 <AccordionPanel className="text-foreground">
-                  <PreparationChecklist
-                    items={trip.preparation}
-                    canToggle={false}
-                    onToggle={() => undefined}
-                  />
+                  <ReadOnlyChecklist items={trip.preparation} />
                 </AccordionPanel>
               </AccordionItem>
             );
@@ -203,4 +224,15 @@ function PersiapanLuringTab({
   );
 }
 
-export { PersiapanLuringTab };
+/** A Perjadin's checklist as this tab shows it: every box disabled, no toggle wired. */
+function ReadOnlyChecklist({ items }: { items: PreparationItem[] }) {
+  return (
+    <PreparationChecklist
+      items={items}
+      canToggle={false}
+      onToggle={() => undefined}
+    />
+  );
+}
+
+export { PersiapanLuringTab, ReadOnlyChecklist };

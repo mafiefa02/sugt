@@ -44,11 +44,16 @@ function DashboardTabs({
             setTab(value as Tab);
           }}
         >
-          <TabsList className="max-w-full overflow-x-auto">
-            <TabsTrigger value="pelaksanaan">Pelaksanaan</TabsTrigger>
-            <TabsTrigger value="persiapan-program">Persiapan Program</TabsTrigger>
-            <TabsTrigger value="persiapan-luring">Persiapan Luring</TabsTrigger>
-          </TabsList>
+          {/* Three tabs are wider than a 360px phone. The list keeps its natural width inside a
+              scrolling frame: a centred list that overflows spills off both sides, and the first tab's
+              start could never be scrolled back into view. */}
+          <div className="max-w-full overflow-x-auto">
+            <TabsList className="w-max">
+              <TabsTrigger value="pelaksanaan">Pelaksanaan</TabsTrigger>
+              <TabsTrigger value="persiapan-program">Persiapan Program</TabsTrigger>
+              <TabsTrigger value="persiapan-luring">Persiapan Luring</TabsTrigger>
+            </TabsList>
+          </div>
         </Tabs>
       </div>
 

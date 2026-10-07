@@ -2,6 +2,8 @@ import { formatTripDates } from "-/lib/perjadin-name";
 import type { PreparationWeek, WeekPerjadin } from "@sugt/db/queries";
 import type { PreparationItemLevel } from "@sugt/domain";
 
+import { addDays } from "./preparation-derive";
+
 /**
  * **The Persiapan Luring tab's pure seam** (#423): which week a date is in, and the week's figures
  * folded from `preparationWeek`'s rows. No React, no DOM, no database — the suite drives it with
@@ -12,15 +14,19 @@ import type { PreparationItemLevel } from "@sugt/domain";
  * every date names exactly one week, by its Monday.
  */
 
-/** `YYYY-MM-DD` plus `days`, in UTC so no clock change shifts it. */
-function addDays(isoDate: string, days: number): string {
-  const ms = Date.parse(`${isoDate}T00:00:00Z`) + days * 86_400_000;
-  return new Date(ms).toISOString().slice(0, 10);
-}
+/**
+ * The years a week may be asked for. Anything outside is not a Programme date, and near year 0 or
+ * 10000 the date arithmetic leaves what Postgres accepts — so a crafted `?minggu=` must not reach the
+ * query.
+ */
+const FIRST_YEAR = 1900;
+const LAST_YEAR = 2999;
 
-/** A real calendar date in `YYYY-MM-DD`, or null. */
-function calendarDate(value: string | undefined): string | null {
+/** A real calendar date in `YYYY-MM-DD` between `FIRST_YEAR` and `LAST_YEAR`, or null. */
+export function calendarDate(value: string | undefined): string | null {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const year = Number(value.slice(0, 4));
+  if (year < FIRST_YEAR || year > LAST_YEAR) return null;
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
     ? value

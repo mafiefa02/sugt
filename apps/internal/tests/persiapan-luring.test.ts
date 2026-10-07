@@ -7,7 +7,7 @@ import {
   weekStarts,
   weekTitle,
 } from "-/app/(app)/persiapan-luring-derive";
-import { PreparationChecklist } from "-/components/perjadin-preparation";
+import { ReadOnlyChecklist } from "-/app/(app)/persiapan-luring-tab";
 import { requirePerson } from "-/lib/person";
 import { db, schema } from "@sugt/db";
 import {
@@ -83,6 +83,12 @@ describe("which week a date is in", () => {
     expect(parseWeekParam("2027-02-30", "2027-03-09")).toBe(MONDAY);
     expect(parseWeekParam("minggu-lalu", "2027-03-14")).toBe("2027-03-15");
   });
+
+  it("refuses a year no week of the Programme is in, so the query never sees one", () => {
+    for (const odd of ["0000-01-01", "0001-01-01", "1899-12-31", "3000-01-01", "9999-12-31"]) {
+      expect(parseWeekParam(odd, "2027-03-09")).toBe(MONDAY);
+    }
+  });
 });
 
 let admin: Person;
@@ -116,6 +122,50 @@ async function companyItem(label: string) {
 async function figuresOf(monday: string) {
   return deriveWeek(await preparationWeek(admin, weekStarts(monday)));
 }
+
+describe("the Per item order, folded from rows in any order", () => {
+  it("puts the lowest percent first and keeps checklist order among equals", () => {
+    const listItem = (
+      itemId: string,
+      level: "semua" | "cluster" | "perjadin",
+      checked: boolean,
+    ) => ({
+      itemId,
+      label: itemId,
+      level,
+      clearsOnTeachingTeamChange: false,
+      checked,
+      checkedBy: null,
+      checkedAt: null,
+    });
+    const trip = {
+      id: "t",
+      subClusterName: "Kelompok 1",
+      startsOn: MONDAY,
+      endsOn: MONDAY,
+      picFullName: "PIC",
+      schoolNames: [],
+      preparation: [
+        listItem("s1", "semua", false),
+        listItem("s2", "semua", true),
+        listItem("s3", "semua", false),
+        listItem("c1", "cluster", false),
+        listItem("p1", "perjadin", false),
+      ],
+    };
+    // The query returns the items in no particular order; checklist order is level, then position.
+    const items = [
+      { itemId: "p1", label: "p1", level: "perjadin" as const, position: 1 },
+      { itemId: "c1", label: "c1", level: "cluster" as const, position: 1 },
+      { itemId: "s3", label: "s3", level: "semua" as const, position: 3 },
+      { itemId: "s2", label: "s2", level: "semua" as const, position: 2 },
+      { itemId: "s1", label: "s1", level: "semua" as const, position: 1 },
+    ];
+
+    const order = deriveWeek({ perjadins: [trip], items }).items.map((row) => row.itemId);
+    expect(order).toEqual(["s1", "s3", "c1", "p1", "s2"]);
+  });
+});
 
 describe("a week's Perjadins and figures", () => {
   beforeEach(async () => {
@@ -293,7 +343,7 @@ describe("the Dashboard's tabs", () => {
 });
 
 describe("the read-only checklist a card opens", () => {
-  it("renders every box disabled", () => {
+  it("renders every box disabled, ticked or not", () => {
     const item = (itemId: string, checked: boolean) => ({
       itemId,
       label: itemId,
@@ -304,11 +354,7 @@ describe("the read-only checklist a card opens", () => {
       checkedAt: null,
     });
     const html = renderToStaticMarkup(
-      createElement(PreparationChecklist, {
-        items: [item("a", true), item("b", false)],
-        canToggle: false,
-        onToggle: () => undefined,
-      }),
+      createElement(ReadOnlyChecklist, { items: [item("a", true), item("b", false)] }),
     );
 
     const boxes = [...html.matchAll(/<[^>]*role="checkbox"[^>]*>/g)].map((match) => match[0]);

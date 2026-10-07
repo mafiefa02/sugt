@@ -166,7 +166,7 @@ Staff included: nothing on it ticks or unticks a box.
 
 - **A week is Monday to Saturday.** It opens on the current week by today in WIB; on a Sunday, on the
   week that starts the next day. The arrows step a week back or forward, **Minggu ini** returns to
-  the current week, and a date field jumps to the week of any date picked. The week is in the URL
+  the current week, and a date field with **Lihat** (or Enter) jumps to the week of any date picked. The week is in the URL
   (`/?minggu=2026-10-12`), so it survives a reload and switching tabs; such a link opens on this tab.
 - **A Perjadin belongs to the week its start date falls in**, and one starting on a Sunday to the
   week that follows: "Kelompok 12 · 11–14 Okt 2026" starts on Sunday 11 Okt and is in the week of
@@ -414,7 +414,9 @@ no money, no deadline, not a record, and **nothing ever ticks a box automaticall
 member may tick any box; the boxes flip optimistically. The checklist's state also shows off the
 trip's own screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is
 done: in the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. For Staff
-the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static.
+the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static. The
+Dashboard's [Persiapan Luring](#persiapan-luring--one-weeks-preparation-checklists) tab follows the
+checklists week by week, read-only.
 
 **Which boxes a trip has** is set by an Administrator at three levels: every Perjadin, one Cluster,
 or one Perjadin ([ADR-0045](./adr/0045-the-preparation-checklist-is-stored-per-level-and-frozen-for-finished-perjadins.md)).
