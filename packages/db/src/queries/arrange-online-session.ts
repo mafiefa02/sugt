@@ -66,7 +66,7 @@ export type ArrangeOnlineSessionInput = {
  *
  * A collision is a **user state**, not a bug, so it comes back as a value rather than a throw
  * ([#12](https://github.com/mafiefa02/sugt/issues/12)): two Staff recording the same School's day is
- * exactly that. `NotStaffError` is the opposite case and still throws.
+ * exactly that. `NotStaffError` and `NotGrantedError` are the opposite case and still throw.
  */
 export type ArrangeOnlineSessionResult =
   | { outcome: "recorded"; sessionId: string }
@@ -110,8 +110,8 @@ export async function arrangeOnlineSession(
   input: ArrangeOnlineSessionInput,
 ): Promise<ArrangeOnlineSessionResult> {
   requireStaff(caller);
-  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
-  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  // Recording an online Session needs the Editor Grant (ADR-0047).
+  // `requireStaff` stays first, so a Pimpinan is refused as non-Staff.
   requireGrant(caller, "Editor");
 
   // Both Pengajar are required (#318); trimmed here so a name of spaces reads as blank. The
@@ -196,8 +196,8 @@ async function pickableSchools(): Promise<SchoolOption[]> {
  */
 export async function arrangeOnlineSessionForm(caller: Person): Promise<ArrangeOnlineSessionForm> {
   requireStaff(caller);
-  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
-  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  // Recording an online Session needs the Editor Grant (ADR-0047).
+  // `requireStaff` stays first, so a Pimpinan is refused as non-Staff.
   requireGrant(caller, "Editor");
 
   const schools = await pickableSchools();
@@ -212,8 +212,8 @@ export type ArrangeOnlineSessionAt = {
 
 /**
  * The second entry point, on Detail Sekolah — where you already are when thinking about one
- * School. Keyed on the School's `slug`, the way that page is. Staff-only, so Detail Sekolah calls
- * it only for a Staff caller and renders the affordance only when it returns; `null` when the
+ * School. Keyed on the School's `slug`, the way that page is. Editor-only (ADR-0047), so Detail
+ * Sekolah calls it only for an Editor and renders the affordance only when it returns; `null` when the
  * slug names no School, which its caller has already ruled out but which this read does not
  * assume.
  */

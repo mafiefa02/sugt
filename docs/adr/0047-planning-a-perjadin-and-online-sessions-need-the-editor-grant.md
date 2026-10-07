@@ -15,7 +15,7 @@ it names, and can change from **/orang**, not every Staff member.
 
 ## The decision
 
-Six queries keep their `requireStaff` and add `requireGrant(caller, "Editor")` right after it:
+Seven queries keep their `requireStaff` and add `requireGrant(caller, "Editor")` right after it:
 
 | Write or read                  | Query                                                |
 | ------------------------------ | ---------------------------------------------------- |
@@ -58,7 +58,8 @@ Pimpinan write.
 - A Staff member with no Grant, or with Dashboard Viewer only, still runs any trip they are on — its
   Sessions, money, Dokumen and Persiapan — but cannot plan a new one.
 - The legacy Tandai terlaksana and Batalkan Sesi on an `arranged` online Session sit in the same
-  `/sesi-daring/[id]` write panel, so they are shown only to an Editor too. Their queries are shared
-  with offline Sessions and are not gated here; who writes an **existing** Perjadin and its Sessions is
+  `/sesi-daring/[id]` write panel, so they are shown only to an Editor too, and their two online-only
+  Server Actions check the Grant. Their queries, `markSessionDelivered` and `cancelSession`, are shared
+  with offline Sessions and are not gated here: who writes an **existing** Perjadin and its Sessions is
   the companion decision, ADR-0048 ([#439](https://github.com/sugt-itb/sugt-itb-26/issues/439)), not
   this one.

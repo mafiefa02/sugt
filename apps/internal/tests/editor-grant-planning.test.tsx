@@ -1,6 +1,10 @@
 import PerjadinBaruPage from "-/app/(app)/perjadin/baru/page";
 import PerjadinPage from "-/app/(app)/perjadin/page";
 import SekolahPage from "-/app/(app)/sekolah/[slug]/page";
+import {
+  cancelOnlineSessionAction,
+  markOnlineSessionDeliveredAction,
+} from "-/app/(app)/sesi-daring/[id]/actions";
 import SesiDaringDetailPage from "-/app/(app)/sesi-daring/[id]/page";
 import SesiDaringBaruPage from "-/app/(app)/sesi-daring/baru/page";
 import SesiDaringPage from "-/app/(app)/sesi-daring/page";
@@ -24,6 +28,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addCluster,
   addGrant,
+  addPerjadin,
   addPerson,
   addProvince,
   addSchool,
@@ -45,6 +50,7 @@ import {
  */
 
 vi.mock("-/lib/person", () => ({ requirePerson: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ push: () => undefined, refresh: () => undefined }),
@@ -218,6 +224,11 @@ describe("the pages", () => {
   it("show Rencanakan Perjadin, Catat Sesi Daring and the online edit/delete only with the Grant, and read the same for everyone", async () => {
     const { rina, dewi, budi, sari, hadi } = await people();
     const where = await place();
+    await addPerjadin({
+      advanceIdr: null,
+      picPersonId: budi.id,
+      subClusterId: where.subCluster.id,
+    });
 
     const render = async () => ({
       perjadin: renderToStaticMarkup(await PerjadinPage()),
@@ -245,12 +256,38 @@ describe("the pages", () => {
       expect(html.sesiDaring.includes('href="/sesi-daring/baru"'), label).toBe(granted);
       expect(html.sekolah.includes("Catat Sesi daring"), label).toBe(granted);
       expect(html.detail.includes("Hapus Sesi"), label).toBe(granted);
+      expect(html.detail.includes("Ubah Sesi"), label).toBe(granted);
 
       // Reading is unchanged: every page renders its subject for everyone signed in.
-      expect(html.perjadin, label).toContain("Perjadin");
+      expect(html.perjadin, label).toContain("Kelompok 10");
       expect(html.sesiDaring, label).toContain("SMAN 1 Bontang");
       expect(html.sekolah, label).toContain("SMAN 1 Bontang");
       expect(html.detail, label).toContain("SMAN 1 Bontang");
     }
+  });
+});
+
+describe("the legacy status writes on an arranged online Session", () => {
+  it("refuse Tandai terlaksana and Batalkan Sesi without the Grant, and let an Editor do them", async () => {
+    const { rina, dewi, budi } = await people();
+    const { school } = await place();
+    const first = await addSession({ schoolId: school.id, heldOn: "2026-02-01" });
+    const second = await addSession({ schoolId: school.id, heldOn: "2026-02-02" });
+
+    for (const person of [rina, dewi]) {
+      vi.mocked(requirePerson).mockResolvedValue(person);
+      await expect(digestOf(markOnlineSessionDeliveredAction(first.id))).resolves.toBe(FORBIDDEN);
+      await expect(digestOf(cancelOnlineSessionAction(second.id, "Hujan"))).resolves.toBe(
+        FORBIDDEN,
+      );
+    }
+
+    vi.mocked(requirePerson).mockResolvedValue(budi);
+    await expect(markOnlineSessionDeliveredAction(first.id)).resolves.toEqual({
+      outcome: "delivered",
+    });
+    await expect(cancelOnlineSessionAction(second.id, "Hujan")).resolves.toMatchObject({
+      outcome: "cancelled",
+    });
   });
 });

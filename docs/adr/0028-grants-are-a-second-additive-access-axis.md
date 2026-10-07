@@ -47,6 +47,10 @@ Three properties define it:
 - **Additive.** Grants only ever _add_ capability to a Staff Person; they never subtract from what the
   Role already allows, and their absence is the default (no rows, no extra capability).
 
+  > Amended 2026-10-08: planning a Perjadin and online Session writes moved from the Staff Role to the
+  > Editor Grant ([ADR-0047](./0047-planning-a-perjadin-and-online-sessions-need-the-editor-grant.md)).
+  > See the amendment at the foot.
+
 The guard lives beside `requireStaff` in the `@sugt/db` choke point, as `hasGrant` / `requireGrant`,
 throwing a distinguishable `NotGrantedError` (`sugtErrorCode = "sugt/not-granted"`, discriminated on
 the property, not `instanceof`, for the reason on `NotStaffError`) that `staffSurface()` translates

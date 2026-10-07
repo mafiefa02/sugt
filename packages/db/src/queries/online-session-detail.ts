@@ -212,8 +212,8 @@ export async function updateOnlineSession(
   input: OnlineSessionInput,
 ): Promise<UpdateOnlineSessionResult> {
   requireStaff(caller);
-  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
-  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  // Writing an online Session needs the Editor Grant (ADR-0047).
+  // `requireStaff` stays first, so a Pimpinan is refused as non-Staff.
   requireGrant(caller, "Editor");
 
   // The online-required fields the nullable columns cannot enforce, refused before the write exactly
@@ -287,8 +287,8 @@ export async function deleteOnlineSession(
   sessionId: string,
 ): Promise<DeleteOnlineSessionResult> {
   requireStaff(caller);
-  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
-  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  // Writing an online Session needs the Editor Grant (ADR-0047).
+  // `requireStaff` stays first, so a Pimpinan is refused as non-Staff.
   requireGrant(caller, "Editor");
 
   const [deleted] = await db

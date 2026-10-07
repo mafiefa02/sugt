@@ -26,7 +26,7 @@ export async function generateMetadata({
 /**
  * **Detail Sesi daring** — one online Session, and every field the record form set, editable (#152,
  * #318). The online counterpart of `/perjadin/[id]`: the header, then the Session's fields (School,
- * date, times and the two cohort-named Pengajar) with an Edit dialog, and — for Staff — a hard Delete.
+ * date, times and the two cohort-named Pengajar) with an Edit dialog, and — for an Editor (ADR-0047) — a hard Delete.
  * A born-`delivered` Session shows **Edit + Delete**; a legacy `arranged` one also shows Tandai
  * terlaksana and Batalkan Sesi.
  *

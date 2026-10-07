@@ -68,7 +68,9 @@ export default async function Page() {
 
       {trips.length === 0 ? (
         <p className="p-4 text-sm text-muted-foreground sm:p-7">
-          Belum ada Perjadin. Buka Rencanakan Perjadin untuk merencanakan yang pertama.
+          Belum ada Perjadin.
+          {hasGrant(person, "Editor") &&
+            " Buka Rencanakan Perjadin untuk merencanakan yang pertama."}
         </p>
       ) : (
         <PerjadinDirectoryList

@@ -149,7 +149,7 @@ export type SessionTimeClash = {
  * Every one is a **user state and comes back as a value**, by the rule settled on
  * [#12](https://github.com/mafiefa02/sugt/issues/12): each is reachable from a form
  * somebody filled in honestly, and each gets a field-level message rather than an error
- * page. `NotStaffError` is the opposite case and still throws, as does a PIC who is not
+ * page. `NotStaffError` and `NotGrantedError` are the opposite case and still throw, as does a PIC who is not
  * Staff — that one is not reachable from a screen that only offers Staff.
  */
 export type PlanPerjadinResult =
@@ -268,8 +268,8 @@ export async function planPerjadin(
   input: PlanPerjadinInput,
 ): Promise<PlanPerjadinResult> {
   requireStaff(caller);
-  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
-  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  // Planning a Perjadin needs the Editor Grant (ADR-0047).
+  // `requireStaff` stays first, so a Pimpinan is refused as non-Staff.
   requireGrant(caller, "Editor");
 
   // The range is two typed dates (ADR-0041). Same-day is allowed. `perjadin_dates_check` holds
@@ -634,8 +634,8 @@ async function plannableSubClusters(): Promise<SubClusterOfSchools[]> {
  */
 export async function perjadinPlan(caller: Person): Promise<PerjadinPlan> {
   requireStaff(caller);
-  // Planning a Perjadin and online Sessions need the Editor Grant (ADR-0047); an Administrator has it
-  // implicitly. `requireStaff` stays first, so a Pimpinan is still refused as non-Staff.
+  // Planning a Perjadin needs the Editor Grant (ADR-0047).
+  // `requireStaff` stays first, so a Pimpinan is refused as non-Staff.
   requireGrant(caller, "Editor");
 
   const [subClusters, { staff, pimpinan }] = await Promise.all([
