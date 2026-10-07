@@ -389,6 +389,14 @@ Session's date picker is bounded by the two dates. On the trip's own screen Staf
 **Ubah tanggal** beside the range; the edit moves no Session, and is refused whole if a Session still
 to be delivered would fall outside the new range. A Pimpinan sees the dates read-only.
 
+**Uang Perjalanan is optional on the form** — labelled "Uang Perjalanan (Rp) — opsional" — because a
+trip often has to be planned before anyone knows its figure (#437). Left empty it is "not filled in
+yet", which is not Rp 0. Staff fill it in later with **Isi Uang Perjalanan** on the trip's screen (the
+button reads **Ubah Uang Perjalanan** once it is set); once set it can be changed, to zero included,
+but not emptied again. While it is empty, the money strip on the trip's screen and the Laporan read
+Diterima **"Belum diisi"** and Sisa **"—"**, the `/pendamping` card reads "Uang Perjalanan belum
+diisi" with no Tersisa and no bar, and the export leaves its cell empty.
+
 **A trip goes to one Sub-Cluster.** A Sub-Cluster is a set of Schools near enough that any of
 them can share a journey. Choosing it is what decides which Schools may appear on the trip at
 all, so the form no longer asks anyone to assemble that set by hand — which was the old
@@ -434,8 +442,8 @@ Perjadin lain" when there are none). **The note is read-only and never blocks**:
 offline Sessions per School is still not enforced, and a School with Sessions elsewhere can be
 planned like any other — only the same School at the same date and time is refused.
 
-The **Advance** is fixed during trip planning and transferred to the PIC before
-departure, so a Perjadin is never in an unfunded state.
+The **Advance** is set at planning or later (#437) and transferred to the PIC before departure; the
+Laporan cannot be filed until it is set.
 
 Offline Sessions happen during a Perjadin. **Online Sessions have no Perjadin at all** —
 which is why counting trips never tells you how much teaching has happened, and why six
@@ -566,9 +574,12 @@ convenience but never data. Offline is worth adding eventually, not worth blocki
 remaining. Nothing enters that date — it follows from the Perjadin's end date, so it
 cannot be typed wrong and it moves by itself if the trip's dates are corrected.
 
-**Nothing is gated.** DITSAMA sets that deadline itself, and the tool is never stricter
-than the process it serves — invented friction has the same escape route as duplicated
-work.
+**Nothing is gated on the deadline.** DITSAMA sets that deadline itself, and the tool is never
+stricter than the process it serves — invented friction has the same escape route as duplicated
+work. **Laporkan does wait for Uang Perjalanan** (#437): while it is empty, filing is refused with
+"Isi Uang Perjalanan sebelum melaporkan.", since the Laporan accounts for it. Nothing else waits for
+it — transactions, receipts, Dokumen, Foto & Video, Sessions and Persiapan all work while it is
+empty.
 
 This screen is load-bearing in a way the others are not. Nothing structurally compels a
 PIC to use this tool: the Treasurer accepts any format. So it has to be plainly better

@@ -98,6 +98,10 @@ describe("spentPercent", () => {
     expect(spentPercent(0, 50_000)).toBe(0);
   });
 
+  it("is 0 when the advance is not filled in yet (#437)", () => {
+    expect(spentPercent(null, 50_000)).toBe(0);
+  });
+
   it("never falls below 0", () => {
     expect(spentPercent(1_000_000, -10_000)).toBe(0);
   });

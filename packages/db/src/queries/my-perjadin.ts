@@ -93,8 +93,11 @@ export type MyPerjadinTrip = {
   endsOn: string;
   picPersonId: string;
   picFullName: string;
-  /** Fixed at planning and transferred before departure, so never null and never absent. */
-  advanceIdr: number;
+  /**
+   * Uang Perjalanan, or `null` while it is not filled in yet (#437) — never the same as Rp 0. The card
+   * reads "Uang Perjalanan belum diisi" then, with no Tersisa and no progress bar.
+   */
+  advanceIdr: number | null;
   /**
    * The **travel-float draw-down** for this trip: the sum of only the transactions whose category is
    * an `ADVANCE_DRAWDOWN_CATEGORIES` member (ADR-0029), zero when none has been entered. The UI

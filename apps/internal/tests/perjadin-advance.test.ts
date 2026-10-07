@@ -2,6 +2,7 @@ import { db, schema } from "@sugt/db";
 import {
   filePerjadinReport,
   isNotStaffError,
+  myPerjadin,
   perjadinAcquittal,
   updatePerjadinAdvance,
 } from "@sugt/db/queries";
@@ -11,9 +12,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addPerjadin, addPerson, addTransaction, resetDatabase } from "./support/fixtures";
 
 /**
- * **The Advance is Staff-correctable after planning** (#192). `planPerjadin` writes it once; this is
- * the only write that changes it afterwards. It reverses the domain's "fixed during trip planning"
- * position for the amount — still set at planning, now correctable — while leaving
+ * **The Advance is Staff-correctable after planning** (#192). `planPerjadin` may write it; this is
+ * the only write that changes it afterwards, or fills it in when the trip was planned without one
+ * (#437). It reverses the domain's "fixed during trip planning" position for the amount — set at
+ * planning or later, and correctable — while leaving
  * money-write-is-Staff-only (ADR-0026) intact: reads are open, this write stays `requireStaff`.
  *
  * The validation is the DB floor only (`advance_idr >= 0`), deliberately not coupled to spend: an
@@ -145,5 +147,76 @@ describe("Correcting a Perjadin's Advance", () => {
     expect(isNotStaffError(refusal)).toBe(true);
     // Nothing was written: the guard runs before the update.
     expect(await advanceOf(trip.id)).toBe(5_000_000);
+  });
+});
+
+/**
+ * **Uang Perjalanan is optional at planning** (#437). `null` is "not filled in yet", never Rp 0. It
+ * can be filled in later and changed, but not cleared; the money surfaces read it as missing rather
+ * than as zero; and filing the Laporan is the one write that waits for it.
+ */
+describe("an Advance not filled in yet", () => {
+  beforeEach(resetDatabase);
+
+  it("is filled in through the same write, and can be changed afterwards to any amount", async () => {
+    const pic = await staff();
+    const trip = await addPerjadin({ picPersonId: pic.id, advanceIdr: null });
+
+    await expect(updatePerjadinAdvance(pic, trip.id, 4_000_000)).resolves.toEqual({
+      outcome: "updated",
+    });
+    expect(await advanceOf(trip.id)).toBe(4_000_000);
+    await expect(updatePerjadinAdvance(pic, trip.id, 0)).resolves.toEqual({ outcome: "updated" });
+    expect(await advanceOf(trip.id)).toBe(0);
+  });
+
+  it("cannot be cleared once set — Rp 0 is a value, empty is refused", async () => {
+    const pic = await staff();
+    const trip = await addPerjadin({ picPersonId: pic.id, advanceIdr: 0 });
+
+    await expect(updatePerjadinAdvance(pic, trip.id, null)).resolves.toEqual({
+      outcome: "advance-required",
+    });
+    expect(await advanceOf(trip.id)).toBe(0);
+  });
+
+  it("reads as null on the acquittal and on /pendamping, with no remainder — never null − spend", async () => {
+    const pic = await staff();
+    const trip = await addPerjadin({
+      picPersonId: pic.id,
+      advanceIdr: null,
+      startsOn: "2099-01-01",
+      endsOn: "2099-01-02",
+    });
+    await addTransaction({
+      perjadinId: trip.id,
+      amountIdr: 300_000,
+      category: "Konsumsi",
+      createdByPersonId: pic.id,
+    });
+
+    await expect(perjadinAcquittal(pic, trip.id)).resolves.toMatchObject({
+      advanceIdr: null,
+      spentIdr: 300_000,
+      remainderIdr: null,
+    });
+    const {
+      current: [mine],
+    } = await myPerjadin(pic);
+    expect(mine).toMatchObject({ id: trip.id, advanceIdr: null, drawnDownIdr: 300_000 });
+  });
+
+  it("refuses Laporkan with advance-missing and files nothing; once set, Laporkan files", async () => {
+    const pic = await staff();
+    const trip = await addPerjadin({ picPersonId: pic.id, advanceIdr: null });
+
+    await expect(filePerjadinReport(pic, trip.id)).resolves.toEqual({
+      outcome: "advance-missing",
+    });
+    expect((await perjadinAcquittal(pic, trip.id))?.reportFiledAt).toBeNull();
+    await expect(db.select().from(schema.activityLog)).resolves.toEqual([]);
+
+    await updatePerjadinAdvance(pic, trip.id, 2_000_000);
+    await expect(filePerjadinReport(pic, trip.id)).resolves.toMatchObject({ outcome: "filed" });
   });
 });

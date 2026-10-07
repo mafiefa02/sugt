@@ -260,8 +260,10 @@ export async function updatePerjadinDatesAction(
 }
 
 /**
- * **Correct a Perjadin's Advance (Uang Perjalanan)** — the one write that changes the amount after
- * planning (#192). Money writes stay Staff-only (ADR-0026), so it goes through `staffSurface`.
+ * **Fill in or correct a Perjadin's Advance (Uang Perjalanan)** — the one write that changes the
+ * amount after planning (#192), including filling in one the trip was planned without (#437).
+ * `null` is accepted only to be refused once a value is set (`advance-required`); the UI never sends
+ * it. Money writes stay Staff-only (ADR-0026), so it goes through `staffSurface`.
  *
  * **This revalidates two routes.** The Advance shows on the trip page's Uang Perjalanan strip *and* on
  * `/perjadin/[id]/laporan` (the acquittal derives its remainder from it), so both are stale the
@@ -270,7 +272,7 @@ export async function updatePerjadinDatesAction(
  */
 export async function updatePerjadinAdvanceAction(
   perjadinId: string,
-  advanceIdr: number,
+  advanceIdr: number | null,
 ): Promise<UpdatePerjadinAdvanceResult> {
   const person = await requirePerson();
 

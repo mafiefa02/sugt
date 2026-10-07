@@ -71,7 +71,10 @@ export const perjadin = pgTable(
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
 
-    advanceIdr: bigint("advance_idr", { mode: "number" }).notNull(),
+    // Uang Perjalanan. Null means "not filled in yet" — never the same as Rp 0, which stays a real
+    // amount. A Perjadin is often planned before anyone knows it, so it may be set later; once set it
+    // can be changed but not cleared, and the Laporan cannot be filed while it is null (#437).
+    advanceIdr: bigint("advance_idr", { mode: "number" }),
 
     picPersonId: uuid("pic_person_id").notNull(),
     picRole: text("pic_role").$type<"Staff">().notNull().default("Staff"),
