@@ -10,8 +10,8 @@ import { requireGrant } from "./staff-only";
  * **Preparation Cards** — the reads and writes behind the Dashboard (`/`) Persiapan tab's
  * free-standing cards (ADR-0028). A Card is a title, a date or date-range, and a variable checklist
  * whose **items each carry a Jenis** (#292); it is **not** the Perjadin Preparation Checklist
- * (ADR-0018), which is a Perjadin's six fixed boxes — see `docs` / `CONTEXT.md` for the collision
- * note.
+ * (ADR-0018, ADR-0045), which is a Perjadin's own hand-ticked list — see `docs` / `CONTEXT.md` for
+ * the collision note.
  *
  * **The read query applies no guard** — it is the reads behind the Persiapan tab, and whoever reaches
  * the Dashboard reads them. Reaching the Dashboard itself now needs a grant (#322, ADR-0037): a

@@ -114,7 +114,7 @@ function MyPerjadinSection({
  */
 function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: UploadGate }) {
   // The pill's `x/N` is read straight off the checklist the card also hands the dialog — one payload
-  // for both, so the pill and the boxes can never disagree. `N` is always six (amendment to ADR-0018).
+  // for both, so the pill and the boxes can never disagree. `N` is the trip's own (ADR-0045).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
   const preparationTotal = trip.preparation.length;
   // The shared three-way progress tone `/perjadin`'s pill wears too — neutral before anything is

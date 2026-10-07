@@ -1,17 +1,13 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
 import { subCluster } from "../schema/reference";
-import { groupMember, perjadin, perjadinPreparationItem, perjadinTeacher } from "../schema/travel";
+import { groupMember, perjadin, perjadinTeacher } from "../schema/travel";
 import type { Person } from "./caller";
 import { tripSchoolNames } from "./perjadin-naming";
-import {
-  derivePreparationChecklist,
-  type PreparationItem,
-  type PreparationTick,
-} from "./preparation-checklist";
+import { preparationChecklists, type PreparationItem } from "./preparation-checklist";
 
 /**
  * **The Perjadin list** — every trip, open to anyone signed in.
@@ -44,18 +40,15 @@ export type DirectoryPerjadin = {
   sessionsTotal: number;
   picFullName: string;
   /**
-   * The Preparation Checklist pill's `x` and `N` ([#114](https://github.com/mafiefa02/sugt/issues/114)).
-   * `preparationTotal` is the constant **6** — the flat fixed item set (amendment to ADR-0018), with
-   * no per-member derivation; `preparationDone` counts the present ticks whose key is one of the
-   * six fixed items. An orphan from an older model — a `dosen:` tick, or one on a ticket key
-   * ADR-0041 retired — matches none, so the pill never reads past `N`.
+   * The Preparation Checklist pill's `x` and `N` ([#114](https://github.com/mafiefa02/sugt/issues/114)):
+   * the ticked items of this trip's own checklist (ADR-0045), and how many it has. `N` is per trip.
    */
   preparationDone: number;
   preparationTotal: number;
   /**
-   * The fixed six with their tick state, for the Persiapan dialog the Staff pill opens (#343) — the
-   * same `derivePreparationChecklist` `myPerjadin` and the detail read run. `preparationDone`
-   * and `preparationTotal` are counted off this very list, so the pill and the dialog's boxes agree.
+   * The trip's checklist with its tick state, for the Persiapan dialog the Staff pill opens (#343) —
+   * the same resolver `myPerjadin` and the detail read run. `preparationDone` and `preparationTotal`
+   * are counted off this very list, so the pill and the dialog's boxes agree.
    */
   preparation: PreparationItem[];
   /**
@@ -144,35 +137,13 @@ export async function perjadinDirectory(_caller: Person): Promise<DirectoryPerja
 
   if (trips.length === 0) return [];
 
-  // The checklist for the Persiapan pill and its dialog (#343): one batched read of every trip's ticks,
-  // bucketed by trip and folded into the fixed six — the shape `myPerjadin` uses, rather
-  // than a join that would multiply each trip row by its ticks. A trip absent here has no ticks.
-  const tickRows = await db
-    .select({
-      perjadinId: perjadinPreparationItem.perjadinId,
-      itemKey: perjadinPreparationItem.itemKey,
-      checkedBy: perjadinPreparationItem.checkedBy,
-      checkedAt: perjadinPreparationItem.checkedAt,
-    })
-    .from(perjadinPreparationItem)
-    .where(
-      inArray(
-        perjadinPreparationItem.perjadinId,
-        trips.map((trip) => trip.id),
-      ),
-    );
-  const ticksByTrip = new Map<string, PreparationTick[]>();
-  for (const { perjadinId, ...tick } of tickRows) {
-    const bucket = ticksByTrip.get(perjadinId) ?? [];
-    bucket.push(tick);
-    ticksByTrip.set(perjadinId, bucket);
-  }
+  // The checklist for the Persiapan pill and its dialog (#343), resolved for every trip in one batched
+  // read (ADR-0045), not one per row. The pill's `x/N` is counted off the same list the dialog shows,
+  // so the two agree, and `N` is each trip's own.
+  const checklists = await preparationChecklists(trips.map((trip) => trip.id));
 
-  // The pill's `x/N` is counted off the same derived checklist the dialog shows — one read of the
-  // ticks for both, the way `myPerjadin`'s card does it, so the pill and the boxes agree.
-  // `N` is the flat fixed six (amendment to ADR-0018); an orphan `dosen:` tick matches no item.
   return trips.map((trip) => {
-    const preparation = derivePreparationChecklist(ticksByTrip.get(trip.id) ?? []);
+    const preparation = checklists.get(trip.id) ?? [];
     return {
       ...trip,
       // Counted off the trip's Schools (#343, ADR-0044) — one definition for the count, the School

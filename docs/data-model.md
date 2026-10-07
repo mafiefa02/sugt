@@ -1367,46 +1367,110 @@ Writing and rendering them is T3/T7
 ### The Preparation Checklist
 
 ```sql
-create table perjadin_preparation_item (
-  perjadin_id   uuid not null references perjadin (id) on delete cascade,
-  item_key      text not null,
-  checked_by    uuid not null references person (id),
-  checked_at    timestamptz not null default now(),
+create table preparation_item (
+  id                              uuid primary key default gen_random_uuid(),
+  level                           text not null check (level in ('semua', 'cluster', 'perjadin')),
+  cluster_id                      uuid references cluster (id),
+  perjadin_id                     uuid references perjadin (id) on delete cascade,
+  label                           text not null check (length(trim(label)) > 0),
+  position                        integer not null,
+  added_on                        date,   -- semua / cluster only: the WIB day it was added
+  removed_on                      date,   -- semua / cluster only: the WIB day it was removed
+  clears_on_teaching_team_change  boolean not null default false,
+  created_at                      timestamptz not null default now(),
 
-  primary key (perjadin_id, item_key)
+  constraint preparation_item_scope_matches_level check (
+       (level = 'semua'    and cluster_id is null     and perjadin_id is null)
+    or (level = 'cluster'  and cluster_id is not null and perjadin_id is null)
+    or (level = 'perjadin' and perjadin_id is not null and cluster_id is null)),
+  constraint preparation_item_dated_iff_wide check (
+       (level = 'perjadin' and added_on is null and removed_on is null)
+    or (level <> 'perjadin' and added_on is not null)),
+  constraint preparation_item_removed_after_added check (removed_on is null or removed_on >= added_on),
+  constraint preparation_item_system_item_kept check (
+    not clears_on_teaching_team_change or (level = 'semua' and removed_on is null))
+);
+create unique index preparation_item_one_system_item on preparation_item (clears_on_teaching_team_change)
+  where clears_on_teaching_team_change;
+
+-- A wider item hidden for one Cluster (dated spells) or one Perjadin (undated).
+create table preparation_item_hide (
+  id                   uuid primary key default gen_random_uuid(),
+  preparation_item_id  uuid not null references preparation_item (id) on delete cascade,
+  cluster_id           uuid references cluster (id),
+  perjadin_id          uuid references perjadin (id) on delete cascade,
+  hidden_on            date,
+  shown_on             date,
+  created_at           timestamptz not null default now(),
+
+  constraint preparation_item_hide_one_scope check ((cluster_id is null) <> (perjadin_id is null)),
+  constraint preparation_item_hide_dated_iff_cluster check (
+       (cluster_id is not null and hidden_on is not null)
+    or (perjadin_id is not null and hidden_on is null and shown_on is null)),
+  constraint preparation_item_hide_shown_after_hidden check (shown_on is null or shown_on >= hidden_on)
+);
+-- one open spell per (item, Cluster); one row per (item, Perjadin)
+
+-- A wider item reworded for one Cluster or one Perjadin. Undated.
+create table preparation_item_wording (
+  id                   uuid primary key default gen_random_uuid(),
+  preparation_item_id  uuid not null references preparation_item (id) on delete cascade,
+  cluster_id           uuid references cluster (id),
+  perjadin_id          uuid references perjadin (id) on delete cascade,
+  label                text not null check (length(trim(label)) > 0),
+
+  constraint preparation_item_wording_one_scope check ((cluster_id is null) <> (perjadin_id is null))
+);
+-- one per (item, Cluster) and per (item, Perjadin)
+
+create table perjadin_preparation_tick (
+  perjadin_id          uuid not null references perjadin (id) on delete cascade,
+  preparation_item_id  uuid not null references preparation_item (id) on delete cascade,
+  checked_by           uuid not null references person (id),
+  checked_at           timestamptz not null default now(),
+
+  primary key (perjadin_id, preparation_item_id)
 );
 ```
 
-**Only the ticks are stored** ([#114](https://github.com/mafiefa02/sugt/issues/114)). The
-Preparation Checklist is an internal-monitoring aid — Staff hand-tick a pre-departure to-do list,
-and it gates nothing. The _set of items that exists_ is **not** a table: since the amendment to
-[ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md) it is a **flat
-fixed six** — `sk_perjalanan`, `tiket_pp` ("Tiket / transportasi PP"), `booking_penginapan`,
-`transportasi_lokal`, `staff`, and `pengajar_lengkap` ("Narasumber sudah lengkap") — assembled in the
-query layer at read time with **no per-member part**, so it no longer reads the Group at all. A row
-here means one of those is ticked; un-ticking is a `DELETE`, so there is no "unchecked" row to keep.
+**The items are rows, defined at three levels**
+([ADR-0045](./adr/0045-the-preparation-checklist-is-stored-per-level-and-frozen-for-finished-perjadins.md)).
+A `semua` item applies to every Perjadin, a `cluster` item to its Cluster's Perjadins, a `perjadin`
+item to its one Perjadin. A Perjadin's Cluster is `sub_cluster.cluster_id` of its Sub-Cluster, so it
+is known before the trip has a Session. A Cluster or a Perjadin may hide a wider item
+(`preparation_item_hide`) or reword it (`preparation_item_wording`), and the most specific wording
+wins. The order is `semua`, then the Cluster's, then the Perjadin's own, each by its own `position`.
+One query-layer resolver (`queries/preparation-checklist.ts`) turns these rows into a Perjadin's
+list, in a batched form for lists of trips.
 
-**`pengajar_lengkap` is the one box the tool clears by itself**, and the single exception to "nothing
-ticks a box automatically". It replaced the old per-teacher `dosen:{person_id}` boxes when the
-Teaching Team stopped being People (ADR-0020): with up to twenty trip-scoped names, per-name boxes
-made no sense. It is ticked by hand like the rest, but **any Teaching-Team change — a name added,
-renamed or removed — deletes its tick**, so each change forces a fresh manual confirmation that the
-team is complete. That `DELETE` lives inside the teacher-mutation queries
-(`queries/perjadin-teachers.ts`), which is what makes it impossible to change the team without
-clearing the box. No other item is ever touched automatically. `dosen:` ticks the old model left in
-the table are **orphans**: no item derives them, so they are silently ignored and never cleaned up.
-So are ticks on `tiket_keberangkatan` and `tiket_kepulangan`, the two ticket boxes
-[ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md) folded into
-`tiket_pp` when the travel legs went — no data migration.
+**The dates are what freeze a finished Perjadin.** A `semua` or `cluster` item applies to Perjadin P
+only while `added_on <= P.ends_on` and `removed_on` is null or later than `P.ends_on`. Each date is
+the WIB day of the change. A Cluster hide works the same way, one row per spell. Removing a wider
+item is therefore a soft-remove that stamps `removed_on`; the Perjadins that had ended keep it and
+its ticks. A `perjadin` item and a Perjadin-level hide are undated and always apply; removing the
+item deletes it, and its ticks by cascade. Wording is never dated, so a rewording keeps the item's
+id and ticks and shows on finished Perjadins too.
 
-The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent — the write
-upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than duplicating a row.
-`checked_by` and `checked_at` record who and when for later use; nothing renders them yet. **`staff`
-is a single box** — "confirmed with the Pendamping" (the on-Perjadin label for the DITSAMA role,
-[#141](https://github.com/mafiefa02/sugt/issues/141)), not one row per member; the stored key stays
-`staff`. `N` is therefore the
-constant **6**, and every count — the Perjadin list's Persiapan `x/N` pill, the trip card's, the
-dialog's — is taken off the derived six, so an orphan can never make one read 7/6.
+**Only the ticks are stored**, as before ([ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md)).
+A row in `perjadin_preparation_tick` means the item is ticked on that Perjadin; un-ticking is a
+`DELETE`. The primary key makes a toggle idempotent, and the toggle refuses an item the Perjadin's
+resolved list does not hold. A hidden item keeps its ticks, so showing it again brings them back.
+`checked_by` and `checked_at` record who and when; nothing renders them yet.
+
+**The system item** carries `clears_on_teaching_team_change`. Any Teaching-Team change (a name
+added, renamed or removed) deletes that Perjadin's tick on it, inside the teacher-mutation queries
+(`queries/perjadin-teachers.ts`). The flag, not an id or a label, is what those queries read, so a
+rewording keeps the coupling. The database holds that **at most one item carries the flag**
+(`preparation_item_one_system_item`) and that it is a `semua` item **never removed**
+(`preparation_item_system_item_kept`). That it is never hidden is the query layer's rule
+(`queries/preparation-items.ts`), as is which items may be hidden or reworded where: a `semua`
+item for a Cluster or a Perjadin, a `cluster` item for a Perjadin of that Cluster.
+
+**The cutover** is migration `0043_preparation_levels`. The old six became `semua` items removed
+on the day it ran, so every Perjadin that had already ended keeps them; their ticks were converted
+by `item_key`. Ticks on keys no item had (`dosen:*`, `tiket_keberangkatan`, `tiket_kepulangan`)
+were dropped. The company's 14 were added that same day, the second carrying the flag.
+`perjadin_preparation_item` was dropped.
 
 ---
 

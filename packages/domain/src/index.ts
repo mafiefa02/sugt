@@ -670,6 +670,21 @@ export const ACTIVITY_LOG_ACTION_LABELS: Record<ActivityLogAction, string> = {
 };
 
 /**
+ * **The three levels a Preparation Item is defined at** (ADR-0045): every Perjadin, one Cluster's,
+ * or one Perjadin's own. The more specific level wins. Mirrored character for character by
+ * `preparation_item_level_check` (see `packages/db/src/schema/travel.ts`).
+ */
+export const PREPARATION_ITEM_LEVELS = ["semua", "cluster", "perjadin"] as const;
+export type PreparationItemLevel = (typeof PREPARATION_ITEM_LEVELS)[number];
+
+/** How each level reads on screen. */
+export const PREPARATION_ITEM_LEVEL_LABELS: Record<PreparationItemLevel, string> = {
+  semua: "Semua Perjadin",
+  cluster: "Cluster",
+  perjadin: "Perjadin",
+};
+
+/**
  * **The three kinds of Perjadin Document**
  * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397), ADR-0042): attendance sheets, one
  * PDF each. Indonesian because they are the names of paperwork, on the same footing as

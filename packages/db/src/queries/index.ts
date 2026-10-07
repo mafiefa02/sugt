@@ -201,9 +201,23 @@ export {
   type TogglePreparationItemInput,
   type TogglePreparationItemResult,
 } from "./perjadin-preparation";
-// The derived checklist's item shape rides on `PerjadinDetail`; the rest of
-// `./preparation-checklist.ts` is a helper beneath the queries, like `./group-rules.ts`.
+// The resolved checklist's item shape rides on `PerjadinDetail`, `MyPerjadinTrip` and
+// `DirectoryPerjadin`; the resolver itself is a helper beneath the queries, like `./group-rules.ts`.
 export type { PreparationItem } from "./preparation-checklist";
+export {
+  addPreparationItem,
+  clearPreparationItemWording,
+  hidePreparationItem,
+  removePreparationItem,
+  rewordPreparationItem,
+  showPreparationItem,
+  type AddPreparationItemResult,
+  type HidePreparationItemResult,
+  type PreparationOverrideScope,
+  type PreparationScope,
+  type RemovePreparationItemResult,
+  type RewordPreparationItemResult,
+} from "./preparation-items";
 export { onlineSessionDirectory, type DirectoryOnlineSession } from "./online-session-directory";
 export {
   deleteOnlineSession,

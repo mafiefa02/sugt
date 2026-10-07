@@ -1,5 +1,5 @@
 import { db, schema } from "@sugt/db";
-import { myPerjadin, perjadinAcquittal } from "@sugt/db/queries";
+import { myPerjadin, perjadinAcquittal, togglePreparationItem } from "@sugt/db/queries";
 import type { Person } from "@sugt/db/queries";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -12,6 +12,7 @@ import {
   addSchool,
   addSubCluster,
   addTransaction,
+  COMPANY_PREPARATION_ITEMS,
   resetDatabase,
 } from "./support/fixtures";
 
@@ -410,10 +411,10 @@ describe("myPerjadin builds the visited-Schools tree", () => {
   });
 });
 
-describe("myPerjadin derives the Preparation Checklist", () => {
+describe("myPerjadin resolves the Preparation Checklist", () => {
   beforeEach(resetDatabase);
 
-  it("returns the fixed six, marking only the ticked ones and dropping orphans", async () => {
+  it("returns the trip's own checklist, marking only the ticked items", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -423,31 +424,30 @@ describe("myPerjadin derives the Preparation Checklist", () => {
       startsOn: daysFromToday(1),
       endsOn: daysFromToday(4),
     });
-    // Two fixed items ticked, plus two orphans older models left behind — a `dosen:` tick and one on
-    // the ticket key ADR-0041 retired. Neither matches a fixed key, so neither has an item here.
-    await db.insert(schema.perjadinPreparationItem).values([
-      { perjadinId: trip.id, itemKey: "sk_perjalanan", checkedBy: caller.id },
-      { perjadinId: trip.id, itemKey: "tiket_pp", checkedBy: caller.id },
-      { perjadinId: trip.id, itemKey: "tiket_keberangkatan", checkedBy: caller.id },
-      { perjadinId: trip.id, itemKey: "dosen:someone", checkedBy: caller.id },
-    ]);
+    const before = (await myPerjadin(caller)).current[0]?.preparation ?? [];
+    const [first, , third] = before;
+    for (const item of [first!, third!]) {
+      await togglePreparationItem(caller, {
+        perjadinId: trip.id,
+        itemId: item.itemId,
+        checked: true,
+      });
+    }
 
     const {
       current: [mine],
     } = await myPerjadin(caller);
     if (!mine) throw new Error("expected the trip");
 
-    // The card derives its `x/N` pill from this: N is the length (always six), x the checked count.
-    expect(mine.preparation).toHaveLength(6);
-    const checked = mine.preparation.filter((item) => item.checked).map((item) => item.itemKey);
-    expect(checked.sort()).toEqual(["sk_perjalanan", "tiket_pp"]);
-    // Every other fixed item comes back unchecked; the orphans never appear at all.
-    expect(mine.preparation.filter((item) => !item.checked)).toHaveLength(4);
-    expect(mine.preparation.some((item) => item.itemKey.startsWith("dosen:"))).toBe(false);
-    expect(mine.preparation.some((item) => item.itemKey === "tiket_keberangkatan")).toBe(false);
+    // A trip not yet over has the company's 14 (ADR-0045); the card's `x/N` is read off this list.
+    expect(mine.preparation.map((item) => item.label)).toEqual(COMPANY_PREPARATION_ITEMS);
+    expect(mine.preparation.filter((item) => item.checked).map((item) => item.itemId)).toEqual([
+      first!.itemId,
+      third!.itemId,
+    ]);
   });
 
-  it("gives a trip with no ticks all six items unchecked", async () => {
+  it("gives a trip with no ticks every item unchecked", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -462,7 +462,7 @@ describe("myPerjadin derives the Preparation Checklist", () => {
       current: [mine],
     } = await myPerjadin(caller);
     expect(mine?.id).toBe(trip.id);
-    expect(mine?.preparation).toHaveLength(6);
+    expect(mine?.preparation).toHaveLength(COMPANY_PREPARATION_ITEMS.length);
     expect(mine?.preparation.every((item) => !item.checked)).toBe(true);
   });
 });

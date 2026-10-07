@@ -289,13 +289,13 @@ export async function updatePerjadinAdvanceAction(
  */
 export async function togglePreparationItemAction(
   perjadinId: string,
-  itemKey: string,
+  itemId: string,
   checked: boolean,
 ): Promise<TogglePreparationItemResult> {
   const person = await requirePerson();
 
   const result = await staffSurface(() =>
-    togglePreparationItem(person, { perjadinId, itemKey, checked }),
+    togglePreparationItem(person, { perjadinId, itemId, checked }),
   );
   if (result.outcome === "toggled") {
     revalidatePath(`/perjadin/${perjadinId}`);

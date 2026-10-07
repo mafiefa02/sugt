@@ -12,18 +12,12 @@ import { db } from "../client";
 import { session, sessionTeachingTeam } from "../schema/delivery";
 import { person } from "../schema/people";
 import { province, school, subCluster } from "../schema/reference";
-import {
-  groupMember,
-  perjadin,
-  perjadinPimpinan,
-  perjadinPreparationItem,
-  perjadinTeacher,
-} from "../schema/travel";
+import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
 import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
 import { type CoveredSession, offlineSessionsElsewhere } from "./covered-sessions";
 import { duplicatedStaff } from "./group-rules";
-import { derivePreparationChecklist, type PreparationItem } from "./preparation-checklist";
+import { preparationChecklist, type PreparationItem } from "./preparation-checklist";
 import { unknownPimpinanIds } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
@@ -119,10 +113,9 @@ export type PerjadinDetail = {
   /** The Schools of the trip's Sub-Cluster, for the "add a Session" picker (ADR-0016's eligible set). */
   eligibleSchools: EligibleSchool[];
   /**
-   * The Preparation Checklist, each item with its tick state ([#114](https://github.com/mafiefa02/sugt/issues/114)).
-   * **Derived here, not stored**: `perjadin_preparation_item` holds only the ticks. Its per-teacher
-   * derivation is T4's ([#139](https://github.com/mafiefa02/sugt/issues/139)); this ticket leaves it
-   * as it stands. No money, so it rides on this payload rather than the separate acquittal read.
+   * The Preparation Checklist, each item with its tick state ([#114](https://github.com/mafiefa02/sugt/issues/114)),
+   * resolved from the items defined for every Perjadin, its Cluster and itself (ADR-0045). No money,
+   * so it rides on this payload rather than the separate acquittal read.
    */
   preparation: PreparationItem[];
 };
@@ -153,7 +146,7 @@ export async function perjadinDetail(
     staff,
     eligibleSchools,
     teachingLinks,
-    preparationTicks,
+    preparationList,
   ] = await Promise.all([
     db
       .select({
@@ -248,14 +241,7 @@ export async function perjadinDetail(
       .innerJoin(perjadinTeacher, eq(perjadinTeacher.id, sessionTeachingTeam.perjadinTeacherId))
       .where(eq(perjadinTeacher.perjadinId, perjadinId))
       .orderBy(asc(perjadinTeacher.name)),
-    db
-      .select({
-        itemKey: perjadinPreparationItem.itemKey,
-        checkedBy: perjadinPreparationItem.checkedBy,
-        checkedAt: perjadinPreparationItem.checkedAt,
-      })
-      .from(perjadinPreparationItem)
-      .where(eq(perjadinPreparationItem.perjadinId, perjadinId)),
+    preparationChecklist(perjadinId),
   ]);
 
   if (!trip) return null;
@@ -269,9 +255,8 @@ export async function perjadinDetail(
     taughtBySession.set(link.sessionId, list);
   }
 
-  // The Preparation Checklist is a flat fixed six now (amendment to ADR-0018) — no per-member
-  // derivation, so it does not read the Group at all.
-  const preparation = derivePreparationChecklist(preparationTicks);
+  // The trip's own Preparation Checklist (ADR-0045). It exists whenever the trip does.
+  const preparation = preparationList ?? [];
 
   // What each eligible School already has on other trips (#409), this trip's own left out.
   const covered = await offlineSessionsElsewhere(

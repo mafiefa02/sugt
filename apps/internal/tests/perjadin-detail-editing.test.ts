@@ -159,20 +159,29 @@ async function pimpinan(fullName: string, email: string) {
   return addPerson({ fullName, email, role: "Pimpinan" });
 }
 
-/** Put a `perjadin_preparation_item` tick down, so a later mutation's DELETE can be seen. */
-async function tick(perjadinId: string, itemKey: string, by: string) {
-  await db.insert(schema.perjadinPreparationItem).values({ perjadinId, itemKey, checkedBy: by });
+/** A Preparation Item's id by its label — the company's items are in every test database (0043). */
+async function itemId(label: string) {
+  const [row] = await db
+    .select({ id: schema.preparationItem.id })
+    .from(schema.preparationItem)
+    .where(eq(schema.preparationItem.label, label));
+  return row!.id;
+}
+
+/** Put a tick down, so a later mutation's DELETE can be seen. */
+async function tick(perjadinId: string, preparationItemId: string, by: string) {
+  await db
+    .insert(schema.perjadinPreparationTick)
+    .values({ perjadinId, preparationItemId, checkedBy: by });
 }
 
 async function ticks(perjadinId: string) {
   return (
     await db
-      .select({ itemKey: schema.perjadinPreparationItem.itemKey })
-      .from(schema.perjadinPreparationItem)
-      .where(eq(schema.perjadinPreparationItem.perjadinId, perjadinId))
-  )
-    .map((row) => row.itemKey)
-    .sort();
+      .select({ itemId: schema.perjadinPreparationTick.preparationItemId })
+      .from(schema.perjadinPreparationTick)
+      .where(eq(schema.perjadinPreparationTick.perjadinId, perjadinId))
+  ).map((row) => row.itemId);
 }
 
 describe("editing a Perjadin's Teaching Team", () => {
@@ -267,25 +276,27 @@ describe("editing a Perjadin's Teaching Team", () => {
     expect(await linkedTeacherIds(session.id)).toEqual([]);
   });
 
-  it("clears the 'pengajar_lengkap' tick on add, rename and remove, sparing the other boxes", async () => {
+  it("clears the system item's tick on add, rename and remove, sparing the other boxes", async () => {
     const { pic, perjadinId } = await trip();
+    const system = await itemId("Fiksasi Dosen/Narasumber oleh PIC Dosen");
+    const hotel = await itemId("Pemesanan Hotel");
 
     // Add clears it.
-    await tick(perjadinId, "pengajar_lengkap", pic.id);
-    await tick(perjadinId, "staff", pic.id);
+    await tick(perjadinId, system, pic.id);
+    await tick(perjadinId, hotel, pic.id);
     const added = await addPerjadinTeacher(pic, perjadinId, "Dr. Andi");
     if (added.outcome !== "added") throw new Error("fixture failed to add");
-    expect(await ticks(perjadinId)).toEqual(["staff"]);
+    expect(await ticks(perjadinId)).toEqual([hotel]);
 
     // Rename clears it again.
-    await tick(perjadinId, "pengajar_lengkap", pic.id);
+    await tick(perjadinId, system, pic.id);
     await renamePerjadinTeacher(pic, added.teacherId, "Prof. Andi");
-    expect(await ticks(perjadinId)).toEqual(["staff"]);
+    expect(await ticks(perjadinId)).toEqual([hotel]);
 
     // Remove clears it a third time.
-    await tick(perjadinId, "pengajar_lengkap", pic.id);
+    await tick(perjadinId, system, pic.id);
     await removePerjadinTeacher(pic, added.teacherId);
-    expect(await ticks(perjadinId)).toEqual(["staff"]);
+    expect(await ticks(perjadinId)).toEqual([hotel]);
   });
 
   it("refuses a non-Staff caller on every teacher write", async () => {
