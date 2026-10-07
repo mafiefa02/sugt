@@ -48,9 +48,10 @@ import type {
  * screen and nothing else.
  *
  * None opens a transaction. The boundary is the query layer's fifth convention and lives in
- * `@sugt/db`; `requireStaff` inside each query is what closes the path, since a layout does not run
- * before a Server Action. Every one that touches Drive — opening upload sessions, recording a line,
- * attaching receipts to one — also calls it itself, first, through `staffOnTrip`
+ * `@sugt/db`; `requireStaff` and `requirePerjadinWriter` (ADR-0048) inside each query are what
+ * close the path, since a layout does not run before a Server Action. Every one that touches
+ * Drive — opening upload sessions, recording a line, attaching receipts to one — also calls the
+ * guard itself, first, through `staffOnTrip`
  * (`-/lib/drive/upload-guard`), because Google is reached before any query runs. Every refusal
  * comes back as a value.
  */

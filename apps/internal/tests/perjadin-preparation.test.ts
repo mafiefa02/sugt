@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   addCluster,
+  addGroupMember,
   addPerjadin,
   addPerson,
   addSubCluster,
@@ -186,6 +187,8 @@ describe("toggling a box", () => {
       email: "dewi@ditsama.itb.ac.id",
       role: "Staff",
     });
+    // A second member of the Group: only its members, Editors and Administrators tick (ADR-0048).
+    await addGroupMember(perjadinId, other.id);
     const [item] = await checklistOf(pic, perjadinId);
 
     await togglePreparationItem(pic, { perjadinId, itemId: item!.itemId, checked: true });

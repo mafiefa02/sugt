@@ -73,3 +73,12 @@ is asked for. A Pimpinan reads money on the money surfaces, not on the Staff hom
 - ADR-0004's delivery-vs-money framing is amended, not discarded — publishing stays Staff-only,
   delivery-arranging stays Staff-only, and every composite-key role rule is untouched. Only the
   money-read gate moved.
+
+## Amendment (2026-10-08): writing a trip's money is its Group's
+
+"Staff may change" is now narrower for money on a trip. Recording a transaction, attaching a receipt,
+filing the Laporan and correcting Uang Perjalanan are written by **the trip's Group** — its PIC and its
+Staff members — or by an **Editor** or an **Administrator**, not by every Staff member
+([ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), #439). A Staff member off the trip is
+refused with `NotOnPerjadinError`, a 403 like `NotStaffError`. Reading money is unchanged: open to
+everyone signed in.

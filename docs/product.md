@@ -277,7 +277,7 @@ described "Upload dokumentasi kegiatan luring untuk sesi ini"
 - **Hapus** on each sheet asks first — "Hapus dokumen ini? File akan dipindahkan ke Sampah Google
   Drive." — then moves the file to the Drive trash and removes the sheet. There is no editing: a
   wrong upload is fixed by Hapus and a new upload.
-- Any Staff member uploads and deletes. The button, and Hapus, are disabled with the reason while
+- The trip's Group, an Editor or an Administrator uploads and deletes (ADR-0048). The button, and Hapus, are disabled with the reason while
   Drive is not connected or broken, as Catat Transaksi is.
 
 ### Concerns list
@@ -344,7 +344,9 @@ online Session.
 
 **An offline Session's own page, `/sesi/[id]`, has a Foto & Video section** (#425), so a Pimpinan —
 who has no `/pendamping` — sees its photos and videos too. Everyone signed in gets the list with
-**Buka**; Staff also get **Hapus** and **Unggah Foto & Video**, which opens the same popup. A
+**Buka**; whoever writes the Session's trip — its Group, an Editor or an Administrator (ADR-0048) —
+also gets **Hapus** and **Unggah Foto & Video**, which opens the same popup, and the Session's own
+writes (Tandai terlaksana, Batalkan Sesi, the date edit). A
 cancelled Session keeps its list but offers no upload. An online Session has none.
 
 **Only an offline Session has a PIC** — its Perjadin's. An online Session has none: a third-party
@@ -391,13 +393,14 @@ allowed and an end before the start refused. The form asks nothing about getting
 Keberangkatan, no Kepulangan, no time, no transport mode — because many trips are done PP, out to a
 nearby Sub-Cluster and back, sometimes daily
 ([ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md)). Each
-Session's date picker is bounded by the two dates. On the trip's own screen Staff correct them with
-**Ubah tanggal** beside the range; the edit moves no Session, and is refused whole if a Session still
-to be delivered would fall outside the new range. A Pimpinan sees the dates read-only.
+Session's date picker is bounded by the two dates. On the trip's own screen whoever writes the trip
+corrects them with **Ubah tanggal** beside the range; the edit moves no Session, and is refused whole
+if a Session still to be delivered would fall outside the new range. Everyone else sees the dates
+read-only.
 
 **Uang Perjalanan is optional on the form** — labelled "Uang Perjalanan (Rp) — opsional" — because a
 trip often has to be planned before anyone knows its figure (#437). Left empty it is "not filled in
-yet", which is not Rp 0. Staff fill it in later with **Isi Uang Perjalanan** on the trip's screen (the
+yet", which is not Rp 0. Whoever writes the trip fills it in later with **Isi Uang Perjalanan** on the trip's screen (the
 button reads **Ubah Uang Perjalanan** once it is set); once set it can be changed, to zero included,
 but not emptied again. While it is empty, the money strip on the trip's screen and the Laporan read
 Diterima **"Belum diisi"** and Sisa **"—"**, the `/pendamping` card reads "Uang Perjalanan belum
@@ -457,11 +460,12 @@ of every eight Sessions are invisible to anything trip-shaped.
 
 **A Perjadin's screen carries a Preparation Checklist** — a private, hand-ticked list of
 pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid and nothing more:
-no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Any Staff
-member may tick any box; the boxes flip optimistically. The checklist's state also shows off the
+no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Whoever writes
+the trip may tick any box; the boxes flip optimistically. The checklist's state also shows off the
 trip's own screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is
-done: in the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. For Staff
-the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static. The
+done: in the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. On a trip
+the viewer writes, the pill opens the checklist in a dialog, toggleable there; on any other row it is
+static. The
 Dashboard's [Persiapan Luring](#persiapan-luring--one-weeks-preparation-checklists) tab follows the
 checklists week by week, read-only.
 
@@ -517,6 +521,16 @@ above narrows it by the trip's Kelompok, its Schools, its PIC, its Narasumber an
 Administrator has it implicitly), and beside it **Pengaturan Perjadin**, for an Administrator only.
 Anyone else is not shown them; neither is in the sidebar. `/perjadin/baru` answers 403 to a Staff
 member without the Editor Grant, who still runs any trip they are on but cannot plan a new one.
+
+**A trip is written by its Group** — its PIC and its Staff members — **or by an Editor or an
+Administrator** ([ADR-0048](./adr/0048-a-perjadin-is-written-by-its-group.md), #439). Everyone signed
+in reads every trip. On `/perjadin/[id]`, `/perjadin/[id]/laporan` and `/sesi/[id]`, anyone else sees
+everything with every write control absent — Ubah tanggal, Isi/Ubah Uang Perjalanan, Ubah Group, the
+Pimpinan and Narasumber edits, Tambah/Ubah/Batalkan Sesi, Tandai, the Persiapan boxes, Catat
+transaksi, Unggah bukti, Laporkan, Foto & Video's upload and Hapus — and a forced request answers 403.
+Only **Evaluasi Perjadin**'s link stays open to everyone signed in. A Staff member added to a Group
+writes that trip from then on; one who leaves it stops at once. `/pendamping` lists only a person's own
+trips, so every control on its cards stays theirs.
 
 ### The acquittal — the most important screen
 
@@ -913,7 +927,7 @@ SUGT ITB 2026 Internal App Object Storage/
 holds the photos (JPEG, PNG, HEIC or WebP, up to 50 MB) and videos (MP4 or MOV, up to 1000 MB) of
 each offline Session, uploaded as they were taken — a photo keeps its location data — and shared one
 file at a time. A large file is sent to Drive in 16 MB pieces and picks up where it stopped if the
-connection drops. Staff upload them from each Session's **Foto & Video** on `/pendamping` and on `/sesi/[id]`;
+connection drops. The trip's Group, an Editor or an Administrator uploads them from each Session's **Foto & Video** on `/pendamping` and on `/sesi/[id]`;
 anyone signed in views them on `/sesi/[id]`.
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not

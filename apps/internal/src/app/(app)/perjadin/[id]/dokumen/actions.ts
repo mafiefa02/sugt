@@ -16,6 +16,7 @@ import {
   deletePerjadinDocument,
   documentReconcileTarget,
   perjadinDokumen,
+  requirePerjadinWriter,
   requireStaff,
   recordPerjadinDocument,
   type PerjadinDokumen,
@@ -169,8 +170,9 @@ export async function recordDocumentAction(
  * **Hapus — delete one Perjadin Document** (#398, ADR-0042). **The file is trashed first, then the
  * row**, so a row never vanishes while its public file stays live:
  *
- * 1. **Guard** — Staff and the document — then the connection, before any Drive call. While
- *    Drive is not connected or is broken, Hapus is refused with the upload gate's reason.
+ * 1. **Guard** — Staff, the document and its trip's writer (ADR-0048) — then the connection,
+ *    before any Drive call. While Drive is not connected or is broken, Hapus is refused with the
+ *    upload gate's reason.
  * 2. **Trash the file.** One already in the trash, or gone, counts as done: a retry is safe.
  * 3. **Delete the row and log `document_deleted`**, in one transaction (`deletePerjadinDocument`).
  *    If that fails after the trash, the row stays, pointing at a trashed file; Hapus again ends it.
@@ -183,9 +185,12 @@ export async function deleteDocumentAction(
 ): Promise<DeleteDocumentActionResult> {
   const person = await requirePerson();
 
-  const target = await staffSurface(() => {
+  const target = await staffSurface(async () => {
     requireStaff(person);
-    return documentReconcileTarget(person, documentId);
+    const found = await documentReconcileTarget(person, documentId);
+    // The trip's Group, an Editor or an Administrator (ADR-0048), before the file is trashed.
+    if (found) await requirePerjadinWriter(person, found.perjadin.id);
+    return found;
   });
   if (!target) return { outcome: "no-such-document" };
 

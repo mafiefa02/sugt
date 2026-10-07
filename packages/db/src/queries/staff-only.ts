@@ -1,6 +1,11 @@
 import type { Grant } from "@sugt/domain";
+import { type SQL, sql } from "drizzle-orm";
 
+import { db } from "../client";
+import { session } from "../schema/delivery";
+import { groupMember, perjadin } from "../schema/travel";
 import type { Person } from "./caller";
+import type { Executor } from "./preparation-checklist";
 
 /**
  * The Staff-only choke point. **The boundary is now read (any signed-in Person) vs write
@@ -18,6 +23,10 @@ import type { Person } from "./caller";
  * and leaves writes with "the record's owner", which a Session nobody has arranged yet does not
  * have). So the guard is one guard and the reasons are two, and neither of them is "this function
  * reads money".
+ *
+ * **Inside the Staff line, a Perjadin is its Group's** (ADR-0048): every write on a trip and its
+ * offline Sessions also runs `requirePerjadinWriter` below, which passes the trip's Group, an Editor
+ * and an Administrator and refuses every other Staff member with `NotOnPerjadinError`.
  *
  * That rule is application code rather than RLS, because Better Auth means there is
  * no `auth.uid()` in Postgres and a policy would need `SET LOCAL` on every
@@ -200,4 +209,131 @@ export function requireGrant(person: Person, grant: Grant): void {
 export function canViewDashboard(person: Person): boolean {
   if (person.role === "Pimpinan") return true;
   return hasGrant(person, "Editor") || hasGrant(person, "Dashboard Viewer");
+}
+
+const NOT_ON_PERJADIN_ERROR_CODE = "sugt/not-on-perjadin";
+
+/**
+ * A Staff caller reached a write on a Perjadin whose Group they are not in, without the Editor Grant
+ * (ADR-0048).
+ *
+ * The third sibling at this choke point, after `NotStaffError` and `NotGrantedError`, and the same
+ * kind of refusal: the UI hides every write on a trip from a Person who may not make it, so reaching
+ * this is a bug, an attack, or a screen gone stale since its Person left the Group. `staffSurface()`
+ * turns it into the same **403**. Discriminated on `sugtErrorCode`, not `instanceof`, for the reason
+ * on `NotStaffError`.
+ */
+export class NotOnPerjadinError extends Error {
+  readonly sugtErrorCode = NOT_ON_PERJADIN_ERROR_CODE;
+
+  override readonly name = "NotOnPerjadinError";
+
+  constructor(person: Person, perjadinId: string) {
+    super(
+      `A write on Perjadin ${perjadinId} was handed Staff caller ${person.id}, who is not in its ` +
+        `Group and holds [${person.grants.join(", ") || "no grants"}]. A Perjadin is written by its ` +
+        `Group, Editors and Administrators (ADR-0048); the UI offers its writes to no one else, so ` +
+        `this is a bug or a stale screen, not a state a user can reach.`,
+    );
+  }
+}
+
+/** Is this the Perjadin-writer refusal? Translated into a **403** server-side by `staffSurface()`. */
+export function isNotOnPerjadinError(error: unknown): error is NotOnPerjadinError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "sugtErrorCode" in error &&
+    error.sugtErrorCode === NOT_ON_PERJADIN_ERROR_CODE
+  );
+}
+
+/**
+ * **The Perjadin-writer rule as one SQL boolean** (ADR-0048), correlated to the `perjadin` row of
+ * the query it sits in: Staff only, then the Editor Grant (an Administrator implies it) writes every
+ * Perjadin, then anyone else only a trip whose Group — a `group_member` row, the PIC included —
+ * they are in. A Pimpinan recorded on a trip is not in its Group (ADR-0020). The one statement of
+ * the rule: `requirePerjadinWriter`, `canWritePerjadin` and the `/perjadin` directory's per-row
+ * answer all read it. Not exported from the package.
+ */
+export function perjadinWriterSql(person: Person): SQL<boolean> {
+  if (person.role !== "Staff") return sql<boolean>`false`;
+  if (hasGrant(person, "Editor")) return sql<boolean>`true`;
+  return sql<boolean>`exists (
+    select 1 from ${groupMember} gm
+    where gm.perjadin_id = ${perjadin.id} and gm.person_id::text = ${person.id}
+  )`;
+}
+
+/**
+ * May this Person write this Perjadin — or `null` when no such Perjadin exists. A text compare, so
+ * a malformed id is simply no Perjadin rather than a cast error.
+ */
+async function writesPerjadin(
+  executor: Executor,
+  person: Person,
+  perjadinId: string,
+): Promise<boolean | null> {
+  const [row] = await executor
+    .select({ writer: perjadinWriterSql(person) })
+    .from(perjadin)
+    .where(sql`${perjadin.id}::text = ${perjadinId}`);
+  return row ? row.writer : null;
+}
+
+/**
+ * **May this Person write this Perjadin?** (ADR-0048) The non-throwing twin of
+ * `requirePerjadinWriter`, for the UI to decide which write controls to show.
+ */
+export async function canWritePerjadin(person: Person, perjadinId: string): Promise<boolean> {
+  return (await writesPerjadin(db, person, perjadinId)) === true;
+}
+
+/**
+ * **The Perjadin-writer choke point** (ADR-0048). Every write on a Perjadin and on its offline
+ * Sessions runs it, and it is three rules in this order:
+ *
+ * 1. `requireStaff` first, so a Pimpinan is still refused as `NotStaffError` — a Pimpinan writes
+ *    nothing (ADR-0025), Group or not.
+ * 2. The Editor Grant writes every Perjadin; an Administrator implies it.
+ * 3. Anyone else writes only a Perjadin whose Group they are in, and is otherwise refused with
+ *    `NotOnPerjadinError`.
+ *
+ * **A Perjadin that does not exist passes**, so a write on a stale id still answers its own
+ * `no-such-perjadin` as a value: nobody is in a deleted trip's Group, and a stale screen is a state
+ * a member can honestly reach.
+ *
+ * Pass the write's own transaction where it has one, so the membership it reads is the state the
+ * write commits against: a member who has just left the Group is refused on their next write.
+ * Membership is application-enforced, not a database rule (`docs/data-model.md`).
+ */
+export async function requirePerjadinWriter(
+  person: Person,
+  perjadinId: string,
+  executor: Executor = db,
+): Promise<void> {
+  requireStaff(person);
+  if ((await writesPerjadin(executor, person, perjadinId)) === false) {
+    throw new NotOnPerjadinError(person, perjadinId);
+  }
+}
+
+/**
+ * **`requirePerjadinWriter` for a write that names a Session rather than its trip.** An offline
+ * Session is written by its Perjadin's Group (ADR-0048), so this resolves the Session's
+ * `perjadin_id` and runs the Perjadin guard on it. An online Session has no Perjadin and no Group —
+ * who writes one is ADR-0047's Editor Grant, checked by its own surface — and no such Session is the
+ * write's own refusal to give, so both pass with only `requireStaff` here.
+ */
+export async function requireSessionWriter(
+  person: Person,
+  sessionId: string,
+  executor: Executor = db,
+): Promise<void> {
+  requireStaff(person);
+  const [row] = await executor
+    .select({ perjadinId: session.perjadinId })
+    .from(session)
+    .where(sql`${session.id}::text = ${sessionId}`);
+  if (row?.perjadinId) await requirePerjadinWriter(person, row.perjadinId, executor);
 }

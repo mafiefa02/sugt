@@ -32,7 +32,16 @@ const ADVANCE_MISSING_REFUSAL = {
   body: "Isi Uang Perjalanan sebelum melaporkan.",
 };
 
-function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filedAt: Date | null }) {
+function FilePerjadinReport({
+  perjadinId,
+  filedAt,
+  canWrite,
+}: {
+  perjadinId: string;
+  filedAt: Date | null;
+  /** Laporkan is the trip's writers' (ADR-0048); anyone else sees only when it was filed. */
+  canWrite: boolean;
+}) {
   const [refusal, setRefusal] = useState<{ title: string; body: string } | null>(null);
   const [filing, startFiling] = useTransition();
 
@@ -43,6 +52,7 @@ function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filed
       </span>
     );
   }
+  if (!canWrite) return null;
 
   function file() {
     startFiling(async () => {

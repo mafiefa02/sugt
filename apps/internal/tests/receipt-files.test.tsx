@@ -90,6 +90,7 @@ describe("the acquittal's receipt links and gate", () => {
         perjadinId="p1"
         transactions={[line]}
         uploadGate={{ open: true }}
+        canWrite
       />,
     );
 
@@ -109,6 +110,7 @@ describe("the acquittal's receipt links and gate", () => {
         perjadinId="p1"
         transactions={[line]}
         uploadGate={{ open: false, reason }}
+        canWrite
       />,
     );
 

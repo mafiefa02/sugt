@@ -13,7 +13,7 @@ import { perjadin, perjadinDocument } from "../schema/travel";
 import { logActivity, type DocumentLogDetails } from "./activity-log";
 import type { Person } from "./caller";
 import { isTripSchool } from "./perjadin-naming";
-import { requireStaff } from "./staff-only";
+import { requirePerjadinWriter, requireStaff } from "./staff-only";
 
 /**
  * **Perjadin Documents** (#397, ADR-0042) — a trip's attendance sheets, one PDF each in the company
@@ -21,8 +21,8 @@ import { requireStaff } from "./staff-only";
  * upload, the checks on the file and the reconcile talk to Google and live in `@sugt/internal`;
  * their bookkeeping is `./document-drive-sync.ts`.
  *
- * **Any Staff member records one**, as any Staff member records a transaction; a Pimpinan reads
- * only.
+ * **The trip's Group, an Editor or an Administrator records one** (`requirePerjadinWriter`,
+ * ADR-0048), as they record a transaction; everyone else, a Pimpinan included, reads only.
  */
 
 /** A Daftar Hadir Peserta's four extra fields: one School, one cohort, one session's local span. */
@@ -96,6 +96,7 @@ export async function checkDocumentFields(
   { outcome: "ok"; school: { name: string; timeZone: TimeZone } | null } | DocumentFieldsRefusal
 > {
   requireStaff(caller);
+  await requirePerjadinWriter(caller, perjadinId, tx);
 
   const [trip] = await tx
     .select({ startsOn: perjadin.startsOn, endsOn: perjadin.endsOn })
@@ -238,6 +239,8 @@ export async function deletePerjadinDocument(
       .where(sql`${perjadinDocument.id}::text = ${documentId}`)
       .returning();
     if (!row) return { outcome: "no-such-document" };
+    // A refusal here rolls the delete back; the action ran the same check before trashing the file.
+    await requirePerjadinWriter(caller, row.perjadinId, tx);
 
     const peserta =
       row.schoolId && row.participantType && row.startsAt && row.endsAt

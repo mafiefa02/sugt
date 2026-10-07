@@ -604,6 +604,14 @@ export async function addPerjadin(fixture: PerjadinFixture) {
   });
 }
 
+/**
+ * Add one Staff member to a Perjadin's Group — the way they come to write it (ADR-0048). The PIC is
+ * already a member through `addPerjadin`.
+ */
+export async function addGroupMember(perjadinId: string, personId: string) {
+  await db.insert(schema.groupMember).values({ perjadinId, personId, role: "Staff", stream: null });
+}
+
 export type TransactionFixture = {
   perjadinId: string;
   amountIdr: number;
