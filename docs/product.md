@@ -191,6 +191,23 @@ It shows three things, all worked out afresh on every load:
 instead. A grant-less Staff member lands here, and so does every Staff member right after
 signing in.
 
+**An Administrator gets two tabs here, "Anda" and "Pendamping Lain"** (#440), because showing a
+Staff member how to use `/pendamping` means a screenshot of _their_ page:
+
+- **Anda** is the page described below, greeting included.
+- **Pendamping Lain** has a searchable picker, "Pilih pendamping…", over every Staff Person
+  but the viewer, matching name and email. Choosing one shows that Person's **Perjalanan Dinas
+  Anda** and **Perjalanan Dinas Sebelumnya** exactly as they see them — the same titles,
+  descriptions and empty state ("Anda belum tergabung dalam Perjalanan Dinas.") — with **no
+  greeting**. An id that names no Staff Person reads "Pendamping tidak ditemukan." under the picker.
+- The tab and the Person are in the URL, `/pendamping?tab=lain&pendamping=<id>`, so a refresh or a
+  pasted link keeps the view.
+- **Every control there works, as the Administrator**, not as the other Person: a Persiapan tick, a
+  Tandai or an upload is the Administrator's, and the Log names them. Viewing writes nothing.
+
+For anyone who is not an Administrator — an Editor included — those URL parameters are ignored on
+the server: they get their own page, with no tabs, and nothing of the other Person is loaded or sent.
+
 It opens with one small line, **"Selamat datang kembali, {nama}"**. Below it are two sections, each listing the trips the person is in the
 Group of:
 
