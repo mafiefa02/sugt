@@ -49,3 +49,11 @@ If that happens, the fallback is to drop the money side and keep the tool as a d
 - The build is materially larger than a form: itemised transactions with evidence, reconciled against the Advance, exported as a filled template. Mobile capture matters, because receipts are photographed in transit on poor connections.
 - The templates are DITSAMA's own, so they are ours to change — no external dependency, and no external authority to point at when someone wants a different one.
 - Adoption reaches PICs only, and only if the bet lands. Teaching Team members have no Advance, no transactions and nothing generated for them; they open the tool solely to write Session Record parts, with no material consequence if they don't. See [ADR-0004](./0004-delivery-data-is-open-internally-money-is-not.md) and [ADR-0009](./0009-the-tool-tracks-delivery-not-outcomes.md).
+
+## Amendment (2026-10-08): the Advance may be set after planning
+
+"The Advance is fixed at planning" no longer holds ([#437](https://github.com/sugt-itb/sugt-itb-26/issues/437)).
+A Perjadin often has to be planned before anyone knows its Uang Perjalanan, so the plan form takes it
+as optional and it is filled in later; once set it can be changed but not cleared. What this ADR
+rests on is unchanged: the acquittal still reconciles against the Advance, which is why filing the
+Perjadin Report is the one write that waits for it.

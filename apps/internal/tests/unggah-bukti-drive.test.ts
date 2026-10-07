@@ -60,6 +60,7 @@ async function scene(
     advanceIdr?: number | null;
   } = {},
 ) {
+  const { advanceIdr = 5_000_000 } = options;
   const staff = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
   const pimpinan = await addPerson({
     fullName: "Fatimah",
@@ -67,7 +68,7 @@ async function scene(
     role: "Pimpinan",
   });
   const trip = await addPerjadin({
-    advanceIdr: options.advanceIdr === undefined ? 5_000_000 : options.advanceIdr,
+    advanceIdr,
     picPersonId: staff.id,
     subClusterName: "Kelompok 3",
     startsOn: "2026-10-12",

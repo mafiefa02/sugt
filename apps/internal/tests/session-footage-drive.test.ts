@@ -95,6 +95,7 @@ async function scene(
     advanceIdr?: number | null;
   } = {},
 ) {
+  const { advanceIdr = 5_000_000 } = options;
   const staff = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
   await addGrant(staff.id, "Administrator");
   const pimpinan = await addPerson({ fullName: "Fa", email: "fa@itb.ac.id", role: "Pimpinan" });
@@ -113,7 +114,7 @@ async function scene(
     provinceCode: "KT",
   });
   const trip = await addPerjadin({
-    advanceIdr: options.advanceIdr === undefined ? 5_000_000 : options.advanceIdr,
+    advanceIdr,
     picPersonId: staff.id,
     subClusterId: subCluster.id,
     startsOn: "2026-10-12",

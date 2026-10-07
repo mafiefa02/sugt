@@ -12,9 +12,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { addPerjadin, addPerson, addTransaction, resetDatabase } from "./support/fixtures";
 
 /**
- * **The Advance is Staff-correctable after planning** (#192). `planPerjadin` writes it once; this is
- * the only write that changes it afterwards. It reverses the domain's "fixed during trip planning"
- * position for the amount — still set at planning, now correctable — while leaving
+ * **The Advance is Staff-correctable after planning** (#192). `planPerjadin` may write it; this is
+ * the only write that changes it afterwards, or fills it in when the trip was planned without one
+ * (#437). It reverses the domain's "fixed during trip planning" position for the amount — set at
+ * planning or later, and correctable — while leaving
  * money-write-is-Staff-only (ADR-0026) intact: reads are open, this write stays `requireStaff`.
  *
  * The validation is the DB floor only (`advance_idr >= 0`), deliberately not coupled to spend: an

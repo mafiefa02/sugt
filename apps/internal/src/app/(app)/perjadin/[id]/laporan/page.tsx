@@ -104,7 +104,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
           <MoneyFigure
             label="Diterima"
             amountIdr={acquittal.advanceIdr}
-            unset="Belum diisi"
+            unsetLabel="Belum diisi"
           />
           <MoneyFigure
             label="Terpakai"

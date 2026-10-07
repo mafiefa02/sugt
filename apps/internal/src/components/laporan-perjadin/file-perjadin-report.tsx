@@ -26,6 +26,12 @@ import { useState, useTransition } from "react";
  * tool is never stricter than the process it serves — invented friction has the same escape route
  * as duplicated work.
  */
+/** Laporkan's answer while Uang Perjalanan is not filled in yet (#437). */
+const ADVANCE_MISSING_REFUSAL = {
+  title: "Laporan belum bisa dikirim.",
+  body: "Isi Uang Perjalanan sebelum melaporkan.",
+};
+
 function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filedAt: Date | null }) {
   const [refusal, setRefusal] = useState<{ title: string; body: string } | null>(null);
   const [filing, startFiling] = useTransition();
@@ -57,10 +63,7 @@ function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filed
           });
           return;
         case "advance-missing":
-          setRefusal({
-            title: "Laporan belum bisa dikirim.",
-            body: "Isi Uang Perjalanan sebelum melaporkan.",
-          });
+          setRefusal(ADVANCE_MISSING_REFUSAL);
           return;
         case "already-filed":
           setRefusal({
@@ -96,4 +99,4 @@ function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filed
   );
 }
 
-export { FilePerjadinReport };
+export { ADVANCE_MISSING_REFUSAL, FilePerjadinReport };

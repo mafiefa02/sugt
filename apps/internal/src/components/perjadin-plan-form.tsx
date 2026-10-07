@@ -205,8 +205,7 @@ function PerjadinPlanForm({
         subClusterId,
         startsOn: trip.startsOn,
         endsOn: trip.endsOn,
-        // Empty is "not filled in yet" (#437) and sends `null` — never `Number("")`, which is Rp 0.
-        advanceIdr: trip.advanceIdr === "" ? null : Number(trip.advanceIdr),
+        advanceIdr: advanceFromField(trip.advanceIdr),
         picPersonId: trip.picPersonId,
         extraStaffPersonIds: extraStaff,
         teacherNames: teacherNames.map((name) => name.trim()).filter((name) => name !== ""),
@@ -790,4 +789,12 @@ function Field({
   );
 }
 
-export { PerjadinPlanForm };
+/**
+ * The Uang Perjalanan field's digit string as what `planPerjadin` takes. Empty is "not filled in yet"
+ * (#437) and becomes `null` — never `Number("")`, which is Rp 0 and would log `advance_set`.
+ */
+function advanceFromField(digits: string): number | null {
+  return digits === "" ? null : Number(digits);
+}
+
+export { advanceFromField, PerjadinPlanForm };

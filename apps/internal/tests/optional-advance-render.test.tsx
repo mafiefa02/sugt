@@ -1,6 +1,8 @@
+import { ADVANCE_MISSING_REFUSAL } from "-/components/laporan-perjadin/file-perjadin-report";
 import { MoneyFigure } from "-/components/money-figure";
 import { TripMoney } from "-/components/my-perjadin-section";
 import { EditAdvance } from "-/components/perjadin-advance";
+import { advanceFromField } from "-/components/perjadin-plan-form";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -28,7 +30,7 @@ describe("the strip and the Laporan's figures", () => {
         <MoneyFigure
           label="Diterima"
           amountIdr={null}
-          unset="Belum diisi"
+          unsetLabel="Belum diisi"
         />
         <MoneyFigure
           label="Terpakai"
@@ -52,7 +54,7 @@ describe("the strip and the Laporan's figures", () => {
           <MoneyFigure
             label="Diterima"
             amountIdr={0}
-            unset="Belum diisi"
+            unsetLabel="Belum diisi"
           />,
         ),
       ),
@@ -107,5 +109,22 @@ describe("the Advance's edit trigger", () => {
 
     expect(text(unset)).toBe("Isi Uang Perjalanan");
     expect(text(set)).toBe("Ubah Uang Perjalanan");
+  });
+});
+
+describe("the plan form's Uang Perjalanan", () => {
+  it("sends null for an empty field, never Rp 0, and the amount otherwise, zero included", () => {
+    expect(advanceFromField("")).toBeNull();
+    expect(advanceFromField("0")).toBe(0);
+    expect(advanceFromField("1500000")).toBe(1_500_000);
+  });
+});
+
+describe("Laporkan while the Advance is unset", () => {
+  it("answers with the sentence the ticket names", () => {
+    expect(ADVANCE_MISSING_REFUSAL).toEqual({
+      title: "Laporan belum bisa dikirim.",
+      body: "Isi Uang Perjalanan sebelum melaporkan.",
+    });
   });
 });

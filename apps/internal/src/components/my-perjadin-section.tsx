@@ -265,8 +265,7 @@ function TripMoney({
   return (
     <div>
       {advanceIdr === null ? (
-        // Not filled in yet (#437): no Tersisa and no bar, since there is nothing to
-        // measure against. Terpakai stays — spending does not wait for the Advance.
+        // Terpakai stays: spending does not wait for the Advance.
         <>
           <p className="font-heading text-lg">Uang Perjalanan belum diisi</p>
           <p className="mt-1 text-sm tabular-nums">Terpakai {formatRupiah(drawnDownIdr)}</p>

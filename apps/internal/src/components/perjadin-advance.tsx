@@ -55,7 +55,11 @@ function EditAdvance({
   if (!canEdit) return null;
 
   const empty = amount === "";
-  const verb = advanceIdr === null ? "Isi" : "Ubah";
+  // Filling an unset Advance in reads differently from correcting a set one (#437).
+  const copy =
+    advanceIdr === null
+      ? { verb: "Isi", lead: "Isi", done: "diisi" }
+      : { verb: "Ubah", lead: "Koreksi", done: "diubah" };
 
   function submit() {
     if (empty) return;
@@ -88,25 +92,23 @@ function EditAdvance({
             variant="outline"
             size="sm"
           >
-            {verb} Uang Perjalanan
+            {copy.verb} Uang Perjalanan
           </Button>
         }
       />
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{verb} Uang Perjalanan</DialogTitle>
+          <DialogTitle>{copy.verb} Uang Perjalanan</DialogTitle>
           <DialogDescription>
-            {advanceIdr === null ? "Isi" : "Koreksi"} jumlah Uang Perjalanan yang diterima. Sisa
-            dihitung ulang otomatis (Uang Perjalanan dikurangi pengeluaran) dan boleh menjadi
-            negatif jika pengeluaran melebihi Uang Perjalanan.
+            {copy.lead} jumlah Uang Perjalanan yang diterima. Sisa dihitung ulang otomatis (Uang
+            Perjalanan dikurangi pengeluaran) dan boleh menjadi negatif jika pengeluaran melebihi
+            Uang Perjalanan.
           </DialogDescription>
         </DialogHeader>
 
         {refusal !== null && (
           <Alert variant="destructive">
-            <AlertTitle>
-              Uang Perjalanan belum {advanceIdr === null ? "diisi" : "diubah"}.
-            </AlertTitle>
+            <AlertTitle>Uang Perjalanan belum {copy.done}.</AlertTitle>
             <AlertDescription>{refusal}</AlertDescription>
           </Alert>
         )}
