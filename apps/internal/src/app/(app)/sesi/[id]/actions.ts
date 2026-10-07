@@ -102,8 +102,9 @@ export async function moveSessionDateAction(
 /**
  * **File a Session Record** — the PIC's account of the visit as a whole.
  *
- * Staff-only, so it goes through `staffSurface`: `fileSessionRecord` throws `NotStaffError`
- * on a non-Staff caller, which reads as a 403 rather than a crash. Every other refusal comes
+ * Staff-only and the trip's writers' (ADR-0048), so it goes through `staffSurface`:
+ * `fileSessionRecord` throws `NotStaffError` on a non-Staff caller and `NotOnPerjadinError` on a
+ * Staff member off the trip, each of which reads as a 403 rather than a crash. Every other refusal comes
  * back as a value for the form to place on a field.
  *
  * The Class Record action that used to sit beside this was retired in T3 (#153): the `Teaching

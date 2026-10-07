@@ -9,6 +9,9 @@ upload transport, the 50 MB cap and the reconcile are its, reused rather than fo
 
 ## What a Perjadin Document is
 
+> Amended 2026-10-08: a fourth kind, **SPPD**, and the "attendance" framing widened to the trip's
+> paperwork — see [the amendment](#amendment-2026-10-08-sppd-a-fourth-kind-one-per-school-per-perjadin).
+
 There are three kinds, and each is one PDF:
 
 - **Daftar Hadir Peserta**: one School's attendance at one session, for one cohort (`Siswa` or
@@ -37,6 +40,9 @@ arrives is still one PDF. Being PDF only also means no image is ever uploaded, s
 metadata to strip.
 
 ## The tree
+
+> Amended 2026-10-08: an `SPPD/` kind folder; the whole tree is redrawn in
+> [the amendment](#amendment-2026-10-08-sppd-a-fourth-kind-one-per-school-per-perjadin).
 
 ```
 SUGT ITB 2026 Internal App Object Storage/
@@ -115,6 +121,9 @@ says, or a shared file left that no row records.
 only. The upload is closed, with the reason, while the connection is broken or not made, as receipts
 are.
 
+> Amended 2026-10-08: the trip's Group, an Editor or an Administrator, not every Staff member —
+> [ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), and the amendment at the bottom.
+
 ## Consequences
 
 - Attendance sheets have one home, beside the receipts, and an auditor can be given one link per
@@ -158,3 +167,75 @@ They have their own tree, `Foto & Video/`, and their own table
 attendance paperwork, and each tree can be handed over on its own. They keep this ADR's per-file
 sharing, every folder private, and its Hapus order — the file to the Drive trash first, then the row
 and its Log entry.
+
+## Amendment (2026-10-08): the Group uploads and deletes, not every Staff member
+
+"Any Staff member uploads and deletes" now reads: **the trip's Group, an Editor or an Administrator**
+uploads a Perjadin Document and deletes one with Hapus
+([ADR-0048](./0048-a-perjadin-is-written-by-its-group.md), #439). The upload opener and Hapus both check
+before any Drive call, so a Staff member off the trip never gets an upload URL and never trashes a
+file. Reading the sheets stays open to everyone signed in.
+
+## Amendment (2026-10-08): SPPD, a fourth kind, one per School per Perjadin
+
+[#441](https://github.com/sugt-itb/sugt-itb-26/issues/441). A Perjadin Document is no longer only a
+paper record of attendance: it is **the trip's paperwork**, the three attendance kinds plus
+**SPPD** (Surat Perintah Perjalanan Dinas), each School's SPPD for the trip. Each is still one PDF
+under the 50 MB cap, uploaded or deleted, never edited.
+
+- **Its fields.** An SPPD records **only a School**, one of the trip's Schools (the Peserta rule of
+  the #410 amendment above), and no date, time or cohort. `document_date` became nullable, and the
+  two CHECKs that held the Peserta fields both ways round became **one CHECK per kind**, each that
+  kind's exact shape: a Peserta sheet has a date, a School, a cohort and both times; a Narasumber or
+  Pendamping sheet has a date and none of the rest; an SPPD has a School and none of the rest. Every
+  row the old CHECKs allowed satisfies the new ones.
+- **At most one per (Perjadin, School).** A second SPPD for a School on the same Perjadin is refused
+  — "SMAN 1 Bontang sudah punya SPPD untuk Perjadin ini. Hapus dulu untuk menggantinya." — **before
+  the upload session opens**, so nobody uploads a large scan only to be refused. The partial unique index
+  `perjadin_document_sppd_unique` on `(perjadin_id, school_id) where kind = 'SPPD'` holds it against
+  two uploads racing: the loser's record comes back as the same refusal, and its file stays unnamed
+  in private `_staging`. The rule is per **Perjadin**: the same School on another trip gets its own.
+  Hapus frees the School for a new SPPD; that is how one is replaced. The three attendance kinds
+  keep having no duplicate rule.
+- **An SPPD for a School that later leaves the trip stays**, listed and deletable, as a Peserta sheet does.
+- **Its folder and name.** A fourth kind folder, `SPPD/`, made on first use and claimed by
+  compare-and-set like the other three. The file is `{school} · SPPD · D-{doc8}.pdf`, with no date
+  part, and `/` → `-` in the School's name. Only the file is shared, anyone with the link; every
+  folder stays private. Periksa koneksi's sweep finishes an unsynced SPPD with no special case.
+- **The Log** reads it as "SPPD · SMAN 1 Bontang"; no new action, since `document_uploaded` and
+  `document_deleted` cover it.
+
+**A trip-first reorganisation of the Drive was considered and rejected.** The Drive keeps one tree
+per kind of thing, as [ADR-0046](./0046-session-footage-is-stored-in-the-company-google-drive.md)
+decided: reversing it would undo that ADR's handover reason and move every file already in the
+production Drive. The only addition is the `SPPD/` kind folder. The whole tree now reads:
+
+```
+My Drive/
+├── SUGT ITB 2026 _staging — jangan dibagikan/                          private · every upload lands here first as {uuid}.{ext}; NEVER under the root
+└── SUGT ITB 2026 Internal App Object Storage/                          private · the root
+    ├── README
+    ├── Bukti Transaksi/                                                private
+    │   └── Pelaksanaan Offline/                                        private
+    │       └── Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang, SMAN 2 Samarinda · P-1a2b3c4d/   private · the Perjadin folder
+    │           └── 2026-10-12 · Konsumsi · T-9f8e7d6c/                  shared by link (whole folder)
+    │               └── 2026-10-12 · Konsumsi · T-9f8e7d6c · 0a1b2c3d.jpg
+    ├── Dokumen/                                                        private
+    │   └── Pelaksanaan Offline/                                        private
+    │       └── Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang, SMAN 2 Samarinda · P-1a2b3c4d/   private
+    │           ├── Daftar Hadir Peserta/                               private
+    │           │   └── 2026-10-12 · SMAN 1 Bontang · Siswa · Daftar Hadir Peserta · D-5c6d7e8f.pdf   shared by link (this file)
+    │           ├── Daftar Hadir Narasumber/                            private
+    │           │   └── 2026-10-12 · Daftar Hadir Narasumber · D-2b3c4d5e.pdf                      shared by link
+    │           ├── Daftar Hadir Pendamping/                            private
+    │           │   └── 2026-10-12 · Daftar Hadir Pendamping · D-3c4d5e6f.pdf                      shared by link
+    │           └── SPPD/                                               NEW · private, made on first use
+    │               ├── SMAN 1 Bontang · SPPD · D-1a2b3c4d.pdf                                     NEW · shared by link (this file)
+    │               └── SMAN 2 Samarinda · SPPD · D-7e8f9a0b.pdf                                   NEW · shared by link
+    └── Foto & Video/                                                   private
+        └── Pelaksanaan Offline/                                        private
+            └── Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang, SMAN 2 Samarinda · P-1a2b3c4d/   private
+                └── 2026-10-12 · 08.00 · SMAN 1 Bontang · S-3e4f5a6b/  private · one per offline Session
+                    ├── 2026-10-12 · SMAN 1 Bontang · Foto · M-7c8d9e0f.jpg                        shared by link (this file)
+                    └── 2026-10-12 · SMAN 1 Bontang · Video · M-1b2c3d4e.mp4                       shared by link
+```

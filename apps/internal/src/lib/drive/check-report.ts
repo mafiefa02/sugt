@@ -35,6 +35,15 @@ const FAILURE_REASONS: Record<SweepFailure["reason"], string> = {
   "no-such-transaction": "transaksi sudah tidak ada",
 };
 
+/**
+ * A document as a failure line names it: `{date} · {kind}`, or `SPPD · {School}`, since an SPPD
+ * has no date (#441).
+ */
+function documentLabel(failure: DocumentSweepFailure): string {
+  if (failure.kind === "SPPD") return `${failure.kind} · ${failure.schoolName}`;
+  return `${failure.documentDate} · ${failure.kind}`;
+}
+
 const DOCUMENT_FAILURE_REASONS: Record<DocumentSweepFailure["reason"], string> = {
   "folder-trashed": "folder ada di Sampah Google Drive",
   "folder-missing": "folder tidak ditemukan",
@@ -152,7 +161,7 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
               ),
               ...sweep.documents.failures.map(
                 (failure) =>
-                  `${failure.documentDate} · ${failure.kind}: ${DOCUMENT_FAILURE_REASONS[failure.reason]}.`,
+                  `${documentLabel(failure)}: ${DOCUMENT_FAILURE_REASONS[failure.reason]}.`,
               ),
               ...sweep.footage.failures.map(
                 (failure) =>

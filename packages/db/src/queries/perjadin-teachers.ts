@@ -9,7 +9,7 @@ import {
   preparationItem,
 } from "../schema/travel";
 import type { Person } from "./caller";
-import { requireStaff } from "./staff-only";
+import { requirePerjadinWriter, requireStaff } from "./staff-only";
 
 /**
  * **A Perjadin's Teaching Team, edited per name.** Adding, renaming and removing one trip-scoped
@@ -18,9 +18,10 @@ import { requireStaff } from "./staff-only";
  * these three granular writes.
  *
  * Every write is **Staff-only**, by the surface list — arranging and administering a trip is Staff's
- * ([#12](https://github.com/mafiefa02/sugt/issues/12), and see `./staff-only.ts`). Each refusal that
- * a person could reach honestly comes back as a value; `NotStaffError` is the opposite case and
- * still throws.
+ * ([#12](https://github.com/mafiefa02/sugt/issues/12), and see `./staff-only.ts`) — and, inside
+ * that, the trip's Group's, an Editor's or an Administrator's (`requirePerjadinWriter`, ADR-0048).
+ * Each refusal that a person could reach honestly comes back as a value; `NotStaffError` and
+ * `NotOnPerjadinError` are the opposite case and still throw.
  *
  * **Each of the three clears the system Preparation Item's tick** — "Fiksasi Dosen/Narasumber oleh
  * PIC Dosen" at the cutover — so that changing the team forces a fresh manual confirmation it is
@@ -31,6 +32,20 @@ import { requireStaff } from "./staff-only";
  */
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The Perjadin a trip-scoped teacher name belongs to, locked for the write that follows — or `null`
+ * for no such name. The rename and the removal take the name's id, so this is how they find the
+ * trip whose Group may write it (ADR-0048).
+ */
+async function teacherTrip(tx: Tx, teacherId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ perjadinId: perjadinTeacher.perjadinId })
+    .from(perjadinTeacher)
+    .where(eq(perjadinTeacher.id, teacherId))
+    .for("update");
+  return row?.perjadinId ?? null;
+}
 
 /** Clear the system item's tick for one trip — whichever item carries the flag. */
 async function clearSystemItemTick(tx: Tx, perjadinId: string): Promise<void> {
@@ -77,6 +92,8 @@ export async function addPerjadinTeacher(
   if (trimmed === "") return { outcome: "name-required" };
 
   return db.transaction(async (tx) => {
+    await requirePerjadinWriter(caller, perjadinId, tx);
+
     const [trip] = await tx
       .select({ id: perjadin.id })
       .from(perjadin)
@@ -130,6 +147,10 @@ export async function renamePerjadinTeacher(
   if (trimmed === "") return { outcome: "name-required" };
 
   return db.transaction(async (tx) => {
+    const tripId = await teacherTrip(tx, teacherId);
+    if (tripId === null) return { outcome: "no-such-teacher" };
+    await requirePerjadinWriter(caller, tripId, tx);
+
     const [updated] = await tx
       .update(perjadinTeacher)
       .set({ name: trimmed })
@@ -157,6 +178,10 @@ export async function removePerjadinTeacher(
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
+    const tripId = await teacherTrip(tx, teacherId);
+    if (tripId === null) return { outcome: "no-such-teacher" };
+    await requirePerjadinWriter(caller, tripId, tx);
+
     const [deleted] = await tx
       .delete(perjadinTeacher)
       .where(eq(perjadinTeacher.id, teacherId))

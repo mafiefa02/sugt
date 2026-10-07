@@ -21,6 +21,7 @@ import {
   footageReconcileTarget,
   footageSession,
   recordSessionFootage,
+  requirePerjadinWriter,
   requireStaff,
   sessionFootageList,
   type SessionFootageRow,
@@ -46,7 +47,8 @@ import type {
  * **Foto & Video's Server Actions** (#424, ADR-0046): a Session's footage, opening an upload,
  * recording it once it landed, and deleting it. The upload runs Dokumen's order — check, verify,
  * commit, reconcile — and Hapus runs guard, trash, delete (ADR-0042), every check before Google is
- * asked anything. Any Staff member uploads and deletes; anyone signed in lists.
+ * asked anything. The trip's Group, an Editor or an Administrator uploads and deletes (ADR-0048);
+ * anyone signed in lists.
  *
  * **The bytes never pass through Next.** The browser sends the file straight to Drive's resumable
  * session, in 16 MiB pieces (`uploadInPieces`), one file at a time.
@@ -204,7 +206,8 @@ export async function recordFootageAction(
  * **Hapus — delete one file of footage** (ADR-0042's order, ADR-0046). **The file is trashed first,
  * then the row**, so a row never vanishes while its public file stays live:
  *
- * 1. **Guard** — Staff and the footage — then the connection, before any Drive call.
+ * 1. **Guard** — Staff, the footage and its trip's writer (ADR-0048) — then the connection, before
+ *    any Drive call.
  * 2. **Trash the file.** One already in the trash, or gone, counts as done: a retry is safe. If
  *    trashing fails the row stays, and Hapus can be pressed again.
  * 3. **Delete the row and log `footage_deleted`**, in one transaction (`deleteSessionFootage`).
@@ -212,9 +215,12 @@ export async function recordFootageAction(
 export async function deleteFootageAction(footageId: string): Promise<DeleteFootageActionResult> {
   const person = await requirePerson();
 
-  const target = await staffSurface(() => {
+  const target = await staffSurface(async () => {
     requireStaff(person);
-    return footageReconcileTarget(person, footageId);
+    const found = await footageReconcileTarget(person, footageId);
+    // The trip's Group, an Editor or an Administrator (ADR-0048), before the file is trashed.
+    if (found) await requirePerjadinWriter(person, found.perjadin.id);
+    return found;
   });
   if (!target) return { outcome: "no-such-footage" };
 

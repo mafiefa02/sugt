@@ -59,7 +59,9 @@ export type SweepFailure = {
 export type DocumentSweepFailure = {
   documentId: string;
   kind: string;
-  documentDate: string;
+  /** `null` on an SPPD (#441), named by `schoolName` instead. */
+  documentDate: string | null;
+  schoolName: string | null;
   reason: DocumentUnsyncedReason | "no-such-document";
 };
 
@@ -124,6 +126,7 @@ export async function sweepUnsynced(
         documentId: document.id,
         kind: document.kind,
         documentDate: document.documentDate,
+        schoolName: document.schoolName,
         reason: result.outcome === "unsynced" ? result.reason : result.outcome,
       });
     }

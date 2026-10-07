@@ -1,4 +1,4 @@
-import { isNotGrantedError, isNotStaffError } from "@sugt/db/queries";
+import { isNotGrantedError, isNotOnPerjadinError, isNotStaffError } from "@sugt/db/queries";
 import { forbidden } from "next/navigation";
 
 /**
@@ -40,12 +40,17 @@ import { forbidden } from "next/navigation";
  * and it is the same kind of refusal: server-side, a bug or an attack rather than a user state,
  * sanitized to `digest` alone in production if left to an `error.tsx`. So both map to the same 403
  * here, and everything else still passes through untouched.
+ *
+ * And the Perjadin-writer refusal: `NotOnPerjadinError` (ADR-0048), a Staff Person writing a trip
+ * whose Group they are not in, without the Editor Grant. The same 403, for the same reasons.
  */
 export async function staffSurface<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
-    if (isNotStaffError(error) || isNotGrantedError(error)) forbidden();
+    if (isNotStaffError(error) || isNotGrantedError(error) || isNotOnPerjadinError(error)) {
+      forbidden();
+    }
     throw error;
   }
 }

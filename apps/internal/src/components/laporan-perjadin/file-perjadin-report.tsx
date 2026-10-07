@@ -19,11 +19,29 @@ import { useState, useTransition } from "react";
  * touched. The refusal counts those lines — the list below marks each — and each is fixed through
  * its own "Unggah bukti".
  *
+ * **Uang Perjalanan must be filled in** (#437). A Perjadin may be planned without it, and nothing
+ * else on the trip waits for it — filing the Laporan, which accounts for it, is the one thing that does.
+ *
  * **Nothing else is gated**, the deadline included. DITSAMA sets that deadline for itself, and the
  * tool is never stricter than the process it serves — invented friction has the same escape route
  * as duplicated work.
  */
-function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filedAt: Date | null }) {
+/** Laporkan's answer while Uang Perjalanan is not filled in yet (#437). */
+const ADVANCE_MISSING_REFUSAL = {
+  title: "Laporan belum bisa dikirim.",
+  body: "Isi Uang Perjalanan sebelum melaporkan.",
+};
+
+function FilePerjadinReport({
+  perjadinId,
+  filedAt,
+  canWrite,
+}: {
+  perjadinId: string;
+  filedAt: Date | null;
+  /** Laporkan is the trip's writers' (ADR-0048); anyone else sees only when it was filed. */
+  canWrite: boolean;
+}) {
   const [refusal, setRefusal] = useState<{ title: string; body: string } | null>(null);
   const [filing, startFiling] = useTransition();
 
@@ -34,6 +52,7 @@ function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filed
       </span>
     );
   }
+  if (!canWrite) return null;
 
   function file() {
     startFiling(async () => {
@@ -52,6 +71,9 @@ function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filed
             title: "Laporan belum bisa dikirim.",
             body: `${result.transactionIds.length} transaksi belum punya bukti. Lampirkan bukti pada setiap transaksi terlebih dahulu.`,
           });
+          return;
+        case "advance-missing":
+          setRefusal(ADVANCE_MISSING_REFUSAL);
           return;
         case "already-filed":
           setRefusal({
@@ -87,4 +109,4 @@ function FilePerjadinReport({ perjadinId, filedAt }: { perjadinId: string; filed
   );
 }
 
-export { FilePerjadinReport };
+export { ADVANCE_MISSING_REFUSAL, FilePerjadinReport };

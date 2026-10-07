@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   addCluster,
+  addGroupMember,
   addPerjadin,
   addPerson,
   addSubCluster,
@@ -52,13 +53,16 @@ function nonStaff() {
  * against a real Postgres. The levels and their dates are `preparation-items.test.ts`'s.
  */
 
-async function trip(dates: { startsOn: string; endsOn: string }) {
+async function trip(
+  dates: { startsOn: string; endsOn: string },
+  advanceIdr: number | null = 5_000_000,
+) {
   const pic = await addPerson({
     fullName: "Rina Nurhayati",
     email: "rina@ditsama.itb.ac.id",
     role: "Staff",
   });
-  const perjadin = await addPerjadin({ advanceIdr: 5_000_000, picPersonId: pic.id, ...dates });
+  const perjadin = await addPerjadin({ advanceIdr, picPersonId: pic.id, ...dates });
   return { pic, perjadinId: perjadin.id };
 }
 
@@ -148,6 +152,19 @@ describe("toggling a box", () => {
     expect(await ticksOf(perjadinId)).toEqual([]);
   });
 
+  it("ticks a box while Uang Perjalanan is not filled in yet (#437)", async () => {
+    const { pic, perjadinId } = await trip(
+      { startsOn: wibDaysFromToday(-2), endsOn: wibDaysFromToday(0) },
+      null,
+    );
+    const [item] = await checklistOf(pic, perjadinId);
+
+    expect(
+      await togglePreparationItem(pic, { perjadinId, itemId: item!.itemId, checked: true }),
+    ).toEqual({ outcome: "toggled" });
+    expect(await ticksOf(perjadinId)).toHaveLength(1);
+  });
+
   it("is idempotent both ways — a second tick is one row, a second un-tick is a no-op", async () => {
     const { pic, perjadinId } = await current();
     const [item] = await checklistOf(pic, perjadinId);
@@ -170,6 +187,8 @@ describe("toggling a box", () => {
       email: "dewi@ditsama.itb.ac.id",
       role: "Staff",
     });
+    // A second member of the Group: only its members, Editors and Administrators tick (ADR-0048).
+    await addGroupMember(perjadinId, other.id);
     const [item] = await checklistOf(pic, perjadinId);
 
     await togglePreparationItem(pic, { perjadinId, itemId: item!.itemId, checked: true });

@@ -15,12 +15,13 @@ import { revalidatePath } from "next/cache";
  * Action that revalidates any path also re-renders the route it was called from, so the card's
  * Tandai goes and its node turns done without a reload — verified in a browser for #349.
  *
- * `staffSurface` is here for the same reason it is on the Session action: a non-Staff caller
- * reaching this is a bug or an attack, so it reads as a 403 rather than a crash. The `not-arranged`
+ * `staffSurface` is here for the same reason it is on the Session action: a non-Staff caller, or a
+ * Staff one not in the trip's Group and without the Editor Grant (ADR-0048), reaching this is a bug
+ * or an attack, so it reads as a 403 rather than a crash. The `not-arranged`
  * refusal — a Session someone else already delivered or cancelled while the dialog was open — is a
  * value the dialog surfaces as a stale message rather than throwing.
  */
-export async function markSessionDeliveredFromDashboardAction(
+export async function markSessionDeliveredFromPendampingAction(
   sessionId: string,
 ): Promise<MarkDeliveredResult> {
   const person = await requirePerson();

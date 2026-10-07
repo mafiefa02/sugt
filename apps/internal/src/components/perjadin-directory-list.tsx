@@ -34,15 +34,10 @@ import { useMemo, useState } from "react";
  *
  * Sorting defaults to Mulai, newest first; the sort state is `useState`, not the URL. A row
  * opens the trip on click, and its title is a real link besides. **Persiapan** is the checklist
- * dialog's trigger for Staff (`canTogglePreparation`) and a static pill for anyone else.
+ * dialog's trigger on a row the viewer writes (`trip.canWrite`: its Group, an Editor or an
+ * Administrator — ADR-0048) and a static pill on every other row.
  */
-function PerjadinDirectoryList({
-  trips,
-  canTogglePreparation,
-}: {
-  trips: DirectoryPerjadin[];
-  canTogglePreparation: boolean;
-}) {
+function PerjadinDirectoryList({ trips }: { trips: DirectoryPerjadin[] }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<TableSort<PerjadinColumn>>(PERJADIN_DEFAULT_SORT);
 
@@ -163,7 +158,7 @@ function PerjadinDirectoryList({
                   <TableCell>
                     <PreparationPill
                       trip={trip}
-                      canToggle={canTogglePreparation}
+                      canToggle={trip.canWrite}
                     />
                   </TableCell>
                   <TableCell>
@@ -198,8 +193,8 @@ function CountBadge({ done, total }: { done: number; total: number }) {
 
 /**
  * **The Persiapan pill** ([#114](https://github.com/mafiefa02/sugt/issues/114)), `x/N` in the shared
- * progress tone. For Staff it is the trigger of the checklist dialog, toggleable — the same pill the
- * `/pendamping` card wears (`my-perjadin-section.tsx`); for anyone else it is a static badge.
+ * progress tone. On a trip the viewer writes it is the trigger of the checklist dialog, toggleable —
+ * the same pill the `/pendamping` card wears (`my-perjadin-section.tsx`); otherwise a static badge.
  * Opening the dialog never also opens the trip: `ClickableTableRow` ignores a click on a button, and
  * one inside the dialog's portal, so the click stops short of the row's navigation.
  */

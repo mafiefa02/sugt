@@ -1,3 +1,4 @@
+import { MoneyFigure } from "-/components/money-figure";
 import { EditAdvance } from "-/components/perjadin-advance";
 import { PerjadinDates } from "-/components/perjadin-dates";
 import { PerjadinDokumenList } from "-/components/perjadin-dokumen-list";
@@ -9,8 +10,12 @@ import { PerjadinSessions } from "-/components/perjadin-sessions";
 import { PerjadinTeachingTeam } from "-/components/perjadin-teaching-team";
 import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
-import { perjadinAcquittal, perjadinDetail, perjadinDokumen } from "@sugt/db/queries";
-import { formatRupiah } from "@sugt/domain";
+import {
+  canWritePerjadin,
+  perjadinAcquittal,
+  perjadinDetail,
+  perjadinDokumen,
+} from "@sugt/db/queries";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -35,10 +40,11 @@ export async function generateMetadata({ params }: PageProps<"/perjadin/[id]">):
  * reads are open — ADR-0004 reversed by [ADR-0026](../../../../../../../docs/adr/0026-money-is-open-to-read-and-staff-only-to-write.md)
  * (#180). `perjadinDetail` still carries no money; the Advance and the acquittal come from
  * `perjadinAcquittal`, which is an open money read, so the strip below is fetched and shown to a
- * Pimpinan too. The strip carries a link to the Laporan, three figures, and — for Staff only — an
- * "Ubah Uang Perjalanan" edit that corrects the Advance after planning (#192); the acquittal recomputes
- * the remainder live from it. Writing money stays Staff-only, enforced in each Server Action rather
- * than by what this page renders, so a Pimpinan sees the figures but no edit.
+ * Pimpinan too. The strip carries a link to the Laporan, three figures, and — for whoever writes the
+ * trip — an "Ubah Uang Perjalanan" edit that corrects the Advance after planning (#192); the acquittal
+ * recomputes the remainder live from it. **Every write on this page is the trip's Group's, an
+ * Editor's or an Administrator's** (ADR-0048), enforced in each query rather than by what this page
+ * renders, so a Pimpinan or a Staff member off the trip sees the figures but no edit.
  *
  * The Report deadline rides with the money because the Perjadin Report *is* the acquittal state on
  * the row. It is derived and never stored — two days after the Group gets back, so it cannot be
@@ -52,11 +58,14 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
   if (!trip) notFound();
 
   // Fetched for any signed-in Person: money reads are open now (ADR-0026, #180), so a Pimpinan
-  // sees the money strip too. Writing money stays Staff-only, enforced in each Server Action.
+  // sees the money strip too. Writing it is the trip's writers', enforced in each query.
   const acquittal = await perjadinAcquittal(person, id);
-  // The trip's attendance sheets (#398): read-only here, for everyone who can see the page. Upload
-  // and Hapus live on the `/pendamping` card's Dokumen dialog.
+  // The trip's attendance sheets and SPPDs (#398, #441): read-only here, for everyone who can see
+  // the page. Upload and Hapus live on the `/pendamping` card's Dokumen dialog.
   const dokumen = await perjadinDokumen(person, id);
+  // Who writes this trip (ADR-0048): its Group, an Editor or an Administrator. Everyone else reads
+  // it with every write control hidden; each write's query refuses them again, which is the real gate.
+  const canWrite = await canWritePerjadin(person, id);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -69,15 +78,15 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         </Link>
         <h1 className="mt-1 font-heading text-lg font-medium">{perjadinName(trip)}</h1>
         {/*
-          The date range, typed (ADR-0041): Staff correct it here with Ubah tanggal; a Pimpinan
-          reads it.
+          The date range, typed (ADR-0041): whoever writes the trip corrects it here with Ubah
+          tanggal; everyone else reads it.
         */}
         <div className="mt-0.5">
           <PerjadinDates
             perjadinId={trip.id}
             startsOn={trip.startsOn}
             endsOn={trip.endsOn}
-            canEdit={person.role === "Staff"}
+            canEdit={canWrite}
           />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
@@ -91,19 +100,20 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
             <h2 className="font-heading text-sm font-medium">Uang Perjalanan</h2>
             <div className="flex flex-wrap items-center gap-2">
               {/*
-                Correcting the Advance is a money write, so it is Staff-only (ADR-0026): the trigger
-                is offered only when the viewer is Staff (#192). The strip itself renders for any
-                signed-in Person, since money reads are open.
+                Correcting the Advance is a money write on this trip, so the trigger is offered only
+                to whoever writes it (#192, ADR-0048). The strip itself renders for any signed-in
+                Person, since money reads are open.
               */}
               <EditAdvance
                 perjadinId={trip.id}
                 advanceIdr={acquittal.advanceIdr}
-                canEdit={person.role === "Staff"}
+                canEdit={canWrite}
               />
               {/*
                 The Report is the acquittal state on this row, so it is a child of this page
                 rather than a surface of its own. Reading it is open to any signed-in Person now
-                (ADR-0026, #180), like the strip it sits in; writing money there stays Staff-only.
+                (ADR-0026, #180), like the strip it sits in; writing money there is the trip's
+                writers' (ADR-0048).
               */}
               <LinkButton
                 href={`/perjadin/${trip.id}/laporan`}
@@ -123,11 +133,12 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
             Laporan jatuh tempo <span className="tabular-nums">{acquittal.reportDueOn}</span>
           </p>
           <dl className="mt-2.5 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-            <Figure
+            <MoneyFigure
               label="Diterima"
               amountIdr={acquittal.advanceIdr}
+              unsetLabel="Belum diisi"
             />
-            <Figure
+            <MoneyFigure
               label="Terpakai"
               amountIdr={acquittal.spentIdr}
             />
@@ -136,7 +147,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
               and Lainnya draw down (ADR-0029), so this can differ from Diterima − Terpakai.
               Negative means the Group overspent the float, which is a real state and not an error.
             */}
-            <Figure
+            <MoneyFigure
               label="Sisa"
               amountIdr={acquittal.remainderIdr}
             />
@@ -149,30 +160,30 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         group={trip.group}
         picPersonId={trip.picPersonId}
         staff={trip.staff}
-        canEdit={person.role === "Staff"}
+        canEdit={canWrite}
       />
 
       <PerjadinTeachingTeam
         perjadinId={trip.id}
         teachers={trip.teachers}
-        canEdit={person.role === "Staff"}
+        canEdit={canWrite}
       />
 
       <PerjadinPimpinan
         perjadinId={trip.id}
         pimpinan={trip.pimpinan}
         roster={trip.pimpinanRoster}
-        canEdit={person.role === "Staff"}
+        canEdit={canWrite}
       />
 
       {/*
         The Preparation Checklist — an internal Staff monitoring aid. Shown to everyone (it carries
-        no money), interactive for Staff, whom `togglePreparationItem` re-checks.
+        no money), interactive for whoever writes the trip, whom `togglePreparationItem` re-checks.
       */}
       <PerjadinPreparation
         perjadinId={trip.id}
         items={trip.preparation}
-        canToggle={person.role === "Staff"}
+        canToggle={canWrite}
       />
 
       {/*
@@ -200,29 +211,20 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         teachers={trip.teachers}
         startsOn={trip.startsOn}
         endsOn={trip.endsOn}
-        canEdit={person.role === "Staff"}
+        canEdit={canWrite}
       />
 
       <section className="border-t border-border px-4 py-5 sm:px-7">
         <h2 className="font-heading text-sm font-medium">Dokumen</h2>
         <p className="mt-1 mb-3 text-sm text-muted-foreground">
-          Daftar hadir perjalanan ini. Unggah dan hapus dari kartu perjalanan di Pendamping.
+          Daftar hadir dan SPPD perjalanan ini. Unggah dan hapus dari kartu perjalanan di
+          Pendamping.
         </p>
-        <PerjadinDokumenList documents={dokumen?.documents ?? []} />
+        <PerjadinDokumenList
+          documents={dokumen?.documents ?? []}
+          schools={dokumen?.schools ?? []}
+        />
       </section>
-    </div>
-  );
-}
-
-/**
- * Money in whole rupiah, which is what it is stored as — `numeric(_, 2)` would imply a
- * subunit nobody uses, so there is no cent to render and none is invented here.
- */
-function Figure({ label, amountIdr }: { label: string; amountIdr: number }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="tabular-nums">{formatRupiah(amountIdr)}</dd>
     </div>
   );
 }

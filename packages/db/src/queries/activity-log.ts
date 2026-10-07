@@ -36,13 +36,14 @@ import { requireGrant } from "./staff-only";
 
 /**
  * What a `document_uploaded` entry records of its Perjadin Document (#397): enough to say which
- * sheet it was after the document itself is gone. The four Peserta fields are present on a Daftar
- * Hadir Peserta only; `timeZone` is its School's, which its two times are read in.
+ * document it was after the document itself is gone. The four Peserta fields are present on a
+ * Daftar Hadir Peserta only; `timeZone` is its School's, which its two times are read in. An SPPD
+ * (#441) has `schoolName` and no date.
  */
 export type DocumentLogDetails = {
   documentId: string;
   kind: PerjadinDocumentKind;
-  documentDate: string;
+  documentDate: string | null;
   schoolName?: string;
   participantType?: PerjadinDocumentParticipantType;
   startsAt?: string;
@@ -138,13 +139,16 @@ export function activityLogRincian(entry: ActivityLogEntry): string {
 
 /**
  * A Perjadin Document as one line — `Daftar Hadir Peserta · 2026-10-14 · SMA Y · Siswa ·
- * 08.00–11.30 WITA`, or just its kind and date for the other two.
+ * 08.00–11.30 WITA`, just its kind and date for the other two attendance kinds, and
+ * `SPPD · SMAN 1 Bontang` for an SPPD (#441).
  */
 function documentRincian(details: DocumentLogDetails): string {
   const { kind, documentDate, schoolName, participantType, startsAt, endsAt, timeZone } = details;
-  const parts: string[] = [kind, documentDate];
-  if (schoolName && participantType && startsAt && endsAt && timeZone) {
-    parts.push(schoolName, participantType, formatTimeRange(startsAt, endsAt, timeZone));
+  const parts: string[] = [kind];
+  if (documentDate) parts.push(documentDate);
+  if (schoolName) parts.push(schoolName);
+  if (participantType && startsAt && endsAt && timeZone) {
+    parts.push(participantType, formatTimeRange(startsAt, endsAt, timeZone));
   }
   return parts.join(" · ");
 }

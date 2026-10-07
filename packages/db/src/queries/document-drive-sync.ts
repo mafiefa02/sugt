@@ -84,7 +84,8 @@ export async function claimDokumenFolder(
 export type DocumentReconcileTarget = {
   documentId: string;
   kind: PerjadinDocumentKind;
-  documentDate: string;
+  /** `null` on an SPPD, which has a School and no date (#441). */
+  documentDate: string | null;
   schoolName: string | null;
   participantType: PerjadinDocumentParticipantType | null;
   driveFileId: string;
@@ -198,7 +199,13 @@ export async function markDocumentSyncFailed(caller: Person, documentId: string)
 }
 
 /** One document the sweep will reconcile, with what Periksa koneksi says about it if it fails. */
-export type UnsyncedDocument = { id: string; kind: PerjadinDocumentKind; documentDate: string };
+export type UnsyncedDocument = {
+  id: string;
+  kind: PerjadinDocumentKind;
+  /** `null` on an SPPD (#441), which Periksa koneksi names by its School instead. */
+  documentDate: string | null;
+  schoolName: string | null;
+};
 
 /**
  * **The documents the sweep owes**: every one not yet synced, at most `limit`, and how many in all
@@ -218,8 +225,10 @@ export async function unsyncedDocuments(
         id: perjadinDocument.id,
         kind: perjadinDocument.kind,
         documentDate: perjadinDocument.documentDate,
+        schoolName: school.name,
       })
       .from(perjadinDocument)
+      .leftJoin(school, eq(school.id, perjadinDocument.schoolId))
       .where(unsynced)
       .orderBy(
         sql`${perjadinDocument.driveSyncFailedAt} asc nulls first`,

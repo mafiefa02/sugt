@@ -15,14 +15,15 @@ export const metadata: Metadata = { title: "Perjadin" };
  * many Schools it reaches are delivery data, and ADR-0004 opens that to everyone signed in.
  * The Advance is not here at all — it is `perjadinAcquittal`'s, which any signed-in Person may
  * read now (ADR-0004 reversed by ADR-0026, #180); this list simply never fetches money, and
- * writing money stays Staff-only.
+ * writing it is the trip's writers' (ADR-0048).
  *
  * **Pengaturan Perjadin** (#422) is a button here, beside Rencanakan Perjadin, for an Administrator
  * only — not a sidebar entry. Anyone else is not shown it; the page itself answers them 403.
  *
  * The table lives in the `"use client"` `PerjadinDirectoryList`, which filters (#334) and sorts
  * (#343) the payload in the browser — the page stays a Server Component that fetches the full list
- * once. Only Staff toggle the Persiapan checklist from it; for a Pimpinan the pill is static.
+ * once. The Persiapan checklist toggles from a row only for whoever writes that trip — its Group, an
+ * Editor or an Administrator (ADR-0048); every other row's pill is static.
  *
  * The route keeps the `/perjadin` slug [#14](https://github.com/mafiefa02/sugt/issues/14)
  * chose. It mirrors the surface name enumerated in
@@ -55,9 +56,9 @@ export default async function Page() {
               Pengaturan Perjadin
             </LinkButton>
           )}
-          {/* Staff-only create action, moved off the sidebar onto its list page (#294). Non-Staff
-              render nothing — no disabled state. */}
-          {person.role === "Staff" && (
+          {/* The create action, moved off the sidebar onto its list page (#294). It needs the
+              Editor Grant (ADR-0047); anyone without it renders nothing — no disabled state. */}
+          {hasGrant(person, "Editor") && (
             <LinkButton render={<Link href="/perjadin/baru" />}>
               <Plus data-icon="inline-start" />
               Rencanakan Perjadin
@@ -68,13 +69,12 @@ export default async function Page() {
 
       {trips.length === 0 ? (
         <p className="p-4 text-sm text-muted-foreground sm:p-7">
-          Belum ada Perjadin. Buka Rencanakan Perjadin untuk merencanakan yang pertama.
+          Belum ada Perjadin.
+          {hasGrant(person, "Editor") &&
+            " Buka Rencanakan Perjadin untuk merencanakan yang pertama."}
         </p>
       ) : (
-        <PerjadinDirectoryList
-          trips={trips}
-          canTogglePreparation={person.role === "Staff"}
-        />
+        <PerjadinDirectoryList trips={trips} />
       )}
     </div>
   );

@@ -6,7 +6,7 @@ import { SessionWrites } from "-/components/session-writes";
 import { uploadGate } from "-/lib/drive/upload-gate";
 import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
-import { sessionDetail, sessionFootageList } from "@sugt/db/queries";
+import { canWritePerjadin, sessionDetail, sessionFootageList } from "@sugt/db/queries";
 import { formatSessionStartTimeWithWib } from "@sugt/domain";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -29,16 +29,16 @@ export async function generateMetadata({ params }: PageProps<"/sesi/[id]">): Pro
  * **Detail Sesi** — one Session: what has been filed against it, who still owes what, and
  * the PIC.
  *
- * One `requirePerson()`, the Session's query, then its Foto & Video and — for Staff — the upload
- * gate, read together (#425). **No role check on the read**, because a
+ * One `requirePerson()`, the Session's query, then its Foto & Video and — for whoever writes its
+ * trip — the upload gate, read together (#425). **No role check on the read**, because a
  * Session carries no money and ADR-0004 opens delivery data to everyone signed in — a
  * professor opening the Session they taught to see who else still owes a Record is the
  * ordinary case, not an edge one.
  *
- * The writes are Staff-only, and they are **absent rather than disabled** for a Teaching
- * Team member. Hiding them is a courtesy and not the enforcement: `requireStaff` inside
- * each query function is what actually closes the path, since a layout does not run
- * before a Server Action.
+ * The writes are the trip's Group's, an Editor's or an Administrator's (ADR-0048), and they are
+ * **absent rather than disabled** for anyone else. Hiding them is a courtesy and not the
+ * enforcement: `requireSessionWriter` inside each query function is what actually closes the
+ * path, since a layout does not run before a Server Action.
  *
  * Keyed on the Session's id rather than a slug — a Session has no natural name, and its
  * School and date are not unique between two Sessions on the same day. An id naming no
@@ -57,11 +57,13 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
   // An online Session's detail and editing live on `/sesi-daring/[id]`; only offline stays here.
   if (session.mode === "online") redirect(`/sesi-daring/${id}`);
 
-  const isStaff = person.role === "Staff";
+  // An offline Session is written by its trip's Group, an Editor or an Administrator (ADR-0048).
+  const canWrite =
+    session.perjadin !== null && (await canWritePerjadin(person, session.perjadin.id));
   const [footage, gate] = await Promise.all([
     sessionFootageList(person, session.id),
-    // Only Staff upload or Hapus; for anyone else the gate is never read.
-    isStaff ? uploadGate(person) : Promise.resolve({ open: false as const, reason: "" }),
+    // Only the trip's writers upload or Hapus; for anyone else the gate is never read.
+    canWrite ? uploadGate(person) : Promise.resolve({ open: false as const, reason: "" }),
   ]);
 
   return (
@@ -121,19 +123,19 @@ export default async function Page({ params }: PageProps<"/sesi/[id]">) {
 
       {/*
         Foto & Video (#425, ADR-0046): the list for everyone signed in, a Pimpinan included; Hapus
-        and the upload popup for Staff, the upload hidden on a cancelled Session.
+        and the upload popup for the trip's writers, the upload hidden on a cancelled Session.
       */}
       <FotoVideoSection
         sessionId={session.id}
         heldOn={session.heldOn}
         schoolName={session.schoolName}
         footage={footage}
-        isStaff={isStaff}
+        canWrite={canWrite}
         cancelled={session.status === "cancelled"}
         uploadGate={gate}
       />
 
-      {person.role === "Staff" && <SessionWrites session={session} />}
+      {canWrite && <SessionWrites session={session} />}
     </div>
   );
 }

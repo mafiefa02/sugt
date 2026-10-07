@@ -6,6 +6,8 @@ import {
   ONLY_PDF,
   pickDocument,
   recordRefusalText,
+  sessionRefusalText,
+  sppdSummary,
 } from "-/components/perjadin-dokumen-form";
 import { documentFileName } from "-/lib/drive/document-files";
 import { UPLOAD_TOO_LARGE } from "-/lib/drive/receipt-upload";
@@ -70,6 +72,26 @@ describe("the form's fields", () => {
     });
   });
 
+  it("needs only a School for an SPPD, and sends no date (#441)", () => {
+    expect(documentFields({ ...EMPTY_DOCUMENT_FORM, kind: "SPPD" })).toBeNull();
+    expect(
+      documentFields({
+        ...EMPTY_DOCUMENT_FORM,
+        kind: "SPPD",
+        schoolId: "school-1",
+        documentDate: "2026-10-13",
+      }),
+    ).toEqual({ kind: "SPPD", documentDate: null, sppd: { schoolId: "school-1" } });
+  });
+
+  it("says a School already has its SPPD, before the upload and at the record", () => {
+    const refusal = { outcome: "sppd-exists", schoolName: "SMAN 1 Bontang" } as const;
+    const text =
+      "SMAN 1 Bontang sudah punya SPPD untuk Perjadin ini. Hapus dulu untuk menggantinya.";
+    expect(sessionRefusalText(refusal)).toBe(text);
+    expect(recordRefusalText(refusal)).toBe(text);
+  });
+
   it("says why a date was refused, with the trip's window", () => {
     expect(
       recordRefusalText({
@@ -116,6 +138,24 @@ describe("a sheet, as it reads", () => {
     ).toBe("2026-10-14");
   });
 
+  it("lists an SPPD by its School alone", () => {
+    expect(
+      documentRowText({
+        ...row,
+        kind: "SPPD",
+        documentDate: null,
+        participantType: null,
+        startsAt: null,
+        endsAt: null,
+      }),
+    ).toBe("SMA Y");
+  });
+
+  it("counts the trip's Schools that have their SPPD", () => {
+    expect(sppdSummary([{ hasSppd: true }, { hasSppd: false }])).toBe("SPPD: 1/2 sekolah");
+    expect(sppdSummary([])).toBe("SPPD: 0/0 sekolah");
+  });
+
   it("names its file in Drive with the D- marker", () => {
     expect(documentFileName({ ...row, documentId: row.id })).toBe(
       "2026-10-14 · SMA Y · Siswa · Daftar Hadir Peserta · D-1a2b3c4d.pdf",
@@ -129,5 +169,14 @@ describe("a sheet, as it reads", () => {
         participantType: null,
       }),
     ).toBe("2026-10-13 · Daftar Hadir Narasumber · D-1a2b3c4d.pdf");
+    expect(
+      documentFileName({
+        documentId: row.id,
+        kind: "SPPD",
+        documentDate: null,
+        schoolName: "SMAN 1/Bontang",
+        participantType: null,
+      }),
+    ).toBe("SMAN 1-Bontang · SPPD · D-1a2b3c4d.pdf");
   });
 });

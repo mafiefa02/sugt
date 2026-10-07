@@ -1,10 +1,16 @@
 import { submitFeedbackAction } from "-/app/f/[token]/actions";
+import {
+  answersForClass,
+  askedAspects,
+  feedbackSubmission,
+} from "-/app/f/[token]/feedback-answers";
 import { resolveFeedbackToken } from "-/lib/feedback-token";
 import { db, schema } from "@sugt/db";
 import {
   cancelSession,
   issueFeedbackToken,
   submitParticipantFeedback,
+  type ParticipantFeedbackAnswers,
   type ParticipantFeedbackComments,
   type ParticipantFeedbackRatings,
 } from "@sugt/db/queries";
@@ -18,6 +24,7 @@ import {
   addProvince,
   addSchool,
   addSession,
+  refusedBy,
   resetDatabase,
 } from "./support/fixtures";
 
@@ -55,14 +62,27 @@ async function aSession(
   });
 }
 
-const FINE: ParticipantFeedbackRatings = { materials: 9, instructor: 9, relevance: 9 };
+/** A GTK or MS Participant's Ratings: the three every Class is asked, and no Hands-on RBL. */
+const FINE: ParticipantFeedbackRatings = {
+  hands_on_rbl: null,
+  materials: 9,
+  instructor: 9,
+  relevance: 9,
+};
+
+/** A Siswa's: the same three, and Hands-on RBL too (#446). */
+const SISWA: ParticipantFeedbackRatings = { ...FINE, hands_on_rbl: 9 };
 
 /** No comment on any Aspect — the common case, a Participant owing none. */
 const NO_COMMENTS: ParticipantFeedbackComments = {
+  hands_on_rbl: null,
   materials: null,
   instructor: null,
   relevance: null,
 };
+
+/** Neither written question answered — both are optional. */
+const NO_ANSWERS: ParticipantFeedbackAnswers = { knowledgeGain: null, suggestions: null };
 
 async function tokenRows(sessionId: string) {
   return db
@@ -191,8 +211,13 @@ describe("submitParticipantFeedback", () => {
       {
         classKind: "Student",
         name: "Siti",
-        ratings: FINE,
-        comments: { materials: "Bahannya lengkap", instructor: "Seru sekali", relevance: null },
+        ratings: SISWA,
+        comments: {
+          ...NO_COMMENTS,
+          materials: "Bahannya lengkap",
+          instructor: "Seru sekali",
+        },
+        answers: NO_ANSWERS,
       },
     );
 
@@ -216,7 +241,8 @@ describe("submitParticipantFeedback", () => {
         classKind: "GTK",
         name: "Budi",
         ratings: FINE,
-        comments: { materials: "   ", instructor: null, relevance: "  " },
+        comments: { ...NO_COMMENTS, materials: "   ", relevance: "  " },
+        answers: { knowledgeGain: "  ", suggestions: "" },
       },
     );
 
@@ -224,6 +250,8 @@ describe("submitParticipantFeedback", () => {
     expect(rows[0]?.materialsComment).toBeNull();
     expect(rows[0]?.instructorComment).toBeNull();
     expect(rows[0]?.relevanceComment).toBeNull();
+    expect(rows[0]?.knowledgeGain).toBeNull();
+    expect(rows[0]?.suggestions).toBeNull();
   });
 
   it("refuses a blank name, and writes nothing", async () => {
@@ -232,7 +260,7 @@ describe("submitParticipantFeedback", () => {
 
     const result = await submitParticipantFeedback(
       { kind: "participant", sessionId: session.id },
-      { classKind: "MS", name: "   ", ratings: FINE, comments: NO_COMMENTS },
+      { classKind: "MS", name: "   ", ratings: FINE, comments: NO_COMMENTS, answers: NO_ANSWERS },
     );
 
     expect(result).toEqual({ outcome: "name-required" });
@@ -248,8 +276,9 @@ describe("submitParticipantFeedback", () => {
       {
         classKind: "Student",
         name: "Ayu",
-        ratings: { ...FINE, instructor: 2 },
+        ratings: { ...SISWA, instructor: 2 },
         comments: NO_COMMENTS,
+        answers: NO_ANSWERS,
       },
     );
 
@@ -277,6 +306,7 @@ describe("submitFeedbackAction", () => {
       name: "Budi",
       ratings: FINE,
       comments: NO_COMMENTS,
+      answers: NO_ANSWERS,
     });
 
     expect(result).toEqual({ outcome: "submitted" });
@@ -297,8 +327,9 @@ describe("submitFeedbackAction", () => {
     const result = await submitFeedbackAction(token.token, {
       classKind: "Student",
       name: "Siti",
-      ratings: FINE,
+      ratings: SISWA,
       comments: NO_COMMENTS,
+      answers: NO_ANSWERS,
     });
 
     expect(result).toEqual({ outcome: "gone" });
@@ -315,11 +346,199 @@ describe("submitFeedbackAction", () => {
     const result = await submitFeedbackAction(first.token, {
       classKind: "Student",
       name: "Siti",
-      ratings: FINE,
+      ratings: SISWA,
       comments: NO_COMMENTS,
+      answers: NO_ANSWERS,
     });
 
     expect(result).toEqual({ outcome: "gone" });
     expect((await feedbackRows(session.id)).length).toBe(0);
+  });
+});
+
+/**
+ * **The ticket's worked examples** (#446): a Siswa is asked Hands-on RBL first and must Rate it; GTK
+ * and MS are never asked it, and the database refuses one on their rows; the two written questions
+ * are optional and are not Aspects.
+ */
+describe("Hands-on RBL and the written questions (#446)", () => {
+  beforeEach(resetDatabase);
+
+  const as = (sessionId: string) => ({ kind: "participant" as const, sessionId });
+
+  it("stores Rani's four Ratings, her RBL comment and both written answers", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+
+    const result = await submitParticipantFeedback(as(session.id), {
+      classKind: "Student",
+      name: "Rani",
+      ratings: { hands_on_rbl: 8, materials: 9, instructor: 7, relevance: 9 },
+      comments: { ...NO_COMMENTS, hands_on_rbl: "  Modulnya seru  " },
+      answers: { knowledgeGain: "Ya, bertambah.", suggestions: " Tambah waktu praktik. " },
+    });
+
+    expect(result).toEqual({ outcome: "submitted" });
+    const [row] = await feedbackRows(session.id);
+    expect(row).toMatchObject({
+      handsOnRbl: 8,
+      materials: 9,
+      instructor: 7,
+      relevance: 9,
+      handsOnRblComment: "Modulnya seru",
+      knowledgeGain: "Ya, bertambah.",
+      suggestions: "Tambah waktu praktik.",
+    });
+  });
+
+  it("refuses a Siswa with no Hands-on RBL Rating, like a missing Materi, and writes nothing", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+
+    for (const ratings of [FINE, { ...SISWA, materials: null }]) {
+      await expect(
+        submitParticipantFeedback(as(session.id), {
+          classKind: "Student",
+          name: "Rani",
+          ratings,
+          comments: NO_COMMENTS,
+          answers: NO_ANSWERS,
+        }),
+      ).resolves.toEqual({ outcome: "ratings-mismatch" });
+    }
+    expect(await feedbackRows(session.id)).toHaveLength(0);
+  });
+
+  it("refuses Pak Tono's GTK Hands-on RBL Rating at the write, and drops a stray RBL comment", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+
+    await expect(
+      submitParticipantFeedback(as(session.id), {
+        classKind: "GTK",
+        name: "Pak Tono",
+        ratings: SISWA,
+        comments: NO_COMMENTS,
+        answers: NO_ANSWERS,
+      }),
+    ).resolves.toEqual({ outcome: "ratings-mismatch" });
+    await expect(
+      submitParticipantFeedback(as(session.id), {
+        classKind: "GTK",
+        name: "Pak Tono",
+        ratings: FINE,
+        comments: { ...NO_COMMENTS, hands_on_rbl: "tertinggal" },
+        answers: NO_ANSWERS,
+      }),
+    ).resolves.toEqual({ outcome: "submitted" });
+
+    const rows = await feedbackRows(session.id);
+    expect(rows).toEqual([expect.objectContaining({ handsOnRbl: null, handsOnRblComment: null })]);
+  });
+
+  it("holds the Student-only rule and the 1–10 bound at the database, and keeps older Siswa rows valid", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+    const insert = (row: Partial<typeof schema.participantFeedback.$inferInsert>) =>
+      db.insert(schema.participantFeedback).values({
+        sessionId: session.id,
+        classKind: "GTK",
+        name: "Langsung",
+        materials: 9,
+        instructor: 9,
+        relevance: 9,
+        ...row,
+      });
+
+    await expect(refusedBy(insert({ handsOnRbl: 8 }))).resolves.toBe(
+      "participant_feedback_hands_on_rbl_student_check",
+    );
+    await expect(refusedBy(insert({ classKind: "MS", handsOnRblComment: "x" }))).resolves.toBe(
+      "participant_feedback_hands_on_rbl_student_check",
+    );
+    await expect(refusedBy(insert({ classKind: "Student", handsOnRbl: 11 }))).resolves.toBe(
+      "participant_feedback_hands_on_rbl_check",
+    );
+    // A Siswa row filed before Hands-on RBL existed: no RBL Rating, and still valid.
+    await expect(refusedBy(insert({ classKind: "Student" }))).resolves.toBeNull();
+    await expect(refusedBy(insert({ classKind: "Student", handsOnRbl: 1 }))).resolves.toBeNull();
+  });
+});
+
+describe("submitFeedbackAction, after #446", () => {
+  beforeEach(resetDatabase);
+
+  it("refuses a Siswa submission without a Hands-on RBL Rating, and writes nothing", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+    const token = await addFeedbackToken({ sessionId: session.id, issuedByPersonId: pic.id });
+
+    const result = await submitFeedbackAction(token.token, {
+      classKind: "Student",
+      name: "Rani",
+      ratings: FINE,
+      comments: NO_COMMENTS,
+      answers: NO_ANSWERS,
+    });
+
+    expect(result).toEqual({ outcome: "ratings-mismatch" });
+    expect(await feedbackRows(session.id)).toHaveLength(0);
+  });
+
+  it("still lands a GTK submission from a form loaded before #446, with no answers or RBL", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+    const token = await addFeedbackToken({ sessionId: session.id, issuedByPersonId: pic.id });
+
+    // The pre-#446 payload: three Ratings, three comments, no `answers`.
+    const result = await submitFeedbackAction(token.token, {
+      classKind: "GTK",
+      name: "Budi",
+      ratings: { materials: 9, instructor: 9, relevance: 9 },
+      comments: { materials: null, instructor: null, relevance: null },
+    } as never);
+
+    expect(result).toEqual({ outcome: "submitted" });
+    expect(await feedbackRows(session.id)).toEqual([
+      expect.objectContaining({ handsOnRbl: null, knowledgeGain: null, suggestions: null }),
+    ]);
+  });
+});
+
+describe("the form's answers (#446)", () => {
+  it("asks a Siswa Hands-on RBL first, GTK and MS never, and every Class's three before one is picked", () => {
+    expect(askedAspects("Student")).toEqual([
+      "hands_on_rbl",
+      "materials",
+      "instructor",
+      "relevance",
+    ]);
+    expect(askedAspects("GTK")).toEqual(["materials", "instructor", "relevance"]);
+    expect(askedAspects("MS")).toEqual(["materials", "instructor", "relevance"]);
+    expect(askedAspects(undefined)).toEqual(["materials", "instructor", "relevance"]);
+  });
+
+  it("drops Rani's Hands-on RBL when she switches from Siswa to GTK, and sends none", () => {
+    const ratings = answersForClass("GTK", { hands_on_rbl: 4, materials: 9 });
+    const comments = answersForClass("GTK", { hands_on_rbl: "sulit", materials: "bagus" });
+
+    expect(ratings).toEqual({ materials: 9 });
+    expect(comments).toEqual({ materials: "bagus" });
+    expect(
+      feedbackSubmission({
+        classKind: "GTK",
+        name: " Rani ",
+        ratings: { ...ratings, instructor: 9, relevance: 9 },
+        comments,
+        knowledgeGain: "",
+        suggestions: "  ",
+      }),
+    ).toEqual({
+      classKind: "GTK",
+      name: "Rani",
+      ratings: FINE,
+      comments: { ...NO_COMMENTS, materials: "bagus" },
+      answers: NO_ANSWERS,
+    });
   });
 });

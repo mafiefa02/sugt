@@ -227,7 +227,11 @@ describe("the Foto & Video button on a /pendamping Session row", () => {
     });
 
     const html = renderToStaticMarkup(
-      createElement(TripTimeline, { nodes, uploadGate: { open: false, reason: "Terputus." } }),
+      createElement(TripTimeline, {
+        nodes,
+        uploadGate: { open: false, reason: "Terputus." },
+        canWrite: true,
+      }),
     );
 
     // Each row's buttons in order: the arranged one has Tandai first; the delivered one does not.

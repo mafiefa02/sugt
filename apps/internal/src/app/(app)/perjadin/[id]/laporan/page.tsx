@@ -1,11 +1,11 @@
 import { AcquittalTransactions } from "-/components/laporan-perjadin/acquittal-transactions";
 import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-report";
+import { MoneyFigure } from "-/components/money-figure";
 import { driveFileUrl, driveFolderUrl } from "-/lib/drive/receipt-files";
-import { uploadGate } from "-/lib/drive/upload-gate";
+import { uploadGate, type UploadGate } from "-/lib/drive/upload-gate";
 import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
-import { perjadinAcquittal, type AcquittalTransaction } from "@sugt/db/queries";
-import { formatRupiah } from "@sugt/domain";
+import { canWritePerjadin, perjadinAcquittal, type AcquittalTransaction } from "@sugt/db/queries";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -34,11 +34,12 @@ export async function generateMetadata({
  *
  * **Readable by ANY signed-in Person now** (ADR-0004 reversed by [ADR-0026](../../../../../../../../docs/adr/0026-money-is-open-to-read-and-staff-only-to-write.md),
  * #180). `perjadinAcquittal` is an open money read, so a Pimpinan reaching this URL sees the whole
- * acquittal — money reads are open. What stays Staff-only is every **write** control on the page:
- * file report, record transaction and attach receipts each run through a Server Action whose query
- * (or, for the receipt actions, an explicit `requireStaff`) refuses a non-Staff caller server-side.
- * So a Pimpinan reads the report but any write is refused — the enforcement is in the actions, not
- * in what this page chooses to render. (The per-member receipts-handed-in checklist that used to sit
+ * acquittal — money reads are open. Every **write** control on the page — Laporkan, Catat transaksi
+ * and Unggah bukti — is the trip's Group's, an Editor's or an Administrator's (ADR-0048): absent for
+ * anyone else, and refused server-side by each Server Action's query (or, for the receipt actions,
+ * by `staffOnTrip` before Drive is asked anything). So a Pimpinan or a Staff member off the trip
+ * reads the report but writes nothing — the enforcement is in the actions, not in what this page
+ * chooses to render. (The per-member receipts-handed-in checklist that used to sit
  * here was removed with `group_member.receipts_settled_at`, #183.)
  *
  * It is a child of `/perjadin/[id]` rather than a top-level surface because the Perjadin Report
@@ -58,7 +59,12 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
   if (!acquittal) notFound();
 
   const transactions = acquittal.transactions.map(withLinks);
-  const gate = await uploadGate(person);
+  // Who writes this trip (ADR-0048): its Group, an Editor or an Administrator. Everyone else reads
+  // the whole Laporan with Catat transaksi, Unggah bukti and Laporkan absent.
+  const canWrite = await canWritePerjadin(person, id);
+  const gate = canWrite
+    ? await uploadGate(person)
+    : ({ open: false, reason: "" } satisfies UploadGate);
 
   return (
     <div className="flex min-h-full flex-col">
@@ -96,16 +102,18 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
             <FilePerjadinReport
               perjadinId={id}
               filedAt={acquittal.reportFiledAt}
+              canWrite={canWrite}
             />
           </div>
         </div>
 
         <dl className="mt-2.5 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-          <Figure
+          <MoneyFigure
             label="Diterima"
             amountIdr={acquittal.advanceIdr}
+            unsetLabel="Belum diisi"
           />
-          <Figure
+          <MoneyFigure
             label="Terpakai"
             amountIdr={acquittal.spentIdr}
           />
@@ -113,11 +121,11 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
             The same Terpakai total split by the cohort each transaction served — the two sum to
             `spentIdr`, since `participant_type` is required and has no third value.
           */}
-          <Figure
+          <MoneyFigure
             label="Total Siswa"
             amountIdr={acquittal.siswaSpentIdr}
           />
-          <Figure
+          <MoneyFigure
             label="Total GTK-MS"
             amountIdr={acquittal.gtkMsSpentIdr}
           />
@@ -126,7 +134,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
             Lainnya draw down (ADR-0029), so this can differ from Diterima − Terpakai. Negative means
             the Group overspent the float, which is a real state and not an error.
           */}
-          <Figure
+          <MoneyFigure
             label="Sisa"
             amountIdr={acquittal.remainderIdr}
           />
@@ -148,6 +156,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
         perjadinId={id}
         transactions={transactions}
         uploadGate={gate}
+        canWrite={canWrite}
       />
     </div>
   );
@@ -186,17 +195,4 @@ function Deadline({ daysRemaining }: { daysRemaining: number }) {
     return <span className="text-destructive">terlambat {Math.abs(daysRemaining)} hari</span>;
   }
   return <span className="tabular-nums">sisa {daysRemaining} hari</span>;
-}
-
-/**
- * Money in whole rupiah, which is what it is stored as — `numeric(_, 2)` would imply a subunit
- * nobody uses, so there is no cent to render and none is invented here.
- */
-function Figure({ label, amountIdr }: { label: string; amountIdr: number }) {
-  return (
-    <div>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="tabular-nums">{formatRupiah(amountIdr)}</dd>
-    </div>
-  );
 }

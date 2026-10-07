@@ -21,11 +21,16 @@ import {
   AccordionPlainTrigger,
 } from "@sugt/ui/components/accordion";
 import { Button } from "@sugt/ui/components/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@sugt/ui/components/collapsible";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import { Progress } from "@sugt/ui/components/progress";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 /**
  * **One section of `/pendamping`'s own trips** (#199) — Perjalanan Dinas Anda or Perjalanan Dinas
@@ -49,11 +54,19 @@ function MyPerjadinSection({
   description,
   trips,
   uploadGate,
+  canWrite,
 }: {
   title: string;
   description: string;
   trips: MyPerjadinTrip[];
   uploadGate: UploadGate;
+  /**
+   * **Whether the viewer writes these trips** (ADR-0048), computed from the viewer and not from whose
+   * trips they are. On a person's own `/pendamping` it is always true — every trip listed is one
+   * whose Group they are in. Without it, every write control on the cards is absent: Catat
+   * Transaksi, Dokumen, Tandai, the Persiapan boxes and Foto & Video's upload and Hapus.
+   */
+  canWrite: boolean;
 }) {
   // Reveal three at a time from the client, never a refetch — the full list is already in hand, and
   // the button only widens the slice. Hidden once everything is shown.
@@ -76,6 +89,7 @@ function MyPerjadinSection({
             key={trip.id}
             trip={trip}
             uploadGate={uploadGate}
+            canWrite={canWrite}
           />
         ))}
       </Accordion>
@@ -113,7 +127,15 @@ function MyPerjadinSection({
  * its own click and opens the checklist without toggling. The chevron is decorative and outside the
  * trigger, rotated from the item's `data-open`.
  */
-function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: UploadGate }) {
+function TripCard({
+  trip,
+  uploadGate,
+  canWrite,
+}: {
+  trip: MyPerjadinTrip;
+  uploadGate: UploadGate;
+  canWrite: boolean;
+}) {
   // The pill's `x/N` is read straight off the checklist the card also hands the dialog — one payload
   // for both, so the pill and the boxes can never disagree. `N` is the trip's own (ADR-0045).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
@@ -122,11 +144,6 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
   // ticked, amber part-way, emerald once every item is done — so the two screens read the pill the
   // same way. This one stays a button (the checklist opens from it).
   const preparationTone = progressTone(preparationDone, preparationTotal);
-
-  // The same travel-float remainder the acquittal derives (`advanceIdr - drawnDownIdr`, only
-  // ADVANCE_DRAWDOWN_CATEGORIES draw down — ADR-0029), pinned equal by a query test so the two
-  // screens never show two answers. Shown as is, negative included; only the bar clamps.
-  const remainingIdr = trip.advanceIdr - trip.drawnDownIdr;
 
   return (
     <AccordionItem
@@ -155,11 +172,11 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
           <div className="flex max-w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span>PIC: {trip.picFullName}</span>
             {/* The pill *is* the dialog's trigger — clicking it opens the checklist, live-toggleable
-                because `/` is Staff-only (canToggle), and the toggle write re-checks the role anyway. */}
+                for whoever writes the trip (ADR-0048), and the toggle write re-checks that anyway. */}
             <PerjadinPreparationDialog
               perjadinId={trip.id}
               items={trip.preparation}
-              canToggle
+              canToggle={canWrite}
               trigger={
                 <button
                   type="button"
@@ -182,51 +199,44 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
       <AccordionPanel className="text-foreground *:px-3 sm:*:px-4">
         <div className="grid gap-6 pt-2 pb-1 lg:grid-cols-[11fr_9fr]">
           <div className="flex min-w-0 flex-col gap-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Uang Perjalanan</p>
-              <p className="mt-1 font-heading text-lg tabular-nums">
-                Tersisa {formatRupiah(remainingIdr)}
-              </p>
-              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
-                <span>Terpakai {formatRupiah(trip.drawnDownIdr)}</span>
-                <span>{formatRupiah(trip.advanceIdr)}</span>
-              </div>
-              <Progress
-                value={spentPercent(trip.advanceIdr, trip.drawnDownIdr)}
-                aria-label="Uang Perjalanan terpakai"
-                className="mt-2 *:data-[slot=progress-track]:h-3"
-              />
-            </div>
+            <TripMoney
+              advanceIdr={trip.advanceIdr}
+              drawnDownIdr={trip.drawnDownIdr}
+            />
 
             {/* A full-width two-column grid on a phone, each button stretched to its cell. */}
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-              <RecordTransaction
-                perjadinId={trip.id}
-                uploadGate={uploadGate}
-                trigger={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="rounded-full"
-                  >
-                    Catat Transaksi
-                  </Button>
-                }
-              />
-              <PerjadinDokumenDialog
-                perjadinId={trip.id}
-                name={perjadinName(trip)}
-                uploadGate={uploadGate}
-                trigger={
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="rounded-full"
-                  >
-                    Dokumen
-                  </Button>
-                }
-              />
+              {canWrite && (
+                <>
+                  <RecordTransaction
+                    perjadinId={trip.id}
+                    uploadGate={uploadGate}
+                    trigger={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-full"
+                      >
+                        Catat Transaksi
+                      </Button>
+                    }
+                  />
+                  <PerjadinDokumenDialog
+                    perjadinId={trip.id}
+                    name={perjadinName(trip)}
+                    uploadGate={uploadGate}
+                    trigger={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-full"
+                      >
+                        Dokumen
+                      </Button>
+                    }
+                  />
+                </>
+              )}
               <PerjadinFeedbackTokenDialog
                 perjadinId={trip.id}
                 trigger={
@@ -248,13 +258,14 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               </LinkButton>
             </div>
             {/* Said as text, not only as the disabled button's title: a title never shows on touch. */}
-            {!uploadGate.open && (
+            {canWrite && !uploadGate.open && (
               <p className="-mt-2 text-xs text-muted-foreground">{uploadGate.reason}</p>
             )}
 
             <TripTimeline
               nodes={tripTimeline(trip)}
               uploadGate={uploadGate}
+              canWrite={canWrite}
             />
           </div>
 
@@ -266,40 +277,191 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
 }
 
 /**
+ * **The card's Uang Perjalanan**: Tersisa, Terpakai against the Advance, and the bar.
+ *
+ * Unset (`null`, #437) it reads "Uang Perjalanan belum diisi", with Terpakai but no Tersisa and no
+ * bar — there is nothing to measure against, and `null - x` would silently read as `-x`.
+ */
+function TripMoney({
+  advanceIdr,
+  drawnDownIdr,
+}: {
+  advanceIdr: number | null;
+  drawnDownIdr: number;
+}) {
+  return (
+    <div>
+      {advanceIdr === null ? (
+        // Terpakai stays: spending does not wait for the Advance.
+        <>
+          <p className="font-heading text-lg">Uang Perjalanan belum diisi</p>
+          <p className="mt-1 text-sm tabular-nums">Terpakai {formatRupiah(drawnDownIdr)}</p>
+        </>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">Uang Perjalanan</p>
+          {/*
+          The same travel-float remainder the acquittal derives (`advanceIdr -
+          drawnDownIdr`, only ADVANCE_DRAWDOWN_CATEGORIES draw down — ADR-0029), pinned
+          equal by a query test so the two screens never show two answers. Shown as is,
+          negative included; only the bar clamps.
+        */}
+          <p className="mt-1 font-heading text-lg tabular-nums">
+            Tersisa {formatRupiah(advanceIdr - drawnDownIdr)}
+          </p>
+          <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
+            <span>Terpakai {formatRupiah(drawnDownIdr)}</span>
+            <span>{formatRupiah(advanceIdr)}</span>
+          </div>
+          <Progress
+            value={spentPercent(advanceIdr, drawnDownIdr)}
+            aria-label="Uang Perjalanan terpakai"
+            className="mt-2 *:data-[slot=progress-track]:h-3"
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * Who is on the trip, inline: Pendamping (the Staff Group), Narasumber (the trip-scoped teacher
- * names) and Pimpinan (record-only), in that order. A group with nobody in it is left out rather
- * than labelled over an empty list, and the names are plain — the PIC is already named in the
- * header.
+ * names) and Pimpinan (record-only), in that order. Pendamping and Pimpinan are plain lists, left
+ * out when empty — the PIC is already named in the header. Narasumber is always there, folded by
+ * School (#447): a trip's dozen-and-more titled names would otherwise crowd the card.
  */
 function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
-  const groups = [
-    {
-      label: "Pendamping",
-      names: anggota.staff.map((person) => ({ key: person.personId, name: person.fullName })),
-    },
-    {
-      label: "Narasumber",
-      names: anggota.pengajar.map((person) => ({ key: person.id, name: person.name })),
-    },
-    {
-      label: "Pimpinan",
-      names: anggota.pimpinan.map((person) => ({ key: person.personId, name: person.name })),
-    },
-  ].filter((group) => group.names.length > 0);
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <NameList
+        label="Pendamping"
+        names={anggota.staff.map((person) => ({ key: person.personId, name: person.fullName }))}
+      />
+      <NarasumberBlock
+        total={anggota.pengajar.length}
+        pengajarBySchool={anggota.pengajarBySchool}
+      />
+      <NameList
+        label="Pimpinan"
+        names={anggota.pimpinan.map((person) => ({ key: person.personId, name: person.name }))}
+      />
+    </div>
+  );
+}
+
+/** One labelled list of names, one per line; absent when nobody is in it. */
+function NameList({ label, names }: { label: string; names: { key: string; name: string }[] }) {
+  if (names.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      {groups.map((group) => (
-        <div key={group.label}>
-          <p className="text-xs text-muted-foreground">{group.label}</p>
-          <ul className="mt-1 grid gap-0.5 text-sm">
-            {group.names.map((person) => (
-              <li key={person.key}>{person.name}</li>
-            ))}
-          </ul>
-        </div>
-      ))}
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <ul className="mt-1 grid gap-0.5 text-sm">
+        {names.map((person) => (
+          <li key={person.key}>{person.name}</li>
+        ))}
+      </ul>
     </div>
+  );
+}
+
+/**
+ * **Narasumber (n), folded by School** (#447). n is the trip's distinct Narasumber, the unassigned
+ * included, so someone listed under two Schools counts once; with none it is `Narasumber (0)` and
+ * nothing beneath. Each School with a list gets its own toggle; one with none says "belum
+ * ditugaskan" with nothing to open; the unassigned get a last toggle when there are any. The order
+ * — Schools by their earliest live Session, names A–Z — is the query's.
+ */
+function NarasumberBlock({
+  total,
+  pengajarBySchool,
+}: {
+  total: number;
+  pengajarBySchool: MyPerjadinTrip["anggota"]["pengajarBySchool"];
+}) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">Narasumber ({total})</p>
+      {total > 0 && (
+        <ul className="mt-1 flex flex-col">
+          {pengajarBySchool.bySchool.map((school) => (
+            <li key={school.schoolId}>
+              {school.pengajar.length > 0 ? (
+                <NarasumberToggle
+                  label={`Narasumber ${school.name}`}
+                  names={school.pengajar}
+                />
+              ) : (
+                <p className="py-2.5 pl-6 text-sm text-muted-foreground">
+                  Narasumber {school.name}: belum ditugaskan
+                </p>
+              )}
+            </li>
+          ))}
+          {pengajarBySchool.unassigned.length > 0 && (
+            <li>
+              <NarasumberToggle
+                label="Narasumber belum ditugaskan"
+                names={pengajarBySchool.unassigned}
+              />
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One fold: "Tampilkan {label} (n)" closed, "Sembunyikan {label} (n)" open, the names one per line
+ * beneath. Closed on every load and on its own — nothing remembers it. The panel stays mounted
+ * (hidden) so `aria-controls` names a real element even while closed, which Base UI only sets while
+ * open. Its height animates over 200 ms and snaps under `prefers-reduced-motion`.
+ */
+function NarasumberToggle({
+  label,
+  names,
+}: {
+  label: string;
+  names: { id: string; name: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <CollapsibleTrigger
+        aria-controls={panelId}
+        className="group/fold flex min-h-11 w-full items-center gap-2 rounded-md text-left text-sm outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <ChevronRight
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-panel-open/fold:rotate-90 motion-reduce:transition-none"
+        />
+        <span className="min-w-0 break-words">
+          {open ? "Sembunyikan" : "Tampilkan"} {label} ({names.length})
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent
+        id={panelId}
+        keepMounted
+        className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none"
+      >
+        <ul className="grid gap-0.5 pb-2 pl-6 text-sm">
+          {names.map((person) => (
+            <li
+              key={person.id}
+              className="break-words"
+            >
+              {person.name}
+            </li>
+          ))}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -313,7 +475,16 @@ function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
  * with a primary dot. The rail segment below a node is primary only when that node is done; every
  * other segment is muted.
  */
-function TripTimeline({ nodes, uploadGate }: { nodes: TimelineNode[]; uploadGate: UploadGate }) {
+function TripTimeline({
+  nodes,
+  uploadGate,
+  canWrite,
+}: {
+  nodes: TimelineNode[];
+  uploadGate: UploadGate;
+  /** Tandai and Foto & Video's upload and Hapus are the trip's writers' (ADR-0048). */
+  canWrite: boolean;
+}) {
   if (nodes.length === 0) return null;
 
   return (
@@ -339,6 +510,7 @@ function TripTimeline({ nodes, uploadGate }: { nodes: TimelineNode[]; uploadGate
             <SessionNode
               node={node}
               uploadGate={uploadGate}
+              canWrite={canWrite}
             />
           </div>
         </li>
@@ -373,7 +545,15 @@ function TimelineMarker({ done }: { done: boolean }) {
  * (#425), the Session's photos and videos, in both sections since footage is often uploaded after
  * the trip. It opens even while Drive is down, so the files can be viewed; uploading is closed then.
  */
-function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: UploadGate }) {
+function SessionNode({
+  node,
+  uploadGate,
+  canWrite,
+}: {
+  node: TimelineNode;
+  uploadGate: UploadGate;
+  canWrite: boolean;
+}) {
   const { school, session } = node;
   const text = `${session.heldOn} · ${formatSessionStartTimeWithWib(session.startsAt, school.timeZone)} · ${school.name}`;
 
@@ -381,7 +561,7 @@ function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: Upl
     <>
       <span className="tabular-nums">{text}</span>
       <span className="flex flex-wrap gap-2">
-        {session.status === "arranged" && (
+        {canWrite && session.status === "arranged" && (
           <SessionMarkDeliveredDialog
             school={school}
             session={session}
@@ -416,9 +596,9 @@ function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: Upl
           heldOn={session.heldOn}
           schoolName={school.name}
           uploadGate={uploadGate}
-          // `/pendamping` is Staff-only, and the timeline holds no cancelled Session.
-          canUpload
-          canDelete
+          // The timeline holds no cancelled Session; who writes the trip uploads and deletes.
+          canUpload={canWrite}
+          canDelete={canWrite}
           trigger={
             <Button
               variant="secondary"
@@ -435,4 +615,4 @@ function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: Upl
   );
 }
 
-export { MyPerjadinSection, TripTimeline };
+export { AnggotaRoster, MyPerjadinSection, TripMoney, TripTimeline };

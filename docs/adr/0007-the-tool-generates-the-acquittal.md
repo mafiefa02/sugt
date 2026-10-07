@@ -18,7 +18,7 @@ A transaction can be entered whenever suits the PIC — photographed and logged 
 
 ## Amendment: the bet is not placed until the real template exists
 
-The document this ADR promises to fill cannot be built yet. `CONTEXT.md` and [`data-model.md`](../data-model.md) both record that the acquittal's real paperwork — Surat Tugas, SPPD, SPJ or otherwise — is unconfirmed, and it is worse than that: **no completed example exists to confirm it against.** Nobody has filed one for this Programme and no prior trip's set is available to borrow, so the first real Perjadin is what produces one.
+The document this ADR promises to fill cannot be built yet. `CONTEXT.md` and [`data-model.md`](../data-model.md) both record that the acquittal's real paperwork — Surat Tugas, SPPD, SPJ or otherwise — is unconfirmed (SPPD no longer: see [the 2026-10-08 amendment](#amendment-2026-10-08-sppd-is-uploaded-not-generated)), and it is worse than that: **no completed example exists to confirm it against.** Nobody has filed one for this Programme and no prior trip's set is available to borrow, so the first real Perjadin is what produces one.
 
 Waiting is not the answer either. Everything else on the acquittal screen — itemised transactions, evidence attached to the line it belongs to, the running reconciliation against the Advance, the returned-to-Treasurer mark, the receipts checklist — needs nothing from the template. So the screen ships, with a **generic export**: a plain itemisation a PIC can attach, not the real form.
 
@@ -49,3 +49,20 @@ If that happens, the fallback is to drop the money side and keep the tool as a d
 - The build is materially larger than a form: itemised transactions with evidence, reconciled against the Advance, exported as a filled template. Mobile capture matters, because receipts are photographed in transit on poor connections.
 - The templates are DITSAMA's own, so they are ours to change — no external dependency, and no external authority to point at when someone wants a different one.
 - Adoption reaches PICs only, and only if the bet lands. Teaching Team members have no Advance, no transactions and nothing generated for them; they open the tool solely to write Session Record parts, with no material consequence if they don't. See [ADR-0004](./0004-delivery-data-is-open-internally-money-is-not.md) and [ADR-0009](./0009-the-tool-tracks-delivery-not-outcomes.md).
+
+## Amendment (2026-10-08): the Advance may be set after planning
+
+"The Advance is fixed at planning" no longer holds ([#437](https://github.com/sugt-itb/sugt-itb-26/issues/437)).
+A Perjadin often has to be planned before anyone knows its Uang Perjalanan, so the plan form takes it
+as optional and it is filled in later; once set it can be changed but not cleared. What this ADR
+rests on is unchanged: the acquittal still reconciles against the Advance, which is why filing the
+Perjadin Report is the one write that waits for it.
+
+## Amendment (2026-10-08): SPPD is uploaded, not generated
+
+**SPPD** is no longer among the unconfirmed paperwork
+([#441](https://github.com/sugt-itb/sugt-itb-26/issues/441)): each School's SPPD for a Perjadin is
+now a kind of Perjadin Document, uploaded as one PDF beside the attendance sheets
+([ADR-0042](./0042-perjadin-documents-are-stored-in-the-company-google-drive.md)). The tool stores
+the signed paper; it does not fill an SPPD template, so nothing here changes what the acquittal
+export renders. Surat Tugas and SPJ stay unconfirmed, and this ADR's bet still waits on them.

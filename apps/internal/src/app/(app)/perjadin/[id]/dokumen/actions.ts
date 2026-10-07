@@ -16,8 +16,10 @@ import {
   deletePerjadinDocument,
   documentReconcileTarget,
   perjadinDokumen,
+  requirePerjadinWriter,
   requireStaff,
   recordPerjadinDocument,
+  type DocumentFields,
   type PerjadinDokumen,
 } from "@sugt/db/queries";
 import { MAX_UPLOAD_BYTES } from "@sugt/domain";
@@ -33,13 +35,13 @@ import type {
 } from "./action-types";
 
 /**
- * **The Dokumen dialog's Server Actions** (ADR-0042, #397, #398): the trip's sheets, uploading
+ * **The Dokumen dialog's Server Actions** (ADR-0042, #397, #398): the trip's documents, uploading
  * one, and deleting one. An upload runs Catat transaksi's order — check, verify, commit,
  * reconcile — and Hapus runs guard, trash, delete; both through the same guards
  * (`-/lib/drive/upload-guard`), because Google is reached before any query runs.
  */
 
-/** The dialog's read: the trip's window, its Schools and its sheets. Any signed-in Person. */
+/** The dialog's read: the trip's window, its Schools and its documents. Any signed-in Person. */
 export async function perjadinDokumenAction(perjadinId: string): Promise<PerjadinDokumen | null> {
   const person = await requirePerson();
   return perjadinDokumen(person, perjadinId);
@@ -48,12 +50,15 @@ export async function perjadinDokumenAction(perjadinId: string): Promise<Perjadi
 /**
  * Open one Drive resumable upload session for the dialog's PDF. **Every check runs before Google is
  * asked anything**: Staff and the Perjadin, the declared type — a PDF and nothing else — and size,
- * and only then the connection. The session opens in `_staging`, named `{uuid}.pdf`, carrying
- * `sugtPerjadinId`, declaring the exact size and the page's `Origin`, as a receipt's does.
+ * the document's fields against the trip (`checkDocumentFields`), and only then the connection. So
+ * an SPPD for a School that already has one on this trip is refused before a byte is uploaded
+ * (#441). The session opens in `_staging`, named `{uuid}.pdf`, carrying `sugtPerjadinId`, declaring
+ * the exact size and the page's `Origin`, as a receipt's does.
  */
 export async function openDocumentSessionAction(
   perjadinId: string,
   file: DocumentToOpen,
+  fields: DocumentFields,
 ): Promise<OpenDocumentSessionResult> {
   const person = await requirePerson();
 
@@ -62,6 +67,8 @@ export async function openDocumentSessionAction(
   if (!(file.size > 0) || file.size > MAX_UPLOAD_BYTES) {
     return { outcome: "too-large", limit: MAX_UPLOAD_BYTES };
   }
+  const checked = await staffSurface(() => checkDocumentFields(person, perjadinId, fields));
+  if (checked.outcome !== "ok") return checked;
 
   const access = await driveAccessToken(person);
   if (access.outcome !== "ok") return driveRefusal(person, access.outcome);
@@ -106,8 +113,9 @@ async function verifyDocument(
  *
  * 1. **Check** — Staff, the Perjadin, the connection — before any Drive call.
  * 2. **Verify** the file (`verifyDocument`), then **validate** the fields against the trip
- *    (`checkDocumentFields`): the date inside it, a Peserta's School one of the trip's Schools
- *    (#410), the times in order. Either refusal records nothing, and leaves the file unnamed in private `_staging`.
+ *    (`checkDocumentFields`): the date inside it, a Peserta's or an SPPD's School one of the trip's
+ *    Schools (#410), the times in order, no second SPPD for one School (#441). Either refusal
+ *    records nothing, and leaves the file unnamed in private `_staging`.
  * 3. **Commit** the row and its Activity Log entry in one transaction (`recordPerjadinDocument`).
  * 4. **Reconcile** (`reconcileDocument`): name it, move it into its kind folder, share the file. If
  *    that fails the document still stands: `synced: false`, never an error.
@@ -153,7 +161,8 @@ export async function recordDocumentAction(
   );
   if (result.outcome !== "recorded") return result;
 
-  // After the commit nothing may throw: an error would invite a retry that records the sheet twice.
+  // After the commit nothing may throw: an error would invite a retry that records the document
+  // twice.
   const synced = await reconcileDocument(person, drive, access.folders, documentId).then(
     (reconciled) => reconciled.outcome === "synced",
     (error: unknown) => {
@@ -169,8 +178,9 @@ export async function recordDocumentAction(
  * **Hapus — delete one Perjadin Document** (#398, ADR-0042). **The file is trashed first, then the
  * row**, so a row never vanishes while its public file stays live:
  *
- * 1. **Guard** — Staff and the document — then the connection, before any Drive call. While
- *    Drive is not connected or is broken, Hapus is refused with the upload gate's reason.
+ * 1. **Guard** — Staff, the document and its trip's writer (ADR-0048) — then the connection,
+ *    before any Drive call. While Drive is not connected or is broken, Hapus is refused with the
+ *    upload gate's reason.
  * 2. **Trash the file.** One already in the trash, or gone, counts as done: a retry is safe.
  * 3. **Delete the row and log `document_deleted`**, in one transaction (`deletePerjadinDocument`).
  *    If that fails after the trash, the row stays, pointing at a trashed file; Hapus again ends it.
@@ -183,9 +193,12 @@ export async function deleteDocumentAction(
 ): Promise<DeleteDocumentActionResult> {
   const person = await requirePerson();
 
-  const target = await staffSurface(() => {
+  const target = await staffSurface(async () => {
     requireStaff(person);
-    return documentReconcileTarget(person, documentId);
+    const found = await documentReconcileTarget(person, documentId);
+    // The trip's Group, an Editor or an Administrator (ADR-0048), before the file is trashed.
+    if (found) await requirePerjadinWriter(person, found.perjadin.id);
+    return found;
   });
   if (!target) return { outcome: "no-such-document" };
 

@@ -191,6 +191,23 @@ It shows three things, all worked out afresh on every load:
 instead. A grant-less Staff member lands here, and so does every Staff member right after
 signing in.
 
+**An Administrator gets two tabs here, "Anda" and "Pendamping Lain"** (#440), because showing a
+Staff member how to use `/pendamping` means a screenshot of _their_ page:
+
+- **Anda** is the page described below, greeting included.
+- **Pendamping Lain** has a searchable picker, "Pilih pendamping…", over every Staff Person
+  but the viewer, matching name and email. Choosing one shows that Person's **Perjalanan Dinas
+  Anda** and **Perjalanan Dinas Sebelumnya** exactly as they see them — the same titles,
+  descriptions and empty state ("Anda belum tergabung dalam Perjalanan Dinas.") — with **no
+  greeting**. An id that names no Staff Person reads "Pendamping tidak ditemukan." under the picker.
+- The tab and the Person are in the URL, `/pendamping?tab=lain&pendamping=<id>`, so a refresh or a
+  pasted link keeps the view.
+- **Every control there works, as the Administrator**, not as the other Person: a Persiapan tick, a
+  Tandai or an upload is the Administrator's, and the Log names them. Viewing writes nothing.
+
+For anyone who is not an Administrator — an Editor included — those URL parameters are ignored on
+the server: they get their own page, with no tabs, and nothing of the other Person is loaded or sent.
+
 It opens with one small line, **"Selamat datang kembali, {nama}"**. Below it are two sections, each listing the trips the person is in the
 Group of:
 
@@ -224,6 +241,36 @@ spill sideways. Each section shows three cards with **Tampilkan lebih banyak** f
 left out when it has none. With neither, the page says "Anda belum tergabung dalam Perjalanan
 Dinas."
 
+**Who is on the trip** lists Pendamping and Pimpinan by name, as plain lists, and folds the
+Narasumber away by School (#447) — a trip done PP over several Schools often carries a different
+six or so at each, full names with titles, which listed flat crowd the card:
+
+```
+Narasumber (11)
+› Tampilkan Narasumber SMAN 1 Bontang (6)
+› Tampilkan Narasumber SMAN 2 Bontang (6)
+  Narasumber SMAN 3 Bontang: belum ditugaskan
+› Tampilkan Narasumber belum ditugaskan (1)
+```
+
+- **The heading counts the trip's Narasumber once each**, the unassigned included. A trip with none
+  reads `Narasumber (0)` and nothing beneath it.
+- **A Narasumber belongs to a School** when they are in the "Diajar oleh" of one of its live
+  Sessions on this trip. Each School's list stands alone: someone who taught at two Schools is under
+  both, and someone who taught two of one School's Sessions is there once.
+- **A School with nobody in "Diajar oleh"** says "Narasumber {School}: belum ditugaskan", with
+  nothing to open. Whoever is in no live Session's "Diajar oleh" — someone whose only Session was
+  cancelled included — is under a last toggle, "Narasumber belum ditugaskan", shown only when there
+  is someone.
+- **Schools go by their earliest live Session**, then by name — the timeline's order. Names inside
+  a list go A–Z, one per line.
+- **Each toggle opens on its own** to "Sembunyikan Narasumber {School} (n)", and every one starts
+  closed on each page load. The height animates, and snaps under reduced motion. On a phone each
+  toggle is a full-width tap target, and a long School name wraps.
+
+This is how the trip is usually staffed, shown, not a rule: nothing about entering Narasumber or
+"Diajar oleh" changes, and `/perjadin/[id]` still names them per Session.
+
 **Each Session row of the timeline has its own buttons**: **Tandai** while it is still arranged,
 **Feedback**, and **Foto & Video** (#425) — in both sections, since footage is often uploaded after
 the trip. A cancelled Session is not in the timeline, so it has none. There is no Foto & Video
@@ -253,12 +300,14 @@ described "Upload dokumentasi kegiatan luring untuk sesi ini"
   with the reason said as text.
 
 **Dokumen**, beside Catat Transaksi on every card in both sections, opens **"Dokumen —
-{name}"**: the trip's attendance sheets
+{name}"**: the trip's attendance sheets and each School's SPPD
 ([ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)).
 
-- **The list**, under three headings: Daftar Hadir Peserta, Daftar Hadir Narasumber and Daftar
-  Hadir Pendamping. A Peserta sheet reads `2026-10-14 · SMA Y · Siswa · 08.00–11.30 WITA`; the
-  other two read their date. Each has a **Buka** link that opens the PDF in Drive in a new tab, and
+- **The list**, under four headings: Daftar Hadir Peserta, Daftar Hadir Narasumber, Daftar Hadir
+  Pendamping and SPPD. A Peserta sheet reads `2026-10-14 · SMA Y · Siswa · 08.00–11.30 WITA`; the
+  Narasumber and Pendamping sheets read their date; an SPPD reads its School. The SPPD heading
+  carries **"SPPD: x/y sekolah"** — how many of the trip's Schools have their SPPD — so a missing
+  one shows. Each has a **Buka** link that opens the PDF in Drive in a new tab, and
   "belum tersinkron" while it is not yet in place there. An empty heading says "Belum ada".
 - **Unggah dokumen**: pick the **Jenis dokumen**, then its fields.
   - A Peserta sheet asks for **Tanggal Sesi**, **Waktu Mulai** and **Waktu Selesai** (with the
@@ -269,6 +318,11 @@ described "Upload dokumentasi kegiatan luring untuk sesi ini"
     School that has since left the trip stays listed and can still be deleted.
   - A Narasumber or Pendamping sheet asks for **Tanggal Dokumen**.
   - Both dates are limited to the trip's.
+  - An **SPPD** asks only for **Sekolah**: the trip's Schools, each one that already has its SPPD
+    on this trip marked **"sudah ada"** and not selectable. One School has at most one SPPD per
+    Perjadin; a second is refused before the upload starts with "{School} sudah punya SPPD untuk
+    Perjadin ini. Hapus dulu untuk menggantinya." Hapus then a new upload replaces it. The same
+    School on another Perjadin has its own.
   - **File**: one PDF, "1 file .pdf, maks. 50 MB". Anything else is refused with "Hanya file .pdf",
     and a larger file with the 50 MB message, before anything is uploaded.
 - **Unggah** uploads the PDF straight to Drive and records it. Any refusal keeps every field and
@@ -277,7 +331,7 @@ described "Upload dokumentasi kegiatan luring untuk sesi ini"
 - **Hapus** on each sheet asks first — "Hapus dokumen ini? File akan dipindahkan ke Sampah Google
   Drive." — then moves the file to the Drive trash and removes the sheet. There is no editing: a
   wrong upload is fixed by Hapus and a new upload.
-- Any Staff member uploads and deletes. The button, and Hapus, are disabled with the reason while
+- The trip's Group, an Editor or an Administrator uploads and deletes (ADR-0048). The button, and Hapus, are disabled with the reason while
   Drive is not connected or broken, as Catat Transaksi is.
 
 ### Concerns list
@@ -336,9 +390,17 @@ tool does not schedule one and confirm it later — it **logs a Session that alr
 written straight to _delivered_ (ADR-0036). The form is titled "Catat Sesi daring" and its button
 reads "Tandai Terlaksana"; the date cannot be in the future.
 
+**Recording, editing and deleting an online Session need the Editor Grant** (ADR-0047, #438); an
+Administrator has it implicitly. **Catat Sesi Daring** on `/sesi-daring` and the form on
+`/sekolah/[slug]` are shown only to them, `/sesi-daring/baru` answers 403 to anyone else, and the edit
+and delete controls on `/sesi-daring/[id]` are theirs alone. Everyone signed in still reads every
+online Session.
+
 **An offline Session's own page, `/sesi/[id]`, has a Foto & Video section** (#425), so a Pimpinan —
 who has no `/pendamping` — sees its photos and videos too. Everyone signed in gets the list with
-**Buka**; Staff also get **Hapus** and **Unggah Foto & Video**, which opens the same popup. A
+**Buka**; whoever writes the Session's trip — its Group, an Editor or an Administrator (ADR-0048) —
+also gets **Hapus** and **Unggah Foto & Video**, which opens the same popup, and the Session's own
+writes (Tandai terlaksana, Batalkan Sesi, the date edit). A
 cancelled Session keeps its list but offers no upload. An online Session has none.
 
 **Only an offline Session has a PIC** — its Perjadin's. An online Session has none: a third-party
@@ -385,9 +447,18 @@ allowed and an end before the start refused. The form asks nothing about getting
 Keberangkatan, no Kepulangan, no time, no transport mode — because many trips are done PP, out to a
 nearby Sub-Cluster and back, sometimes daily
 ([ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md)). Each
-Session's date picker is bounded by the two dates. On the trip's own screen Staff correct them with
-**Ubah tanggal** beside the range; the edit moves no Session, and is refused whole if a Session still
-to be delivered would fall outside the new range. A Pimpinan sees the dates read-only.
+Session's date picker is bounded by the two dates. On the trip's own screen whoever writes the trip
+corrects them with **Ubah tanggal** beside the range; the edit moves no Session, and is refused whole
+if a Session still to be delivered would fall outside the new range. Everyone else sees the dates
+read-only.
+
+**Uang Perjalanan is optional on the form** — labelled "Uang Perjalanan (Rp) — opsional" — because a
+trip often has to be planned before anyone knows its figure (#437). Left empty it is "not filled in
+yet", which is not Rp 0. Whoever writes the trip fills it in later with **Isi Uang Perjalanan** on the trip's screen (the
+button reads **Ubah Uang Perjalanan** once it is set); once set it can be changed, to zero included,
+but not emptied again. While it is empty, the money strip on the trip's screen and the Laporan read
+Diterima **"Belum diisi"** and Sisa **"—"**, the `/pendamping` card reads "Uang Perjalanan belum
+diisi" with no Tersisa and no bar, and the export leaves its cell empty.
 
 **A trip goes to one Sub-Cluster.** A Sub-Cluster is a set of Schools near enough that any of
 them can share a journey. Choosing it is what decides which Schools may appear on the trip at
@@ -434,8 +505,8 @@ Perjadin lain" when there are none). **The note is read-only and never blocks**:
 offline Sessions per School is still not enforced, and a School with Sessions elsewhere can be
 planned like any other — only the same School at the same date and time is refused.
 
-The **Advance** is fixed during trip planning and transferred to the PIC before
-departure, so a Perjadin is never in an unfunded state.
+The **Advance** is set at planning or later (#437) and transferred to the PIC before departure; the
+Laporan cannot be filed until it is set.
 
 Offline Sessions happen during a Perjadin. **Online Sessions have no Perjadin at all** —
 which is why counting trips never tells you how much teaching has happened, and why six
@@ -443,11 +514,12 @@ of every eight Sessions are invisible to anything trip-shaped.
 
 **A Perjadin's screen carries a Preparation Checklist** — a private, hand-ticked list of
 pre-departure to-dos, shown under `Persiapan`. It is an internal-monitoring aid and nothing more:
-no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Any Staff
-member may tick any box; the boxes flip optimistically. The checklist's state also shows off the
+no money, no deadline, not a record, and **nothing ever ticks a box automatically**. Whoever writes
+the trip may tick any box; the boxes flip optimistically. The checklist's state also shows off the
 trip's own screen, as an `x/N` pill that greys at zero, ambers part-way and greens when everything is
-done: in the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. For Staff
-the pill opens the checklist in a dialog, toggleable there; for a Pimpinan it is static. The
+done: in the Persiapan column of the Perjadin list, and on the trip cards on `/pendamping`. On a trip
+the viewer writes, the pill opens the checklist in a dialog, toggleable there; on any other row it is
+static. The
 Dashboard's [Persiapan Luring](#persiapan-luring--one-weeks-preparation-checklists) tab follows the
 checklists week by week, read-only.
 
@@ -486,9 +558,9 @@ trip's own.
 
 The levels are edited on [Pengaturan Perjadin](#pengaturan-perjadin--the-preparation-checklist).
 
-**A Perjadin's screen ends with its Dokumen**: the attendance sheets uploaded from the
-`/pendamping` card, under the three kinds, each with a **Buka** link and "belum tersinkron" while it
-is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
+**A Perjadin's screen ends with its Dokumen**: the attendance sheets and SPPDs uploaded from the
+`/pendamping` card, under the four kinds with the "SPPD: x/y sekolah" summary, each with a **Buka**
+link and "belum tersinkron" while it is not yet in place in Drive. It is read-only and shown to everyone signed in, a Pimpinan included;
 uploading and Hapus happen in the card's Dokumen dialog.
 
 **The Perjadin list is a table** ([#343](https://github.com/sugt-itb/sugt-itb-26/issues/343)):
@@ -499,8 +571,20 @@ first — Perjadin by name, Kelompok 2 before Kelompok 10, and two trips of one 
 dates. The header stays in view while the list scrolls, a row opens its trip, and the search box
 above narrows it by the trip's Kelompok, its Schools, its PIC, its Narasumber and its Group.
 
-**The list's header holds two buttons**: Rencanakan Perjadin, for Staff, and beside it **Pengaturan
-Perjadin**, for an Administrator only. Anyone else is not shown the second; it is not in the sidebar.
+**The list's header holds two buttons**: **Rencanakan Perjadin**, for an Editor (ADR-0047, #438 — an
+Administrator has it implicitly), and beside it **Pengaturan Perjadin**, for an Administrator only.
+Anyone else is not shown them; neither is in the sidebar. `/perjadin/baru` answers 403 to a Staff
+member without the Editor Grant, who still runs any trip they are on but cannot plan a new one.
+
+**A trip is written by its Group** — its PIC and its Staff members — **or by an Editor or an
+Administrator** ([ADR-0048](./adr/0048-a-perjadin-is-written-by-its-group.md), #439). Everyone signed
+in reads every trip. On `/perjadin/[id]`, `/perjadin/[id]/laporan` and `/sesi/[id]`, anyone else sees
+everything with every write control absent — Ubah tanggal, Isi/Ubah Uang Perjalanan, Ubah Group, the
+Pimpinan and Narasumber edits, Tambah/Ubah/Batalkan Sesi, Tandai, the Persiapan boxes, Catat
+transaksi, Unggah bukti, Laporkan, Foto & Video's upload and Hapus — and a forced request answers 403.
+Only **Evaluasi Perjadin**'s link stays open to everyone signed in. A Staff member added to a Group
+writes that trip from then on; one who leaves it stops at once. `/pendamping` lists only a person's own
+trips, so every control on its cards stays theirs.
 
 ### The acquittal — the most important screen
 
@@ -566,9 +650,12 @@ convenience but never data. Offline is worth adding eventually, not worth blocki
 remaining. Nothing enters that date — it follows from the Perjadin's end date, so it
 cannot be typed wrong and it moves by itself if the trip's dates are corrected.
 
-**Nothing is gated.** DITSAMA sets that deadline itself, and the tool is never stricter
-than the process it serves — invented friction has the same escape route as duplicated
-work.
+**Nothing is gated on the deadline.** DITSAMA sets that deadline itself, and the tool is never
+stricter than the process it serves — invented friction has the same escape route as duplicated
+work. **Laporkan does wait for Uang Perjalanan** (#437): while it is empty, filing is refused with
+"Isi Uang Perjalanan sebelum melaporkan.", since the Laporan accounts for it. Nothing else waits for
+it — transactions, receipts, Dokumen, Foto & Video, Sessions and Persiapan all work while it is
+empty.
 
 This screen is load-bearing in a way the others are not. Nothing structurally compels a
 PIC to use this tool: the Treasurer accepts any format. So it has to be plainly better
@@ -650,14 +737,35 @@ Separate from every internal record, deliberately and permanently — see
 [ADR-0012](./adr/0012-participants-write-through-a-short-lived-session-token.md).
 
 At the end of a Session a link or QR code is shown, live for **24 hours**. Anyone taught there
-can open it without signing in, say which Class they sat in, Rate three things, leave a comment
-and type their name:
+can open it without signing in — almost always on a phone, so the form is laid out for ~360px —
+say which Class they sat in, type their name, then answer, in this order (#446):
 
-| Aspect         | What a low score means  |
-| -------------- | ----------------------- |
-| **Materials**  | It was not clear.       |
-| **Instructor** | It was not well taught. |
-| **Relevance**  | It will not help us.    |
+| Label on the form                                                                  | Description under it                                | Input                                     |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------- |
+| **Pengalaman hands-on RBL** — Siswa only                                           | Apakah modul RBL yang dibuat mudah dilakukan?       | Rating 1–10, required + optional Komentar |
+| **Materi**                                                                         | Apakah materi yang diberikan mudah dipahami?        | Rating 1–10, required + optional Komentar |
+| **Narasumber**                                                                     | Apakah narasumber menyampaikan materi dengan jelas? | Rating 1–10, required + optional Komentar |
+| **Relevansi**                                                                      | Apakah materi yang diberikan relevan?               | Rating 1–10, required + optional Komentar |
+| **Melalui kegiatan kelas ini apakah meningkatkan atau menambah pengetahuan Anda?** | —                                                   | Free text, optional                       |
+| **Saran dan masukan untuk kegiatan kelas**                                         | —                                                   | Free text, optional                       |
+
+- **Hands-on RBL** (Research-Based Learning) appears, first, once the Participant picks **Siswa**,
+  and disappears for GTK and MS. Rating it and then switching to GTK or MS drops that Rating and
+  its Komentar; nothing about it is sent. Before a Class is picked the form shows the three every
+  Class is asked.
+- It is a full Aspect: a Rating of 7 or below puts it on the concerns list like the others.
+- The two written questions are **not Aspects**: no Rating, never counted, never averaged, never
+  on the concerns list.
+- The descriptions are on the form only. Everywhere else the Aspects keep their short names —
+  Hands-on RBL, Materi, Narasumber, Relevansi.
+
+**On `/feedback`'s Peserta tab**, Hands-on RBL has its own average card and its own filter beside
+Narasumber, Materi and Relevansi. Its average is over the rows that have one — GTK, MS and Siswa
+rows filed before it existed never count as 0 — and reads "—" while none do; a Siswa card filed
+before it reads "—" for it too, and a GTK or MS card has no such line. A row's average is the mean
+of the Ratings it has. Each card shows the two written answers under **"Peningkatan
+pengetahuan"** and **"Saran dan masukan"**, clamped like the comments ("selengkapnya" /
+"sembunyikan"); an empty one shows no heading.
 
 **Nothing asks them to rate themselves.** Comprehension, Participation and Readiness sit on the
 Class Record precisely because they are judgements about the room, and a room grading its own
@@ -881,8 +989,10 @@ SUGT ITB 2026 Internal App Object Storage/
 │       └── 2026-10-12 · Konsumsi · T-9f8e7d6c/          shared by link (the whole folder)
 ├── Dokumen/Pelaksanaan Offline/
 │   └── Kelompok 12 · 11–14 Okt 2026 · … · P-1a2b3c4d/
-│       └── Daftar Hadir Peserta/
-│           └── 2026-10-12 · SMA Pradita Dirgantara · Siswa · Daftar Hadir Peserta · D-5c6d7e8f.pdf   shared
+│       ├── Daftar Hadir Peserta/
+│       │   └── 2026-10-12 · SMA Pradita Dirgantara · Siswa · Daftar Hadir Peserta · D-5c6d7e8f.pdf   shared
+│       └── SPPD/
+│           └── SMA Pradita Dirgantara · SPPD · D-1a2b3c4d.pdf   shared
 └── Foto & Video/Pelaksanaan Offline/
     └── Kelompok 12 · 11–14 Okt 2026 · … · P-1a2b3c4d/
         └── 2026-10-12 · 08.00 · SMA Pradita Dirgantara · S-3e4f5a6b/   one per offline Session
@@ -894,7 +1004,7 @@ SUGT ITB 2026 Internal App Object Storage/
 holds the photos (JPEG, PNG, HEIC or WebP, up to 50 MB) and videos (MP4 or MOV, up to 1000 MB) of
 each offline Session, uploaded as they were taken — a photo keeps its location data — and shared one
 file at a time. A large file is sent to Drive in 16 MB pieces and picks up where it stopped if the
-connection drops. Staff upload them from each Session's **Foto & Video** on `/pendamping` and on `/sesi/[id]`;
+connection drops. The trip's Group, an Editor or an Administrator uploads them from each Session's **Foto & Video** on `/pendamping` and on `/sesi/[id]`;
 anyone signed in views them on `/sesi/[id]`.
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not

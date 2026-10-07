@@ -18,6 +18,7 @@ import {
   addProvince,
   addSchool,
   addSession,
+  asEditor,
   resetDatabase,
 } from "./support/fixtures";
 
@@ -31,7 +32,8 @@ import {
 
 /** A Staff Person. */
 async function staff(email = "rina@ditsama.itb.ac.id", fullName = "Rina Nurhayati") {
-  return addPerson({ fullName, email, role: "Staff" });
+  // Editing and deleting an online Session need the Editor Grant (ADR-0047).
+  return asEditor(await addPerson({ fullName, email, role: "Staff" }));
 }
 
 /**
