@@ -225,7 +225,6 @@ export {
 } from "./preparation-items";
 export {
   deleteSessionFootage,
-  footageKindOf,
   footageSession,
   recordSessionFootage,
   sessionFootageList,

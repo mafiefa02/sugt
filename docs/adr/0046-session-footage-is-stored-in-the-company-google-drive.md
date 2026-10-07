@@ -84,11 +84,21 @@ connection dropped mid-upload, and finished. Two findings:
 
 Whether the `Range` header of a `308` is **readable from script** depends on Drive exposing it
 cross-origin. Both cases work against the stand-in: with `Range` readable the status query is
-authoritative; without it the uploader resumes from the last piece it saw accepted, and takes a piece
-refused at that offset as already held — a guess that can only cost a retry, since Drive refuses a
-piece that leaves a gap. **Not yet verified against Google itself**, which needs the company account:
+authoritative; without it — learnt when a piece's own `308` carries no readable `Range`, since a
+status query's `308` without one is also how Drive says it holds nothing — the uploader resumes from
+the last piece it saw accepted, and takes a piece refused (`400`) at that offset as already held,
+**once**: if the next piece is refused too, the guess is taken back. A wrong guess costs retries,
+never a corrupt file, since Drive refuses a piece that leaves a gap; a `308` that keeps none of a
+piece counts toward giving up, so no answer can make the upload loop. **Not yet verified against Google itself**, which needs the company account:
 whether `www.googleapis.com/upload` exposes `Range`, and how it answers a piece it already holds. That
-check is owed before the first real video, and its result belongs here.
+check is owed before the first real video, and its result belongs here. So is a run on the phones
+Staff actually use — Safari on iOS and Chrome on Android — since only desktop Chromium was tried. The
+stand-in was a throwaway script kept outside the repository: it answered `308` with `Range` (exposed
+or not, per run) while it wanted more, `200` with an id once it had every byte, refused with `400` a
+piece not starting where its held bytes ended, and dropped the connection after the second piece.
+
+A retry of the record step after a lost answer is safe: while the file is still unsynced it reaches
+the commit again, and the same Drive file answers its first row without writing anything twice.
 
 ## Verify → commit → reconcile → delete
 

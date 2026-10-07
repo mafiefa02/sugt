@@ -22,6 +22,8 @@ function simulatedDrive(
     rangeReadable?: boolean;
     /** Request numbers answered with this status instead. */
     statuses?: Map<number, number>;
+    /** Pieces (request numbers) Drive answers `308` to while keeping none of the bytes. */
+    keepsNothing?: (request: number) => boolean;
   } = {},
 ) {
   let held = 0;
@@ -45,6 +47,7 @@ function simulatedDrive(
     if (status) return new Response(null, { status });
 
     const piece = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range);
+    if (piece && options.keepsNothing?.(requests)) return answer();
     if (piece) {
       const [from, to] = [Number(piece[1]), Number(piece[2])];
       const size = (init?.body as Blob).size;
@@ -269,6 +272,55 @@ describe("uploadInPieces, when Drive's Range cannot be read cross-origin", () =>
       }),
     ).resolves.toEqual({ outcome: "uploaded", fileId: "drive-file-1" });
     expect(drive.held()).toBe(total);
+  });
+});
+
+describe("uploadInPieces, on answers that must not wreck an upload", () => {
+  it("resends a piece refused once (a 403 rate limit) when Drive says it holds nothing", async () => {
+    // A `308` with no `Range` from the status query is Drive saying "nothing yet", not a hidden header.
+    const total = PIECE * 2;
+    const drive = simulatedDrive(total, { statuses: new Map([[1, 403]]) });
+
+    await expect(
+      uploadInPieces(SESSION, blobOf(total), {
+        pieceBytes: PIECE,
+        fetch: drive.fetch,
+        sleep: noWait,
+      }),
+    ).resolves.toEqual({ outcome: "uploaded", fileId: "drive-file-1" });
+    expect(drive.held()).toBe(total);
+  });
+
+  it("takes back a wrong guess when Range is hidden and a refused piece was not held", async () => {
+    const total = PIECE * 3;
+    const drive = simulatedDrive(total, {
+      rangeReadable: false,
+      statuses: new Map([[2, 400]]),
+    });
+
+    await expect(
+      uploadInPieces(SESSION, blobOf(total), {
+        pieceBytes: PIECE,
+        fetch: drive.fetch,
+        sleep: noWait,
+      }),
+    ).resolves.toEqual({ outcome: "uploaded", fileId: "drive-file-1" });
+    expect(drive.held()).toBe(total);
+  });
+
+  it("gives up, rather than looping, when Drive keeps none of a piece it answers 308 to", async () => {
+    const total = PIECE * 2;
+    const drive = simulatedDrive(total, { keepsNothing: (request) => request >= 2 });
+
+    await expect(
+      uploadInPieces(SESSION, blobOf(total), {
+        pieceBytes: PIECE,
+        fetch: drive.fetch,
+        sleep: noWait,
+        maxRetries: 3,
+      }),
+    ).resolves.toEqual({ outcome: "failed", reason: "gave-up" });
+    expect(drive.requests()).toBe(5);
   });
 });
 

@@ -3,7 +3,7 @@ import {
   type SessionFootageContentType,
   type SessionFootageKind,
 } from "@sugt/domain";
-import { asc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { session, sessionFootage } from "../schema/delivery";
@@ -62,13 +62,6 @@ export async function footageSession(
   return { outcome: "ok", sessionId, perjadinId: row.perjadinId };
 }
 
-/** The kind a footage type is, or `null` for a type that is not footage. */
-export function footageKindOf(contentType: string): SessionFootageKind | null {
-  return Object.hasOwn(SESSION_FOOTAGE_CONTENT_TYPES, contentType)
-    ? SESSION_FOOTAGE_CONTENT_TYPES[contentType as SessionFootageContentType]
-    : null;
-}
-
 export type NewSessionFootage = {
   /** Generated before the insert: the file's name carries it (`M-{footage8}`). */
   footageId: string;
@@ -82,13 +75,18 @@ export type NewSessionFootage = {
 };
 
 export type RecordSessionFootageResult =
-  | { outcome: "recorded"; perjadinId: string }
-  | FootageSessionRefusal;
+  /**
+   * `footageId` is the new row's — or, when this Drive file was recorded already (a lost answer, a
+   * retry), the existing row's, with nothing written twice.
+   */
+  { outcome: "recorded"; perjadinId: string; footageId: string } | FootageSessionRefusal;
 
 /**
  * **Commit one file of footage and its Activity Log entry, in one transaction** (`footage_uploaded`).
  * The Session is checked again under a row lock, so footage never lands on a Session cancelled since
  * the upload opened. The file is not yet in place: `drive_synced_at` stays null until the reconcile.
+ * Recording a Drive file a second time writes nothing and answers the first row, so a retry after a
+ * lost answer is safe.
  */
 export async function recordSessionFootage(
   caller: Person,
@@ -101,17 +99,28 @@ export async function recordSessionFootage(
     if (target.outcome !== "ok") return target;
 
     const kind = SESSION_FOOTAGE_CONTENT_TYPES[input.contentType];
-    await tx.insert(sessionFootage).values({
-      id: input.footageId,
-      sessionId: input.sessionId,
-      kind,
-      contentType: input.contentType,
-      // Trimmed, and never empty: the CHECK refuses an empty name.
-      originalFilename: input.originalFilename.trim() || "tanpa nama",
-      driveFileId: input.driveFileId,
-      byteSize: input.byteSize,
-      uploadedByPersonId: caller.id,
-    });
+    const [inserted] = await tx
+      .insert(sessionFootage)
+      .values({
+        id: input.footageId,
+        sessionId: input.sessionId,
+        kind,
+        contentType: input.contentType,
+        // Trimmed, and never empty: the CHECK refuses an empty name.
+        originalFilename: input.originalFilename.trim() || "tanpa nama",
+        driveFileId: input.driveFileId,
+        byteSize: input.byteSize,
+        uploadedByPersonId: caller.id,
+      })
+      .onConflictDoNothing({ target: sessionFootage.driveFileId })
+      .returning({ id: sessionFootage.id });
+    if (!inserted) {
+      const [existing] = await tx
+        .select({ id: sessionFootage.id })
+        .from(sessionFootage)
+        .where(eq(sessionFootage.driveFileId, input.driveFileId));
+      return { outcome: "recorded", perjadinId: target.perjadinId, footageId: existing!.id };
+    }
 
     const details = await footageLogDetails(tx, {
       footageId: input.footageId,
@@ -120,7 +129,7 @@ export async function recordSessionFootage(
       originalFilename: input.originalFilename.trim() || "tanpa nama",
     });
     await logActivity(tx, caller, target.perjadinId, { action: "footage_uploaded", details });
-    return { outcome: "recorded", perjadinId: target.perjadinId };
+    return { outcome: "recorded", perjadinId: target.perjadinId, footageId: inserted.id };
   });
 }
 
@@ -193,7 +202,7 @@ export type SessionFootageRow = {
   unsynced: boolean;
 };
 
-/** **A Session's footage**, oldest first. Open to anyone signed in. */
+/** **A Session's footage**, newest first. Open to anyone signed in. */
 export async function sessionFootageList(
   _caller: Person,
   sessionId: string,
@@ -213,5 +222,5 @@ export async function sessionFootageList(
     .from(sessionFootage)
     .innerJoin(person, eq(person.id, sessionFootage.uploadedByPersonId))
     .where(sql`${sessionFootage.sessionId}::text = ${sessionId}`)
-    .orderBy(asc(sessionFootage.uploadedAt), asc(sessionFootage.id));
+    .orderBy(desc(sessionFootage.uploadedAt), desc(sessionFootage.id));
 }

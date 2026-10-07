@@ -28,7 +28,10 @@ import { reassertSessionFootageNames } from "./rename-session-footage";
  * reconnect callback runs the sweep half of it too.
  */
 
-/** How many unsynced transactions one press reconciles — and, after them, how many documents. */
+/**
+ * How many unsynced transactions one press reconciles — and, after them, how many documents, and then
+ * how many files of footage.
+ */
 export const SWEEP_LIMIT = 25;
 
 /**
@@ -39,7 +42,10 @@ export const SWEEP_LIMIT = 25;
  */
 export const SWEEP_BUDGET_MS = 40_000;
 
-/** How many Perjadin folders one press of Periksa koneksi renames (#407). */
+/**
+ * After how many renames one press of Periksa koneksi stops re-asserting names (#407): Perjadin
+ * folders, and Session footage folders with their files (ADR-0046). Checked between folders.
+ */
 export const RENAME_LIMIT = 25;
 
 export type SweepFailure = {
@@ -77,7 +83,8 @@ export type SweepReport = {
 /**
  * **The sweep**: reconcile the unsynced transactions in the order `unsyncedTransactions` gives — at
  * most `limit`, one at a time, and none started once `budgetMs` has passed — then the unsynced
- * Perjadin Documents the same way (ADR-0042), within what is left of the budget. A trashed folder
+ * Perjadin Documents the same way (ADR-0042), then the unsynced Session Footage (ADR-0046), within
+ * what is left of the budget. A trashed folder
  * is reported, never recreated (the reconciles' own rule). `waiting` is what is still owed
  * afterwards: the failures, and anything past the bound or the budget.
  */
@@ -176,12 +183,15 @@ export type FolderNameReport = {
 /**
  * **Re-assert every Perjadin folder's name** (#407): the Drive folders of every Perjadin that has
  * one, receipts then Dokumen then Foto & Video, in trip-id order — and then every Session's footage
- * folder and its files (ADR-0046), named for the Session's date, time and School. Each folder is read and renamed only when its name
- * is not `perjadinFolderName` — an out-of-date one from before ADR-0044, a Sub-Cluster renamed since,
- * or a rename after a write that did not happen. A folder already right costs a read and no write.
+ * folder and its files (ADR-0046), named for the Session's date, time and School. A Perjadin folder is
+ * read and renamed only when its name is not `perjadinFolderName` — an out-of-date one from before
+ * ADR-0044, a Sub-Cluster renamed since, or a rename after a write that did not happen — and a Session
+ * folder only when it is not `sessionFootageFolderName`, its files renamed first
+ * (`reassertSessionFootageNames`). A folder already right costs a read and no write.
  *
  * **Bounded per press, and re-runnable.** It stops after `limit` renames or once `budgetMs` has
- * passed, and reports how many folders it did not reach; the next press re-reads the ones it already
+ * passed — inside a Session's files too — and reports how many folders it did not reach; the next
+ * press re-reads the ones it already
  * put right and carries on. A folder trashed or deleted by hand is reported and skipped, never
  * recreated — the reconciles' own rule — and never renamed in the trash.
  */
@@ -234,9 +244,14 @@ export async function reassertPerjadinFolderNames(
       folder: "sesi-foto-video" as const,
     };
     try {
-      const named = await reassertSessionFootageNames(drive, folder);
+      const named = await reassertSessionFootageNames(drive, folder, startedAt + budgetMs);
       renamed += named.renamed;
       if (named.problem) failures.push({ ...failure, reason: named.problem });
+      if (!named.finished) {
+        // Out of time inside this Session: it counts as not reached, and the next press resumes it.
+        sessionsChecked -= 1;
+        break;
+      }
     } catch (error) {
       if (!isDriveFailure(error)) throw error;
       failures.push({ ...failure, reason: "drive-failed" });
@@ -301,7 +316,8 @@ export type DriveCheckReport =
  * 3. **The safety check**: `permissions.list` on the root and on `_staging`. An `anyone` permission
  *    on either — inherited or direct — means the folder has been moved under a link-shared folder, or
  *    shared by hand, and files nobody should see can be opened by link.
- * 4. **The Dokumen folders** (`ensureDokumenFolders`), made if missing, when the tree is usable.
+ * 4. **The Dokumen and Foto & Video folders** (`ensureDokumenFolders`, `ensureFootageFolders`), made
+ *    if missing, when the tree is usable.
  * 5. **The sweep** (`sweepUnsynced`), only when the tree is usable; otherwise how much waits.
  * 6. **The folder names** (`reassertPerjadinFolderNames`, #407), only when the tree is usable, within
  *    what the sweep left of `SWEEP_BUDGET_MS`. This is how folders made before ADR-0044 take the new

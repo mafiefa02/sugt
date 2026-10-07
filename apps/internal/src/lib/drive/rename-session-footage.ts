@@ -22,29 +22,33 @@ export type SessionFootageNameResult = {
   renamed: number;
   /** The folder could not be named, and so its files were left alone. */
   problem: "folder-trashed" | "folder-missing" | null;
+  /** `false` when the deadline came first: the folder keeps its old name, so the next pass resumes. */
+  finished: boolean;
 };
 
 /**
- * Put one Session's footage folder and its files under their right names. A file that has gone, or is
- * in the trash, is skipped: it has nothing to show under any name. A Drive failure throws, for the
- * caller to answer.
+ * Put one Session's footage folder and its files under their right names. **The files go first and
+ * the folder last**, so a folder already carrying its right name means its files do too: a pass over
+ * a Session that needs nothing costs one read, however many files it holds. A file that has gone, or
+ * is in the trash, is skipped. Past `deadline` it stops between files, before the folder, so a later
+ * pass picks up where it stopped. A Drive failure throws, for the caller to answer.
  */
 export async function reassertSessionFootageNames(
   drive: DriveClient,
   folder: SessionFootageFolder,
+  deadline = Number.POSITIVE_INFINITY,
 ): Promise<SessionFootageNameResult> {
   const { naming } = folder;
   const found = await drive.getFile(folder.folderId);
-  if (!found) return { renamed: 0, problem: "folder-missing" };
-  if (found.trashed) return { renamed: 0, problem: "folder-trashed" };
+  if (!found) return { renamed: 0, problem: "folder-missing", finished: true };
+  if (found.trashed) return { renamed: 0, problem: "folder-trashed", finished: true };
+
+  const folderName = sessionFootageFolderName(naming);
+  if (found.name === folderName) return { renamed: 0, problem: null, finished: true };
 
   let renamed = 0;
-  const folderName = sessionFootageFolderName(naming);
-  if (found.name !== folderName) {
-    await drive.updateFile(folder.folderId, { name: folderName });
-    renamed += 1;
-  }
   for (const placed of folder.files) {
+    if (Date.now() > deadline) return { renamed, problem: null, finished: false };
     const file = await drive.getFile(placed.driveFileId);
     if (!file || file.trashed) continue;
     const name = footageFileName({
@@ -57,7 +61,8 @@ export async function reassertSessionFootageNames(
       renamed += 1;
     }
   }
-  return { renamed, problem: null };
+  await drive.updateFile(folder.folderId, { name: folderName });
+  return { renamed: renamed + 1, problem: null, finished: true };
 }
 
 /**

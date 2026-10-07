@@ -1,4 +1,8 @@
-import type { SessionFootageContentType, SessionFootageKind } from "@sugt/domain";
+import {
+  SESSION_FOOTAGE_CONTENT_TYPES,
+  type SessionFootageContentType,
+  type SessionFootageKind,
+} from "@sugt/domain";
 
 import { SEPARATOR, short } from "./receipt-files";
 
@@ -17,8 +21,11 @@ import { SEPARATOR, short } from "./receipt-files";
  * is written `08.00`, since Drive names avoid `:`, and a `/` in a School's name becomes `-`.
  */
 
-/** Enough of a file's head to sniff every footage type: the ISO-BMFF brand sits at bytes 8–11. */
-export const FOOTAGE_SNIFF_LENGTH = 16;
+/**
+ * Enough of a file's head to sniff every footage type: the ISO-BMFF major brand sits at bytes 8–11,
+ * and the compatible brands that tell an AVIF from a HEIF start at byte 16.
+ */
+export const FOOTAGE_SNIFF_LENGTH = 32;
 
 /** The ISO-BMFF major brands of a HEIC or HEIF still image. */
 const HEIF_BRANDS = new Set(["heic", "heix", "mif1", "msf1", "heif", "hevc", "hevx"]);
@@ -39,7 +46,12 @@ const MP4_BRANDS = new Set([
   "dash",
   "3gp4",
   "3gp5",
+  // Sony's camera MP4.
+  "XAVC",
 ]);
+
+/** Compatible brands that make a `mif1`/`msf1` file an AVIF — a different image format, refused. */
+const AVIF_BRANDS = new Set(["avif", "avis"]);
 
 function ascii(bytes: Uint8Array, start: number, end: number): string {
   return String.fromCharCode(...bytes.slice(start, end));
@@ -61,7 +73,18 @@ export function sniffFootageType(bytes: Uint8Array): SessionFootageContentType |
   if (ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 12) === "WEBP") return "image/webp";
   if (ascii(bytes, 4, 8) === "ftyp") {
     const brand = ascii(bytes, 8, 12);
-    if (HEIF_BRANDS.has(brand)) return "image/heic";
+    if (HEIF_BRANDS.has(brand)) {
+      // `mif1` and `msf1` are generic, and some AVIF writers lead with them: an AVIF says so among the
+      // compatible brands, four bytes each from byte 16 to the end of the box (or of what was read).
+      const boxEnd = Math.min(
+        new DataView(bytes.buffer, bytes.byteOffset).getUint32(0),
+        bytes.length,
+      );
+      for (let offset = 16; offset + 4 <= boxEnd; offset += 4) {
+        if (AVIF_BRANDS.has(ascii(bytes, offset, offset + 4))) return null;
+      }
+      return "image/heic";
+    }
     if (brand === "qt  ") return "video/quicktime";
     if (MP4_BRANDS.has(brand)) return "video/mp4";
   }
@@ -87,13 +110,8 @@ export function footageExtension(contentType: SessionFootageContentType): string
  * stored as `image/heic` once sniffed. Anything else is refused before Drive is asked.
  */
 export const DECLARABLE_FOOTAGE_TYPES: Record<string, SessionFootageKind> = {
-  "image/jpeg": "foto",
-  "image/png": "foto",
-  "image/heic": "foto",
+  ...SESSION_FOOTAGE_CONTENT_TYPES,
   "image/heif": "foto",
-  "image/webp": "foto",
-  "video/mp4": "video",
-  "video/quicktime": "video",
 };
 
 /** `08:00:00` or `08:00` as `08.00`. */

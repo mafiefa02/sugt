@@ -24,8 +24,10 @@
  * it. When a `308` carries no readable `Range`, the upload resumes from the last piece it knows Drive
  * accepted — a `308` for a piece arrives only once the piece is received — which is never ahead of
  * what Drive holds. One case that is not enough, found in the browser: a piece the browser re-sent on
- * its own is held, so re-sending it is refused for ever; a refused piece at the known offset is
- * therefore taken as held. ADR-0046 records what was verified, against what, and what was not.
+ * its own is held, so re-sending it is refused for ever; a piece refused (`400`) at the known offset
+ * is therefore taken as held — once, and taken back if the next piece is refused too. A `308` that
+ * keeps none of a piece counts toward giving up, so no answer can make it loop. ADR-0046 records what
+ * was verified, against what, and what was not.
  *
  * Everything it touches is passed in (`fetch`, `sleep`), so the protocol is tested without a network.
  */
@@ -69,9 +71,9 @@ async function fileIdOf(response: Response): Promise<string | null> {
   return typeof body?.id === "string" ? body.id : null;
 }
 
-/** A status a retry may cure: Drive's own trouble or its rate limit. */
+/** A status a retry may cure: a timeout, Drive's own trouble or its rate limit. */
 function transient(status: number): boolean {
-  return status === 429 || status >= 500;
+  return status === 408 || status === 429 || status >= 500;
 }
 
 export async function uploadInPieces(
@@ -86,11 +88,17 @@ export async function uploadInPieces(
   const sleep = options.sleep ?? defaultSleep;
   const total = blob.size;
 
-  /** What Drive is known to hold: never ahead of it. */
+  /** Where the next piece starts: what Drive is known to hold, or — once — a guess past it. */
   let accepted = 0;
   let failures = 0;
-  /** Whether the last status query told us what Drive holds — cross-origin, only if `Range` is exposed. */
-  let rangeRead = true;
+  /**
+   * Whether `Range` is hidden from script. Learnt from a piece's `308`: Drive then holds bytes, so a
+   * `308` with no readable `Range` means it is not exposed. A status query's `308` without one proves
+   * nothing — that is also how Drive says it holds nothing yet.
+   */
+  let rangeHidden = false;
+  /** What Drive held before a guess past a refused piece, so a wrong guess can be taken back. */
+  let beforeGuess: number | null = null;
 
   /** Wait, then ask Drive what it holds. `"done"` with the id when it already has everything. */
   async function recover(): Promise<{ done: string } | "again" | "refused"> {
@@ -107,9 +115,7 @@ export async function uploadInPieces(
         return id ? { done: id } : "refused";
       }
       if (status.status === 308) {
-        const held = heldThrough(status);
-        rangeRead = held !== null;
-        accepted = Math.max(accepted, held ?? accepted);
+        accepted = Math.max(accepted, heldThrough(status) ?? accepted);
         return "again";
       }
       return transient(status.status) ? "again" : "refused";
@@ -139,18 +145,38 @@ export async function uploadInPieces(
     }
     if (response && response.status === 308) {
       // Received. Drive's `Range` is the authority when readable; otherwise this piece's end.
-      accepted = heldThrough(response) ?? to;
-      failures = 0;
-      options.onProgress?.(accepted, total);
+      const held = heldThrough(response);
+      if (held === null) rangeHidden = true;
+      const next = held ?? to;
+      if (next > from) {
+        accepted = next;
+        failures = 0;
+        beforeGuess = null;
+        options.onProgress?.(accepted, total);
+        continue;
+      }
+      // Drive kept none of the piece. Not progress, so it counts toward giving up — never a loop.
+      failures += 1;
+      if (failures > maxRetries) return { outcome: "failed", reason: "gave-up" };
+      await sleep(backoffMs(failures));
       continue;
     }
     // A drop, Drive's own trouble, or a piece it would not take: ask what it holds before deciding.
-    const refused = response !== null && !transient(response.status);
+    const refusedAsHeld = response?.status === 400;
     const recovered = await recover();
-    // Drive refused a piece starting where it was last known to stand, and its answer could not say
-    // what it holds: it already has that piece — the browser re-sent it on its own. Go past it. A
-    // wrong guess costs a retry, never a corrupt file: Drive refuses a piece that leaves a gap.
-    if (recovered === "again" && refused && !rangeRead && accepted === from) accepted = to;
+    if (recovered === "again" && rangeHidden && refusedAsHeld && accepted === from) {
+      if (beforeGuess === null) {
+        // Drive refused a piece starting where it was last known to stand, and cannot say what it
+        // holds: the browser most likely re-sent that piece on its own, so Drive has it. Go past it,
+        // once. Drive refuses a piece that leaves a gap, so a wrong guess never corrupts the file.
+        beforeGuess = accepted;
+        accepted = to;
+      } else {
+        // The guess was wrong — the piece after it was refused too. Take it back, and guess no more
+        // until a piece is accepted.
+        accepted = beforeGuess;
+      }
+    }
     if (recovered === "refused") {
       return { outcome: "failed", reason: failures > maxRetries ? "gave-up" : "refused" };
     }

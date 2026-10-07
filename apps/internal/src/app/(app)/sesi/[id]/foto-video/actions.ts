@@ -52,7 +52,7 @@ import type {
  * session, in 16 MiB pieces (`uploadInPieces`), one file at a time.
  */
 
-/** A Session's footage, oldest first. Any signed-in Person. */
+/** A Session's footage, newest first. Any signed-in Person. */
 export async function sessionFootageAction(sessionId: string): Promise<SessionFootageRow[]> {
   const person = await requirePerson();
   return sessionFootageList(person, sessionId);
@@ -106,8 +106,9 @@ export async function openFootageUploadAction(
 
 /**
  * Check the landed file in Drive — the server never saw the bytes. It must sit in `_staging`,
- * untrashed, carry this trip's `sugtPerjadinId`, and its first bytes must be one of the six types,
- * of the kind the browser declared, within that kind's cap by Drive's own count.
+ * untrashed, carry this trip's `sugtPerjadinId` and this Session's `sugtSessionId`, and its first
+ * bytes must be one of the six types, of the kind the browser declared, within that kind's cap by
+ * Drive's own count.
  */
 async function verifyFootage(
   drive: DriveClient,
@@ -122,7 +123,11 @@ async function verifyFootage(
     >
 > {
   const file = await drive.getFile(input.driveFileId);
-  if (!isStagedUploadFor(file, stagingFolderId, perjadinId, MAX_FOOTAGE_VIDEO_BYTES)) {
+  if (
+    !isStagedUploadFor(file, stagingFolderId, perjadinId, MAX_FOOTAGE_VIDEO_BYTES) ||
+    // Opened for this very Session: not another Session's upload, nor a receipt still in `_staging`.
+    file.appProperties.sugtSessionId !== input.sessionId
+  ) {
     return { outcome: "file-unverified" };
   }
   const sniffed = sniffFootageType(
@@ -182,17 +187,17 @@ export async function recordFootageAction(
   );
   if (result.outcome !== "recorded") return result;
 
-  // After the commit nothing may throw: an error would invite a retry that records the file twice.
-  const synced = await reconcileFootage(person, drive, access.folders, footageId).then(
+  // After the commit nothing may throw. A retry is safe anyway: the same file answers its first row.
+  const synced = await reconcileFootage(person, drive, access.folders, result.footageId).then(
     (reconciled) => reconciled.outcome === "synced",
     (error: unknown) => {
-      console.error(`Reconcile of footage ${footageId} threw after its commit.`, error);
+      console.error(`Reconcile of footage ${result.footageId} threw after its commit.`, error);
       return false;
     },
   );
   revalidatePath(`/sesi/${input.sessionId}`);
   revalidatePath("/pendamping");
-  return { outcome: "recorded", footageId, synced };
+  return { outcome: "recorded", footageId: result.footageId, synced };
 }
 
 /**

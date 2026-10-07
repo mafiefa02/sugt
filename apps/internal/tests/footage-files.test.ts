@@ -12,9 +12,9 @@ import { describe, expect, it } from "vitest";
 
 const text = (value: string) => [...value].map((character) => character.charCodeAt(0));
 
-/** The first 16 bytes of a file: `prefix`, then zeros. */
+/** The first 32 bytes of a file: `prefix`, then zeros. */
 function head(...prefix: number[]) {
-  const bytes = new Uint8Array(16);
+  const bytes = new Uint8Array(32);
   bytes.set(prefix);
   return bytes;
 }
@@ -32,6 +32,12 @@ describe("sniffFootageType", () => {
     ["MP4 (isom)", isoBmff("isom"), "video/mp4"],
     ["MP4 (mp42)", isoBmff("mp42"), "video/mp4"],
     ["MOV", isoBmff("qt  "), "video/quicktime"],
+    ["Sony XAVC MP4", isoBmff("XAVC"), "video/mp4"],
+    [
+      "a HEIF whose compatible brands are HEIF's",
+      head(0, 0, 0, 0x18, ...text("ftypmif1"), 0, 0, 0, 0, ...text("mif1heic")),
+      "image/heic",
+    ],
   ])("accepts %s", (_name, bytes, expected) => {
     expect(sniffFootageType(bytes)).toBe(expected);
   });
@@ -40,6 +46,10 @@ describe("sniffFootageType", () => {
     ["a PDF", head(...text("%PDF-1.7"))],
     ["a GIF", head(...text("GIF89a"))],
     ["an AVIF", isoBmff("avif")],
+    [
+      "an AVIF that leads with the generic HEIF brand",
+      head(0, 0, 0, 0x18, ...text("ftypmif1"), 0, 0, 0, 0, ...text("mif1avif")),
+    ],
     ["a RIFF that is not WebP", head(...text("RIFF"), 0, 0, 0, 0, ...text("WAVE"))],
     ["an MP3", head(...text("ID3"))],
     ["nothing", new Uint8Array(0)],

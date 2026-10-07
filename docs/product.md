@@ -825,7 +825,9 @@ was recorded while the connection was down, as Periksa koneksi does below.
 - **every Perjadin folder's name**, receipts, Dokumen and Foto & Video, brought to the trip's name
   (`Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang · P-1a2b3c4d`), and every Session's Foto & Video
   folder and files brought to the Session's date, time and School: "{n} nama folder dan berkas
-  diganti, {m} folder tersisa". It renames up to 25 per press; a folder already right is only read. A
+  diganti, {m} folder tersisa". It stops after 25 renamed folders, or when the press's time is up,
+  even part-way through one Session's files; a folder already right is only read, and a Session
+  folder already right means its files are too, so they are not read at all. A
   folder in the Drive trash or gone is listed with the reason and left alone. Folders made before
   the name changed, or whose Sub-Cluster was renamed since, take the new name here — press again
   until nothing is left.

@@ -1589,9 +1589,10 @@ Video". **The database holds** each file's kind against its type and its kind's 
 "photo", and that the uploader is Staff, by the composite key a PIC's is held by. `content_type` is
 the type the server **sniffed**; a HEIF file is stored as `image/heic`.
 
-**The application holds the rest**, in `recordSessionFootage`: the Session is offline and not
-cancelled when the footage is added — checked again under a row lock inside the commit — and the
-declared kind matches the sniffed one. Footage of a Session cancelled later stays. The key to
+**The application holds the rest**: in `recordSessionFootage`, the Session is offline and not
+cancelled when the footage is added — checked again under a row lock inside the commit — and, in
+the upload's verify step before it, the file was opened for this Session and its declared kind
+matches the sniffed one. Footage of a Session cancelled later stays. The key to
 `session` has **no cascade**: offline Sessions are only ever cancelled, so a delete that would orphan
 Drive files is refused rather than followed.
 
@@ -2100,7 +2101,8 @@ connection made before them has neither, and a receipt must not wait on them. A 
 koneksi and the document reconcile each make whichever is unset, missing or trashed, and claim it by
 compare-and-set, so no Administrator has to reconnect for them. **`footage_folder_id` and
 `footage_pelaksanaan_offline_folder_id`** are `Foto & Video/` and its `Pelaksanaan Offline/`
-(ADR-0046), kept and ensured the same way, by the footage reconcile instead.
+(ADR-0046), kept and ensured the same way — on connect, by Periksa koneksi and by the footage
+reconcile.
 
 **Who reaches it.** The card's read and the connect writes need the Administrator Grant. The
 credential read, and the two writes a token refresh makes (`last_used_at`, broken), need Staff,

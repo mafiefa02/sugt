@@ -1,5 +1,8 @@
 import { checkDriveConnectionAction } from "-/app/(app)/pengaturan/actions";
-import { editPerjadinSessionAction } from "-/app/(app)/perjadin/[id]/actions";
+import {
+  editPerjadinSessionAction,
+  updatePerjadinDatesAction,
+} from "-/app/(app)/perjadin/[id]/actions";
 import { moveSessionDateAction } from "-/app/(app)/sesi/[id]/actions";
 import {
   deleteFootageAction,
@@ -18,6 +21,7 @@ import {
   activityLogAksi,
   activityLogRincian,
   deleteSessionFootage,
+  recordSessionFootage,
   sessionFootageList,
   type Person,
 } from "@sugt/db/queries";
@@ -25,6 +29,7 @@ import { MAX_FOOTAGE_PHOTO_BYTES, MAX_FOOTAGE_VIDEO_BYTES } from "@sugt/domain";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { logActivity } from "../../../packages/db/src/queries/activity-log";
 import { connectDrive, digestOf, FORBIDDEN, jpeg, pdf, stubTokenEndpoint } from "./support/drive";
 import {
   addCluster,
@@ -55,6 +60,12 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({
   headers: vi.fn(async () => new Headers({ origin: "https://preview-42.sugt.test" })),
 }));
+// The Activity Log write, wrapped so one test can refuse it inside the commit's transaction.
+vi.mock("../../../packages/db/src/queries/activity-log", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../packages/db/src/queries/activity-log")>();
+  return { ...actual, logActivity: vi.fn(actual.logActivity) };
+});
 vi.mock("@sugt/db/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@sugt/db/queries")>();
   return { ...actual, deleteSessionFootage: vi.fn(actual.deleteSessionFootage) };
@@ -298,6 +309,64 @@ describe("verifying what landed", () => {
     ).resolves.toEqual({ outcome: "file-unverified" });
   });
 
+  it("refuses a file opened for another Session of the same trip", async () => {
+    const { session, school, trip } = await scene();
+    const other = await addOfflineSession({
+      schoolId: school.id,
+      heldOn: "2026-10-13",
+      startsAt: "10:00",
+      perjadinId: trip.id,
+    });
+    const driveFileId = await upload(other.id, jpeg());
+
+    await expect(
+      recordFootageAction({
+        sessionId: session.id,
+        driveFileId,
+        originalFilename: "a.jpg",
+        contentType: "image/jpeg",
+      }),
+    ).resolves.toEqual({ outcome: "file-unverified" });
+  });
+
+  it("waits for a cancellation in flight, and refuses once it commits", async () => {
+    const { session, staff } = await scene();
+    const driveFileId = await upload(session.id, jpeg());
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let locked!: () => void;
+    const lockTaken = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    // Another request cancelling the Session, its transaction still open while the footage commits.
+    const cancelling = db.transaction(async (tx) => {
+      await tx
+        .update(schema.session)
+        .set({ status: "cancelled", cancelledReason: "Hujan" })
+        .where(eq(schema.session.id, session.id));
+      locked();
+      await held;
+    });
+    await lockTaken;
+
+    const recording = recordSessionFootage(staff, {
+      footageId: "00000000-0000-4000-8000-0000000000f1",
+      sessionId: session.id,
+      contentType: "image/jpeg",
+      originalFilename: "a.jpg",
+      driveFileId,
+      byteSize: 4096,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    release();
+    await cancelling;
+
+    await expect(recording).resolves.toEqual({ outcome: "session-cancelled" });
+    await expect(footage()).resolves.toEqual([]);
+  });
+
   it("refuses a Session cancelled after the upload opened", async () => {
     const { session } = await scene();
     const driveFileId = await upload(session.id, jpeg());
@@ -385,18 +454,19 @@ describe("an upload, recorded and reconciled", () => {
     expect(b.parents).toEqual(a.parents);
     expect(b.name).toMatch(/ · Video · M-[0-9a-f]{8}\.mov$/);
     const rows = await sessionFootageList(staffPerson, session.id);
+    // Newest first.
     expect(rows.map((row) => [row.kind, row.contentType])).toEqual([
-      ["foto", "image/jpeg"],
       ["video", "video/quicktime"],
+      ["foto", "image/jpeg"],
     ]);
   });
 
-  it("commits the row and its Log entry together: one refused, neither written", async () => {
+  it("commits the row and its Log entry together: the Log refused, the row undone", async () => {
     const { session } = await scene();
     const driveFileId = await upload(session.id, jpeg());
-    // A caller whose Person does not exist: the row's Staff key refuses it inside the transaction.
-    const ghost = { ...staffPerson, id: "00000000-0000-0000-0000-00000000dead" } as Person;
-    vi.mocked(requirePerson).mockResolvedValue(ghost);
+    // The Log entry is written after the row, inside the same transaction: refuse it, and the row
+    // already inserted must go with it.
+    vi.mocked(logActivity).mockRejectedValueOnce(new Error("log refused"));
 
     await expect(
       recordFootageAction({
@@ -405,9 +475,38 @@ describe("an upload, recorded and reconciled", () => {
         originalFilename: "a.jpg",
         contentType: "image/jpeg",
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("log refused");
     await expect(footage()).resolves.toEqual([]);
     await expect(logged()).resolves.toEqual([]);
+  });
+
+  it("records a Drive file once: a retry while it is unsynced answers the first row", async () => {
+    const { session } = await scene();
+    const driveFileId = await upload(session.id, jpeg());
+    const record = () =>
+      recordFootageAction({
+        sessionId: session.id,
+        driveFileId,
+        originalFilename: "a.jpg",
+        contentType: "image/jpeg",
+      });
+
+    // The first answer is lost and its reconcile failed, so the file is still in `_staging`: the
+    // browser's retry passes verify again and reaches the commit.
+    vi.spyOn(drive, "createFolder").mockRejectedValueOnce(
+      new DriveRequestError("files.create", 503),
+    );
+    const first = await record();
+    const second = await record();
+
+    expect(second).toEqual(
+      expect.objectContaining({
+        outcome: "recorded",
+        footageId: first.outcome === "recorded" ? first.footageId : "",
+      }),
+    );
+    await expect(footage()).resolves.toHaveLength(1);
+    await expect(logged()).resolves.toHaveLength(1);
   });
 
   it("keeps the footage, unsynced, when the reconcile fails; a second run finishes it, once", async () => {
@@ -528,6 +627,35 @@ describe("renames", () => {
     const file = drive.files.get(driveFileId)!;
     expect(file.name.startsWith("2026-10-16 · ")).toBe(true);
     expect(drive.files.get(file.parents[0]!)?.name.startsWith("2026-10-16 · 10.00 · ")).toBe(true);
+  });
+});
+
+describe("the Perjadin's Foto & Video folder", () => {
+  it("is renamed with the trip's other folders when its dates are corrected", async () => {
+    const { session, trip } = await scene();
+    await uploadAndRecord(session.id);
+    const [before] = await db.select().from(schema.perjadin).where(eq(schema.perjadin.id, trip.id));
+
+    await expect(
+      updatePerjadinDatesAction(trip.id, { startsOn: "2026-10-13", endsOn: "2026-10-16" }),
+    ).resolves.toMatchObject({ outcome: "updated" });
+
+    expect(drive.files.get(before!.driveFootageFolderId!)!.name).toBe(
+      `Kelompok 18 · 13–16 Okt 2026 · SMAN 1/Bontang · P-${trip.id.slice(0, 8)}`,
+    );
+  });
+
+  it("is brought back to its name by Periksa koneksi", async () => {
+    const { session, trip } = await scene();
+    await uploadAndRecord(session.id);
+    const [row] = await db.select().from(schema.perjadin).where(eq(schema.perjadin.id, trip.id));
+    await drive.updateFile(row!.driveFootageFolderId!, { name: "lama" });
+
+    await checkDriveConnectionAction();
+
+    expect(drive.files.get(row!.driveFootageFolderId!)!.name).toBe(
+      `Kelompok 18 · 12–16 Okt 2026 · SMAN 1/Bontang · P-${trip.id.slice(0, 8)}`,
+    );
   });
 });
 
