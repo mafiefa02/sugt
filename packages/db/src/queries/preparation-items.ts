@@ -30,10 +30,26 @@ import { requireGrant } from "./staff-only";
  * **The system item** — the one whose tick a Teaching-Team change clears — may be reworded but never
  * removed or hidden, at any level. That refusal is here, not only on the screen.
  *
- * **A wording** is trimmed, may not be empty, and is at most `MAX_PREPARATION_ITEM_LABEL_LENGTH`
- * characters. A new item, or a wording given at a level, may not repeat one that already applies at
- * that level — compared ignoring case and repeated spaces.
+ * **A wording** is trimmed, its runs of spaces made one, may not be empty, and is at most
+ * `MAX_PREPARATION_ITEM_LABEL_LENGTH` characters. A new item, or any rewording, may not repeat
+ * another item's wording on the list of the level it is given at — compared ignoring case. Only that
+ * level's list: a Semua item may still share a wording with one Cluster's own item.
+ *
+ * **Adding, rewording and moving take one lock** (`lockDefinitions`), so the duplicate check and the
+ * write it guards, or a move's read of the order and its renumbering, cannot interleave with another.
  */
+
+/** A transaction on `db`. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Serialise the writes that read the definitions before changing them: adding, rewording and moving.
+ * A transaction-scoped advisory lock, so it is released at commit; a level that has no row of its own
+ * to lock (Semua) is covered the same way as one that does.
+ */
+async function lockDefinitions(tx: Tx): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('preparation_item_definitions'))`);
+}
 
 /** Where an item is defined. */
 export type PreparationScope =
@@ -49,7 +65,7 @@ type LabelRefusal = { outcome: "label-required" } | { outcome: "label-too-long" 
 
 /** Trim a wording, or refuse it. */
 function checkLabel(raw: string): { outcome: "ok"; label: string } | LabelRefusal {
-  const label = raw.trim();
+  const label = raw.trim().replace(/\s+/g, " ");
   if (label === "") return { outcome: "label-required" };
   if (label.length > MAX_PREPARATION_ITEM_LABEL_LENGTH) return { outcome: "label-too-long" };
   return { outcome: "ok", label };
@@ -93,12 +109,6 @@ export async function addPreparationItem(
   const { scope } = input;
   const clusterId = scope.level === "cluster" ? scope.clusterId : null;
   const perjadinId = scope.level === "perjadin" ? scope.perjadinId : null;
-  const view = await levelView(scope);
-  if (!view) return { outcome: "no-such-scope" };
-  if (view.items.some((item) => sameWording(item.label, label))) {
-    return { outcome: "duplicate-label" };
-  }
-
   const sameScope = and(
     eq(preparationItem.level, scope.level),
     clusterId === null
@@ -109,21 +119,30 @@ export async function addPreparationItem(
       : eq(preparationItem.perjadinId, perjadinId),
   );
 
-  const [row] = await db
-    .insert(preparationItem)
-    .values({
-      level: scope.level,
-      clusterId,
-      perjadinId,
-      label,
-      // After every item of the same scope, removed ones included. Two adds at once may take the
-      // same position; the resolver then orders them by id, so the order stays stable.
-      position: sql`(select coalesce(max(${preparationItem.position}), 0) + 1 from ${preparationItem} where ${sameScope})`,
-      addedOn: scope.level === "perjadin" ? null : sql`${todayInDeadlineZone}`,
-    })
-    .returning({ id: preparationItem.id });
+  return db.transaction(async (tx): Promise<AddPreparationItemResult> => {
+    await lockDefinitions(tx);
+    const view = await levelView(scope, tx);
+    if (!view) return { outcome: "no-such-scope" };
+    if (view.items.some((item) => sameWording(item.label, label))) {
+      return { outcome: "duplicate-label" };
+    }
 
-  return { outcome: "added", itemId: row!.id };
+    const [row] = await tx
+      .insert(preparationItem)
+      .values({
+        level: scope.level,
+        clusterId,
+        perjadinId,
+        label,
+        // After every item of the same scope, removed ones included. Adds are serialised by the
+        // lock, so two never take the same position.
+        position: sql`(select coalesce(max(${preparationItem.position}), 0) + 1 from ${preparationItem} where ${sameScope})`,
+        addedOn: scope.level === "perjadin" ? null : sql`${todayInDeadlineZone}`,
+      })
+      .returning({ id: preparationItem.id });
+
+    return { outcome: "added", itemId: row!.id };
+  });
 }
 
 export type RemovePreparationItemResult =
@@ -235,6 +254,8 @@ export async function showPreparationItem(
 export type RewordPreparationItemResult =
   | { outcome: "reworded" }
   | LabelRefusal
+  /** Another item on the list of the level the wording is given at already has it. */
+  | { outcome: "duplicate-label" }
   | { outcome: "not-wider" }
   | ItemRefusal;
 
@@ -242,7 +263,8 @@ export type RewordPreparationItemResult =
  * Reword an item. Without a scope the item's own wording changes; with one, the wording is
  * overridden for that Cluster or Perjadin only (a wider item's). Either way it stays **the same
  * item** — same id, ticks kept — and the wording shows wherever it applies, finished Perjadins
- * included. The system item may be reworded like any other.
+ * included. The system item may be reworded like any other. Refused when another item on the list
+ * of the level it is given at — the item's own, or the scope's — already has the wording.
  */
 export async function rewordPreparationItem(
   caller: Person,
@@ -254,40 +276,69 @@ export async function rewordPreparationItem(
   if (checkedLabel.outcome !== "ok") return checkedLabel;
   const { label } = checkedLabel;
 
-  if (!input.scope) {
-    const [updated] = await db
-      .update(preparationItem)
-      .set({ label })
-      .where(eq(preparationItem.id, input.itemId))
-      .returning({ id: preparationItem.id });
-    return updated ? { outcome: "reworded" } : { outcome: "no-such-item" };
+  const item = await itemById(input.itemId);
+  if (!item) return { outcome: "no-such-item" };
+  if (input.scope) {
+    const checked = await checkOverride(input.itemId, input.scope);
+    if (checked.outcome !== "ok") return checked;
   }
+  const at = input.scope ? levelOfOverride(input.scope) : ownLevelOf(item);
 
-  const checked = await checkOverride(input.itemId, input.scope);
-  if (checked.outcome !== "ok") return checked;
+  return db.transaction(async (tx): Promise<RewordPreparationItemResult> => {
+    await lockDefinitions(tx);
+    const view = await levelView(at, tx);
+    if (!view) return { outcome: "no-such-scope" };
+    const others = view.items.filter((other) => other.itemId !== input.itemId);
+    if (others.some((other) => sameWording(other.label, label))) {
+      return { outcome: "duplicate-label" };
+    }
 
-  // One upsert on the scope's partial unique index, not a delete and an insert: two rewords at once
-  // would both pass the delete, and the second insert would hit the index.
-  const scope = input.scope;
-  const byCluster = "clusterId" in scope;
-  await db
-    .insert(preparationItemWording)
-    .values({
-      preparationItemId: input.itemId,
-      ...(byCluster ? { clusterId: scope.clusterId } : { perjadinId: scope.perjadinId }),
-      label,
-    })
-    .onConflictDoUpdate({
-      target: [
-        preparationItemWording.preparationItemId,
-        byCluster ? preparationItemWording.clusterId : preparationItemWording.perjadinId,
-      ],
-      targetWhere: byCluster
-        ? sql`${preparationItemWording.clusterId} is not null`
-        : sql`${preparationItemWording.perjadinId} is not null`,
-      set: { label },
-    });
-  return { outcome: "reworded" };
+    if (!input.scope) {
+      await tx.update(preparationItem).set({ label }).where(eq(preparationItem.id, input.itemId));
+      return { outcome: "reworded" };
+    }
+
+    // One upsert on the scope's partial unique index, not a delete and an insert: two rewords at
+    // once would both pass the delete, and the second insert would hit the index.
+    const scope = input.scope;
+    const byCluster = "clusterId" in scope;
+    await tx
+      .insert(preparationItemWording)
+      .values({
+        preparationItemId: input.itemId,
+        ...(byCluster ? { clusterId: scope.clusterId } : { perjadinId: scope.perjadinId }),
+        label,
+      })
+      .onConflictDoUpdate({
+        target: [
+          preparationItemWording.preparationItemId,
+          byCluster ? preparationItemWording.clusterId : preparationItemWording.perjadinId,
+        ],
+        targetWhere: byCluster
+          ? sql`${preparationItemWording.clusterId} is not null`
+          : sql`${preparationItemWording.perjadinId} is not null`,
+        set: { label },
+      });
+    return { outcome: "reworded" };
+  });
+}
+
+/** The level an override is given at. */
+function levelOfOverride(scope: PreparationOverrideScope): PreparationScope {
+  return "clusterId" in scope
+    ? { level: "cluster", clusterId: scope.clusterId }
+    : { level: "perjadin", perjadinId: scope.perjadinId };
+}
+
+/** The level an item is defined at. */
+function ownLevelOf(item: {
+  level: string;
+  clusterId: string | null;
+  perjadinId: string | null;
+}): PreparationScope {
+  if (item.level === "cluster") return { level: "cluster", clusterId: item.clusterId! };
+  if (item.level === "perjadin") return { level: "perjadin", perjadinId: item.perjadinId! };
+  return { level: "semua" };
 }
 
 /** Drop a Cluster's or Perjadin's wording, so the wider wording shows again. */
@@ -324,40 +375,24 @@ function overrideScopeOf(at: PreparationScope): PreparationOverrideScope | null 
   return null;
 }
 
-export type RewordPreparationItemAtResult =
-  | RewordPreparationItemResult
-  /** Another item on this level's list already has that wording. */
-  | { outcome: "duplicate-label" };
-
 /**
  * **Ubah**: reword an item as seen at a level. An item defined there gets a new wording of its own,
- * which reaches every Perjadin it is on; a wider one gets this level's override. Refused when the
- * wording repeats another item on the level's list.
+ * which reaches every Perjadin it is on; a wider one gets this level's override.
  */
 export async function rewordPreparationItemAt(
   caller: Person,
   input: { itemId: string; label: string; at: PreparationScope },
-): Promise<RewordPreparationItemAtResult> {
+): Promise<RewordPreparationItemResult> {
   requireGrant(caller, "Administrator");
 
-  const checked = checkLabel(input.label);
-  if (checked.outcome !== "ok") return checked;
   const item = await itemById(input.itemId);
   if (!item) return { outcome: "no-such-item" };
-
-  const view = await levelView(input.at);
-  if (!view) return { outcome: "no-such-scope" };
-  const others = view.items.filter((other) => other.itemId !== input.itemId);
-  if (others.some((other) => sameWording(other.label, checked.label))) {
-    return { outcome: "duplicate-label" };
-  }
-
   if (definedAt(item, input.at)) {
-    return rewordPreparationItem(caller, { itemId: input.itemId, label: checked.label });
+    return rewordPreparationItem(caller, { itemId: input.itemId, label: input.label });
   }
   const scope = overrideScopeOf(input.at);
   if (!scope) return { outcome: "not-wider" };
-  return rewordPreparationItem(caller, { itemId: input.itemId, label: checked.label, scope });
+  return rewordPreparationItem(caller, { itemId: input.itemId, label: input.label, scope });
 }
 
 export type RemovePreparationItemAtResult =
@@ -396,7 +431,8 @@ export type MovePreparationItemResult =
  * with both items, finished ones included; it changes no item and no tick.
  *
  * The level's items are renumbered `1…n` in their current order first, so two items that share a
- * position (two adds at once) still swap. The rows are locked, so two moves at once queue.
+ * position still swap. The order is read after taking `lockDefinitions`, so a second move at once
+ * reads the first one's result rather than renumbering from the order before it.
  */
 export async function movePreparationItem(
   caller: Person,
@@ -404,7 +440,8 @@ export async function movePreparationItem(
 ): Promise<MovePreparationItemResult> {
   requireGrant(caller, "Administrator");
 
-  return db.transaction(async (tx) => {
+  return db.transaction(async (tx): Promise<MovePreparationItemResult> => {
+    await lockDefinitions(tx);
     const [item] = await tx
       .select({
         level: preparationItem.level,
@@ -429,8 +466,7 @@ export async function movePreparationItem(
             : eq(preparationItem.perjadinId, item.perjadinId),
         ),
       )
-      .orderBy(asc(preparationItem.position), asc(preparationItem.id))
-      .for("update");
+      .orderBy(asc(preparationItem.position), asc(preparationItem.id));
 
     const active = siblings.filter((row) => row.removedOn === null);
     const at = active.findIndex((row) => row.id === input.itemId);

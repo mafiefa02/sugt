@@ -229,7 +229,14 @@ function LevelChecklist({
     );
   }
 
-  function reword(itemId: string) {
+  function reword(itemId: string, current: string) {
+    // Simpan with the wording unchanged writes nothing, so it never leaves an override that only
+    // repeats the text beneath it.
+    if (editDraft.trim().replace(/\s+/g, " ") === current) {
+      setEditingId(null);
+      setRefusal(null);
+      return;
+    }
     write(
       () => rewordPreparationItemAction(itemId, editDraft, scope),
       ["reworded"],
@@ -267,7 +274,7 @@ function LevelChecklist({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
-                        reword(item.itemId);
+                        reword(item.itemId, item.label);
                       }
                     }}
                   />
@@ -276,7 +283,7 @@ function LevelChecklist({
                       size="sm"
                       disabled={busy || editDraft.trim() === ""}
                       onClick={() => {
-                        reword(item.itemId);
+                        reword(item.itemId, item.label);
                       }}
                     >
                       Simpan
@@ -509,6 +516,10 @@ function LevelChecklist({
             </DialogDescription>
           </DialogHeader>
           {confirming !== null && <p className="text-sm break-words">“{confirming.label}”</p>}
+          {/* A refusal while the popup is open is said here, not only behind it. */}
+          {confirming !== null && refusal !== null && (
+            <p className="text-sm text-destructive">{refusal}</p>
+          )}
           <DialogFooter>
             <Button
               variant="ghost"
@@ -546,13 +557,13 @@ function LevelChecklist({
 /** The sentence under the level picker: what this list is, and what a change here reaches. */
 function levelSummary(scope: PreparationScope, settings: PreparationSettings): string {
   if (scope.level === "semua") {
-    return "Berlaku untuk setiap Perjadin. Menambah atau menghapus item hanya mengenai Perjadin yang belum selesai; mengubah teks mengenai semuanya.";
+    return "Berlaku untuk setiap Perjadin. Menambah atau menghapus item hanya mengenai Perjadin yang belum selesai; mengubah teks dan urutan mengenai semuanya.";
   }
   if (scope.level === "cluster") {
-    return `Yang didapat Perjadin ${settings.clusterName ?? ""} yang belum selesai: item Semua Perjadin, lalu item Cluster ini. Perjadin yang sudah selesai tidak berubah.`;
+    return `Yang didapat Perjadin ${settings.clusterName ?? ""} yang belum selesai: item Semua Perjadin, lalu item Cluster ini. Menambah, menghapus atau menampilkan lagi tidak mengenai Perjadin yang sudah selesai; mengubah teks dan urutan mengenai semuanya.`;
   }
   return settings.finished
-    ? "Perjadin ini sudah selesai, jadi perubahan di Semua Perjadin atau Cluster tidak lagi mengenainya. Perubahan di sini tetap berlaku."
+    ? "Perjadin ini sudah selesai: item yang ditambah, dihapus atau ditampilkan lagi di Semua Perjadin atau Cluster tidak lagi mengenainya, tetapi perubahan teks dan urutan di sana tetap. Perubahan di sini tetap berlaku."
     : "Daftar Persiapan Perjadin ini. Perubahan di sini hanya mengenai Perjadin ini.";
 }
 

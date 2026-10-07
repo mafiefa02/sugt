@@ -1467,8 +1467,9 @@ rewording keeps the coupling. The database holds that **at most one item carries
 (`queries/preparation-items.ts`), as is which items may be hidden or reworded where: a `semua`
 item for a Cluster or a Perjadin, a `cluster` item for a Perjadin of that Cluster. So are the
 wording rules Pengaturan Perjadin (#422) applies: at most `MAX_PREPARATION_ITEM_LABEL_LENGTH` (200)
-characters, and no new item or level wording that repeats, ignoring case and spacing, one already
-on that level's list. Moving an item renumbers its level's `position`s, undated.
+characters, runs of spaces made one, and no new item or rewording that repeats, ignoring case,
+another item's wording on the list of the level it is given at. Adding, rewording and moving take
+one transaction-scoped advisory lock, so those checks cannot race. Moving an item renumbers its level's `position`s, undated.
 
 **The cutover** is migration `0043_preparation_levels`. The old six became `semua` items removed
 on the day it ran, so every Perjadin that had already ended keeps them; their ticks were converted

@@ -14,7 +14,7 @@ import {
   type PreparationOverrideScope,
   type PreparationScope,
   type RemovePreparationItemAtResult,
-  type RewordPreparationItemAtResult,
+  type RewordPreparationItemResult,
 } from "@sugt/db/queries";
 import { revalidatePath } from "next/cache";
 
@@ -24,15 +24,17 @@ import { revalidatePath } from "next/cache";
  * 403. None is written to the Activity Log.
  *
  * A change can alter the checklist on every Perjadin page, `/perjadin`'s pills, `/pendamping` and the
- * Dashboard, so the whole signed-in tree is revalidated rather than this page alone.
+ * Dashboard, so the whole signed-in tree is revalidated rather than this page alone — but only when
+ * the write went through; a refusal changed nothing.
  */
 
-async function asAdministrator<T>(
+async function asAdministrator<T extends { outcome: string }>(
   write: (person: Awaited<ReturnType<typeof requirePerson>>) => Promise<T>,
-) {
+  succeeded: T["outcome"][],
+): Promise<T> {
   const person = await requirePerson();
   const result = await staffSurface(() => write(person));
-  revalidatePath("/", "layout");
+  if (succeeded.includes(result.outcome)) revalidatePath("/", "layout");
   return result;
 }
 
@@ -41,7 +43,7 @@ export async function addPreparationItemAction(
   at: PreparationScope,
   label: string,
 ): Promise<AddPreparationItemResult> {
-  return asAdministrator((person) => addPreparationItem(person, { scope: at, label }));
+  return asAdministrator((person) => addPreparationItem(person, { scope: at, label }), ["added"]);
 }
 
 /** **Ubah → Simpan**: the item's own wording, or this level's override of a wider one. */
@@ -49,8 +51,11 @@ export async function rewordPreparationItemAction(
   itemId: string,
   label: string,
   at: PreparationScope,
-): Promise<RewordPreparationItemAtResult> {
-  return asAdministrator((person) => rewordPreparationItemAt(person, { itemId, label, at }));
+): Promise<RewordPreparationItemResult> {
+  return asAdministrator(
+    (person) => rewordPreparationItemAt(person, { itemId, label, at }),
+    ["reworded"],
+  );
 }
 
 /** **Kembalikan teks asal**: drop this level's override, so the wider wording shows again. */
@@ -58,7 +63,10 @@ export async function clearPreparationItemWordingAction(
   itemId: string,
   scope: PreparationOverrideScope,
 ): Promise<{ outcome: "cleared" }> {
-  return asAdministrator((person) => clearPreparationItemWording(person, { itemId, scope }));
+  return asAdministrator(
+    (person) => clearPreparationItemWording(person, { itemId, scope }),
+    ["cleared"],
+  );
 }
 
 /** **Hapus**, after its confirmation: removed if defined at this level, hidden here if wider. */
@@ -66,7 +74,10 @@ export async function removePreparationItemAction(
   itemId: string,
   at: PreparationScope,
 ): Promise<RemovePreparationItemAtResult> {
-  return asAdministrator((person) => removePreparationItemAt(person, { itemId, at }));
+  return asAdministrator(
+    (person) => removePreparationItemAt(person, { itemId, at }),
+    ["removed", "hidden"],
+  );
 }
 
 /** **Tampilkan lagi**: end this level's hide. */
@@ -74,7 +85,7 @@ export async function showPreparationItemAction(
   itemId: string,
   scope: PreparationOverrideScope,
 ): Promise<{ outcome: "shown" }> {
-  return asAdministrator((person) => showPreparationItem(person, { itemId, scope }));
+  return asAdministrator((person) => showPreparationItem(person, { itemId, scope }), ["shown"]);
 }
 
 /** **Up / down** among the level's own items. Applies at once. */
@@ -82,5 +93,5 @@ export async function movePreparationItemAction(
   itemId: string,
   direction: "up" | "down",
 ): Promise<MovePreparationItemResult> {
-  return asAdministrator((person) => movePreparationItem(person, { itemId, direction }));
+  return asAdministrator((person) => movePreparationItem(person, { itemId, direction }), ["moved"]);
 }

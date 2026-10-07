@@ -52,6 +52,9 @@ export type PreparationItem = {
  */
 export type ChecklistPerjadin = { id: string | null; clusterId: string | null; endsOn: string };
 
+/** The database or a transaction on it: what the catalog and a level's view are read through. */
+export type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /** The stored rows the resolver reads, already narrowed to the Perjadins at hand. */
 export type ChecklistCatalog = {
   items: {
@@ -185,17 +188,17 @@ export async function preparationChecklists(
  * `semua` items, the Clusters' and the Perjadins' own items, the hides and wordings on either, and the
  * Perjadins' ticks — four selects, run concurrently.
  */
-export async function loadChecklistCatalog(scope: {
-  clusterIds: string[];
-  perjadinIds: string[];
-}): Promise<ChecklistCatalog> {
+export async function loadChecklistCatalog(
+  scope: { clusterIds: string[]; perjadinIds: string[] },
+  executor: Executor = db,
+): Promise<ChecklistCatalog> {
   const { clusterIds, perjadinIds: ids } = scope;
   // `inArray` over an empty list is `false`, so a scope with no Cluster or no Perjadin is harmless.
   const inScope = (table: typeof preparationItemHide | typeof preparationItemWording) =>
     or(inArray(table.clusterId, clusterIds), inArray(table.perjadinId, ids));
 
   const [items, hides, wordings, ticks] = await Promise.all([
-    db
+    executor
       .select({
         id: preparationItem.id,
         level: preparationItem.level,
@@ -215,7 +218,7 @@ export async function loadChecklistCatalog(scope: {
           and(eq(preparationItem.level, "perjadin"), inArray(preparationItem.perjadinId, ids)),
         ),
       ),
-    db
+    executor
       .select({
         preparationItemId: preparationItemHide.preparationItemId,
         clusterId: preparationItemHide.clusterId,
@@ -225,7 +228,7 @@ export async function loadChecklistCatalog(scope: {
       })
       .from(preparationItemHide)
       .where(inScope(preparationItemHide)),
-    db
+    executor
       .select({
         preparationItemId: preparationItemWording.preparationItemId,
         clusterId: preparationItemWording.clusterId,
@@ -234,7 +237,7 @@ export async function loadChecklistCatalog(scope: {
       })
       .from(preparationItemWording)
       .where(inScope(preparationItemWording)),
-    db
+    executor
       .select({
         perjadinId: perjadinPreparationTick.perjadinId,
         preparationItemId: perjadinPreparationTick.preparationItemId,

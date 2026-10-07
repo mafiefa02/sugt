@@ -221,7 +221,6 @@ export {
   type PreparationScope,
   type RemovePreparationItemAtResult,
   type RemovePreparationItemResult,
-  type RewordPreparationItemAtResult,
   type RewordPreparationItemResult,
 } from "./preparation-items";
 export {

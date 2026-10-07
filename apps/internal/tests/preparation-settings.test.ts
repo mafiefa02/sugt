@@ -9,6 +9,7 @@ import {
   preparationSettingsPerjadins,
   removePreparationItem,
   removePreparationItemAt,
+  rewordPreparationItem,
   rewordPreparationItemAt,
   showPreparationItem,
   clearPreparationItemWording,
@@ -513,9 +514,73 @@ describe("Administrator only", () => {
       () => removePreparationItemAt(staff, { itemId: hotel, at: trip(perjadinId) }),
       () => rewordPreparationItemAt(staff, { itemId: hotel, label: "X", at: SEMUA }),
       () => movePreparationItem(staff, { itemId: hotel, direction: "down" }),
+      () => showPreparationItem(staff, { itemId: hotel, scope: { perjadinId } }),
+      () => clearPreparationItemWording(staff, { itemId: hotel, scope: { perjadinId } }),
     ];
 
     for (const call of calls) await expect(call()).rejects.toSatisfy(isNotGrantedError);
     expect(await labelsOf(perjadinId)).toEqual(COMPANY_PREPARATION_ITEMS);
+  });
+});
+
+describe("writes at the same moment", () => {
+  it("lets only one of two identical adds through", async () => {
+    const results = await Promise.all([
+      addPreparationItem(admin, { scope: cluster(), label: "Sama" }),
+      addPreparationItem(admin, { scope: cluster(), label: "sama" }),
+    ]);
+
+    expect(results.map((result) => result.outcome).toSorted()).toEqual([
+      "added",
+      "duplicate-label",
+    ]);
+    const labels = (await settingsAt(cluster())).items.map((item) => item.label.toLowerCase());
+    expect(labels.filter((label) => label === "sama")).toHaveLength(1);
+  });
+
+  it("applies both of two moves, one after the other, losing neither", async () => {
+    const perjadinId = await tripEnding(3);
+    const a = await added(trip(perjadinId), "A");
+    await added(trip(perjadinId), "B");
+    const c = await added(trip(perjadinId), "C");
+
+    await Promise.all([
+      movePreparationItem(admin, { itemId: c, direction: "up" }),
+      movePreparationItem(admin, { itemId: a, direction: "down" }),
+    ]);
+
+    // C up then A down gives C,A,B; A down then C up gives B,C,A. Anything else lost a move.
+    expect([
+      ["C", "A", "B"],
+      ["B", "C", "A"],
+    ]).toContainEqual((await labelsOf(perjadinId)).slice(-3));
+  });
+});
+
+describe("the wording itself", () => {
+  it("is stored trimmed, with its runs of spaces made one", async () => {
+    const itemId = await added(SEMUA, "  Bawa   spanduk  ");
+    const [row] = await db
+      .select({ label: schema.preparationItem.label })
+      .from(schema.preparationItem)
+      .where(eq(schema.preparationItem.id, itemId));
+    expect(row?.label).toBe("Bawa spanduk");
+  });
+
+  it("is refused as a duplicate by a plain rewording too, at the item's own level", async () => {
+    const hotel = await companyItem("Pemesanan Hotel");
+    expect(
+      await rewordPreparationItem(admin, {
+        itemId: hotel,
+        label: "Uang pegangan konsumsi sudah diterima",
+      }),
+    ).toEqual({ outcome: "duplicate-label" });
+    expect(
+      await rewordPreparationItem(admin, {
+        itemId: hotel,
+        label: "Uang pegangan konsumsi sudah diterima",
+        scope: { clusterId },
+      }),
+    ).toEqual({ outcome: "duplicate-label" });
   });
 });

@@ -857,31 +857,35 @@ the checklist as it applies there:
 - **A Cluster** — what a trip of that Cluster that has not ended gets: the Semua boxes it has not
   hidden, in its wording, then its own.
 - **A Perjadin** — that trip's own list. A finished trip shows the list it was frozen with, and says
-  that only changes made for it still reach it.
+  so: boxes added, removed or shown again for every Perjadin or its Cluster no longer reach it, but
+  a wording or an order changed there still does, and changes made for it always do.
 
 **Each box shows where it comes from** — "Semua", the Cluster's name or "Perjadin ini" — and
 "Diubah di sini" when its wording was changed at this level, with the wording beneath it as "Teks
 asal". Each box has:
 
-- **Ubah**, which edits the wording in place, with Simpan and Batal. A box from this level is
+- **Ubah**, which edits the wording in place, with Simpan and Batal; Simpan with the wording
+  unchanged changes nothing. A box from this level is
   reworded itself; a box from a wider level gets a wording for this level only, which **Kembalikan
   teks asal** takes away again.
 - **Hapus**, which always asks first and says what it will do: "Item ini akan hilang dari 7 Perjadin
   yang belum selesai. Perjadin yang sudah selesai tidak berubah.", counted from the trips at the
   time, or "Item ini akan hilang dari Perjadin ini." A box from this level is removed; a box from a
   wider level is hidden here, and is listed under **Disembunyikan di sini** with **Tampilkan lagi**.
-- **Up and down arrows**, on this level's own boxes only, which move it within them at once.
+- **Up and down arrows**, on this level's own boxes only, which move it within them at once. Like a
+  wording, the order is not dated: it shows on finished trips too.
 
 **"Fiksasi Dosen/Narasumber oleh PIC Dosen" has no Hapus** at any level, with a line saying why: its
 tick is cleared, and must be given again, whenever the trip's Narasumber change.
 
 **Tambah item adds nothing by itself.** It opens an empty row with Simpan and Batal; the box is
 created, at the end of this level's own boxes, only on Simpan, and Batal throws the row away. An
-empty wording is refused, as is one longer than 200 characters, or one a box on this list already
-has (ignoring case and spacing).
+empty wording is refused, as is one longer than 200 characters, or one another box on this list
+already has (ignoring case and spacing). Ubah refuses the same. The check is against this list only:
+a Semua box may share its wording with one Cluster's own box.
 
-On a phone the level buttons and pickers take the full width, each box's buttons wrap under its
-wording, and nothing scrolls sideways.
+On a phone the Cluster and Perjadin pickers take the full width, the three level buttons wrap if
+they must, each box's buttons wrap under its wording, and nothing scrolls sideways.
 
 ---
 

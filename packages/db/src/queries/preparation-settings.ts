@@ -1,11 +1,11 @@
 import type { PreparationItemLevel } from "@sugt/domain";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 
 import { db } from "../client";
 import { cluster, subCluster } from "../schema/reference";
 import { perjadin } from "../schema/travel";
 import type { Person } from "./caller";
-import { todayInDeadlineZone } from "./deadline";
+import { DEADLINE_TIME_ZONE } from "./deadline";
 import { tripSchoolNames } from "./perjadin-naming";
 import {
   loadChecklistCatalog,
@@ -13,6 +13,7 @@ import {
   resolvePreparationChecklist,
   type ChecklistCatalog,
   type ChecklistPerjadin,
+  type Executor,
 } from "./preparation-checklist";
 import type { PreparationScope } from "./preparation-items";
 import { requireGrant } from "./staff-only";
@@ -74,27 +75,31 @@ type LevelView = {
   today: string;
 };
 
-/** Today in WIB, as `YYYY-MM-DD` — the day every dated change is stamped with. */
-async function wibToday(): Promise<string> {
-  const [row] = await db.execute<{ today: string }>(
-    sql`select ${todayInDeadlineZone}::text as today`,
-  );
-  return row!.today;
+/**
+ * Today in WIB, as `YYYY-MM-DD` — the day every dated change is stamped with (`todayInDeadlineZone`
+ * in SQL), worked out here as `arrange-online-session.ts` does rather than asked of the database.
+ */
+function wibToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: DEADLINE_TIME_ZONE }).format(new Date());
 }
 
 /**
  * Resolve one level, or `null` when its Cluster or Perjadin does not exist. Shared with the writes
- * that must compare against what a level shows (`./preparation-items.ts`).
+ * that must compare against what a level shows (`./preparation-items.ts`), which read it inside
+ * their own transaction — hence `executor`.
  */
-export async function levelView(scope: PreparationScope): Promise<LevelView | null> {
-  const today = await wibToday();
+export async function levelView(
+  scope: PreparationScope,
+  executor: Executor = db,
+): Promise<LevelView | null> {
+  const today = wibToday();
 
   let trip: ChecklistPerjadin;
   let clusterName: string | null = null;
   if (scope.level === "semua") {
     trip = { id: null, clusterId: null, endsOn: today };
   } else if (scope.level === "cluster") {
-    const [row] = await db
+    const [row] = await executor
       .select({ name: cluster.name })
       .from(cluster)
       .where(eq(cluster.id, scope.clusterId));
@@ -102,7 +107,7 @@ export async function levelView(scope: PreparationScope): Promise<LevelView | nu
     trip = { id: null, clusterId: scope.clusterId, endsOn: today };
     clusterName = row.name;
   } else {
-    const [row] = await db
+    const [row] = await executor
       .select({
         clusterId: subCluster.clusterId,
         endsOn: perjadin.endsOn,
@@ -117,10 +122,13 @@ export async function levelView(scope: PreparationScope): Promise<LevelView | nu
     clusterName = row.clusterName;
   }
 
-  const catalog = await loadChecklistCatalog({
-    clusterIds: trip.clusterId === null ? [] : [trip.clusterId],
-    perjadinIds: trip.id === null ? [] : [trip.id],
-  });
+  const catalog = await loadChecklistCatalog(
+    {
+      clusterIds: trip.clusterId === null ? [] : [trip.clusterId],
+      perjadinIds: trip.id === null ? [] : [trip.id],
+    },
+    executor,
+  );
   const items = resolvePreparationChecklist(trip, catalog);
   return { trip, catalog, items, clusterName, today };
 }
