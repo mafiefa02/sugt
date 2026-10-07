@@ -7,9 +7,16 @@
 /**
  * One option a `SingleSelectCombobox` offers: a stable `value`, the `label` shown for it, and
  * optional `keywords` — extra text the search matches alongside `label` (a School's Kabupaten/Kota,
- * say) while the input still displays only `label`.
+ * say) while the input still displays only `label`. An optional `description` is a second, muted
+ * line under the label in the list (a Perjadin's Schools); it is shown, not searched — put it in
+ * `keywords` too to make it searchable.
  */
-export type SingleSelectOption = { value: string; label: string; keywords?: string };
+export type SingleSelectOption = {
+  value: string;
+  label: string;
+  keywords?: string;
+  description?: string;
+};
 
 /**
  * Case-insensitive "contains" match over an option's `label` and its optional `keywords` — the

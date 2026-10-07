@@ -53,7 +53,7 @@ export function DashboardView({
   postestTable: PivotTable;
 }) {
   return (
-    <div className="flex flex-col gap-6 px-7 py-6">
+    <div className="flex flex-col gap-6 px-4 py-6 sm:px-7">
       {/* KPI cards. Both are equal-height flex columns (the grid stretches them), each with a
           label-only header; the value text pins to the top of the content and the progress bar to the
           bottom (`justify-between`). So the two cards' value rows line up and their bars line up, even

@@ -11,6 +11,7 @@ import { cluster, province, school, subCluster } from "../schema/reference";
 import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
 import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
+import { type CoveredSession, offlineSessionsElsewhere } from "./covered-sessions";
 import { duplicatedStaff } from "./group-rules";
 import {
   activeRosters,
@@ -18,6 +19,11 @@ import {
   type RosterPerson,
   type SelectedSchool,
 } from "./rosters";
+import {
+  bookedOnAnotherPerjadin,
+  type SchoolBookedOnAnotherPerjadin,
+  slotViolationRefusal,
+} from "./school-slot";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
 
@@ -80,9 +86,9 @@ export type PlannedSession = {
  *
  * **`subClusterId` is the trip's, picked in the form.** Every School on the trip must belong
  * to it — the rule ADR-0016 explains cannot be a foreign key, checked below at the one place
- * it can be violated. `destination` is **not** here: it is derived server-side from the
- * Sub-Cluster and its Schools' Kabupaten/Kota at insert ([#105](https://github.com/mafiefa02/sugt/issues/105)),
- * so the form has no Tujuan box to drift from what it already shows.
+ * it can be violated. There is no destination or name here: a Perjadin's name is
+ * `{Sub-Cluster} · {dates}`, read live and never stored (ADR-0044), so the form has no Tujuan box to
+ * drift from what it already shows.
  */
 export type PlanPerjadinInput = {
   subClusterId: string;
@@ -200,11 +206,18 @@ export type PlanPerjadinResult =
   /**
    * One School planned twice at the same date **and** time (ADR-0038). Parallel rooms are one
    * Session now, whose Teaching Team lists everyone who taught, so a second row at the same moment is
-   * a mistake. `session_no_duplicate_offline_per_school_per_perjadin` refuses it at the database too;
-   * checked here against the whole payload so the form gets a value naming each slot rather than a
+   * a mistake. `session_no_duplicate_offline_per_school` refuses it at the database too; checked
+   * here against the whole payload so the form gets a value naming each slot rather than a
    * unique-violation thrown from inside the transaction. The form catches it before submit as well.
    */
-  | { outcome: "duplicate-session"; duplicates: DuplicateSessionSlot[] };
+  | { outcome: "duplicate-session"; duplicates: DuplicateSessionSlot[] }
+  /**
+   * A planned Session's School already has a live offline Session at that date and time on another
+   * Perjadin (#408, ADR-0043) — a double-booking `session_no_duplicate_offline_per_school` refuses
+   * at the database. Checked first, Session by Session, so the refusal names the other trip; the
+   * first one found is reported.
+   */
+  | SchoolBookedOnAnotherPerjadin;
 
 /** A School planned more than once at one date and time — see the `duplicate-session` refusal. */
 export type DuplicateSessionSlot = {
@@ -222,9 +235,11 @@ export type DuplicateSessionSlot = {
  * second step. The writes are one act and commit together.
  *
  * Everything the application has to check is checked **before** the transaction opens.
- * That is not an optimisation: each of these is a rule the database cannot hold, so
+ * That is not an optimisation: all but one of these are rules the database cannot hold, so
  * finding out inside the transaction would mean rolling back a trip somebody typed rather
- * than telling them which field is wrong.
+ * than telling them which field is wrong. The one it does hold — a School already booked at that
+ * moment on another trip (#408) — is read first too, for the sentence naming that trip, and a race
+ * past the read is caught on the index and named the same way.
  *
  * What is **not** checked here is checked at the database and left there. The PIC being
  * Staff is `perjadin_pic_is_staff`; a Session being offline and carrying its Perjadin is
@@ -326,10 +341,11 @@ export async function planPerjadin(
   }
 
   // A Perjadin goes to exactly one Sub-Cluster and every School it teaches at belongs to it
-  // (CONTEXT.md, ADR-0016). This is the one write that can break that rule — there is no write
-  // that adds a School to an existing trip — so it is refused for the whole payload here rather
-  // than left to a foreign key that editability forbids. A School id that names no row, or one
-  // whose Sub-Cluster is null, is "outside" too, since neither equals the chosen Sub-Cluster.
+  // (CONTEXT.md, ADR-0016). Planning is one of the two writes that can break that rule —
+  // `addPerjadinSession`, which adds a School to an existing trip, checks it too — so it is refused
+  // for the whole payload here rather than left to a foreign key that editability forbids. A School
+  // id that names no row, or one whose Sub-Cluster is null, is "outside" too, since neither equals
+  // the chosen Sub-Cluster.
   const schoolIds = input.sessions.map((planned) => planned.schoolId);
   const memberships = await db
     .select({ id: school.id, subClusterId: school.subClusterId })
@@ -348,8 +364,8 @@ export async function planPerjadin(
   //   index is per School — so this app check is the only guard for the different-Schools rule. Sharing a date alone stays legal;
   //   that is what the per-School start time serves.
   // - The *same* School twice in one slot is a duplicate (ADR-0038): parallel rooms are one Session
-  //   now, and `session_no_duplicate_offline_per_school_per_perjadin` would refuse the second row at
-  //   the database. Caught here so it comes back as a value naming the slot, not a raw violation.
+  //   now, and `session_no_duplicate_offline_per_school` would refuse the second row at the
+  //   database. Caught here so it comes back as a value naming the slot, not a raw violation.
   const slots = new Map<
     string,
     { heldOn: string; startsAt: string; schoolIds: Set<string>; repeated: Set<string> }
@@ -384,150 +400,129 @@ export async function planPerjadin(
   );
   if (duplicates.length > 0) return { outcome: "duplicate-session", duplicates };
 
-  // The destination is derived, not typed: the planner has already picked the Sub-Cluster and
-  // seen its Schools, so a free-text box would only restate that and could drift from it (#105).
-  // A **snapshot** into the write-once column, computed once here and never on read — Sub-Clusters
-  // are editable (ADR-0016), so a live read would silently rewrite an already-issued Surat Tugas
-  // when Schools are later regrouped or the Sub-Cluster is renamed.
-  const destination = await derivePerjadinDestination(input.subClusterId);
+  // The same School at the same moment on another trip (#408). Every live offline Session is on
+  // another trip — this one does not exist yet — so any holder is a double-booking.
+  const booked = await bookedOnAnotherPerjadin(db, input.sessions, { ownPerjadinId: null });
+  if (booked) return booked;
 
-  const perjadinId = await db.transaction(async (tx) => {
-    const [created] = await tx
-      .insert(perjadin)
-      .values({
-        subClusterId: input.subClusterId,
-        destination,
-        // Typed, written directly (ADR-0041). `perjadin_dates_check` still holds
-        // `ends_on >= starts_on`, guarded above.
-        startsOn: input.startsOn,
-        endsOn: input.endsOn,
-        advanceIdr: input.advanceIdr,
-        picPersonId: input.picPersonId,
-      })
-      .returning({ id: perjadin.id });
+  let perjadinId: string;
+  try {
+    perjadinId = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(perjadin)
+        .values({
+          subClusterId: input.subClusterId,
+          // Typed, written directly (ADR-0041). `perjadin_dates_check` still holds
+          // `ends_on >= starts_on`, guarded above.
+          startsOn: input.startsOn,
+          endsOn: input.endsOn,
+          advanceIdr: input.advanceIdr,
+          picPersonId: input.picPersonId,
+        })
+        .returning({ id: perjadin.id });
 
-    const id = created!.id;
+      const id = created!.id;
 
-    // The Group is **Staff and only Staff** now (ADR-0020): the PIC plus the extra Staff, none
-    // carrying a Stream — `group_member_stream_iff_teaching` refuses one that does. The Teaching
-    // Team have left this table entirely for `perjadin_teacher` below; the PIC's row is first so the
-    // DEFERRABLE `perjadin_pic_is_a_group_member` is satisfied at COMMIT.
-    await tx.insert(groupMember).values([
-      { perjadinId: id, personId: input.picPersonId, role: "Staff" as const, stream: null },
-      ...extraStaff.map((personId) => ({
-        perjadinId: id,
-        personId,
-        role: "Staff" as const,
-        stream: null,
-      })),
-    ]);
+      // The Group is **Staff and only Staff** now (ADR-0020): the PIC plus the extra Staff, none
+      // carrying a Stream — `group_member_stream_iff_teaching` refuses one that does. The Teaching
+      // Team have left this table entirely for `perjadin_teacher` below; the PIC's row is first so the
+      // DEFERRABLE `perjadin_pic_is_a_group_member` is satisfied at COMMIT.
+      await tx.insert(groupMember).values([
+        { perjadinId: id, personId: input.picPersonId, role: "Staff" as const, stream: null },
+        ...extraStaff.map((personId) => ({
+          perjadinId: id,
+          personId,
+          role: "Staff" as const,
+          stream: null,
+        })),
+      ]);
 
-    // The Teaching Team as trip-scoped names (ADR-0020) — one `perjadin_teacher` row per name.
-    // RETURNING keeps the inserted ids in the order the names were given, which is what a Session's
-    // `taughtByTeacherIndexes` indexes into. Skipped entirely when the team is empty, since an
-    // INSERT with no rows is not a statement Postgres accepts.
-    const teacherIds =
-      input.teacherNames.length > 0
-        ? (
-            await tx
-              .insert(perjadinTeacher)
-              .values(input.teacherNames.map((name) => ({ perjadinId: id, name })))
-              .returning({ id: perjadinTeacher.id })
-          ).map((row) => row.id)
-        : [];
+      // The Teaching Team as trip-scoped names (ADR-0020) — one `perjadin_teacher` row per name.
+      // RETURNING keeps the inserted ids in the order the names were given, which is what a Session's
+      // `taughtByTeacherIndexes` indexes into. Skipped entirely when the team is empty, since an
+      // INSERT with no rows is not a statement Postgres accepts.
+      const teacherIds =
+        input.teacherNames.length > 0
+          ? (
+              await tx
+                .insert(perjadinTeacher)
+                .values(input.teacherNames.map((name) => ({ perjadinId: id, name })))
+                .returning({ id: perjadinTeacher.id })
+            ).map((row) => row.id)
+          : [];
 
-    // The Sessions. RETURNING keeps them in input order, so
-    // `sessionIds[i]` is the row for `input.sessions[i]` — the join key the teaching-team links use.
-    const sessionIds = (
-      await tx
-        .insert(session)
-        .values(
-          input.sessions.map((planned) => ({
-            schoolId: planned.schoolId,
-            perjadinId: id,
-            mode: "offline" as const,
-            heldOn: planned.heldOn,
-            startsAt: planned.startsAt,
-          })),
-        )
-        .returning({ id: session.id })
-    ).map((row) => row.id);
+      // The Sessions. RETURNING keeps them in input order, so
+      // `sessionIds[i]` is the row for `input.sessions[i]` — the join key the teaching-team links use.
+      const sessionIds = (
+        await tx
+          .insert(session)
+          .values(
+            input.sessions.map((planned) => ({
+              schoolId: planned.schoolId,
+              perjadinId: id,
+              mode: "offline" as const,
+              heldOn: planned.heldOn,
+              startsAt: planned.startsAt,
+            })),
+          )
+          .returning({ id: session.id })
+      ).map((row) => row.id);
 
-    // "Diajar oleh" — each Session's `taughtByTeacherIndexes` become `session_teaching_team` links
-    // from the Session to the `perjadin_teacher` rows those indexes name. A Session with no teachers
-    // yet contributes nothing; the whole insert is skipped when there are no links at all.
-    const teachingLinks = input.sessions.flatMap((planned, i) =>
-      planned.taughtByTeacherIndexes.map((teacherIndex) => ({
-        sessionId: sessionIds[i]!,
-        perjadinTeacherId: teacherIds[teacherIndex]!,
-      })),
-    );
-    if (teachingLinks.length > 0) {
-      await tx.insert(sessionTeachingTeam).values(teachingLinks);
-    }
+      // "Diajar oleh" — each Session's `taughtByTeacherIndexes` become `session_teaching_team` links
+      // from the Session to the `perjadin_teacher` rows those indexes name. A Session with no teachers
+      // yet contributes nothing; the whole insert is skipped when there are no links at all.
+      const teachingLinks = input.sessions.flatMap((planned, i) =>
+        planned.taughtByTeacherIndexes.map((teacherIndex) => ({
+          sessionId: sessionIds[i]!,
+          perjadinTeacherId: teacherIds[teacherIndex]!,
+        })),
+      );
+      if (teachingLinks.length > 0) {
+        await tx.insert(sessionTeachingTeam).values(teachingLinks);
+      }
 
-    // The Pimpinan recorded on the trip — record-only rows referencing a real Person, never
-    // `group_member` (ADR-0020, #181). Deduped so `(perjadin_id, person_id)` cannot collide; skipped
-    // when none join. `role` defaults to 'Pimpinan'.
-    if (uniquePimpinan.length > 0) {
-      await tx
-        .insert(perjadinPimpinan)
-        .values(uniquePimpinan.map((personId) => ({ perjadinId: id, personId })));
-    }
+      // The Pimpinan recorded on the trip — record-only rows referencing a real Person, never
+      // `group_member` (ADR-0020, #181). Deduped so `(perjadin_id, person_id)` cannot collide; skipped
+      // when none join. `role` defaults to 'Pimpinan'.
+      if (uniquePimpinan.length > 0) {
+        await tx
+          .insert(perjadinPimpinan)
+          .values(uniquePimpinan.map((personId) => ({ perjadinId: id, personId })));
+      }
 
-    // The Activity Log (#395): the planned Advance, in this transaction, committing with the trip.
-    await logActivity(tx, caller, id, {
-      action: "advance_set",
-      details: { amountIdr: input.advanceIdr },
+      // The Activity Log (#395): the planned Advance, in this transaction, committing with the trip.
+      await logActivity(tx, caller, id, {
+        action: "advance_set",
+        details: { amountIdr: input.advanceIdr },
+      });
+
+      return id;
     });
-
-    return id;
-  });
+  } catch (error) {
+    // A race past the read above: another trip took a slot between the check and the insert. The
+    // index refused it; read again who holds it, so the form still gets the sentence.
+    const raced = await slotViolationRefusal(error, input.sessions, { ownPerjadinId: null });
+    if (raced) return raced;
+    throw error;
+  }
 
   return { outcome: "planned", perjadinId };
 }
 
 /**
- * The destination line the Surat Tugas is written against: the Sub-Cluster's own label, then the
- * distinct Kabupaten/Kota its Schools sit in — e.g. `Kelompok 18: Samarinda, Bontang dan Balikpapan`.
- *
- * **The whole Sub-Cluster, not only the visited Schools:** the line names where the trip's
- * Kelompok is, which does not change because one School was dropped this time. Distinct
- * Kabupaten/Kota in School order (first appearance wins), so several Schools in one regency
- * collapse to one entry. The Sub-Cluster name is used verbatim — it already reads "Kelompok 18".
+ * A School the form is planning a Session for, as one row of its Sub-Cluster shows it: the fields of
+ * `SelectedSchool`, extended rather than restated — the reuse `arrange-online-session.ts`'s
+ * `SchoolOption` also makes, so the shared fields cannot drift — plus what the School already has
+ * on other trips (#409), which only this form shows.
  */
-async function derivePerjadinDestination(subClusterId: string): Promise<string> {
-  const rows = await db
-    .select({ name: subCluster.name, kabupatenKota: school.kabupatenKota })
-    .from(subCluster)
-    .innerJoin(school, eq(school.subClusterId, subCluster.id))
-    .where(eq(subCluster.id, subClusterId))
-    .orderBy(asc(school.name));
-
-  const places: string[] = [];
-  for (const row of rows) {
-    if (!places.includes(row.kabupatenKota)) places.push(row.kabupatenKota);
-  }
-  return `${rows[0]?.name ?? ""}: ${joinWithDan(places)}`;
-}
-
-/**
- * Join a list the way an Indonesian sentence does: comma-separated, with `" dan "` before the
- * last and no serial comma. One item is itself; none is the empty string.
- * `["Samarinda", "Bontang", "Balikpapan"]` → `"Samarinda, Bontang dan Balikpapan"`.
- */
-function joinWithDan(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} dan ${items[items.length - 1]}`;
-}
-
-/**
- * A School the form is planning a Session for, as one row of its Sub-Cluster shows it. The same
- * three fields a form row has always rendered, so it **aliases** `SelectedSchool` rather than
- * restating the shape — the reuse `arrange-online-session.ts`'s `SchoolOption` also makes, which
- * keeps the two from drifting.
- */
-export type PlannableSchool = SelectedSchool;
+export type PlannableSchool = SelectedSchool & {
+  /**
+   * Its live offline Sessions on other Perjadins (#409) — every one, since the trip being planned
+   * does not exist yet — for the note under its row. Read-only: nothing here changes what can be
+   * submitted.
+   */
+  offlineSessionsElsewhere: CoveredSession[];
+};
 
 /** One Sub-Cluster the form can plan a trip around, with the Schools it is eligible to visit. */
 export type PlannableSubCluster = {
@@ -558,12 +553,15 @@ export type PerjadinPlan = {
   pimpinan: PlannablePerson[];
 };
 
+/** A Sub-Cluster and its Schools as stored, before `perjadinPlan` adds what each already has. */
+type SubClusterOfSchools = Omit<PlannableSubCluster, "schools"> & { schools: SelectedSchool[] };
+
 /**
  * The Sub-Clusters a trip can be planned around, each with its eligible Schools, in one round
  * trip. An inner join to `school`, so a Sub-Cluster with no Schools does not appear — it has
  * nothing to visit, and the form's first act is to reveal a Sub-Cluster's Schools.
  */
-async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
+async function plannableSubClusters(): Promise<SubClusterOfSchools[]> {
   const rows = await db
     .select({
       subClusterId: subCluster.id,
@@ -580,7 +578,7 @@ async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
     .innerJoin(province, eq(province.code, school.provinceCode))
     .orderBy(asc(cluster.name), asc(subCluster.name), asc(school.name));
 
-  const map = new Map<string, PlannableSubCluster>();
+  const map = new Map<string, SubClusterOfSchools>();
   for (const row of rows) {
     let entry = map.get(row.subClusterId);
     if (!entry) {
@@ -608,7 +606,9 @@ async function plannableSubClusters(): Promise<PlannableSubCluster[]> {
  *
  * **Staff-only, so the read is too** — a Teaching Team member reaching the URL directly would
  * otherwise be shown the whole form and refused only on submit. `Promise.all` keeps the
- * Sub-Cluster read and the roster read concurrent; the rosters come from `./rosters.ts`. Both the
+ * Sub-Cluster read and the roster read concurrent; the rosters come from `./rosters.ts`. What each
+ * School already has on other trips (#409) is a second round trip after them, since it is keyed on
+ * the Schools the first one found. Both the
  * `staff` and `pimpinan` halves are kept — Staff for the PIC/extra-Staff pickers, Pimpinan for the
  * record-only checkbox list (#181). The Teaching Team are trip-scoped names now, not a roster (ADR-0020).
  */
@@ -620,5 +620,19 @@ export async function perjadinPlan(caller: Person): Promise<PerjadinPlan> {
     activeRosters(),
   ]);
 
-  return { subClusters, staff, pimpinan };
+  // What each School already has on other trips (#409), read once for every School the form can show.
+  const covered = await offlineSessionsElsewhere(
+    subClusters.flatMap((entry) => entry.schools.map((row) => row.id)),
+  );
+  return {
+    subClusters: subClusters.map((entry) => ({
+      ...entry,
+      schools: entry.schools.map((row) => ({
+        ...row,
+        offlineSessionsElsewhere: covered.get(row.id) ?? [],
+      })),
+    })),
+    staff,
+    pimpinan,
+  };
 }

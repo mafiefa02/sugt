@@ -266,3 +266,50 @@ from the browser straight to Drive, so Vercel's request limit is not in play.
 The body above keeps the `SUGT 2026 …` names, the old README text and the 20 MB cap as the
 point-in-time record of what was first decided; the running tool uses the names and the cap in this
 amendment.
+
+## Amendment (2026-10-06): the Perjadin folder's name carries the trip's Schools and an id
+
+[ADR-0044](./0044-a-perjadin-is-named-by-its-kelompok-and-dates.md),
+[#406](https://github.com/sugt-itb/sugt-itb-26/issues/406). `perjadin.destination` is dropped, so the
+Perjadin folder is no longer `{destination} · {starts_on}`. It is
+
+```
+{name} · {the trip's Schools} · P-{perjadin8}
+Kelompok 10 · 12–13 Okt 2026 · SMAN 1 Bontang, SMAN 2 Samarinda · P-1a2b3c4d
+```
+
+where the name is `{Sub-Cluster name} · {dates}` and the trip's Schools are those with a
+non-cancelled Session on it, alphabetically; with none, the Schools part is left out. `P-{perjadin8}`
+is the first 8 hex characters of the Perjadin's uuid, which tells two trips of one Kelompok apart
+when their names and Schools agree. The `:` → ` ·` rule goes: the name has no colon. One function,
+`perjadinFolderName`, builds it for both reconciles and the date-correction rename. The transaction
+folders and files below it are unchanged.
+
+## Amendment (2026-10-06): when a Perjadin folder is renamed
+
+[#407](https://github.com/sugt-itb/sugt-itb-26/issues/407). The Perjadin folder's name now carries
+both dates and the trip's Schools (the amendment above), so it is renamed whenever **any** of them
+changes, not only `starts_on` (#376):
+
+- **Right after the write commits, best effort**, when either date is corrected, or when a Session
+  write changes the trip's set of Schools: a Session added at a School not yet on the trip, one moved
+  to another School, or a School's last live Session cancelled. The write reports whether the set
+  changed, so a Session write that leaves it alone makes no call to Google. A failed rename never
+  fails the write.
+- **A Sub-Cluster rename makes no call.** The next reconcile on each of its trips re-asserts the
+  name, because names are app-owned.
+- **Periksa koneksi re-asserts every Perjadin folder name**: it reads each folder, renames those
+  whose name is out of date, at most 25 per press and within the sweep's time budget, and reports
+  how many it renamed and how many it did not reach. A folder in the Drive trash or gone is reported
+  and skipped, never recreated. This is how folders made before ADR-0044 take the new name: the
+  product owner presses it after deploy until none is left.
+
+## Amendment (2026-10-07): a third tree, `Foto & Video/`
+
+The root now holds a third tree beside `Bukti Transaksi/` and `Dokumen/`: `Foto & Video/`, with its
+own `Pelaksanaan Offline/`, a folder per Perjadin named as its receipts folder is, and inside it a
+folder per offline Session ([ADR-0046](./0046-session-footage-is-stored-in-the-company-google-drive.md),
+#424). It reuses this ADR's account, `_staging`, upload gate and reconcile; only a large file's
+transport differs, sent to the resumable session in 16 MiB pieces rather than one `PUT`. A Perjadin
+folder rename now renames all three of a trip's folders together, and Periksa koneksi ensures the
+third tree, sweeps its unsynced files and re-asserts its names.

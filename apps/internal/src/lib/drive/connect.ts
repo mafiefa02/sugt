@@ -9,7 +9,7 @@ import {
 } from "@sugt/db/queries";
 
 import { sweepUnsynced } from "./check";
-import { ensureDokumenFolders } from "./dokumen-folders";
+import { ensureDokumenFolders, ensureFootageFolders } from "./dokumen-folders";
 import { ensureFixedFolders, readyFolders } from "./fixed-folders";
 import { DRIVE_FILE_SCOPE, exchangeDriveCode, openDrive } from "./google";
 import { encryptRefreshToken } from "./token-crypto";
@@ -110,6 +110,13 @@ export async function completeDriveConnection(input: {
     // tree, but outside its readiness: failing here is logged and left to the next reconcile.
     await ensureDokumenFolders(person, drive, folders.rootFolderId).catch((error: unknown) => {
       console.error("Ensuring the Dokumen folders after connecting Google Drive failed.", error);
+    });
+    // `Foto & Video/` and its `Pelaksanaan Offline/` (ADR-0046), the same way.
+    await ensureFootageFolders(person, drive, folders.rootFolderId).catch((error: unknown) => {
+      console.error(
+        "Ensuring the Foto & Video folders after connecting Google Drive failed.",
+        error,
+      );
     });
     await sweepUnsynced(person, drive, folders).catch((error: unknown) => {
       console.error("The sweep after reconnecting Google Drive threw.", error);

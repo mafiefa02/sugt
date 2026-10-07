@@ -1,8 +1,9 @@
+import { perjadinCsvFileName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal } from "@sugt/db/queries";
 import { notFound } from "next/navigation";
 
-import { csvOf, fileNameOf } from "./csv";
+import { csvOf } from "./csv";
 
 /**
  * **The generic export.**
@@ -38,7 +39,7 @@ export async function GET(
       // `charset=utf-8` is load-bearing: the categories are Indonesian and the descriptions are
       // whatever a PIC typed, so a reader defaulting to a single-byte encoding mangles both.
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${fileNameOf(acquittal)}"`,
+      "content-disposition": `attachment; filename="${perjadinCsvFileName(acquittal)}"`,
       // The figures change whenever a line item does, and it is money. Nothing caches it.
       "cache-control": "no-store",
     },

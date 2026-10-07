@@ -3,9 +3,10 @@ import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { driveConnection } from "../schema/drive";
-import { school } from "../schema/reference";
+import { school, subCluster } from "../schema/reference";
 import { perjadin, perjadinDocument, perjadinDocumentFolder } from "../schema/travel";
 import type { Person } from "./caller";
+import { perjadinFolderNaming, type PerjadinFolderNaming } from "./perjadin-naming";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -82,14 +83,13 @@ export async function claimDokumenFolder(
 /** Everything the reconcile needs to put one document in place. */
 export type DocumentReconcileTarget = {
   documentId: string;
-  perjadinId: string;
   kind: PerjadinDocumentKind;
   documentDate: string;
   schoolName: string | null;
   participantType: PerjadinDocumentParticipantType | null;
   driveFileId: string;
-  destination: string;
-  startsOn: string;
+  /** What the Perjadin's folder is named from (ADR-0044). */
+  perjadin: PerjadinFolderNaming;
   /** The Perjadin's folder under `Dokumen/Pelaksanaan Offline`, once claimed. */
   dokumenFolderId: string | null;
   /** This kind's folder in it, once claimed. */
@@ -106,19 +106,18 @@ export async function documentReconcileTarget(
   const [row] = await db
     .select({
       documentId: perjadinDocument.id,
-      perjadinId: perjadin.id,
       kind: perjadinDocument.kind,
       documentDate: perjadinDocument.documentDate,
       schoolName: school.name,
       participantType: perjadinDocument.participantType,
       driveFileId: perjadinDocument.driveFileId,
-      destination: perjadin.destination,
-      startsOn: perjadin.startsOn,
+      perjadin: perjadinFolderNaming,
       dokumenFolderId: perjadin.driveDokumenFolderId,
       kindFolderId: perjadinDocumentFolder.driveFolderId,
     })
     .from(perjadinDocument)
     .innerJoin(perjadin, eq(perjadin.id, perjadinDocument.perjadinId))
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .leftJoin(school, eq(school.id, perjadinDocument.schoolId))
     .leftJoin(
       perjadinDocumentFolder,

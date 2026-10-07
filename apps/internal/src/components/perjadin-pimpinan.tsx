@@ -45,7 +45,7 @@ function PerjadinPimpinan({
   }
 
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <h2 className="font-heading text-sm font-medium">Pimpinan</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Pimpinan DITSAMA yang ikut memantau — tercatat saja, bukan anggota Group.

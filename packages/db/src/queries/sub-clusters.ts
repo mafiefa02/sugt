@@ -265,7 +265,8 @@ export async function deleteSubCluster(
 /** A Perjadin still going to visit the School, named so it can be re-planned or cancelled. */
 export type BlockingPerjadin = {
   id: string;
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044). */
+  subClusterName: string;
   startsOn: string;
   endsOn: string;
 };
@@ -332,12 +333,13 @@ export async function moveSchool(
       const blocking = await tx
         .selectDistinct({
           id: perjadin.id,
-          destination: perjadin.destination,
+          subClusterName: subCluster.name,
           startsOn: perjadin.startsOn,
           endsOn: perjadin.endsOn,
         })
         .from(session)
         .innerJoin(perjadin, eq(perjadin.id, session.perjadinId))
+        .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
         .where(
           and(
             eq(session.schoolId, schoolId),

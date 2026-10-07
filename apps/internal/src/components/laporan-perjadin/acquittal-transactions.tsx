@@ -21,6 +21,12 @@ import {
 import { RequiredLegend, RequiredMark } from "-/components/required-mark";
 import { UnsyncedMarker } from "-/components/unsynced-marker";
 import {
+  holdOpenWhile,
+  UploadStatus,
+  useLeaveWarning,
+  type UploadProgress,
+} from "-/components/upload-status";
+import {
   isAcceptedReceipt,
   MAX_UPLOAD_MEGABYTES,
   prepareReceipt,
@@ -47,6 +53,7 @@ import { Button } from "@sugt/ui/components/button";
 import { Card, CardHeader } from "@sugt/ui/components/card";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -125,7 +132,7 @@ function AcquittalTransactions({
   );
 
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Transaksi</h2>
         <RecordTransaction
@@ -222,7 +229,8 @@ function TransactionCard({
           <span className="text-muted-foreground">{line.category}</span>
           <Badge variant="secondary">{line.participantType}</Badge>
           {line.unsynced && <UnsyncedMarker explanation={UNSYNCED_TOOLTIP} />}
-          <div className="ml-auto flex items-center gap-4">
+          {/* Wraps under the line on a phone rather than pushing the card sideways (#418). */}
+          <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
             <span className="tabular-nums">{formatRupiah(line.amountIdr)}</span>
             <Receipts
               perjadinId={perjadinId}
@@ -336,14 +344,22 @@ function Receipts({
 }) {
   const [note, setNote] = useState<string | null>(null);
   const [uploading, startUploading] = useTransition();
+  // What the upload is doing, said inline under the row while it runs (#420). Read only while
+  // `uploading`, so a finished upload's last value never shows.
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   // Negative for a line grandfathered with more than five; it gains nothing either way.
   const slotsLeft = MAX_RECEIPTS_PER_TRANSACTION - line.evidence.length;
+  useLeaveWarning(uploading);
 
   function upload(files: File[]) {
+    const batch = files.slice(0, Math.max(0, slotsLeft));
+    // Set before the transition, not inside it: React holds an async transition's updates made
+    // before its first `await` until the whole action ends, so the status would never show and the
+    // last attempt's note would stay beside it.
+    setProgress({ phase: "uploading", done: 0, total: batch.length });
+    setNote(null);
     startUploading(async () => {
-      setNote(null);
-      const batch = files.slice(0, Math.max(0, slotsLeft));
       const notes: string[] = [];
       if (batch.length < files.length) {
         notes.push(`${files.length - batch.length} berkas tidak diunggah: ${CAP_NOTE}`);
@@ -355,7 +371,13 @@ function Receipts({
         if (tooLarge > 0) notes.push(`${tooLarge} berkas: ${UPLOAD_TOO_LARGE}`);
 
         if (prepared.length > 0) {
-          const sent = await uploadToDrive(perjadinId, prepared, line.id);
+          setProgress({ phase: "uploading", done: 0, total: prepared.length });
+          const sent = await uploadToDrive(perjadinId, prepared, {
+            transactionId: line.id,
+            onFileDone: () => {
+              setProgress(oneMoreDone);
+            },
+          });
           if ("refusal" in sent) {
             setNote([...notes, sent.refusal].join(" "));
             return;
@@ -363,6 +385,7 @@ function Receipts({
           let failed = sent.failed;
 
           if (sent.landed.length > 0) {
+            setProgress({ phase: "saving" });
             const result = await finalizeReceiptsAction(perjadinId, line.id, sent.landed);
             // The write's refusals are answered rather than counted as upload failures: none of
             // them means a file did not reach Drive.
@@ -393,11 +416,11 @@ function Receipts({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {line.evidence.length === 0 ? (
         <span className="text-muted-foreground">Belum ada bukti</span>
       ) : (
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-2">
           {line.evidence.map((file, index) => (
             <a
               key={file.id}
@@ -441,9 +464,16 @@ function Receipts({
         title={uploadGate.open ? undefined : uploadGate.reason}
         onClick={() => picker.current?.click()}
       >
-        {uploading ? "Mengunggah…" : "Unggah bukti"}
+        Unggah bukti
       </Button>
 
+      {uploading && progress !== null && (
+        <UploadStatus
+          inline
+          progress={progress}
+          className="basis-full"
+        />
+      )}
       {note !== null && <span className="text-destructive">{note}</span>}
     </div>
   );
@@ -478,8 +508,12 @@ function RecordTransaction({
   // this says so rather than closing as if all were done.
   const [unsynced, setUnsynced] = useState(false);
   const [saving, startSaving] = useTransition();
+  // What the save is doing (#420), shown above the buttons only while `saving`. Until it ends the
+  // popup will not close, its fields are disabled and leaving the page asks first.
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const fields = useId();
+  useLeaveWarning(saving);
 
   const complete =
     spentOn !== "" &&
@@ -510,16 +544,22 @@ function RecordTransaction({
    * against fresh sessions. Files that did land stay in private `_staging`, which ADR-0040 accepts.
    */
   function submit() {
+    // Before the transition, so the status shows and the last attempt's alert clears at once (see
+    // `Receipts`'s `upload`).
+    setProgress({ phase: "uploading", done: 0, total: staged.length });
+    setRefusal(null);
+    setUnsynced(false);
     startSaving(async () => {
-      setRefusal(null);
-      setUnsynced(false);
-
       // A new line is all or nothing: any file that cannot be sent refuses the whole of it.
       const { prepared, unsupported, tooLarge } = await prepareAll(staged);
       if (unsupported > 0) return setRefusal(UNSUPPORTED_RECEIPT);
       if (tooLarge > 0) return setRefusal(UPLOAD_TOO_LARGE);
 
-      const sent = await uploadToDrive(perjadinId, prepared);
+      const sent = await uploadToDrive(perjadinId, prepared, {
+        onFileDone: () => {
+          setProgress(oneMoreDone);
+        },
+      });
       if ("refusal" in sent) {
         setRefusal(sent.refusal);
         return;
@@ -529,6 +569,7 @@ function RecordTransaction({
         return;
       }
 
+      setProgress({ phase: "saving" });
       const result = await recordTransactionAction({
         perjadinId,
         spentOn,
@@ -557,7 +598,7 @@ function RecordTransaction({
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
+      onOpenChange={holdOpenWhile(saving, (next) => {
         setOpen(next);
         // Clear a stale alert when the form is reopened, so a prior refusal does not greet the
         // next entry.
@@ -565,7 +606,7 @@ function RecordTransaction({
           setRefusal(null);
           setUnsynced(false);
         }
-      }}
+      })}
     >
       <DialogTrigger
         disabled={!uploadGate.open}
@@ -581,7 +622,10 @@ function RecordTransaction({
           )
         }
       />
-      <DialogContent>
+      <DialogContent
+        size="panel"
+        closeDisabled={saving}
+      >
         <DialogHeader>
           <DialogTitle>Catat transaksi</DialogTitle>
           <DialogDescription>
@@ -590,240 +634,251 @@ function RecordTransaction({
           <RequiredLegend />
         </DialogHeader>
 
-        {refusal !== null && (
-          <Alert variant="destructive">
-            <AlertTitle>Transaksi belum tercatat.</AlertTitle>
-            <AlertDescription>{refusal}</AlertDescription>
-          </Alert>
-        )}
-        {unsynced && (
-          <Alert>
-            <AlertTitle>Transaksi tercatat.</AlertTitle>
-            <AlertDescription>{UNSYNCED_NOTE}</AlertDescription>
-          </Alert>
-        )}
+        <DialogBody>
+          {refusal !== null && (
+            <Alert variant="destructive">
+              <AlertTitle>Transaksi belum tercatat.</AlertTitle>
+              <AlertDescription>{refusal}</AlertDescription>
+            </Alert>
+          )}
+          {unsynced && (
+            <Alert>
+              <AlertTitle>Transaksi tercatat.</AlertTitle>
+              <AlertDescription>{UNSYNCED_NOTE}</AlertDescription>
+            </Alert>
+          )}
 
-        <div className="grid gap-3.5">
-          <div className="grid gap-1.5">
-            <Label
-              htmlFor={`${fields}-spent-on`}
-              className="gap-1"
-            >
-              Tanggal Transaksi
-              <RequiredMark />
-            </Label>
-            <Input
-              id={`${fields}-spent-on`}
-              aria-required="true"
-              type="date"
-              value={spentOn}
-              onChange={(event) => {
-                setSpentOn(event.target.value);
-              }}
-            />
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label
-              htmlFor={`${fields}-description`}
-              className="gap-1"
-            >
-              Keterangan
-              <RequiredMark />
-            </Label>
-            <Input
-              id={`${fields}-description`}
-              aria-required="true"
-              value={description}
-              onChange={(event) => {
-                setDescription(event.target.value);
-              }}
-            />
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label
-              htmlFor={`${fields}-amount`}
-              className="gap-1"
-            >
-              Jumlah (Rp)
-              <RequiredMark />
-            </Label>
-            {/*
-              A masked text input, not `type="number"`: it groups the thousands as they type so a
-              large amount's magnitude is legible at the point of entry — the same pattern the plan
-              form's Uang Perjalanan uses. `amount` stays a plain digit string in state; every non-digit
-              is stripped back out on change, so submit's `Number(...)` and the `complete` guard are
-              unchanged.
-            */}
-            <Input
-              id={`${fields}-amount`}
-              aria-required="true"
-              type="text"
-              inputMode="numeric"
-              value={amount === "" ? "" : formatIdr(Number(amount))}
-              onChange={(event) => {
-                const digits = event.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
-                setAmount(digits);
-              }}
-            />
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label
-              htmlFor={`${fields}-category`}
-              className="gap-1"
-            >
-              Kategori
-              <RequiredMark />
-            </Label>
-            {/*
-              The twelve come from `@sugt/domain`, which is the same list `transaction_category_check`
-              pins in the database. There is no "other" beyond `Lainnya`, which is in the list.
-            */}
-            <Select
-              value={category}
-              onValueChange={(value) => {
-                setCategory(value as TransactionCategory);
-              }}
-            >
-              <SelectTrigger
-                id={`${fields}-category`}
-                aria-required="true"
+          {/* Short fields sit two to a row from `sm` up, so the panel's width isn't wasted (#417). */}
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor={`${fields}-spent-on`}
+                className="gap-1"
               >
-                <SelectValue placeholder="Pilih kategori" />
-              </SelectTrigger>
-              <SelectContent>
-                {TRANSACTION_CATEGORIES.map((option) => (
-                  <SelectItem
-                    key={option}
-                    value={option}
-                  >
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-1.5">
-            <Label
-              htmlFor={`${fields}-participant-type`}
-              className="gap-1"
-            >
-              Tipe Peserta
-              <RequiredMark />
-            </Label>
-            {/*
-              An axis orthogonal to Kategori — which cohort the spend served. The two values come
-              from `@sugt/domain`, the same list `transaction_participant_type_check` pins in the
-              database. Required, so there is no empty option: a shared cost is attributed to
-              whichever type it predominantly served.
-            */}
-            <Select
-              value={participantType}
-              onValueChange={(value) => {
-                setParticipantType(value as TransactionParticipantType);
-              }}
-            >
-              <SelectTrigger
-                id={`${fields}-participant-type`}
+                Tanggal Transaksi
+                <RequiredMark />
+              </Label>
+              <Input
+                id={`${fields}-spent-on`}
                 aria-required="true"
+                disabled={saving}
+                type="date"
+                value={spentOn}
+                onChange={(event) => {
+                  setSpentOn(event.target.value);
+                }}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor={`${fields}-description`}
+                className="gap-1"
               >
-                <SelectValue placeholder="Pilih tipe peserta" />
-              </SelectTrigger>
-              <SelectContent>
-                {TRANSACTION_PARTICIPANT_TYPES.map((option) => (
-                  <SelectItem
-                    key={option}
-                    value={option}
-                  >
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                Keterangan
+                <RequiredMark />
+              </Label>
+              <Input
+                id={`${fields}-description`}
+                aria-required="true"
+                disabled={saving}
+                value={description}
+                onChange={(event) => {
+                  setDescription(event.target.value);
+                }}
+              />
+            </div>
 
-          <div className="grid gap-1.5">
-            <Label className="gap-1">
-              Bukti
-              <RequiredMark />
-            </Label>
-            <p className="-mt-0.5 text-xs text-muted-foreground">
-              1–{MAX_RECEIPTS_PER_TRANSACTION} berkas JPG, PNG, WebP atau PDF, masing-masing paling
-              besar {MAX_UPLOAD_MEGABYTES} MB. Foto diperkecil sebelum diunggah.
-            </p>
-            {/*
-              Required and staged, not uploaded on pick: `submit` PUTs them all before it records the
-              line, and records nothing unless every one landed. Same picker as the row's `Receipts`
-              — image or PDF, many at once, capped at `MAX_RECEIPTS_PER_TRANSACTION`. The control is
-              a button, which `aria-required` does not apply to; Catat staying disabled until a file
-              is staged is what enforces it here.
-            */}
-            <input
-              ref={picker}
-              type="file"
-              accept={RECEIPT_ACCEPT}
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                const picked = Array.from(event.target.files ?? []);
-                event.target.value = "";
-                if (picked.length === 0) return;
-                // A type outside the four is refused here, before anything is uploaded.
-                const chosen = picked.filter(isAcceptedReceipt);
-                const next = [...staged, ...chosen];
-                setStaged(next.slice(0, MAX_RECEIPTS_PER_TRANSACTION));
-                const dropped = next.length - MAX_RECEIPTS_PER_TRANSACTION;
-                const notes = [
-                  chosen.length < picked.length ? UNSUPPORTED_RECEIPT : null,
-                  dropped > 0 ? `${dropped} berkas tidak ditambahkan: ${CAP_NOTE}` : null,
-                ].filter((note) => note !== null);
-                setPickNote(notes.length > 0 ? notes.join(" ") : null);
-              }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={saving || staged.length >= MAX_RECEIPTS_PER_TRANSACTION}
-              onClick={() => picker.current?.click()}
-            >
-              Unggah bukti
-            </Button>
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor={`${fields}-amount`}
+                className="gap-1"
+              >
+                Jumlah (Rp)
+                <RequiredMark />
+              </Label>
+              {/*
+                A masked text input, not `type="number"`: it groups the thousands as they type so a
+                large amount's magnitude is legible at the point of entry — the same pattern the plan
+                form's Uang Perjalanan uses. `amount` stays a plain digit string in state; every non-digit
+                is stripped back out on change, so submit's `Number(...)` and the `complete` guard are
+                unchanged.
+              */}
+              <Input
+                id={`${fields}-amount`}
+                aria-required="true"
+                disabled={saving}
+                type="text"
+                inputMode="numeric"
+                value={amount === "" ? "" : formatIdr(Number(amount))}
+                onChange={(event) => {
+                  const digits = event.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+                  setAmount(digits);
+                }}
+              />
+            </div>
 
-            {pickNote !== null && <p className="text-sm text-destructive">{pickNote}</p>}
-
-            {staged.length > 0 && (
-              <ul className="grid gap-1">
-                {staged.map((file, index) => (
-                  <li
-                    key={`${index}-${file.name}`}
-                    className="flex items-center justify-between gap-2 text-sm"
-                  >
-                    <span className="truncate text-muted-foreground">{file.name}</span>
-                    <button
-                      type="button"
-                      className="text-muted-foreground underline hover:no-underline"
-                      disabled={saving}
-                      onClick={() => {
-                        setStaged((current) => current.filter((_, at) => at !== index));
-                        setPickNote(null);
-                      }}
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor={`${fields}-category`}
+                className="gap-1"
+              >
+                Kategori
+                <RequiredMark />
+              </Label>
+              {/*
+                The twelve come from `@sugt/domain`, which is the same list `transaction_category_check`
+                pins in the database. There is no "other" beyond `Lainnya`, which is in the list.
+              */}
+              <Select
+                value={category}
+                disabled={saving}
+                onValueChange={(value) => {
+                  setCategory(value as TransactionCategory);
+                }}
+              >
+                <SelectTrigger
+                  id={`${fields}-category`}
+                  aria-required="true"
+                >
+                  <SelectValue placeholder="Pilih kategori" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TRANSACTION_CATEGORIES.map((option) => (
+                    <SelectItem
+                      key={option}
+                      value={option}
                     >
-                      Hapus
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor={`${fields}-participant-type`}
+                className="gap-1"
+              >
+                Tipe Peserta
+                <RequiredMark />
+              </Label>
+              {/*
+                An axis orthogonal to Kategori — which cohort the spend served. The two values come
+                from `@sugt/domain`, the same list `transaction_participant_type_check` pins in the
+                database. Required, so there is no empty option: a shared cost is attributed to
+                whichever type it predominantly served.
+              */}
+              <Select
+                value={participantType}
+                disabled={saving}
+                onValueChange={(value) => {
+                  setParticipantType(value as TransactionParticipantType);
+                }}
+              >
+                <SelectTrigger
+                  id={`${fields}-participant-type`}
+                  aria-required="true"
+                >
+                  <SelectValue placeholder="Pilih tipe peserta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TRANSACTION_PARTICIPANT_TYPES.map((option) => (
+                    <SelectItem
+                      key={option}
+                      value={option}
+                    >
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-1.5 sm:col-span-2">
+              <Label className="gap-1">
+                Bukti
+                <RequiredMark />
+              </Label>
+              <p className="-mt-0.5 text-xs text-muted-foreground">
+                1–{MAX_RECEIPTS_PER_TRANSACTION} berkas JPG, PNG, WebP atau PDF, masing-masing
+                paling besar {MAX_UPLOAD_MEGABYTES} MB. Foto diperkecil sebelum diunggah.
+              </p>
+              {/*
+                Required and staged, not uploaded on pick: `submit` PUTs them all before it records the
+                line, and records nothing unless every one landed. Same picker as the row's `Receipts`
+                — image or PDF, many at once, capped at `MAX_RECEIPTS_PER_TRANSACTION`. The control is
+                a button, which `aria-required` does not apply to; Catat staying disabled until a file
+                is staged is what enforces it here.
+              */}
+              <input
+                ref={picker}
+                type="file"
+                accept={RECEIPT_ACCEPT}
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  const picked = Array.from(event.target.files ?? []);
+                  event.target.value = "";
+                  if (picked.length === 0) return;
+                  // A type outside the four is refused here, before anything is uploaded.
+                  const chosen = picked.filter(isAcceptedReceipt);
+                  const next = [...staged, ...chosen];
+                  setStaged(next.slice(0, MAX_RECEIPTS_PER_TRANSACTION));
+                  const dropped = next.length - MAX_RECEIPTS_PER_TRANSACTION;
+                  const notes = [
+                    chosen.length < picked.length ? UNSUPPORTED_RECEIPT : null,
+                    dropped > 0 ? `${dropped} berkas tidak ditambahkan: ${CAP_NOTE}` : null,
+                  ].filter((note) => note !== null);
+                  setPickNote(notes.length > 0 ? notes.join(" ") : null);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={saving || staged.length >= MAX_RECEIPTS_PER_TRANSACTION}
+                onClick={() => picker.current?.click()}
+              >
+                Unggah bukti
+              </Button>
+
+              {pickNote !== null && <p className="text-sm text-destructive">{pickNote}</p>}
+
+              {staged.length > 0 && (
+                <ul className="grid gap-1">
+                  {staged.map((file, index) => (
+                    <li
+                      key={`${index}-${file.name}`}
+                      className="flex items-center justify-between gap-2 text-sm"
+                    >
+                      <span className="truncate text-muted-foreground">{file.name}</span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground underline hover:no-underline"
+                        disabled={saving}
+                        onClick={() => {
+                          setStaged((current) => current.filter((_, at) => at !== index));
+                          setPickNote(null);
+                        }}
+                      >
+                        Hapus
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
-        </div>
+        </DialogBody>
+
+        {saving && progress !== null && <UploadStatus progress={progress} />}
 
         <DialogFooter>
           <Button
             variant="ghost"
+            disabled={saving}
             onClick={() => {
               setOpen(false);
             }}
@@ -834,7 +889,7 @@ function RecordTransaction({
             disabled={saving || !complete}
             onClick={submit}
           >
-            {saving ? "Menyimpan…" : "Catat"}
+            Catat
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -864,12 +919,13 @@ async function prepareAll(
  * ids that landed and how many did not, or the sentence for why no session opened.
  *
  * It records nothing: the entry form hands `landed` to `recordTransactionAction`, the row to
- * `finalizeReceiptsAction`, each with its own answer to a partial failure.
+ * `finalizeReceiptsAction`, each with its own answer to a partial failure. `onFileDone` fires as
+ * each file's `PUT` settles, landed or not, so the upload status can count them (#420).
  */
 async function uploadToDrive(
   perjadinId: string,
   prepared: PreparedReceipt[],
-  transactionId?: string,
+  { transactionId, onFileDone }: { transactionId?: string; onFileDone: () => void },
 ): Promise<{ landed: UploadedReceipt[]; failed: number } | { refusal: string }> {
   const sessions = await openReceiptSessionsAction(
     perjadinId,
@@ -879,10 +935,17 @@ async function uploadToDrive(
   if (sessions.outcome !== "ready") return { refusal: sessionRefusalFor(sessions) };
 
   const ids = await Promise.all(
-    prepared.map((file, index) => putToDriveSession(sessions.sessionUris[index]!, file.blob)),
+    prepared.map((file, index) =>
+      putToDriveSession(sessions.sessionUris[index]!, file.blob).finally(onFileDone),
+    ),
   );
   const landed = ids.flatMap((driveFileId) => (driveFileId ? [{ driveFileId }] : []));
   return { landed, failed: ids.length - landed.length };
+}
+
+/** One more file finished, for a `setProgress` updater; anything but the upload phase is left alone. */
+function oneMoreDone(progress: UploadProgress | null): UploadProgress | null {
+  return progress?.phase === "uploading" ? { ...progress, done: progress.done + 1 } : progress;
 }
 
 /** The five-receipt ceiling, as each place that meets it says it: a row upload or a dialog pick cut short, or a refused line. */

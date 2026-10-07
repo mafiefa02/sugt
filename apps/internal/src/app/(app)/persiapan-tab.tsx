@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader } from "@sugt/ui/components/card";
 import { Checkbox } from "@sugt/ui/components/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -43,7 +44,7 @@ import {
 import { preparationPercent } from "./preparation-derive";
 
 /**
- * **The Dashboard (`/`) Persiapan tab** — the free-standing Preparation Cards (#221, ADR-0028), a Card
+ * **The Dashboard (`/`) Persiapan Program tab** (Persiapan until #423) — the free-standing Preparation Cards (#221, ADR-0028), a Card
  * being a title, a Jenis, a date or date-range, and a hand-ticked checklist that is *not* the
  * Perjadin Preparation Checklist (ADR-0018). The cards arrive read from the server; nothing here
  * fetches.
@@ -131,7 +132,7 @@ function PersiapanTab({ cards, canEdit }: { cards: PreparationCard[]; canEdit: b
   }, [cards, sort]);
 
   return (
-    <div className="flex flex-col gap-5 px-7 py-6">
+    <div className="flex flex-col gap-5 px-4 py-6 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Select
           items={SORT_OPTIONS}
@@ -374,7 +375,7 @@ function CardFormDialog(props: { mode: "create" } | { mode: "edit"; card: Prepar
           )
         }
       />
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent size="panel">
         <DialogHeader>
           <DialogTitle>{props.mode === "create" ? "Persiapan Baru" : "Edit Persiapan"}</DialogTitle>
         </DialogHeader>
@@ -556,89 +557,92 @@ function CreateCardForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="grid gap-5">
-      <CardFieldset
-        fields={fields}
-        onChange={(patch) => {
-          setFields((previous) => ({ ...previous, ...patch }));
-        }}
-      />
+    <>
+      <DialogBody className="gap-5">
+        <CardFieldset
+          fields={fields}
+          onChange={(patch) => {
+            setFields((previous) => ({ ...previous, ...patch }));
+          }}
+        />
 
-      <div className="grid gap-2">
-        <Label htmlFor={draftId}>Checklist</Label>
-        <div className="flex gap-2">
-          <Input
-            id={draftId}
-            placeholder="Tambah checklist"
-            value={draft}
-            disabled={atCap}
-            onChange={(event) => {
-              setDraft(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                addDraft();
-              }
-            }}
-          />
-          <JenisSelect
-            value={draftJenis}
-            ariaLabel="Jenis checklist baru"
-            disabled={atCap}
-            onValueChange={setDraftJenis}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={draft.trim() === "" || atCap}
-            onClick={addDraft}
-          >
-            Tambah checklist
-          </Button>
-        </div>
-        {atCap && (
-          <p className="text-xs text-muted-foreground">
-            Maksimal {MAX_PREPARATION_CHECKLIST_ITEMS} checklist.
-          </p>
-        )}
+        <div className="grid gap-2">
+          <Label htmlFor={draftId}>Checklist</Label>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              id={draftId}
+              className="min-w-0 flex-[1_1_12rem]"
+              placeholder="Tambah checklist"
+              value={draft}
+              disabled={atCap}
+              onChange={(event) => {
+                setDraft(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addDraft();
+                }
+              }}
+            />
+            <JenisSelect
+              value={draftJenis}
+              ariaLabel="Jenis checklist baru"
+              disabled={atCap}
+              onValueChange={setDraftJenis}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={draft.trim() === "" || atCap}
+              onClick={addDraft}
+            >
+              Tambah checklist
+            </Button>
+          </div>
+          {atCap && (
+            <p className="text-xs text-muted-foreground">
+              Maksimal {MAX_PREPARATION_CHECKLIST_ITEMS} checklist.
+            </p>
+          )}
 
-        {items.length > 0 && (
-          <ul className="mt-1 space-y-1.5">
-            {items.map((item, index) => (
-              <li
-                // The list only grows at the end or shrinks by removal, so a positional key is stable.
-                key={`draft-${index}`}
-                className="flex items-center gap-2 text-sm"
-              >
-                <span className="flex-1">{item.label}</span>
-                <JenisSelect
-                  value={item.jenis}
-                  ariaLabel={`Jenis ${item.label}`}
-                  onValueChange={(jenis) => {
-                    setItems((previous) =>
-                      previous.map((it, i) => (i === index ? { ...it, jenis } : it)),
-                    );
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Hapus ${item.label}`}
-                  onClick={() => {
-                    setItems((previous) => previous.filter((_, i) => i !== index));
-                  }}
+          {items.length > 0 && (
+            <ul className="mt-1 space-y-1.5">
+              {items.map((item, index) => (
+                <li
+                  // The list only grows at the end or shrinks by removal, so a positional key is stable.
+                  key={`draft-${index}`}
+                  className="flex flex-wrap items-center gap-2 text-sm"
                 >
-                  <XIcon />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                  <span className="min-w-0 flex-[1_1_10rem] break-words">{item.label}</span>
+                  <JenisSelect
+                    value={item.jenis}
+                    ariaLabel={`Jenis ${item.label}`}
+                    onValueChange={(jenis) => {
+                      setItems((previous) =>
+                        previous.map((it, i) => (i === index ? { ...it, jenis } : it)),
+                      );
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Hapus ${item.label}`}
+                    onClick={() => {
+                      setItems((previous) => previous.filter((_, i) => i !== index));
+                    }}
+                  >
+                    <XIcon />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
-      {refusal !== null && <p className="text-sm text-destructive">{refusal}</p>}
+        {refusal !== null && <p className="text-sm text-destructive">{refusal}</p>}
+      </DialogBody>
 
       <DialogFooter>
         <Button
@@ -648,7 +652,7 @@ function CreateCardForm({ onDone }: { onDone: () => void }) {
           {saving ? "Menyimpan…" : "Buat"}
         </Button>
       </DialogFooter>
-    </div>
+    </>
   );
 }
 
@@ -753,129 +757,134 @@ function EditCardForm({ card, onDone }: { card: PreparationCard; onDone: () => v
   }
 
   return (
-    <div className="grid gap-5">
-      <CardFieldset
-        fields={fields}
-        onChange={(patch) => {
-          setFields((previous) => ({ ...previous, ...patch }));
-        }}
-      />
+    <>
+      <DialogBody className="gap-5">
+        <CardFieldset
+          fields={fields}
+          onChange={(patch) => {
+            setFields((previous) => ({ ...previous, ...patch }));
+          }}
+        />
 
-      <div className="grid gap-2">
-        <Label htmlFor={draftId}>Checklist</Label>
-        <div className="flex gap-2">
-          <Input
-            id={draftId}
-            placeholder="Tambah checklist"
-            value={draft}
-            disabled={atCap || itemPending}
-            onChange={(event) => {
-              setDraft(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                addItem();
-              }
-            }}
-          />
-          <JenisSelect
-            value={draftJenis}
-            ariaLabel="Jenis checklist baru"
-            disabled={atCap || itemPending}
-            onValueChange={setDraftJenis}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={draft.trim() === "" || atCap || itemPending}
-            onClick={addItem}
-          >
-            Tambah checklist
-          </Button>
-        </div>
-        {atCap && (
-          <p className="text-xs text-muted-foreground">
-            Maksimal {MAX_PREPARATION_CHECKLIST_ITEMS} checklist.
-          </p>
-        )}
-
-        {(uncheckedItems.length > 0 || checkedItems.length > 0) && (
-          <ul className="mt-1 space-y-1.5">
-            {uncheckedItems.map((item) => (
-              <li
-                key={item.id}
-                draggable
-                onDragStart={() => {
-                  draggingId.current = item.id;
-                }}
-                onDragOver={(event) => {
+        <div className="grid gap-2">
+          <Label htmlFor={draftId}>Checklist</Label>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              id={draftId}
+              className="min-w-0 flex-[1_1_12rem]"
+              placeholder="Tambah checklist"
+              value={draft}
+              disabled={atCap || itemPending}
+              onChange={(event) => {
+                setDraft(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
                   event.preventDefault();
-                }}
-                onDrop={() => {
-                  dropOnto(item.id);
-                }}
-                className="flex items-center gap-2 rounded-2xl bg-muted/40 px-2.5 py-1.5 text-sm"
-              >
-                <GripVerticalIcon className="size-4 shrink-0 cursor-grab text-muted-foreground" />
-                <span className="flex-1">{item.label}</span>
-                <JenisSelect
-                  value={item.jenis}
-                  ariaLabel={`Jenis ${item.label}`}
-                  disabled={itemPending}
-                  onValueChange={(jenis) => {
-                    setItemJenis(item.id, jenis);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Hapus ${item.label}`}
-                  disabled={itemPending}
-                  onClick={() => {
-                    removeItem(item.id);
-                  }}
-                >
-                  <XIcon />
-                </Button>
-              </li>
-            ))}
-            {checkedItems.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center gap-2 px-2.5 py-1.5 text-sm"
-              >
-                {/* Checked rows keep their place at the bottom and are not draggable — the write
-                    only ever renumbers unchecked items. */}
-                <span className="flex-1 text-muted-foreground line-through">{item.label}</span>
-                <JenisSelect
-                  value={item.jenis}
-                  ariaLabel={`Jenis ${item.label}`}
-                  disabled={itemPending}
-                  onValueChange={(jenis) => {
-                    setItemJenis(item.id, jenis);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Hapus ${item.label}`}
-                  disabled={itemPending}
-                  onClick={() => {
-                    removeItem(item.id);
-                  }}
-                >
-                  <XIcon />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                  addItem();
+                }
+              }}
+            />
+            <JenisSelect
+              value={draftJenis}
+              ariaLabel="Jenis checklist baru"
+              disabled={atCap || itemPending}
+              onValueChange={setDraftJenis}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={draft.trim() === "" || atCap || itemPending}
+              onClick={addItem}
+            >
+              Tambah checklist
+            </Button>
+          </div>
+          {atCap && (
+            <p className="text-xs text-muted-foreground">
+              Maksimal {MAX_PREPARATION_CHECKLIST_ITEMS} checklist.
+            </p>
+          )}
 
-      {refusal !== null && <p className="text-sm text-destructive">{refusal}</p>}
+          {(uncheckedItems.length > 0 || checkedItems.length > 0) && (
+            <ul className="mt-1 space-y-1.5">
+              {uncheckedItems.map((item) => (
+                <li
+                  key={item.id}
+                  draggable
+                  onDragStart={() => {
+                    draggingId.current = item.id;
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                  }}
+                  onDrop={() => {
+                    dropOnto(item.id);
+                  }}
+                  className="flex flex-wrap items-center gap-2 rounded-2xl bg-muted/40 px-2.5 py-1.5 text-sm"
+                >
+                  <GripVerticalIcon className="size-4 shrink-0 cursor-grab text-muted-foreground" />
+                  <span className="min-w-0 flex-[1_1_10rem] break-words">{item.label}</span>
+                  <JenisSelect
+                    value={item.jenis}
+                    ariaLabel={`Jenis ${item.label}`}
+                    disabled={itemPending}
+                    onValueChange={(jenis) => {
+                      setItemJenis(item.id, jenis);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Hapus ${item.label}`}
+                    disabled={itemPending}
+                    onClick={() => {
+                      removeItem(item.id);
+                    }}
+                  >
+                    <XIcon />
+                  </Button>
+                </li>
+              ))}
+              {checkedItems.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-center gap-2 px-2.5 py-1.5 text-sm"
+                >
+                  {/* Checked rows keep their place at the bottom and are not draggable — the write
+                    only ever renumbers unchecked items. */}
+                  <span className="min-w-0 flex-[1_1_10rem] break-words text-muted-foreground line-through">
+                    {item.label}
+                  </span>
+                  <JenisSelect
+                    value={item.jenis}
+                    ariaLabel={`Jenis ${item.label}`}
+                    disabled={itemPending}
+                    onValueChange={(jenis) => {
+                      setItemJenis(item.id, jenis);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Hapus ${item.label}`}
+                    disabled={itemPending}
+                    onClick={() => {
+                      removeItem(item.id);
+                    }}
+                  >
+                    <XIcon />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {refusal !== null && <p className="text-sm text-destructive">{refusal}</p>}
+      </DialogBody>
 
       <DialogFooter className="sm:justify-between">
         <Button
@@ -892,7 +901,7 @@ function EditCardForm({ card, onDone }: { card: PreparationCard; onDone: () => v
           {saving ? "Menyimpan…" : "Simpan"}
         </Button>
       </DialogFooter>
-    </div>
+    </>
   );
 }
 

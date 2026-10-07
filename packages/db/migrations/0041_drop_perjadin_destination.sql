@@ -1,0 +1,1 @@
+ALTER TABLE "perjadin" DROP COLUMN "destination";

@@ -182,6 +182,9 @@ export {
   type PerjadinSessionInput,
   type SessionPlacementRefusal,
 } from "./perjadin-sessions";
+export { type SchoolBookedOnAnotherPerjadin } from "./school-slot";
+export { type CoveredSession } from "./covered-sessions";
+export { type PerjadinNameRef } from "./perjadin-naming";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
   myPerjadin,
@@ -198,9 +201,71 @@ export {
   type TogglePreparationItemInput,
   type TogglePreparationItemResult,
 } from "./perjadin-preparation";
-// The derived checklist's item shape rides on `PerjadinDetail`; the rest of
-// `./preparation-checklist.ts` is a helper beneath the queries, like `./group-rules.ts`.
+// The resolved checklist's item shape rides on `PerjadinDetail`, `MyPerjadinTrip` and
+// `DirectoryPerjadin`; the resolver itself is a helper beneath the queries, like `./group-rules.ts`.
 export type { PreparationItem } from "./preparation-checklist";
+export {
+  addPreparationItem,
+  clearPreparationItemWording,
+  hidePreparationItem,
+  movePreparationItem,
+  removePreparationItem,
+  removePreparationItemAt,
+  rewordPreparationItem,
+  rewordPreparationItemAt,
+  showPreparationItem,
+  type AddPreparationItemResult,
+  type HidePreparationItemResult,
+  type MovePreparationItemResult,
+  type PreparationOverrideScope,
+  type PreparationScope,
+  type RemovePreparationItemAtResult,
+  type RemovePreparationItemResult,
+  type RewordPreparationItemResult,
+} from "./preparation-items";
+export {
+  deleteSessionFootage,
+  footageSession,
+  recordSessionFootage,
+  sessionFootageList,
+  type DeleteSessionFootageResult,
+  type FootageSession,
+  type FootageSessionRefusal,
+  type NewSessionFootage,
+  type RecordSessionFootageResult,
+  type SessionFootageRow,
+} from "./session-footage";
+export {
+  claimFootageFolder,
+  claimPerjadinFootageFolder,
+  claimSessionFootageFolder,
+  footageFolderIds,
+  footageReconcileTarget,
+  markFootageSynced,
+  markFootageSyncFailed,
+  sessionFootageFolders,
+  unsyncedFootage,
+  type FootageFolderIds,
+  type FootageReconcileTarget,
+  type PlacedFootage,
+  type SessionFolderNaming,
+  type SessionFootageFolder,
+  type UnsyncedFootage,
+} from "./session-footage-drive-sync";
+export {
+  preparationWeek,
+  type PreparationWeek,
+  type WeekPerjadin,
+  type WeekPreparationItem,
+} from "./preparation-week";
+export {
+  preparationSettings,
+  preparationSettingsClusters,
+  preparationSettingsPerjadins,
+  type PreparationSettings,
+  type PreparationSettingsItem,
+  type PreparationSettingsPerjadin,
+} from "./preparation-settings";
 export { onlineSessionDirectory, type DirectoryOnlineSession } from "./online-session-directory";
 export {
   deleteOnlineSession,
@@ -317,6 +382,7 @@ export {
   markTransactionSyncFailed,
   markTransactionSynced,
   perjadinDriveFolder,
+  perjadinDriveFolders,
   reconcileTarget,
   unsyncedTransactions,
   type PerjadinDriveFolder,

@@ -72,6 +72,41 @@ export type SessionMode = (typeof SESSION_MODES)[number];
 export const SESSION_STATUSES = ["arranged", "delivered", "cancelled"] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
+/** What a Session's Sesi is ranked by — see `rankBySchool`. */
+export type RankableSession = { id: string; schoolId: string; heldOn: string; startsAt: string };
+
+/**
+ * The Sesi order: by held date, then start time, then id as a stable tie-break. Plain string
+ * comparison is correct for both — `heldOn` is `YYYY-MM-DD` and `startsAt` is `HH:MM[:SS]`, both
+ * of which sort lexically as they sort chronologically.
+ */
+function bySesiRank(a: RankableSession, b: RankableSession): number {
+  if (a.heldOn !== b.heldOn) return a.heldOn < b.heldOn ? -1 : 1;
+  if (a.startsAt !== b.startsAt) return a.startsAt < b.startsAt ? -1 : 1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * **A Session's Sesi** — its per-School, per-mode date rank
+ * (`docs/adr/0027-a-sessions-sesi-is-its-per-school-date-rank.md`), computed on the fly and never
+ * stored. Each School's Sessions in Sesi order: index 0 is Sesi 1, index 1 is
+ * Sesi 2. The one ranking, shared by the `/monitoring` matrix and the planning note (#409).
+ *
+ * The caller passes **one mode's live Sessions** — cancelled ones are left out, so the next Session
+ * after a cancelled one takes its rank rather than one past it — and **all** of a School's, whichever
+ * trip each is on, since the rank is the School's and not a trip's.
+ */
+export function rankBySchool<T extends RankableSession>(sessions: readonly T[]): Map<string, T[]> {
+  const ranked = new Map<string, T[]>();
+  for (const s of sessions) {
+    const list = ranked.get(s.schoolId);
+    if (list) list.push(s);
+    else ranked.set(s.schoolId, [s]);
+  }
+  for (const list of ranked.values()) list.sort(bySesiRank);
+  return ranked;
+}
+
 /**
  * Indonesia's three Time Zones. A Province keeps exactly one and a School's is its
  * Province's, so this is what makes a Session's start time mean something — 09:00 at a
@@ -545,7 +580,7 @@ export type TransactionParticipantType = (typeof TRANSACTION_PARTICIPANT_TYPES)[
 
 /**
  * The **Jenis** a Preparation **Checklist Item** carries — the kind of preparation that item tracks,
- * on the Dashboard (`/`) Persiapan tab. Moved down from the Card to each item (#292). A closed set of
+ * on the Dashboard (`/`) Persiapan Program tab. Moved down from the Card to each item (#292). A closed set of
  * four, mirrored by `preparation_checklist_item_jenis_check` character for character (see
  * `packages/db/src/schema/monitoring.ts`).
  *
@@ -603,6 +638,39 @@ export const MAX_RECEIPTS_PER_TRANSACTION = 5;
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 /**
+ * **Session Footage** — the photos and videos documenting one offline Session, shown as "Foto &
+ * Video" (#424, ADR-0046). Two kinds, each with its own cap, in the same MiB arithmetic as
+ * `MAX_UPLOAD_BYTES`. A photo is held to the receipts' 50 MB; a video may be twenty times that.
+ * Footage is uploaded untouched, so these caps are on the file as it was taken.
+ */
+export const SESSION_FOOTAGE_KINDS = ["foto", "video"] as const;
+export type SessionFootageKind = (typeof SESSION_FOOTAGE_KINDS)[number];
+
+export const MAX_FOOTAGE_PHOTO_BYTES = 50 * 1024 * 1024;
+export const MAX_FOOTAGE_VIDEO_BYTES = 1000 * 1024 * 1024;
+
+/** The cap on one file of each kind. */
+export const MAX_FOOTAGE_BYTES: Record<SessionFootageKind, number> = {
+  foto: MAX_FOOTAGE_PHOTO_BYTES,
+  video: MAX_FOOTAGE_VIDEO_BYTES,
+};
+
+/**
+ * The types Session Footage is stored as — the six the server recognises from a file's first bytes
+ * (JPEG, PNG, HEIC/HEIF, WebP, MP4, MOV), each with its kind. A HEIF file is stored as `image/heic`:
+ * the two share a container and a sniff. Mirrored by `session_footage_content_type_check`.
+ */
+export const SESSION_FOOTAGE_CONTENT_TYPES = {
+  "image/jpeg": "foto",
+  "image/png": "foto",
+  "image/heic": "foto",
+  "image/webp": "foto",
+  "video/mp4": "video",
+  "video/quicktime": "video",
+} as const satisfies Record<string, SessionFootageKind>;
+export type SessionFootageContentType = keyof typeof SESSION_FOOTAGE_CONTENT_TYPES;
+
+/**
  * **What an Activity Log entry records**
  * ([#395](https://github.com/sugt-itb/sugt-itb-26/issues/395)): one act on a Perjadin's money,
  * receipts, documents or report. A closed set, mirrored character for character by
@@ -610,7 +678,8 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
  *
  * The two `document_*` values went into the set with the rest, so the Dokumen uploads
  * ([#397](https://github.com/sugt-itb/sugt-itb-26/issues/397)) and Hapus
- * ([#398](https://github.com/sugt-itb/sugt-itb-26/issues/398)) needed no CHECK migration.
+ * ([#398](https://github.com/sugt-itb/sugt-itb-26/issues/398)) needed no CHECK migration. The two
+ * `footage_*` values (Session Footage, #424) came later and widened the CHECK in migration 0044.
  */
 export const ACTIVITY_LOG_ACTIONS = [
   "advance_set",
@@ -620,6 +689,8 @@ export const ACTIVITY_LOG_ACTIONS = [
   "report_filed",
   "document_uploaded",
   "document_deleted",
+  "footage_uploaded",
+  "footage_deleted",
 ] as const;
 export type ActivityLogAction = (typeof ACTIVITY_LOG_ACTIONS)[number];
 
@@ -632,7 +703,23 @@ export const ACTIVITY_LOG_ACTION_LABELS: Record<ActivityLogAction, string> = {
   report_filed: "Laporan dikirim",
   document_uploaded: "Dokumen diunggah",
   document_deleted: "Dokumen dihapus",
+  footage_uploaded: "Foto/Video diunggah",
+  footage_deleted: "Foto/Video dihapus",
 };
+
+/**
+ * **The three levels a Preparation Item is defined at** (ADR-0045): every Perjadin, one Cluster's,
+ * or one Perjadin's own. The more specific level wins. Mirrored character for character by
+ * `preparation_item_level_check` (see `packages/db/src/schema/travel.ts`).
+ */
+export const PREPARATION_ITEM_LEVELS = ["semua", "cluster", "perjadin"] as const;
+export type PreparationItemLevel = (typeof PREPARATION_ITEM_LEVELS)[number];
+
+/**
+ * The longest a Preparation Item's wording may be, in characters, at any level. The company's longest
+ * item is under 130; this leaves room without letting a paragraph in.
+ */
+export const MAX_PREPARATION_ITEM_LABEL_LENGTH = 200;
 
 /**
  * **The three kinds of Perjadin Document**

@@ -29,6 +29,7 @@ import {
   addPerson,
   addProvince,
   addSchool,
+  addSchoolOnTrip,
   addSubCluster,
   addTransaction,
   addTransactionEvidence,
@@ -360,7 +361,7 @@ describe("activityLogPage — /log's read", () => {
 
   const NO_FILTERS: ActivityLogFilters = { q: "", aksi: null, dari: null, sampai: null, page: 1 };
 
-  /** Two trips with different PICs and destinations, and an entry-writer for either. */
+  /** Two trips with different PICs, Kelompok and Schools, and an entry-writer for either. */
   async function twoTrips() {
     const admin = await administrator();
     const rina = await staff();
@@ -368,15 +369,17 @@ describe("activityLogPage — /log's read", () => {
     const samarinda = await addPerjadin({
       picPersonId: rina.id,
       advanceIdr: 15_000_000,
-      destination: "Kelompok 18: Samarinda, Bontang dan Kabupaten Kutai Kartanegara",
+      subClusterName: "Kelompok 18",
       startsOn: "2026-10-12",
       endsOn: "2026-10-15",
     });
     const bandung = await addPerjadin({
       picPersonId: budi.id,
       advanceIdr: 5_000_000,
-      destination: "Kelompok 3: Kota Bandung",
+      subClusterName: "Kelompok 3",
     });
+    await addSchoolOnTrip({ perjadin: samarinda, name: "SMAN 1 Bontang" });
+    await addSchoolOnTrip({ perjadin: bandung, name: "SMAN 3 Bandung" });
     const log = (
       trip: { id: string },
       actor: { id: string; email: string },
@@ -456,7 +459,8 @@ describe("activityLogPage — /log's read", () => {
       driveFolderId: "folder-1",
       perjadin: {
         id: samarinda.id,
-        destination: "Kelompok 18: Samarinda, Bontang dan Kabupaten Kutai Kartanegara",
+        subClusterName: "Kelompok 18",
+        schoolNames: ["SMAN 1 Bontang"],
         startsOn: "2026-10-12",
         endsOn: "2026-10-15",
         picName: "Budi Hartono",
@@ -496,7 +500,7 @@ describe("activityLogPage — /log's read", () => {
     expect(page.rows.map((row) => row.id)).toEqual([a.id, b.id].sort().reverse());
   });
 
-  it("searches, case-insensitively and in SQL, the email, destination, PIC and details", async () => {
+  it("searches, case-insensitively and in SQL, the email, Kelompok, Schools, PIC and details", async () => {
     const { admin, rina, budi, samarinda, bandung, log } = await twoTrips();
     await log(samarinda, rina, advanceSet(15_000_000), "2026-10-01T02:00:00Z");
     await log(bandung, budi, advanceSet(5_000_000), "2026-10-02T02:00:00Z");
@@ -515,10 +519,14 @@ describe("activityLogPage — /log's read", () => {
 
     // The actor's email.
     expect(await search("RINA@")).toEqual([[samarinda.id, "advance_set"]]);
-    // The destination, as stored and as the screen shortens it.
+    // The trip's Kelompok — its Sub-Cluster's name, the first half of its name (ADR-0044).
+    expect(await search("kelompok 18")).toEqual([[samarinda.id, "advance_set"]]);
+    // The trip's Schools, the School line under its name.
     expect(await search("bontang")).toEqual([[samarinda.id, "advance_set"]]);
-    expect(await search("Kab. Kutai")).toEqual([[samarinda.id, "advance_set"]]);
-    expect(await search("Kabupaten Kutai")).toEqual([[samarinda.id, "advance_set"]]);
+    expect(await search("SMAN 3")).toEqual([
+      [bandung.id, "report_filed"],
+      [bandung.id, "advance_set"],
+    ]);
     // The current PIC's name.
     expect(await search("Hartono")).toEqual([
       [bandung.id, "report_filed"],

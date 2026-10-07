@@ -1,6 +1,7 @@
 "use client";
 
 import { FeedbackTokenDialog } from "-/components/feedback-token";
+import { FotoVideoDialog } from "-/components/foto-video-dialog";
 import { RecordTransaction } from "-/components/laporan-perjadin/acquittal-transactions";
 import { PerjadinDokumenDialog } from "-/components/perjadin-dokumen-dialog";
 import { PerjadinFeedbackTokenDialog } from "-/components/perjadin-feedback-token";
@@ -9,8 +10,7 @@ import { PerjadinPreparationDialog } from "-/components/perjadin-preparation";
 import { progressTone } from "-/components/progress-tone";
 import { spentPercent, tripTimeline, type TimelineNode } from "-/components/trip-timeline";
 import type { UploadGate } from "-/lib/drive/upload-gate";
-import { shortenKabupaten } from "-/lib/format-destination";
-import { formatWibDate } from "-/lib/format-wib";
+import { perjadinName, perjadinSchoolsLine } from "-/lib/perjadin-name";
 import type { MyPerjadinTrip } from "@sugt/db/queries";
 import { formatRupiah, formatSessionStartTimeWithWib } from "@sugt/domain";
 import {
@@ -101,17 +101,21 @@ function MyPerjadinSection({
  * two-column body — the money, the actions and the trip timeline on the left, the Anggota roster on
  * the right.
  *
+ * **Every collapsed card is the same shape** (#419) — past, current or future, PIC or not: the name
+ * and the Schools on the left; PIC, the Persiapan pill and the chevron on the right. Nothing else, so
+ * no card's row is squeezed by a line the others lack. The Laporan is reached through Edit.
+ *
  * The header row holds a second control, the Persiapan pill, so the trigger cannot wrap the row — a
  * button inside a button is invalid HTML. Instead the trigger wraps only the title and is *stretched*
  * over the whole row by an `after:` overlay (the row is its containing block): clicking the PIC, the
- * dates, the chevron or empty space lands on the overlay and toggles the card, and the trigger's
+ * School line, the chevron or empty space lands on the overlay and toggles the card, and the trigger's
  * accessible name is the title alone. The pill sits above the overlay (`relative z-10`), so it takes
  * its own click and opens the checklist without toggling. The chevron is decorative and outside the
  * trigger, rotated from the item's `data-open`.
  */
 function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: UploadGate }) {
   // The pill's `x/N` is read straight off the checklist the card also hands the dialog — one payload
-  // for both, so the pill and the boxes can never disagree. `N` is always six (amendment to ADR-0018).
+  // for both, so the pill and the boxes can never disagree. `N` is the trip's own (ADR-0045).
   const preparationDone = trip.preparation.filter((item) => item.checked).length;
   const preparationTotal = trip.preparation.length;
   // The shared three-way progress tone `/perjadin`'s pill wears too — neutral before anything is
@@ -129,15 +133,26 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
       value={trip.id}
       className="group/trip rounded-lg border border-border bg-card last:border-b"
     >
-      <div className="relative flex items-start gap-3 p-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 lg:flex-row lg:items-center lg:justify-between lg:gap-3">
-          <AccordionHeader className="min-w-0 font-heading text-lg font-normal text-foreground">
-            <AccordionPlainTrigger className="after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50">
-              {/* Same render-time abbreviation the trip's own page and its dialogs use (#105). */}
-              {shortenKabupaten(trip.destination)}
-            </AccordionPlainTrigger>
-          </AccordionHeader>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      <div className="relative flex items-start gap-3 p-3 sm:p-4">
+        {/* Left and right share a line whenever they fit and wrap on a phone, PIC + Persiapan then
+            sitting under the Schools. The left block's basis is its own width, so the right block
+            wraps away before the name would; the Schools line is `w-0 min-w-full` so its length
+            never counts toward that width, only the name's does. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+          <div className="min-w-0 flex-auto">
+            <AccordionHeader className="font-heading text-lg font-normal text-foreground">
+              <AccordionPlainTrigger className="after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50">
+                {/* The name already carries the dates (ADR-0044), so the card shows no date line. */}
+                {perjadinName(trip)}
+              </AccordionPlainTrigger>
+            </AccordionHeader>
+            {trip.schoolNames.length > 0 && (
+              <p className="mt-0.5 w-0 min-w-full text-xs text-muted-foreground">
+                {perjadinSchoolsLine(trip.schoolNames)}
+              </p>
+            )}
+          </div>
+          <div className="flex max-w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             <span>PIC: {trip.picFullName}</span>
             {/* The pill *is* the dialog's trigger — clicking it opens the checklist, live-toggleable
                 because `/` is Staff-only (canToggle), and the toggle write re-checks the role anyway. */}
@@ -154,16 +169,7 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
                 </button>
               }
             />
-            <span className="text-muted-foreground tabular-nums">
-              {trip.startsOn} – {trip.endsOn}
-            </span>
           </div>
-          {trip.report && (
-            <ReportLine
-              perjadinId={trip.id}
-              report={trip.report}
-            />
-          )}
         </div>
         <ChevronDown
           aria-hidden
@@ -171,7 +177,9 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
         />
       </div>
 
-      <AccordionPanel className="text-foreground">
+      {/* 12px inside the card on a phone, 16px from `sm`: the primitive's own `px-4` is on its inner
+          div, so this card narrows it from outside rather than changing it for every accordion. */}
+      <AccordionPanel className="text-foreground *:px-3 sm:*:px-4">
         <div className="grid gap-6 pt-2 pb-1 lg:grid-cols-[11fr_9fr]">
           <div className="flex min-w-0 flex-col gap-4">
             <div>
@@ -179,7 +187,7 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               <p className="mt-1 font-heading text-lg tabular-nums">
                 Tersisa {formatRupiah(remainingIdr)}
               </p>
-              <div className="mt-1 flex items-baseline justify-between gap-3 text-sm tabular-nums">
+              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 text-sm tabular-nums">
                 <span>Terpakai {formatRupiah(trip.drawnDownIdr)}</span>
                 <span>{formatRupiah(trip.advanceIdr)}</span>
               </div>
@@ -190,7 +198,8 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               />
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            {/* A full-width two-column grid on a phone, each button stretched to its cell. */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               <RecordTransaction
                 perjadinId={trip.id}
                 uploadGate={uploadGate}
@@ -206,7 +215,7 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               />
               <PerjadinDokumenDialog
                 perjadinId={trip.id}
-                destination={trip.destination}
+                name={perjadinName(trip)}
                 uploadGate={uploadGate}
                 trigger={
                   <Button
@@ -243,48 +252,16 @@ function TripCard({ trip, uploadGate }: { trip: MyPerjadinTrip; uploadGate: Uplo
               <p className="-mt-2 text-xs text-muted-foreground">{uploadGate.reason}</p>
             )}
 
-            <TripTimeline nodes={tripTimeline(trip)} />
+            <TripTimeline
+              nodes={tripTimeline(trip)}
+              uploadGate={uploadGate}
+            />
           </div>
 
           <AnggotaRoster anggota={trip.anggota} />
         </div>
       </AccordionPanel>
     </AccordionItem>
-  );
-}
-
-/**
- * **The PIC's Laporan line** (#396), on their own cards only. Unfiled, it names the acquittal's own
- * deadline, in the destructive colour once that has passed; filed, the WIB day it was filed, read
- * the way the Laporan reads it. The link sits above the card's stretched trigger
- * (`relative z-10`), so it opens the Laporan rather than toggling the card.
- */
-function ReportLine({
-  perjadinId,
-  report,
-}: {
-  perjadinId: string;
-  report: NonNullable<MyPerjadinTrip["report"]>;
-}) {
-  const { dueOn, overdue, filedAt } = report;
-  return (
-    <p className="flex flex-wrap items-center gap-x-2 text-xs lg:basis-full">
-      {filedAt ? (
-        <span className="text-muted-foreground">
-          Laporan: terkirim <span className="tabular-nums">{formatWibDate(filedAt)}</span>
-        </span>
-      ) : (
-        <span className={overdue ? "text-destructive" : "text-muted-foreground"}>
-          Laporan: belum dikirim · tenggat <span className="tabular-nums">{dueOn}</span>
-        </span>
-      )}
-      <Link
-        href={`/perjadin/${perjadinId}/laporan`}
-        className="relative z-10 underline underline-offset-4 hover:text-foreground"
-      >
-        Buka laporan
-      </Link>
-    </p>
   );
 }
 
@@ -336,7 +313,7 @@ function AnggotaRoster({ anggota }: { anggota: MyPerjadinTrip["anggota"] }) {
  * with a primary dot. The rail segment below a node is primary only when that node is done; every
  * other segment is muted.
  */
-function TripTimeline({ nodes }: { nodes: TimelineNode[] }) {
+function TripTimeline({ nodes, uploadGate }: { nodes: TimelineNode[]; uploadGate: UploadGate }) {
   if (nodes.length === 0) return null;
 
   return (
@@ -359,7 +336,10 @@ function TripTimeline({ nodes }: { nodes: TimelineNode[] }) {
             className={`flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 ${index < nodes.length - 1 ? "pb-4" : ""}`}
           >
             <span className="sr-only">{node.done ? "Selesai: " : "Belum: "}</span>
-            <SessionNode node={node} />
+            <SessionNode
+              node={node}
+              uploadGate={uploadGate}
+            />
           </div>
         </li>
       ))}
@@ -388,17 +368,19 @@ function TimelineMarker({ done }: { done: boolean }) {
 
 /**
  * `{heldOn} · {start time} · {School}`, then the Session's own controls: **Tandai** only while it is
- * `arranged` (a delivered Session has no transition left, so the pill goes once it lands), and
- * **Feedback** — the Participant-Feedback QR — which stays after delivery.
+ * `arranged` (a delivered Session has no transition left, so the pill goes once it lands),
+ * **Feedback** — the Participant-Feedback QR — which stays after delivery, and **Foto & Video**
+ * (#425), the Session's photos and videos, in both sections since footage is often uploaded after
+ * the trip. It opens even while Drive is down, so the files can be viewed; uploading is closed then.
  */
-function SessionNode({ node }: { node: TimelineNode }) {
+function SessionNode({ node, uploadGate }: { node: TimelineNode; uploadGate: UploadGate }) {
   const { school, session } = node;
   const text = `${session.heldOn} · ${formatSessionStartTimeWithWib(session.startsAt, school.timeZone)} · ${school.name}`;
 
   return (
     <>
       <span className="tabular-nums">{text}</span>
-      <span className="flex gap-2">
+      <span className="flex flex-wrap gap-2">
         {session.status === "arranged" && (
           <SessionMarkDeliveredDialog
             school={school}
@@ -429,9 +411,28 @@ function SessionNode({ node }: { node: TimelineNode }) {
             </Button>
           }
         />
+        <FotoVideoDialog
+          sessionId={session.sessionId}
+          heldOn={session.heldOn}
+          schoolName={school.name}
+          uploadGate={uploadGate}
+          // `/pendamping` is Staff-only, and the timeline holds no cancelled Session.
+          canUpload
+          canDelete
+          trigger={
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full"
+              aria-label={`Foto & Video ${text}`}
+            >
+              Foto & Video
+            </Button>
+          }
+        />
       </span>
     </>
   );
 }
 
-export { MyPerjadinSection };
+export { MyPerjadinSection, TripTimeline };

@@ -8,14 +8,15 @@ import type { TransactionCategory } from "@sugt/domain";
  *
  * ```
  * Pelaksanaan Offline/
- * └── {destination} · {starts_on}/                               ← Perjadin folder, private
+ * └── {name} · {the trip's Schools} · P-{perjadin8}/              ← Perjadin folder, private
  *     └── {spent_on} · {category} · T-{txn8}/                    ← transaction folder, shared
  *         └── {spent_on} · {category} · T-{txn8} · {ev8}.{ext}
  * ```
  *
  * Dates are ISO; the separator is ` · ` (U+00B7 with a space each side) everywhere; `/` becomes
- * `-` in the two categories that hold one; `:` becomes ` ·` in `perjadin.destination`, whose
- * "Kelompok 18" is the Sub-Cluster's own name. `txn8`/`ev8` are the first 8 hex characters of the
+ * `-` in the two categories that hold one. The Perjadin folder is named by `perjadinFolderName` in
+ * `../perjadin-name.ts`, the one place a Perjadin's name is put together (ADR-0044).
+ * `txn8`/`ev8` are the first 8 hex characters of the
  * transaction and evidence uuids, and the extension comes from the **sniffed** type, never the
  * browser's word. Names are app-owned: the database holds ids, so a rename by hand breaks nothing.
  */
@@ -50,11 +51,6 @@ export const SEPARATOR = " · ";
 /** The first 8 hex characters of a uuid — its first group. */
 export function short(uuid: string): string {
   return uuid.replaceAll("-", "").slice(0, 8);
-}
-
-/** `Kelompok 18 · Samarinda, Bontang dan Balikpapan · 2026-10-12` */
-export function perjadinFolderName(destination: string, startsOn: string): string {
-  return `${destination.replaceAll(":", " ·")}${SEPARATOR}${startsOn}`;
 }
 
 /** `2026-10-13 · Transport Bandara-Stasiun · T-1a2b3c4d` */

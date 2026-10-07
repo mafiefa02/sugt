@@ -26,8 +26,8 @@ import { school } from "./reference";
  * variable checklist; the **Jenis category lives on each checklist item**, not on the Card (#292).
  *
  * **This is a different concept from the Perjadin Preparation Checklist** ([ADR-0018](../../../../docs/adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md)),
- * despite both reading "Persiapan" in the UI. That one is a Perjadin's **six fixed** boxes, stored
- * as ticks and derived against a fixed list; this one is a **standalone** Card with a **variable**,
+ * despite both reading "Persiapan" in the UI. That one is a Perjadin's own boxes, defined at three
+ * levels and stored with their ticks (ADR-0045); this one is a **standalone** Card with a **variable**,
  * ordered, hand-edited checklist and no Perjadin, School, Cluster or Session behind it. They share
  * no table and no code — see `CONTEXT.md`, **Preparation Cards** vs **Preparation Checklist**.
  */

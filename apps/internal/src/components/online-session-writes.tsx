@@ -35,7 +35,7 @@ import { useId, useState, useTransition } from "react";
  */
 function OnlineSessionWrites({ session }: { session: OnlineSessionDetail }) {
   return (
-    <div className="flex flex-wrap gap-2.5 px-7 py-5">
+    <div className="flex flex-wrap gap-2.5 px-4 py-5 sm:px-7">
       {session.status === "arranged" && (
         <>
           <MarkDelivered session={session} />

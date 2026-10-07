@@ -544,10 +544,10 @@ describe("participantFeedbackAverages", () => {
  * `filed_by_role` / `filed_by_name` pass through onto the row.
  */
 
-/** One throwaway Perjadin to hang evaluations on — its destination and window are asserted below. */
+/** One throwaway Perjadin to hang evaluations on — its Kelompok and window are asserted below. */
 async function oneTrip(picPersonId: string) {
   return addPerjadin({
-    destination: "Kelompok 3: Kabupaten Sleman",
+    subClusterName: "Kelompok 3",
     advanceIdr: 5_000_000,
     picPersonId,
   });
@@ -561,7 +561,7 @@ function perjadinFilters(overrides: Partial<PerjadinFeedbackFilters>): PerjadinF
 describe("perjadinFeedbackPage", () => {
   beforeEach(resetDatabase);
 
-  it("sorts lowest-average-first, then newest, and carries filed_by/destination/date range", async () => {
+  it("sorts lowest-average-first, then newest, and carries filed_by/Kelompok/date range", async () => {
     const person = await signedIn();
     const trip = await oneTrip(person.id);
     await addPerjadinEvaluation({
@@ -591,7 +591,7 @@ describe("perjadinFeedbackPage", () => {
     // The stored role and name pass through verbatim — no derivation (ADR-0024, #167).
     expect(page.rows[0]?.filedByRole).toBe("Narasumber");
     expect(page.rows[1]?.filedByRole).toBe("Pimpinan");
-    expect(page.rows[0]?.destination).toBe("Kelompok 3: Kabupaten Sleman");
+    expect(page.rows[0]?.subClusterName).toBe("Kelompok 3");
     expect(page.rows[0]?.perjadinId).toBe(trip.id);
     expect(page.rows[0]?.createdOn).toBe("2026-03-01");
     // The trip's date range (#184) — the fixture's defaults.

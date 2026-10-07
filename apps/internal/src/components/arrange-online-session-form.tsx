@@ -110,7 +110,7 @@ function ArrangeOnlineSessionForm(
   }
 
   return (
-    <div className="flex flex-col gap-4 px-7 py-5">
+    <div className="flex flex-col gap-4 px-4 py-5 sm:px-7">
       {refusal !== null && (
         <Alert variant="destructive">
           <AlertTitle>Sesi belum tersimpan.</AlertTitle>

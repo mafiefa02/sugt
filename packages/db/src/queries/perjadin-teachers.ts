@@ -1,10 +1,14 @@
 import { MAX_TEACHING_TEAM_PER_PERJADIN } from "@sugt/domain";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "../client";
-import { perjadin, perjadinPreparationItem, perjadinTeacher } from "../schema/travel";
+import {
+  perjadin,
+  perjadinPreparationTick,
+  perjadinTeacher,
+  preparationItem,
+} from "../schema/travel";
 import type { Person } from "./caller";
-import { PENGAJAR_LENGKAP_KEY } from "./preparation-checklist";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -18,25 +22,30 @@ import { requireStaff } from "./staff-only";
  * a person could reach honestly comes back as a value; `NotStaffError` is the opposite case and
  * still throws.
  *
- * **Each of the three clears the "Narasumber sudah lengkap" Preparation tick** so that changing the
- * team forces a fresh manual confirmation it is complete (the amendment to ADR-0018). The Item is
- * now defined and derived as one of the fixed six (T4/#139, `./preparation-checklist.ts`); this is
- * the one place in the system that clears a tick automatically. A `DELETE` matching no row is not an
- * error, so clearing an already-unticked box is a harmless no-op.
+ * **Each of the three clears the system Preparation Item's tick** — "Fiksasi Dosen/Narasumber oleh
+ * PIC Dosen" at the cutover — so that changing the team forces a fresh manual confirmation it is
+ * complete (the amendment to ADR-0018, ADR-0045). The item is found by its
+ * `clears_on_teaching_team_change` flag, not by an id or a label, so a rewording keeps the coupling;
+ * this is the one place in the system that clears a tick automatically. A `DELETE` matching no row is
+ * not an error, so clearing an already-unticked box is a harmless no-op.
  */
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/**
- * Clear the "Narasumber sudah lengkap" tick for one trip — keyed by the shared canonical constant.
- */
-async function clearPengajarLengkap(tx: Tx, perjadinId: string): Promise<void> {
+/** Clear the system item's tick for one trip — whichever item carries the flag. */
+async function clearSystemItemTick(tx: Tx, perjadinId: string): Promise<void> {
   await tx
-    .delete(perjadinPreparationItem)
+    .delete(perjadinPreparationTick)
     .where(
       and(
-        eq(perjadinPreparationItem.perjadinId, perjadinId),
-        eq(perjadinPreparationItem.itemKey, PENGAJAR_LENGKAP_KEY),
+        eq(perjadinPreparationTick.perjadinId, perjadinId),
+        inArray(
+          perjadinPreparationTick.preparationItemId,
+          tx
+            .select({ id: preparationItem.id })
+            .from(preparationItem)
+            .where(eq(preparationItem.clearsOnTeachingTeamChange, true)),
+        ),
       ),
     );
 }
@@ -92,7 +101,7 @@ export async function addPerjadinTeacher(
       .values({ perjadinId, name: trimmed })
       .returning({ id: perjadinTeacher.id });
 
-    await clearPengajarLengkap(tx, perjadinId);
+    await clearSystemItemTick(tx, perjadinId);
     return { outcome: "added", teacherId: created!.id };
   });
 }
@@ -128,7 +137,7 @@ export async function renamePerjadinTeacher(
       .returning({ perjadinId: perjadinTeacher.perjadinId });
     if (!updated) return { outcome: "no-such-teacher" };
 
-    await clearPengajarLengkap(tx, updated.perjadinId);
+    await clearSystemItemTick(tx, updated.perjadinId);
     return { outcome: "renamed" };
   });
 }
@@ -154,7 +163,7 @@ export async function removePerjadinTeacher(
       .returning({ perjadinId: perjadinTeacher.perjadinId });
     if (!deleted) return { outcome: "no-such-teacher" };
 
-    await clearPengajarLengkap(tx, deleted.perjadinId);
+    await clearSystemItemTick(tx, deleted.perjadinId);
     return { outcome: "removed" };
   });
 }

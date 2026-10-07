@@ -3,9 +3,10 @@
 import { randomUUID } from "node:crypto";
 
 import { driveAccessToken } from "-/lib/drive/access-token";
-import { type DriveClient, DriveRequestError, isDriveFailure, openDrive } from "-/lib/drive/google";
+import { type DriveClient, isDriveFailure, openDrive } from "-/lib/drive/google";
 import { SNIFF_LENGTH, sniffReceiptType } from "-/lib/drive/receipt-files";
 import { reconcileDocument } from "-/lib/drive/reconcile-document";
+import { trashIfLive } from "-/lib/drive/trash-if-live";
 import { driveRefusal, isStagedUploadFor, staffOnTrip } from "-/lib/drive/upload-guard";
 import { requireEnv } from "-/lib/env";
 import { requirePerson } from "-/lib/person";
@@ -105,8 +106,8 @@ async function verifyDocument(
  *
  * 1. **Check** — Staff, the Perjadin, the connection — before any Drive call.
  * 2. **Verify** the file (`verifyDocument`), then **validate** the fields against the trip
- *    (`checkDocumentFields`): the date inside it, a Peserta's School in its Sub-Cluster, the times
- *    in order. Either refusal records nothing, and leaves the file unnamed in private `_staging`.
+ *    (`checkDocumentFields`): the date inside it, a Peserta's School one of the trip's Schools
+ *    (#410), the times in order. Either refusal records nothing, and leaves the file unnamed in private `_staging`.
  * 3. **Commit** the row and its Activity Log entry in one transaction (`recordPerjadinDocument`).
  * 4. **Reconcile** (`reconcileDocument`): name it, move it into its kind folder, share the file. If
  *    that fails the document still stands: `synced: false`, never an error.
@@ -203,15 +204,4 @@ export async function deleteDocumentAction(
   revalidatePath("/pendamping");
   revalidatePath(`/perjadin/${result.perjadinId}`);
   return { outcome: "deleted" };
-}
-
-/** Move a file to the Drive trash, unless it is there already or gone — both count as done. */
-async function trashIfLive(drive: DriveClient, driveFileId: string): Promise<void> {
-  const file = await drive.getFile(driveFileId);
-  if (!file || file.trashed) return;
-  await drive.trashFile(driveFileId).catch((error: unknown) => {
-    // Gone between the read and the trash: done all the same.
-    if (error instanceof DriveRequestError && error.status === 404) return;
-    throw error;
-  });
 }

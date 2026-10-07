@@ -6,7 +6,7 @@ import {
   moveSchoolAction,
   renameSubClusterAction,
 } from "-/app/(app)/kelompok-sekolah/actions";
-import { shortenKabupaten } from "-/lib/format-destination";
+import { perjadinName } from "-/lib/perjadin-name";
 import type {
   BlockingPerjadin,
   ClusterWithSubClusters,
@@ -39,7 +39,7 @@ function KelompokSekolahEditor({
   canWrite: boolean;
 }) {
   return (
-    <div className="flex min-h-full flex-col gap-8 p-7">
+    <div className="flex min-h-full flex-col gap-8 p-4 sm:p-7">
       {clusters.map((cluster) => (
         <ClusterSection
           key={cluster.id}
@@ -371,9 +371,7 @@ function SchoolRow({
           </p>
           <ul className="mt-1 list-disc pl-4">
             {blocking.map((perjadin) => (
-              <li key={perjadin.id}>
-                {shortenKabupaten(perjadin.destination)} ({perjadin.startsOn} – {perjadin.endsOn})
-              </li>
+              <li key={perjadin.id}>{perjadinName(perjadin)}</li>
             ))}
           </ul>
         </div>

@@ -68,14 +68,14 @@ const PROSE_REQUIRED = `Nilai ${CONCERN_AT_OR_BELOW} ke bawah wajib disertai pen
 
 function EpForm({
   token,
-  destination,
-  startsOn,
-  endsOn,
+  tripName,
+  schoolsLine,
 }: {
   token: string;
-  destination: string;
-  startsOn: string;
-  endsOn: string;
+  /** The trip's name, `{Sub-Cluster} · {dates}` (ADR-0044). */
+  tripName: string;
+  /** The trip's Schools, one line; empty when it has no live Session. */
+  schoolsLine: string;
 }) {
   const [role, setRole] = useState<PerjadinEvaluationRole | undefined>(undefined);
   const [name, setName] = useState("");
@@ -194,10 +194,8 @@ function EpForm({
     <div>
       <h1 className="font-heading text-lg font-medium">Evaluasi Perjalanan Dinas</h1>
       {/* Which trip this is, so a filer opening a bare link knows what they are rating (#167). */}
-      <p className="mt-1 text-sm text-foreground">{destination}</p>
-      <p className="text-sm text-muted-foreground tabular-nums">
-        {startsOn} – {endsOn}
-      </p>
+      <p className="mt-1 text-sm text-foreground">{tripName}</p>
+      {schoolsLine && <p className="text-sm text-muted-foreground">{schoolsLine}</p>}
       <p className="mt-2 text-sm text-muted-foreground">{INSTRUCTION}</p>
 
       <div className="mt-5 grid gap-5">

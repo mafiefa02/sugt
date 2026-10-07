@@ -123,3 +123,38 @@ are.
 - A sheet a person shares from Drive by hand is beyond the app's control, as a receipt is.
 - A trip's Dokumen and receipts folders are separate trees, so moving one by hand moves only that
   one.
+
+## Amendment (2026-10-06): the Perjadin's Dokumen folder name
+
+[ADR-0044](./0044-a-perjadin-is-named-by-its-kelompok-and-dates.md),
+[#406](https://github.com/sugt-itb/sugt-itb-26/issues/406). The Perjadin's Dokumen folder still
+carries the same name as its receipts folder, which is now
+`{name} · {the trip's Schools} · P-{perjadin8}` (ADR-0040's 2026-10-06 amendment) rather than
+`{destination} · {starts_on}`. The kind folders and file names below it are unchanged.
+
+## Amendment (2026-10-06): when the Dokumen folder is renamed
+
+[#407](https://github.com/sugt-itb/sugt-itb-26/issues/407). The Perjadin's Dokumen folder is renamed
+together with its receipts folder, on the occasions ADR-0040's amendment _when a Perjadin folder is
+renamed_ lists: a
+change to either date or to the trip's Schools, right after the write commits and best effort; a
+Sub-Cluster rename lazily, at the next reconcile; and every name re-asserted by Periksa koneksi.
+
+## Amendment (2026-10-06): a Peserta sheet names one of the trip's Schools
+
+[#410](https://github.com/sugt-itb/sugt-itb-26/issues/410). A Daftar Hadir Peserta's School must now
+be one of **the trip's Schools** — those with a non-cancelled Session on the Perjadin
+([ADR-0044](./0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)) — not merely in its
+Sub-Cluster. One Sub-Cluster may be covered by several trips
+([ADR-0043](./0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)), so the Sub-Cluster rule
+offered Schools this trip never visits. The picker offers that set and the server refuses any other
+School with a sentence; a sheet already recorded for a School that later left the trip stays.
+
+## Amendment (2026-10-07): Session Footage beside the documents, not among them
+
+Photos and videos of an offline Session are **not** Perjadin Documents and do not go under `Dokumen/`.
+They have their own tree, `Foto & Video/`, and their own table
+([ADR-0046](./0046-session-footage-is-stored-in-the-company-google-drive.md), #424): they are not
+attendance paperwork, and each tree can be handed over on its own. They keep this ADR's per-file
+sharing, every folder private, and its Hapus order — the file to the Drive trash first, then the row
+and its Log entry.

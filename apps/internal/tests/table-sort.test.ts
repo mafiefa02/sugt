@@ -56,7 +56,7 @@ describe("progressTone", () => {
 function trip(id: string, patch: Partial<SortablePerjadin> = {}): SortablePerjadin {
   return {
     id,
-    destination: "Kelompok 1: Kota Bandung",
+    subClusterName: "Kelompok 1",
     schoolCount: 1,
     startsOn: "2026-09-01",
     endsOn: "2026-09-03",
@@ -80,18 +80,30 @@ describe("sortPerjadinDirectory", () => {
     expect(ids(sortPerjadinDirectory(rows, PERJADIN_DEFAULT_SORT))).toEqual(["b", "a", "c"]);
   });
 
-  it("sorts Perjadin numeric-aware, so Kelompok 2 comes before Kelompok 12", () => {
+  it("sorts Perjadin by name numeric-aware, so Kelompok 2 comes before Kelompok 12", () => {
     const rows = [
-      trip("twelve", { destination: "Kelompok 12: Kab. Sragen" }),
-      trip("two", { destination: "Kelompok 2: Kota Bandung" }),
+      trip("twelve", { subClusterName: "Kelompok 12" }),
+      trip("two", { subClusterName: "Kelompok 2" }),
     ];
-    expect(ids(sortPerjadinDirectory(rows, { key: "destination", direction: "asc" }))).toEqual([
+    expect(ids(sortPerjadinDirectory(rows, { key: "name", direction: "asc" }))).toEqual([
       "two",
       "twelve",
     ]);
-    expect(ids(sortPerjadinDirectory(rows, { key: "destination", direction: "desc" }))).toEqual([
+    expect(ids(sortPerjadinDirectory(rows, { key: "name", direction: "desc" }))).toEqual([
       "twelve",
       "two",
+    ]);
+  });
+
+  it("sorts two trips of one Kelompok by their dates, not by how the name spells them", () => {
+    // "12 Okt" spelled out sorts before "9 Okt" as text; as dates it comes after.
+    const rows = [
+      trip("later", { startsOn: "2026-10-12", endsOn: "2026-10-13" }),
+      trip("earlier", { startsOn: "2026-10-09", endsOn: "2026-10-10" }),
+    ];
+    expect(ids(sortPerjadinDirectory(rows, { key: "name", direction: "asc" }))).toEqual([
+      "earlier",
+      "later",
     ]);
   });
 

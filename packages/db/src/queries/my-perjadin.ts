@@ -4,28 +4,24 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../client";
 import { session } from "../schema/delivery";
 import { person } from "../schema/people";
-import { province, school } from "../schema/reference";
+import { province, school, subCluster } from "../schema/reference";
 import {
   groupMember,
   perjadin,
   perjadinPimpinan,
-  perjadinPreparationItem,
   perjadinTeacher,
   transaction,
 } from "../schema/travel";
 import { advanceDrawdownCategoryList } from "./advance-drawdown";
 import type { Person } from "./caller";
-import { perjadinReportDeadline, todayInDeadlineZone } from "./deadline";
-import {
-  derivePreparationChecklist,
-  type PreparationItem,
-  type PreparationTick,
-} from "./preparation-checklist";
+import { todayInDeadlineZone } from "./deadline";
+import { tripSchoolNames } from "./perjadin-naming";
+import { preparationChecklists, type PreparationItem } from "./preparation-checklist";
 
 /**
  * **The caller's own trips**, for `/pendamping` (#197, #396): Perjalanan Dinas Anda — the trips not
  * yet over — and Perjalanan Dinas Sebelumnya — the ones that are, still fully workable, since the
- * Laporan and the attendance sheets are often finished after the trip.
+ * transactions and the attendance sheets are often finished after the trip.
  *
  * A read scoped **by** the caller rather than gated by their role: it takes a `Person` and returns
  * only the trips that Person is a working member of, so there is no Staff choke point (every
@@ -81,26 +77,22 @@ export type MyPerjadinSchool = {
 /**
  * One trip the caller is on, everything its `/pendamping` card renders.
  *
- * `preparation` is the flat fixed six (amendment to ADR-0018), each item carrying its tick state —
- * the same `derivePreparationChecklist` the detail read runs. It carries the whole checklist rather
- * than a bare `x`/`N` because the card's pill *and* its Persiapan dialog read from one payload: the
- * pill is `preparation.filter(i => i.checked).length` out of `preparation.length` (always six), and
- * the dialog toggles the very items shown here.
+ * `preparation` is the trip's own checklist (ADR-0045), each item carrying its tick state — the
+ * same resolver the detail read runs. It carries the whole checklist rather than a bare `x`/`N`
+ * because the card's pill *and* its Persiapan dialog read from one payload: the pill is
+ * `preparation.filter(i => i.checked).length` out of `preparation.length`, and the dialog toggles
+ * the very items shown here.
  */
 export type MyPerjadinTrip = {
   id: string;
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044), read live — never stored. */
+  subClusterName: string;
+  /** The trip's Schools (`tripSchoolNames`): the School line under the card's name. */
+  schoolNames: string[];
   startsOn: string;
   endsOn: string;
   picPersonId: string;
   picFullName: string;
-  /**
-   * The Perjadin Report's state, for the line on the card — **null unless the caller is the
-   * PIC**, so there is no line to draw. `dueOn` is the acquittal's own deadline
-   * (`perjadinReportDeadline`), and `overdue` compares it with today in the office's zone, as
-   * `daysRemaining` does there. `filedAt` is null until the Report is filed.
-   */
-  report: { dueOn: string; overdue: boolean; filedAt: Date | null } | null;
   /** Fixed at planning and transferred before departure, so never null and never absent. */
   advanceIdr: number;
   /**
@@ -112,7 +104,7 @@ export type MyPerjadinTrip = {
    * domain constant, where the acquittal reduces its loaded rows through `sumAdvanceDrawdownIdr`.
    */
   drawnDownIdr: number;
-  /** The fixed six, each with its current tick state — the pill's `x`/`N` and the dialog's boxes. */
+  /** The trip's checklist, each item with its tick state — the pill's `x`/`N` and the dialog's boxes. */
   preparation: PreparationItem[];
   /**
    * Who is on the trip, in three lists the way `docs/data-model.md` splits them: the Staff Group,
@@ -154,22 +146,21 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
   const rows = await db
     .select({
       id: perjadin.id,
-      destination: perjadin.destination,
+      subClusterName: subCluster.name,
+      schoolNames: tripSchoolNames(perjadin.id),
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
       picPersonId: perjadin.picPersonId,
       picFullName: person.fullName,
       advanceIdr: perjadin.advanceIdr,
       isCurrent,
-      reportDueOn: sql<string>`to_char(${perjadinReportDeadline}, 'YYYY-MM-DD')`,
-      reportOverdue: sql<boolean>`${perjadinReportDeadline} < ${todayInDeadlineZone}`,
-      reportFiledAt: perjadin.reportFiledAt,
     })
     .from(perjadin)
     .innerJoin(
       groupMember,
       and(eq(groupMember.perjadinId, perjadin.id), eq(groupMember.personId, caller.id)),
     )
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .innerJoin(person, eq(person.id, perjadin.picPersonId))
     // Current trips first, soonest first — a trip is remembered by when it happens. Then the
     // previous ones, the most recently ended first. `id` breaks the tie so the order is total.
@@ -183,18 +174,10 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
 
   if (rows.length === 0) return { current: [], previous: [] };
 
-  const trips = rows.map(({ reportDueOn, reportOverdue, reportFiledAt, ...trip }) => ({
-    ...trip,
-    report:
-      trip.picPersonId === caller.id
-        ? { dueOn: reportDueOn, overdue: reportOverdue, filedAt: reportFiledAt }
-        : null,
-  }));
-
-  const tripIds = trips.map((trip) => trip.id);
+  const tripIds = rows.map((trip) => trip.id);
 
   // The six hanging lists, gathered concurrently and each scoped to just these trips.
-  const [drawnDownRows, staffRows, pengajarRows, pimpinanRows, sessionRows, preparationRows] =
+  const [drawnDownRows, staffRows, pengajarRows, pimpinanRows, sessionRows, checklists] =
     await Promise.all([
       // Travel-float draw-down per trip (ADR-0029): `sum(amount_idr) filter (where category in …)`
       // over only `ADVANCE_DRAWDOWN_CATEGORIES`, grouped by `perjadin_id`. A trip with no drawdown
@@ -267,19 +250,9 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
         .innerJoin(province, eq(province.code, school.provinceCode))
         .where(and(inArray(session.perjadinId, tripIds), eq(session.mode, "offline")))
         .orderBy(asc(school.name), asc(session.heldOn), asc(session.startsAt), asc(session.id)),
-      // Every fixed-item tick on these trips. Not a count like `perjadinDirectory`'s pill: the card's
-      // Persiapan dialog toggles the boxes, so it needs the whole tick per item (who and when), which
-      // `derivePreparationChecklist` folds into the fixed six below — the same derivation the detail
-      // read runs. A `dosen:` orphan the old model left behind matches no fixed key, so it drops out.
-      db
-        .select({
-          perjadinId: perjadinPreparationItem.perjadinId,
-          itemKey: perjadinPreparationItem.itemKey,
-          checkedBy: perjadinPreparationItem.checkedBy,
-          checkedAt: perjadinPreparationItem.checkedAt,
-        })
-        .from(perjadinPreparationItem)
-        .where(inArray(perjadinPreparationItem.perjadinId, tripIds)),
+      // Every trip's checklist in one batched read (ADR-0045): the card's Persiapan dialog toggles
+      // the boxes, so it needs each item whole, not a count.
+      preparationChecklists(tripIds),
     ]);
 
   // Float draw-down keyed by trip; a trip absent from the grouped sum drew nothing down.
@@ -303,16 +276,6 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
     const list = pimpinanByTrip.get(row.perjadinId) ?? [];
     list.push({ personId: row.personId, name: row.name });
     pimpinanByTrip.set(row.perjadinId, list);
-  }
-
-  // Preparation ticks bucketed by trip; `derivePreparationChecklist` folds each bucket into the
-  // fixed six below. A trip absent here has no ticks, and `derivePreparationChecklist([])` gives
-  // the same six all unchecked — so the pill reads `0/6` rather than the trip dropping its pill.
-  const preparationTicksByTrip = new Map<string, PreparationTick[]>();
-  for (const row of preparationRows) {
-    const list = preparationTicksByTrip.get(row.perjadinId) ?? [];
-    list.push({ itemKey: row.itemKey, checkedBy: row.checkedBy, checkedAt: row.checkedAt });
-    preparationTicksByTrip.set(row.perjadinId, list);
   }
 
   // Sessions grouped by (trip, School), preserving the query's School-then-Session order. A trip's
@@ -346,7 +309,7 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
     });
   }
 
-  const built = trips.map(({ isCurrent, ...trip }) => {
+  const built = rows.map(({ isCurrent, ...trip }) => {
     const staff = (staffByTrip.get(trip.id) ?? []).map((member) => ({
       ...member,
       isPic: member.personId === trip.picPersonId,
@@ -356,7 +319,7 @@ export async function myPerjadin(caller: Person): Promise<MyPerjadin> {
     const card: MyPerjadinTrip = {
       ...trip,
       drawnDownIdr: drawnDownByTrip.get(trip.id) ?? 0,
-      preparation: derivePreparationChecklist(preparationTicksByTrip.get(trip.id) ?? []),
+      preparation: checklists.get(trip.id) ?? [],
       anggota: {
         staff,
         pengajar,

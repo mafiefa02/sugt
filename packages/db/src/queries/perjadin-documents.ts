@@ -5,13 +5,14 @@ import {
   type PerjadinDocumentParticipantType,
   type TimeZone,
 } from "@sugt/domain";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { province, school } from "../schema/reference";
 import { perjadin, perjadinDocument } from "../schema/travel";
 import { logActivity, type DocumentLogDetails } from "./activity-log";
 import type { Person } from "./caller";
+import { isTripSchool } from "./perjadin-naming";
 import { requireStaff } from "./staff-only";
 
 /**
@@ -60,8 +61,12 @@ export type DocumentFieldsRefusal =
   | { outcome: "invalid-fields" }
   /** The date is outside the trip — Tanggal Sesi and Tanggal Dokumen both lie inside it. */
   | { outcome: "date-outside-perjadin"; startsOn: string; endsOn: string }
-  /** A School that is not in the trip's Sub-Cluster — the rule offline Sessions hold too. */
-  | { outcome: "school-outside-sub-cluster" }
+  /**
+   * A School that is not one of **the trip's Schools** — none of its Sessions on this Perjadin is
+   * still live (#410, `isTripSchool`). A Kelompok split across several trips (ADR-0043) holds
+   * Schools this trip never visits, and an attendance sheet for one of them is a mistake.
+   */
+  | { outcome: "school-not-on-perjadin" }
   /** Waktu Selesai is not after Waktu Mulai, or either is not a time. */
   | { outcome: "times-out-of-order" };
 
@@ -93,11 +98,7 @@ export async function checkDocumentFields(
   requireStaff(caller);
 
   const [trip] = await tx
-    .select({
-      startsOn: perjadin.startsOn,
-      endsOn: perjadin.endsOn,
-      subClusterId: perjadin.subClusterId,
-    })
+    .select({ startsOn: perjadin.startsOn, endsOn: perjadin.endsOn })
     .from(perjadin)
     .where(eq(perjadin.id, perjadinId));
   if (!trip) return { outcome: "no-such-perjadin" };
@@ -134,18 +135,16 @@ export async function checkDocumentFields(
     return { outcome: "times-out-of-order" };
   }
 
+  // Only the trip's Schools (#410) — the same rule the picker offers. A new upload only: a sheet
+  // already recorded for a School that has since left the trip stays listed and deletable.
   const [found] = await tx
-    .select({
-      name: school.name,
-      subClusterId: school.subClusterId,
-      timeZone: province.timeZone,
-    })
+    .select({ name: school.name, timeZone: province.timeZone })
     .from(school)
     .innerJoin(province, eq(province.code, school.provinceCode))
-    .where(sql`${school.id}::text = ${peserta.schoolId}`);
-  if (!found || found.subClusterId !== trip.subClusterId) {
-    return { outcome: "school-outside-sub-cluster" };
-  }
+    .where(
+      and(sql`${school.id}::text = ${peserta.schoolId}`, isTripSchool(sql`${perjadinId}::uuid`)),
+    );
+  if (!found) return { outcome: "school-not-on-perjadin" };
   return { outcome: "ok", school: { name: found.name, timeZone: found.timeZone } };
 }
 
@@ -283,13 +282,12 @@ export type PerjadinDocumentRow = {
   unsynced: boolean;
 };
 
-/** A School the Peserta form offers: the trip's Sub-Cluster's, with the zone its times are in. */
+/** A School the Peserta form offers — one of the trip's Schools (#410) — with its zone. */
 export type DocumentSchool = { id: string; name: string; timeZone: TimeZone };
 
 /** Everything the Dokumen dialog renders for one trip. */
 export type PerjadinDokumen = {
   perjadinId: string;
-  destination: string;
   startsOn: string;
   endsOn: string;
   schools: DocumentSchool[];
@@ -308,10 +306,8 @@ export async function perjadinDokumen(
   const [trip] = await db
     .select({
       perjadinId: perjadin.id,
-      destination: perjadin.destination,
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
-      subClusterId: perjadin.subClusterId,
     })
     .from(perjadin)
     .where(eq(perjadin.id, perjadinId));
@@ -322,7 +318,7 @@ export async function perjadinDokumen(
       .select({ id: school.id, name: school.name, timeZone: province.timeZone })
       .from(school)
       .innerJoin(province, eq(province.code, school.provinceCode))
-      .where(eq(school.subClusterId, trip.subClusterId))
+      .where(isTripSchool(sql`${perjadinId}::uuid`))
       .orderBy(asc(school.name), asc(school.id)),
     db
       .select({
@@ -349,6 +345,5 @@ export async function perjadinDokumen(
       ),
   ]);
 
-  const { subClusterId: _subClusterId, ...window } = trip;
-  return { ...window, schools, documents };
+  return { ...trip, schools, documents };
 }

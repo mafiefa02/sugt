@@ -41,7 +41,7 @@ export function DashboardWarnings({ warnings }: { warnings: Warning[] }) {
   const [state, setState] = useState(() => initialWarningState(warnings));
 
   return (
-    <div className="flex flex-col gap-6 px-7 pt-6">
+    <div className="flex flex-col gap-6 px-4 pt-6 sm:px-7">
       {/* Active warnings — one collapsible card, open by default, that folds to a single line. Hidden
           entirely when nothing is active, exactly as the per-warning stack was. */}
       {state.active.length > 0 && (

@@ -6,6 +6,7 @@ import {
   type ActivityLogAction,
   type PerjadinDocumentKind,
   type PerjadinDocumentParticipantType,
+  type SessionFootageKind,
   type TimeZone,
   type TransactionCategory,
   type TransactionParticipantType,
@@ -14,9 +15,12 @@ import { and, count, desc, eq, ilike, inArray, like, or, sql, type SQL } from "d
 import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "../client";
+import { sessionFootage } from "../schema/delivery";
 import { person } from "../schema/people";
+import { subCluster } from "../schema/reference";
 import { activityLog, perjadin, perjadinDocument, transaction } from "../schema/travel";
 import type { Person } from "./caller";
+import { tripSchoolNames } from "./perjadin-naming";
 import { requireGrant } from "./staff-only";
 
 /**
@@ -47,6 +51,19 @@ export type DocumentLogDetails = {
 };
 
 /**
+ * What a `footage_*` entry records of one file of Session Footage (#424, ADR-0046): which file, and
+ * which Session — its date and School — since a Perjadin may hold several Sessions.
+ */
+export type FootageLogDetails = {
+  footageId: string;
+  sessionId: string;
+  kind: SessionFootageKind;
+  originalFilename: string;
+  heldOn: string;
+  schoolName: string;
+};
+
+/**
  * What `details` holds for each action. `document_deleted` is the same snapshot as
  * `document_uploaded`, taken of the row as it is deleted (#398), since the row is then gone.
  */
@@ -74,6 +91,8 @@ export type ActivityLogDetails = {
   report_filed: { transactionCount: number; totalIdr: number };
   document_uploaded: DocumentLogDetails;
   document_deleted: DocumentLogDetails;
+  footage_uploaded: FootageLogDetails;
+  footage_deleted: FootageLogDetails;
 };
 
 /** One act: its action and the details shaped for it. */
@@ -111,6 +130,9 @@ export function activityLogRincian(entry: ActivityLogEntry): string {
     case "document_uploaded":
     case "document_deleted":
       return documentRincian(entry.details);
+    case "footage_uploaded":
+    case "footage_deleted":
+      return footageRincian(entry.details);
   }
 }
 
@@ -125,6 +147,12 @@ function documentRincian(details: DocumentLogDetails): string {
     parts.push(schoolName, participantType, formatTimeRange(startsAt, endsAt, timeZone));
   }
   return parts.join(" · ");
+}
+
+/** One file of footage as one line — `Foto · IMG_1234.JPG · 2026-10-14 · SMAN 1 Bontang`. */
+function footageRincian(details: FootageLogDetails): string {
+  const kind = details.kind === "foto" ? "Foto" : "Video";
+  return [kind, details.originalFilename, details.heldOn, details.schoolName].join(" · ");
 }
 
 /** `search_text`: the Aksi and Rincian as the screen shows them, lower-cased once at write time. */
@@ -159,21 +187,25 @@ export async function logActivity(
 export const ACTIVITY_LOG_PAGE_SIZE = 50;
 
 /**
- * The Aksi dropdown's choices besides Semua, keyed by their `?aksi=` value. Uang Perjalanan and
- * Dokumen each cover two actions.
+ * The Aksi dropdown's choices besides Semua, keyed by their `?aksi=` value. Uang Perjalanan,
+ * Dokumen and Foto & Video each cover two actions.
  */
 export const ACTIVITY_LOG_AKSI_FILTERS = {
   "uang-perjalanan": { label: "Uang Perjalanan", actions: ["advance_set", "advance_changed"] },
   "catat-transaksi": { label: "Catat transaksi", actions: ["transaction_recorded"] },
   "unggah-bukti": { label: "Unggah bukti", actions: ["evidence_uploaded"] },
   dokumen: { label: "Dokumen", actions: ["document_uploaded", "document_deleted"] },
+  "foto-video": { label: "Foto & Video", actions: ["footage_uploaded", "footage_deleted"] },
   laporan: { label: "Laporan dikirim", actions: ["report_filed"] },
 } as const satisfies Record<string, { label: string; actions: readonly ActivityLogAction[] }>;
 export type ActivityLogAksiFilter = keyof typeof ACTIVITY_LOG_AKSI_FILTERS;
 
 /** What `/log`'s URL asks for. Every filter is optional, and they combine with AND. */
 export type ActivityLogFilters = {
-  /** Matched, case-insensitively, against the actor's email, destination, PIC and `search_text`. */
+  /**
+   * Matched, case-insensitively, against the actor's email, the trip's Sub-Cluster name and its
+   * Schools (ADR-0044), its PIC and `search_text`.
+   */
   q: string;
   aksi: ActivityLogAksiFilter | null;
   /** A WIB calendar date, `YYYY-MM-DD`, inclusive. */
@@ -189,11 +221,21 @@ export type ActivityLogRow = ActivityLogEntry & {
   occurredAt: Date;
   actorEmail: string;
   backfilled: boolean;
-  perjadin: { id: string; destination: string; startsOn: string; endsOn: string; picName: string };
+  /** The trip is named `{subClusterName} · {dates}`, with `schoolNames` as its School line (ADR-0044). */
+  perjadin: {
+    id: string;
+    subClusterName: string;
+    schoolNames: string[];
+    startsOn: string;
+    endsOn: string;
+    picName: string;
+  };
   /** The Drive folder of the transaction the entry names, when it has one. */
   driveFolderId: string | null;
   /** The Drive file of the Perjadin Document the entry names, while the document stands. */
   documentFileId: string | null;
+  /** The Drive file of the Session Footage the entry names, while the footage stands. */
+  footageFileId: string | null;
 };
 
 export type ActivityLogPage = {
@@ -233,9 +275,10 @@ export async function activityLogPage(
     conditions.push(
       or(
         ilike(activityLog.actorEmail, pattern),
-        // As stored, and as the screen shows it — `shortenKabupaten` writes "Kab." for "Kabupaten".
-        ilike(perjadin.destination, pattern),
-        ilike(sql`regexp_replace(${perjadin.destination}, '\\mKabupaten ', 'Kab. ', 'g')`, pattern),
+        // The trip's name is its Sub-Cluster's and its dates (ADR-0044); the dates are the date
+        // filter's, so the search reads the Kelompok — and the School line under it.
+        ilike(subCluster.name, pattern),
+        ilike(sql`array_to_string(${tripSchoolNames(perjadin.id)}, ', ')`, pattern),
         ilike(pic.fullName, pattern),
         like(activityLog.searchText, pattern),
       ),
@@ -263,6 +306,7 @@ export async function activityLogPage(
     .select({ total: count() })
     .from(activityLog)
     .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
     .where(where);
   const total = matched?.total ?? 0;
@@ -278,15 +322,18 @@ export async function activityLogPage(
       details: activityLog.details,
       backfilled: activityLog.backfilled,
       perjadinId: perjadin.id,
-      destination: perjadin.destination,
+      subClusterName: subCluster.name,
+      schoolNames: tripSchoolNames(perjadin.id),
       startsOn: perjadin.startsOn,
       endsOn: perjadin.endsOn,
       picName: pic.fullName,
       driveFolderId: transaction.driveFolderId,
       documentFileId: perjadinDocument.driveFileId,
+      footageFileId: sessionFootage.driveFileId,
     })
     .from(activityLog)
     .innerJoin(perjadin, eq(perjadin.id, activityLog.perjadinId))
+    .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
     .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
     .leftJoin(
       transaction,
@@ -295,6 +342,10 @@ export async function activityLogPage(
     .leftJoin(
       perjadinDocument,
       sql`${perjadinDocument.id} = (${activityLog.details} ->> 'documentId')::uuid`,
+    )
+    .leftJoin(
+      sessionFootage,
+      sql`${sessionFootage.id} = (${activityLog.details} ->> 'footageId')::uuid`,
     )
     .where(where)
     .orderBy(desc(activityLog.occurredAt), desc(activityLog.id))
@@ -310,13 +361,15 @@ export async function activityLogPage(
       backfilled: row.backfilled,
       perjadin: {
         id: row.perjadinId,
-        destination: row.destination,
+        subClusterName: row.subClusterName,
+        schoolNames: row.schoolNames,
         startsOn: row.startsOn,
         endsOn: row.endsOn,
         picName: row.picName,
       },
       driveFolderId: row.driveFolderId,
       documentFileId: row.documentFileId,
+      footageFileId: row.footageFileId,
     })),
     total,
     page,

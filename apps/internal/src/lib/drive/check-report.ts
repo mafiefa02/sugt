@@ -3,6 +3,8 @@ import type {
   DriveCheckReport,
   ExposableFolder,
   FolderCheck,
+  FolderNameFailure,
+  FootageSweepFailure,
   SweepFailure,
 } from "./check";
 
@@ -43,10 +45,39 @@ const DOCUMENT_FAILURE_REASONS: Record<DocumentSweepFailure["reason"], string> =
   "no-such-document": "dokumen sudah tidak ada",
 };
 
+const FOOTAGE_FAILURE_REASONS: Record<FootageSweepFailure["reason"], string> = {
+  "folder-trashed": "folder ada di Sampah Google Drive",
+  "folder-missing": "folder tidak ditemukan",
+  "file-trashed": "berkas ada di Sampah Google Drive",
+  "file-missing": "berkas tidak ditemukan",
+  "footage-folders-busy": "folder Foto & Video sedang disiapkan proses lain",
+  "drive-failed": "Google Drive gagal menjawab",
+  "no-such-footage": "foto/video sudah tidak ada",
+};
+
+const NAME_FAILURE_REASONS: Record<FolderNameFailure["reason"], string> = {
+  "folder-trashed": "folder ada di Sampah Google Drive",
+  "folder-missing": "folder tidak ditemukan",
+  "drive-failed": "Google Drive gagal menjawab",
+};
+
+const PERJADIN_FOLDER_LABELS: Record<FolderNameFailure["folder"], string> = {
+  "bukti-transaksi": "Bukti Transaksi",
+  dokumen: "Dokumen",
+  "foto-video": "Foto & Video",
+  "sesi-foto-video": "Foto & Video Sesi",
+};
+
 const DOKUMEN_LINES: Record<"ok" | "created" | "busy", string> = {
   ok: "Folder Dokumen: ada.",
   created: "Folder Dokumen: dibuat.",
   busy: "Folder Dokumen: sedang disiapkan proses lain — periksa lagi.",
+};
+
+const FOOTAGE_LINES: Record<"ok" | "created" | "busy", string> = {
+  ok: "Folder Foto & Video: ada.",
+  created: "Folder Foto & Video: dibuat.",
+  busy: "Folder Foto & Video: sedang disiapkan proses lain — periksa lagi.",
 };
 
 /** The prominent warning when a link-shared folder reaches the root or `_staging`. */
@@ -59,7 +90,10 @@ export type DriveCheckSentences = {
   lines: string[];
   /** Said prominently: a folder anyone with a link can open. */
   warnings: string[];
-  /** Each line the sweep could not finish, and why. */
+  /**
+   * Each line the sweep could not finish, and each Perjadin folder whose name could not be put
+   * right, and why.
+   */
   failures: string[];
 };
 
@@ -86,21 +120,26 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
         failures: [],
       };
     case "ok": {
-      const { sweep } = report;
+      const { sweep, names } = report;
       const lines = [
         "Token Google Drive berfungsi.",
         ...report.folders.map(
           (check) => `${FOLDER_NAMES[check.folder]}: ${FOLDER_STATES[check.state]}.`,
         ),
         ...(report.dokumen === "skipped" ? [] : [DOKUMEN_LINES[report.dokumen]]),
+        ...(report.footage === "skipped" ? [] : [FOOTAGE_LINES[report.footage]]),
         ...(sweep.ran
           ? [
               `${sweep.synced} transaksi disinkronkan, ${sweep.waiting} masih menunggu.`,
               `${sweep.documents.synced} dokumen disinkronkan, ${sweep.documents.waiting} masih menunggu.`,
+              `${sweep.footage.synced} foto/video disinkronkan, ${sweep.footage.waiting} masih menunggu.`,
             ]
           : [
-              `Sinkronisasi dilewati sampai folder di atas beres; ${sweep.waiting} transaksi dan ${sweep.documentsWaiting} dokumen masih menunggu.`,
+              `Sinkronisasi dilewati sampai folder di atas beres; ${sweep.waiting} transaksi, ${sweep.documentsWaiting} dokumen dan ${sweep.footageWaiting} foto/video masih menunggu.`,
             ]),
+        ...(names.ran
+          ? [`${names.renamed} nama folder dan berkas diganti, ${names.remaining} folder tersisa.`]
+          : []),
       ];
       return {
         lines,
@@ -114,6 +153,14 @@ export function describeDriveCheck(report: DriveCheckReport): DriveCheckSentence
               ...sweep.documents.failures.map(
                 (failure) =>
                   `${failure.documentDate} · ${failure.kind}: ${DOCUMENT_FAILURE_REASONS[failure.reason]}.`,
+              ),
+              ...sweep.footage.failures.map(
+                (failure) =>
+                  `${failure.originalFilename}: ${FOOTAGE_FAILURE_REASONS[failure.reason]}.`,
+              ),
+              ...(names.ran ? names.failures : []).map(
+                (failure) =>
+                  `${failure.name} (${PERJADIN_FOLDER_LABELS[failure.folder]}): ${NAME_FAILURE_REASONS[failure.reason]}.`,
               ),
             ]
           : [],

@@ -126,7 +126,7 @@ function FeedbackTokenDialog(props: FeedbackTokenDialogProps) {
                 alt="QR umpan balik"
                 width={256}
                 height={256}
-                className="size-64"
+                className="aspect-square w-full max-w-64"
               />
             </div>
 

@@ -88,7 +88,6 @@ describe("Pimpinan is record-only", () => {
     const refusal = await refusedBy(
       db.insert(schema.perjadin).values({
         subClusterId: subCluster.id,
-        destination: "Bandung",
         startsOn: "2026-09-01",
         endsOn: "2026-09-03",
         advanceIdr: 5_000_000,

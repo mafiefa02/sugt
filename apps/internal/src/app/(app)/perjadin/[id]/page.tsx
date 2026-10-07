@@ -7,7 +7,7 @@ import { PerjadinPimpinan } from "-/components/perjadin-pimpinan";
 import { PerjadinPreparation } from "-/components/perjadin-preparation";
 import { PerjadinSessions } from "-/components/perjadin-sessions";
 import { PerjadinTeachingTeam } from "-/components/perjadin-teaching-team";
-import { shortenKabupaten } from "-/lib/format-destination";
+import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, perjadinDetail, perjadinDokumen } from "@sugt/db/queries";
 import { formatRupiah } from "@sugt/domain";
@@ -17,15 +17,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 /**
- * The browser-tab title: `Perjadin — <destination>`, reusing the same shortened destination the H1
- * shows; a not-found id falls back to the section label (#309). Reads `perjadinDetail` again rather
- * than share state — a minimal title query, as the ticket asks.
+ * The browser-tab title: `Perjadin — <name>`, the same name the H1 shows (ADR-0044); a not-found
+ * id falls back to the section label (#309). Reads `perjadinDetail` again rather than share state —
+ * a minimal title query, as the ticket asks.
  */
 export async function generateMetadata({ params }: PageProps<"/perjadin/[id]">): Promise<Metadata> {
   const person = await requirePerson();
   const { id } = await params;
   const trip = await perjadinDetail(person, id);
-  return { title: trip ? `Perjadin — ${shortenKabupaten(trip.destination)}` : "Perjadin" };
+  return { title: trip ? `Perjadin — ${perjadinName(trip)}` : "Perjadin" };
 }
 
 /**
@@ -60,16 +60,14 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <Link
           href="/perjadin"
           className="text-sm text-muted-foreground hover:underline"
         >
           Perjadin
         </Link>
-        <h1 className="mt-1 font-heading text-lg font-medium">
-          {shortenKabupaten(trip.destination)}
-        </h1>
+        <h1 className="mt-1 font-heading text-lg font-medium">{perjadinName(trip)}</h1>
         {/*
           The date range, typed (ADR-0041): Staff correct it here with Ubah tanggal; a Pimpinan
           reads it.
@@ -88,7 +86,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
       </header>
 
       {acquittal !== null && (
-        <div className="border-b border-border px-7 py-5">
+        <div className="border-b border-border px-4 py-5 sm:px-7">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h2 className="font-heading text-sm font-medium">Uang Perjalanan</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -184,7 +182,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         it out; the filer self-declares a Role and Name on `/ep/{token}`. So the old Group-member
         gate is gone — this block shows for everyone who can see the page.
       */}
-      <div className="border-b border-border px-7 py-5">
+      <div className="border-b border-border px-4 py-5 sm:px-7">
         <h2 className="font-heading text-sm font-medium">Evaluasi Perjadin</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Bagikan tautan agar Narasumber, Pendamping dan Pimpinan dapat menilai perjalanannya —
@@ -205,7 +203,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]">) {
         canEdit={person.role === "Staff"}
       />
 
-      <section className="border-t border-border px-7 py-5">
+      <section className="border-t border-border px-4 py-5 sm:px-7">
         <h2 className="font-heading text-sm font-medium">Dokumen</h2>
         <p className="mt-1 mb-3 text-sm text-muted-foreground">
           Daftar hadir perjalanan ini. Unggah dan hapus dari kartu perjalanan di Pendamping.

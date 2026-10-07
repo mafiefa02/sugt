@@ -1,8 +1,6 @@
-import { formatWibDate } from "-/lib/format-wib";
 import { db, schema } from "@sugt/db";
-import { myPerjadin, perjadinAcquittal } from "@sugt/db/queries";
+import { myPerjadin, perjadinAcquittal, togglePreparationItem } from "@sugt/db/queries";
 import type { Person } from "@sugt/db/queries";
-import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -14,14 +12,15 @@ import {
   addSchool,
   addSubCluster,
   addTransaction,
+  COMPANY_PREPARATION_ITEMS,
   resetDatabase,
 } from "./support/fixtures";
 
 /**
  * **The caller's own trips** (#197, #396). The read is scoped *by* the caller — only trips they are
  * a `group_member` of — and split at WIB "today" into the current trips, soonest first, and the
- * previous ones, most recently ended first. Each carries its money, its Group/teachers/Pimpinan, its
- * visited Schools and, for the PIC, its Laporan state.
+ * previous ones, most recently ended first. Each carries its money, its Group/teachers/Pimpinan
+ * and its visited Schools.
  */
 
 /** A `Person` shaped the way the query layer takes one, from an inserted `person` row. */
@@ -177,62 +176,10 @@ describe("myPerjadin splits at today (WIB) and orders each section", () => {
   });
 });
 
-describe("myPerjadin carries the PIC's Laporan line", () => {
+describe("myPerjadin gives the PIC and a member the same card", () => {
   beforeEach(resetDatabase);
 
-  it("is unfiled with the acquittal's deadline, overdue once it has passed, or filed", async () => {
-    const caller = asPerson(
-      await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
-    );
-    // Ended yesterday: due tomorrow, not yet overdue.
-    const due = await addPerjadin({
-      picPersonId: caller.id,
-      advanceIdr: 1_000_000,
-      startsOn: wibDaysFromToday(-4),
-      endsOn: wibDaysFromToday(-1),
-    });
-    // Ended three days ago: due yesterday, overdue.
-    const overdue = await addPerjadin({
-      picPersonId: caller.id,
-      advanceIdr: 1_000_000,
-      startsOn: wibDaysFromToday(-6),
-      endsOn: wibDaysFromToday(-3),
-    });
-    // Filed at 20:00 UTC, which is the next day in WIB.
-    const filed = await addPerjadin({
-      picPersonId: caller.id,
-      advanceIdr: 1_000_000,
-      startsOn: "2026-01-05",
-      endsOn: "2026-01-08",
-    });
-    await db
-      .update(schema.perjadin)
-      .set({ reportFiledAt: new Date("2026-01-09T20:00:00Z") })
-      .where(eq(schema.perjadin.id, filed.id));
-
-    const { previous } = await myPerjadin(caller);
-    const reportOf = (id: string) => previous.find((trip) => trip.id === id)?.report;
-
-    expect(reportOf(due.id)).toEqual({ dueOn: wibDaysFromToday(1), overdue: false, filedAt: null });
-    expect(reportOf(overdue.id)).toEqual({
-      dueOn: wibDaysFromToday(-1),
-      overdue: true,
-      filedAt: null,
-    });
-    expect(reportOf(filed.id)).toEqual({
-      dueOn: "2026-01-10",
-      overdue: true,
-      filedAt: new Date("2026-01-09T20:00:00Z"),
-    });
-    // The card and the Laporan both read the filed day in WIB, where 20:00 UTC is the next day.
-    expect(formatWibDate(new Date("2026-01-09T20:00:00Z"))).toBe("2026-01-10");
-
-    // The same deadline the acquittal shows — one rule, read from one place.
-    const acquittal = await perjadinAcquittal(caller, overdue.id);
-    expect(acquittal?.reportDueOn).toBe(reportOf(overdue.id)?.dueOn);
-  });
-
-  it("marks only the PIC's own trips, so a member who is not PIC gets no line", async () => {
+  it("carries no Laporan state, so a PIC's card has nothing a member's lacks (#419)", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -241,16 +188,27 @@ describe("myPerjadin carries the PIC's Laporan line", () => {
       email: "budi@ditsama.itb.ac.id",
       role: "Staff",
     });
+    // Ended three days ago with nothing filed: the trip that used to carry the red overdue line.
+    const led = await addPerjadin({
+      picPersonId: caller.id,
+      advanceIdr: 1_000_000,
+      startsOn: wibDaysFromToday(-6),
+      endsOn: wibDaysFromToday(-3),
+    });
     const joined = await addPerjadin({
       picPersonId: other.id,
       advanceIdr: 1_000_000,
-      startsOn: daysFromToday(2),
-      endsOn: daysFromToday(6),
+      startsOn: wibDaysFromToday(-8),
+      endsOn: wibDaysFromToday(-5),
     });
     await addGroupMember(joined.id, caller.id);
 
-    const { current } = await myPerjadin(caller);
-    expect(current[0]?.report).toBeNull();
+    const { previous } = await myPerjadin(caller);
+    const ledCard = previous.find((trip) => trip.id === led.id);
+    const joinedCard = previous.find((trip) => trip.id === joined.id);
+
+    expect(ledCard).not.toHaveProperty("report");
+    expect(Object.keys(ledCard ?? {}).toSorted()).toEqual(Object.keys(joinedCard ?? {}).toSorted());
   });
 });
 
@@ -453,10 +411,10 @@ describe("myPerjadin builds the visited-Schools tree", () => {
   });
 });
 
-describe("myPerjadin derives the Preparation Checklist", () => {
+describe("myPerjadin resolves the Preparation Checklist", () => {
   beforeEach(resetDatabase);
 
-  it("returns the fixed six, marking only the ticked ones and dropping orphans", async () => {
+  it("returns the trip's own checklist, marking only the ticked items", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -466,31 +424,30 @@ describe("myPerjadin derives the Preparation Checklist", () => {
       startsOn: daysFromToday(1),
       endsOn: daysFromToday(4),
     });
-    // Two fixed items ticked, plus two orphans older models left behind — a `dosen:` tick and one on
-    // the ticket key ADR-0041 retired. Neither matches a fixed key, so neither has an item here.
-    await db.insert(schema.perjadinPreparationItem).values([
-      { perjadinId: trip.id, itemKey: "sk_perjalanan", checkedBy: caller.id },
-      { perjadinId: trip.id, itemKey: "tiket_pp", checkedBy: caller.id },
-      { perjadinId: trip.id, itemKey: "tiket_keberangkatan", checkedBy: caller.id },
-      { perjadinId: trip.id, itemKey: "dosen:someone", checkedBy: caller.id },
-    ]);
+    const before = (await myPerjadin(caller)).current[0]?.preparation ?? [];
+    const [first, , third] = before;
+    for (const item of [first!, third!]) {
+      await togglePreparationItem(caller, {
+        perjadinId: trip.id,
+        itemId: item.itemId,
+        checked: true,
+      });
+    }
 
     const {
       current: [mine],
     } = await myPerjadin(caller);
     if (!mine) throw new Error("expected the trip");
 
-    // The card derives its `x/N` pill from this: N is the length (always six), x the checked count.
-    expect(mine.preparation).toHaveLength(6);
-    const checked = mine.preparation.filter((item) => item.checked).map((item) => item.itemKey);
-    expect(checked.sort()).toEqual(["sk_perjalanan", "tiket_pp"]);
-    // Every other fixed item comes back unchecked; the orphans never appear at all.
-    expect(mine.preparation.filter((item) => !item.checked)).toHaveLength(4);
-    expect(mine.preparation.some((item) => item.itemKey.startsWith("dosen:"))).toBe(false);
-    expect(mine.preparation.some((item) => item.itemKey === "tiket_keberangkatan")).toBe(false);
+    // A trip not yet over has the company's 14 (ADR-0045); the card's `x/N` is read off this list.
+    expect(mine.preparation.map((item) => item.label)).toEqual(COMPANY_PREPARATION_ITEMS);
+    expect(mine.preparation.filter((item) => item.checked).map((item) => item.itemId)).toEqual([
+      first!.itemId,
+      third!.itemId,
+    ]);
   });
 
-  it("gives a trip with no ticks all six items unchecked", async () => {
+  it("gives a trip with no ticks every item unchecked", async () => {
     const caller = asPerson(
       await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
     );
@@ -505,7 +462,7 @@ describe("myPerjadin derives the Preparation Checklist", () => {
       current: [mine],
     } = await myPerjadin(caller);
     expect(mine?.id).toBe(trip.id);
-    expect(mine?.preparation).toHaveLength(6);
+    expect(mine?.preparation).toHaveLength(COMPANY_PREPARATION_ITEMS.length);
     expect(mine?.preparation.every((item) => !item.checked)).toBe(true);
   });
 });

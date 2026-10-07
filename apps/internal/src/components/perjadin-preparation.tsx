@@ -5,6 +5,7 @@ import type { PreparationItem } from "@sugt/db/queries";
 import { Checkbox } from "@sugt/ui/components/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -17,8 +18,8 @@ import { type ReactElement, useId, useOptimistic, useTransition } from "react";
  * ([#114](https://github.com/mafiefa02/sugt/issues/114)).
  *
  * **An internal-monitoring aid, and nothing more**: no money, no deadline, not a record, and
- * nothing ever ticks a box automatically. The six fixed items are derived server-side
- * (`perjadinDetail`); this only flips them.
+ * nothing ever ticks a box automatically. Which items a Perjadin has is resolved server-side
+ * (ADR-0045); this only flips them.
  *
  * Each box is **optimistic**: it flips on click, fires the toggle action, and reconciles when the
  * route revalidates. Toggling is offered to Staff only — `togglePreparationItem` re-checks the
@@ -34,26 +35,29 @@ import { type ReactElement, useId, useOptimistic, useTransition } from "react";
 function usePreparationChecklist(perjadinId: string, items: PreparationItem[]) {
   const [optimisticItems, setOptimisticChecked] = useOptimistic(
     items,
-    (state, patch: { itemKey: string; checked: boolean }) =>
+    (state, patch: { itemId: string; checked: boolean }) =>
       state.map((item) =>
-        item.itemKey === patch.itemKey ? { ...item, checked: patch.checked } : item,
+        item.itemId === patch.itemId ? { ...item, checked: patch.checked } : item,
       ),
   );
   const [, startToggle] = useTransition();
 
-  function toggle(itemKey: string, checked: boolean) {
+  function toggle(itemId: string, checked: boolean) {
     startToggle(async () => {
       // Inside the transition so the flip and the pending state are one update, then the action —
       // its `revalidatePath` re-reads the real state and `useOptimistic` falls back to it.
-      setOptimisticChecked({ itemKey, checked });
-      await togglePreparationItemAction(perjadinId, itemKey, checked);
+      setOptimisticChecked({ itemId, checked });
+      await togglePreparationItemAction(perjadinId, itemId, checked);
     });
   }
 
   return { items: optimisticItems, toggle };
 }
 
-/** The checkbox list itself — presentational, over the optimistic items and toggle the hook owns. */
+/**
+ * The checkbox list itself — presentational, over the optimistic items and toggle the hook owns. The
+ * Dashboard's Persiapan Luring tab (#423) renders it read-only, `canToggle` false, every box disabled.
+ */
 function PreparationChecklist({
   items,
   canToggle,
@@ -61,17 +65,17 @@ function PreparationChecklist({
 }: {
   items: PreparationItem[];
   canToggle: boolean;
-  onToggle: (itemKey: string, checked: boolean) => void;
+  onToggle: (itemId: string, checked: boolean) => void;
 }) {
   const fields = useId();
 
   return (
     <ul className="mt-2.5 space-y-1.5">
       {items.map((item) => {
-        const id = `${fields}-${item.itemKey}`;
+        const id = `${fields}-${item.itemId}`;
         return (
           <li
-            key={item.itemKey}
+            key={item.itemId}
             className="flex items-center gap-2.5 text-sm"
           >
             <Checkbox
@@ -79,7 +83,7 @@ function PreparationChecklist({
               checked={item.checked}
               disabled={!canToggle}
               onCheckedChange={(checked) => {
-                onToggle(item.itemKey, checked === true);
+                onToggle(item.itemId, checked === true);
               }}
             />
             <label
@@ -114,7 +118,7 @@ function PerjadinPreparation({
   const total = optimisticItems.length;
 
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Persiapan</h2>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -133,7 +137,7 @@ function PerjadinPreparation({
 
 /**
  * The same checklist as a dialog, opened from a caller's own control — a trip card's
- * "Persiapan n/6" pill. `trigger` is required because there is no default surface for it here; the
+ * "Persiapan x/N" pill. `trigger` is required because there is no default surface for it here; the
  * pill is the whole reason this variant exists. Live check/uncheck runs through the same
  * `usePreparationChecklist` hook as the inline section, so the toggle is not forked.
  */
@@ -153,19 +157,21 @@ function PerjadinPreparationDialog({
   return (
     <Dialog>
       <DialogTrigger render={trigger} />
-      <DialogContent>
+      <DialogContent size="panel">
         <DialogHeader>
           <DialogTitle>Persiapan</DialogTitle>
         </DialogHeader>
 
-        <PreparationChecklist
-          items={optimisticItems}
-          canToggle={canToggle}
-          onToggle={toggle}
-        />
+        <DialogBody>
+          <PreparationChecklist
+            items={optimisticItems}
+            canToggle={canToggle}
+            onToggle={toggle}
+          />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );
 }
 
-export { PerjadinPreparation, PerjadinPreparationDialog };
+export { PerjadinPreparation, PerjadinPreparationDialog, PreparationChecklist };

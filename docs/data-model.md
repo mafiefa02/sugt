@@ -331,7 +331,12 @@ given; a Sub-Cluster is invented, so "not yet grouped" is a genuinely tempting s
 It is not allowed. Every School belongs to exactly one Sub-Cluster from the moment the seed
 runs, which is what lets a Perjadin be planned by picking a Sub-Cluster and nothing else — an
 unassigned School would be a School no trip could ever be planned for, and nothing on any
-screen would say so.
+screen would say so. A Sub-Cluster bounds which Schools one Perjadin may combine; it may be
+covered by several Perjadins, and nothing makes `perjadin.sub_cluster_id` unique
+([ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)). `sub_cluster.name`
+is the first half of every trip's name
+([ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)), so renaming a
+Sub-Cluster relabels its trips.
 
 **A School carries both `cluster_id` and `sub_cluster_id`, and they cannot disagree.** The
 second is derivable from the first via `sub_cluster`, so this is a denormalisation, and it is
@@ -407,9 +412,9 @@ create unique index session_one_online_per_school_per_day
   on session (school_id, held_on)
   where perjadin_id is null and status <> 'cancelled';
 
-create unique index session_no_duplicate_offline_per_school_per_perjadin
-  on session (perjadin_id, school_id, held_on, starts_at)
-  where status <> 'cancelled';
+create unique index session_no_duplicate_offline_per_school
+  on session (school_id, held_on, starts_at)
+  where status <> 'cancelled' and perjadin_id is not null;
 ```
 
 **No Session carries a Stream.** The STEM/Research split used to be a property of who taught — the
@@ -431,14 +436,16 @@ It dropped `stream` from the key when Stream was dropped from online delivery. I
 `perjadin_id` is not null. Partial the usual way besides: cancelled rows accumulate and must not
 collide with their replacements.
 
-**Two offline-Session indexes were dropped, and this one replaces them
+**Two offline-Session indexes were dropped, and a per-trip one replaced them — itself replaced by
+the cross-trip index below since #408
 ([ADR-0019](./adr/0019-offline-sessions-carry-a-stream-and-a-school-gets-many-per-trip.md),
 narrowed by [ADR-0038](./adr/0038-offline-sessions-carry-no-stream-and-parallel-rooms-are-one-session.md)).**
 `session_one_per_school_per_perjadin` — "one Session per School on the trip" — is gone, because a
 School now has _several_ offline Sessions per Perjadin, each on its own date and time.
 `session_one_school_at_a_time_per_perjadin`, on `(perjadin_id, held_on, starts_at)`, forbade _any_
 two Sessions sharing a moment on one trip, same School included, and had to go. What the database
-holds is **one live offline Session per School per date and start time on a trip**: parallel rooms
+held then was **one live offline Session per School per date and start time on a trip** (since
+#408, on any trip — see below): parallel rooms
 are recorded as one Session whose Teaching Team lists everyone who taught, so two live rows at the
 same School and moment are refused. ADR-0019 had allowed that pair when the key also carried
 `stream` (a STEM and a Research room at one hour); ADR-0038 dropped `stream` and reversed it.
@@ -451,8 +458,26 @@ party — stays the application's (enforced when a trip is planned, and when a S
 edited) and is listed in [what the database does not hold](#what-the-database-does-not-hold). Under
 ADR-0019 it could not be a plain unique index, because same-School pairs had to pass. Since
 ADR-0038 they no longer do, so the two rules together are one live offline Session per trip per
-moment, and the trip-wide `(perjadin_id, held_on, starts_at)` index could hold both. #342 kept the
-per-School key it specified; restoring the trip-wide index would be its own change.
+moment on one trip, and the trip-wide `(perjadin_id, held_on, starts_at)` index could hold both
+within a trip. #342 kept the per-School key it specified; restoring the trip-wide index would be its
+own change.
+
+**The per-School rule holds across trips
+([#408](https://github.com/sugt-itb/sugt-itb-26/issues/408),
+[ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)).** One Sub-Cluster may
+be covered by several Perjadins and the same School may sit on several, so a second live offline
+Session at one School, date and start time is a double-booking **whichever trip carries it**.
+Migration `0042` replaced `session_no_duplicate_offline_per_school_per_perjadin`, on
+`(perjadin_id, school_id, held_on, starts_at)`, with `session_no_duplicate_offline_per_school`, on
+`(school_id, held_on, starts_at)` — strictly wider, so the old one was dropped. It is partial on
+`status <> 'cancelled' and perjadin_id is not null`: a cancelled Session never blocks its slot, and
+online Sessions stay out, as the `perjadin_id` column in the old key kept them. Only an exact match
+on date and start time collides; overlapping start times do not, across trips as within one. The
+writes read the slot first (`slotHolder`), so a double-booking on another trip comes back as
+`school-booked-on-another-perjadin`, naming and linking that trip, and a race past the read is read
+again and named the same way. Like `0032`, migration `0042` first looks for live pairs the wider
+index would refuse and **aborts listing them**; nothing cancels a Session to make it fit. The different-Schools rule stays
+**per trip** — two Groups can be in two places at once.
 
 **There is no `sub_cluster_id` on a Session, and the reason is worth stating because the column
 is an obvious thing to reach for.** The rule it would enforce — every School a Perjadin teaches
@@ -1101,10 +1126,13 @@ select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
 
 union all
 
-select 'Perjadin Evaluation', pj.destination, r.aspect, r.rating,
+select 'Perjadin Evaluation',
+       sc.name || ' · ' || pj.starts_on || ' – ' || pj.ends_on,   -- the trip's name (ADR-0044)
+       r.aspect, r.rating,
        e.filed_by_name, r.said, e.created_at
   from perjadin_evaluation e
   join perjadin pj on pj.id = e.perjadin_id
+  join sub_cluster sc on sc.id = pj.sub_cluster_id
   cross join lateral (values ('lodging',     e.lodging,     e.lodging_comment),
                              ('transport',   e.transport,   e.transport_comment),
                              ('meals',       e.meals,       e.meals_comment),
@@ -1155,7 +1183,6 @@ the ones who slept in the hotel.
 create table perjadin (
   id                          uuid primary key default gen_random_uuid(),
   sub_cluster_id              uuid not null references sub_cluster (id),
-  destination                 text not null,
   starts_on                   date not null,
   ends_on                     date not null,
 
@@ -1227,20 +1254,23 @@ Two declarative constraints replace what would otherwise be trigger code:
   hold at commit. It has to be deferred because `perjadin` and its `group_member` rows are
   inserted in the same transaction and neither can go first.
 
-**`sub_cluster_id` is where a Perjadin goes, and `destination` is what the paperwork calls it.**
-They are not redundant, and dropping either would cost something real. The Sub-Cluster is
-structural: it decides which Schools may appear on the trip at all, and the composite key on
-`session` makes that unbreakable. `destination` is the prose that ends up on a Surat Tugas —
-`Kelompok 18: Samarinda dan Balikpapan` — the Sub-Cluster's own label followed by the distinct
-Kabupaten/Kota of **all** its Schools, joined with `" dan "` before the last
-([#105](https://github.com/mafiefa02/sugt/issues/105)). It is **derived server-side at insert**
-by `planPerjadin`, from the Sub-Cluster and its Schools rather than typed, so a Surat Tugas cannot
-disagree with the trip the form already shows. Once written it is a **snapshot** and is never
-recomputed on read: Sub-Clusters are editable ([ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md)),
-so a live read would silently rewrite an already-issued Surat Tugas when Schools are later
-regrouped or the Sub-Cluster renamed. (The column began as free text; the earlier note here
-rejected deriving it from `sub_cluster.name` _alone_ — naming the concrete places, prefixed by the
-Kelompok label, is what a destination line is for.)
+**`sub_cluster_id` is where a Perjadin goes, and there is no `destination`.** The Sub-Cluster is
+structural: it bounds which Schools may appear on the trip at all — checked in the application,
+not by a key ([what the database does not hold](#what-the-database-does-not-hold)). It is not
+unique: one Sub-Cluster may be covered by several Perjadins, on the same dates or different ones
+([ADR-0043](./adr/0043-a-sub-cluster-may-be-covered-by-several-perjadins.md)).
+
+**A Perjadin's name is derived, never stored**
+([ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)): `{sub_cluster.name} ·
+{dates}`, read live — `Kelompok 10 · 12–13 Okt 2026`. Renaming a Sub-Cluster relabels its trips,
+past ones included. **The trip's Schools** — the distinct Schools with a non-cancelled Session on
+it, by name — are its second line where trips are listed, and part of its Drive folder and CSV
+names; one query-side definition (`tripSchoolNames` in `@sugt/db`) serves every read. The
+`destination` column this replaced was a Surat Tugas line —
+`Kelompok 18: Samarinda dan Balikpapan`, the Sub-Cluster's label and every Kabupaten/Kota of its
+Schools — derived at insert and frozen as a snapshot
+([#105](https://github.com/mafiefa02/sugt/issues/105)). Migration 0041 dropped it: no Surat Tugas
+generator exists, and a whole-Sub-Cluster line misnamed a trip to only some of its Schools.
 
 The Schools **actually** visited remain the structural truth and are still reached through
 `session.perjadin_id`. A Perjadin covers several, but no longer an arbitrary several: the
@@ -1337,46 +1367,115 @@ Writing and rendering them is T3/T7
 ### The Preparation Checklist
 
 ```sql
-create table perjadin_preparation_item (
-  perjadin_id   uuid not null references perjadin (id) on delete cascade,
-  item_key      text not null,
-  checked_by    uuid not null references person (id),
-  checked_at    timestamptz not null default now(),
+create table preparation_item (
+  id                              uuid primary key default gen_random_uuid(),
+  level                           text not null check (level in ('semua', 'cluster', 'perjadin')),
+  cluster_id                      uuid references cluster (id),
+  perjadin_id                     uuid references perjadin (id) on delete cascade,
+  label                           text not null check (length(trim(label)) > 0),
+  position                        integer not null,
+  added_on                        date,   -- semua / cluster only: the WIB day it was added
+  removed_on                      date,   -- semua / cluster only: the WIB day it was removed
+  clears_on_teaching_team_change  boolean not null default false,
+  created_at                      timestamptz not null default now(),
 
-  primary key (perjadin_id, item_key)
+  constraint preparation_item_scope_matches_level check (
+       (level = 'semua'    and cluster_id is null     and perjadin_id is null)
+    or (level = 'cluster'  and cluster_id is not null and perjadin_id is null)
+    or (level = 'perjadin' and perjadin_id is not null and cluster_id is null)),
+  constraint preparation_item_dated_iff_wide check (
+       (level = 'perjadin' and added_on is null and removed_on is null)
+    or (level <> 'perjadin' and added_on is not null)),
+  constraint preparation_item_removed_after_added check (removed_on is null or removed_on >= added_on),
+  constraint preparation_item_system_item_kept check (
+    not clears_on_teaching_team_change or (level = 'semua' and removed_on is null))
+);
+create unique index preparation_item_one_system_item on preparation_item (clears_on_teaching_team_change)
+  where clears_on_teaching_team_change;
+
+-- A wider item hidden for one Cluster (dated spells) or one Perjadin (undated).
+create table preparation_item_hide (
+  id                   uuid primary key default gen_random_uuid(),
+  preparation_item_id  uuid not null references preparation_item (id) on delete cascade,
+  cluster_id           uuid references cluster (id),
+  perjadin_id          uuid references perjadin (id) on delete cascade,
+  hidden_on            date,
+  shown_on             date,
+  created_at           timestamptz not null default now(),
+
+  constraint preparation_item_hide_one_scope check ((cluster_id is null) <> (perjadin_id is null)),
+  constraint preparation_item_hide_dated_iff_cluster check (
+       (cluster_id is not null and hidden_on is not null)
+    or (perjadin_id is not null and hidden_on is null and shown_on is null)),
+  constraint preparation_item_hide_shown_after_hidden check (shown_on is null or shown_on >= hidden_on)
+);
+-- one open spell per (item, Cluster); one row per (item, Perjadin)
+
+-- A wider item reworded for one Cluster or one Perjadin. Undated.
+create table preparation_item_wording (
+  id                   uuid primary key default gen_random_uuid(),
+  preparation_item_id  uuid not null references preparation_item (id) on delete cascade,
+  cluster_id           uuid references cluster (id),
+  perjadin_id          uuid references perjadin (id) on delete cascade,
+  label                text not null check (length(trim(label)) > 0),
+
+  constraint preparation_item_wording_one_scope check ((cluster_id is null) <> (perjadin_id is null))
+);
+-- one per (item, Cluster) and per (item, Perjadin)
+
+create table perjadin_preparation_tick (
+  perjadin_id          uuid not null references perjadin (id) on delete cascade,
+  preparation_item_id  uuid not null references preparation_item (id) on delete cascade,
+  checked_by           uuid not null references person (id),
+  checked_at           timestamptz not null default now(),
+
+  primary key (perjadin_id, preparation_item_id)
 );
 ```
 
-**Only the ticks are stored** ([#114](https://github.com/mafiefa02/sugt/issues/114)). The
-Preparation Checklist is an internal-monitoring aid — Staff hand-tick a pre-departure to-do list,
-and it gates nothing. The _set of items that exists_ is **not** a table: since the amendment to
-[ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md) it is a **flat
-fixed six** — `sk_perjalanan`, `tiket_pp` ("Tiket / transportasi PP"), `booking_penginapan`,
-`transportasi_lokal`, `staff`, and `pengajar_lengkap` ("Narasumber sudah lengkap") — assembled in the
-query layer at read time with **no per-member part**, so it no longer reads the Group at all. A row
-here means one of those is ticked; un-ticking is a `DELETE`, so there is no "unchecked" row to keep.
+**The items are rows, defined at three levels**
+([ADR-0045](./adr/0045-the-preparation-checklist-is-stored-per-level-and-frozen-for-finished-perjadins.md)).
+A `semua` item applies to every Perjadin, a `cluster` item to its Cluster's Perjadins, a `perjadin`
+item to its one Perjadin. A Perjadin's Cluster is `sub_cluster.cluster_id` of its Sub-Cluster, so it
+is known before the trip has a Session. A Cluster or a Perjadin may hide a wider item
+(`preparation_item_hide`) or reword it (`preparation_item_wording`), and the most specific wording
+wins. The order is `semua`, then the Cluster's, then the Perjadin's own, each by its own `position`.
+One query-layer resolver (`queries/preparation-checklist.ts`) turns these rows into a Perjadin's
+list, in a batched form for lists of trips.
 
-**`pengajar_lengkap` is the one box the tool clears by itself**, and the single exception to "nothing
-ticks a box automatically". It replaced the old per-teacher `dosen:{person_id}` boxes when the
-Teaching Team stopped being People (ADR-0020): with up to twenty trip-scoped names, per-name boxes
-made no sense. It is ticked by hand like the rest, but **any Teaching-Team change — a name added,
-renamed or removed — deletes its tick**, so each change forces a fresh manual confirmation that the
-team is complete. That `DELETE` lives inside the teacher-mutation queries
-(`queries/perjadin-teachers.ts`), which is what makes it impossible to change the team without
-clearing the box. No other item is ever touched automatically. `dosen:` ticks the old model left in
-the table are **orphans**: no item derives them, so they are silently ignored and never cleaned up.
-So are ticks on `tiket_keberangkatan` and `tiket_kepulangan`, the two ticket boxes
-[ADR-0041](./adr/0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md) folded into
-`tiket_pp` when the travel legs went — no data migration.
+**The dates are what freeze a finished Perjadin.** A `semua` or `cluster` item applies to Perjadin P
+only while `added_on <= P.ends_on` and `removed_on` is null or later than `P.ends_on`. Each date is
+the WIB day of the change. A Cluster hide works the same way, one row per spell. Removing a wider
+item is therefore a soft-remove that stamps `removed_on`; the Perjadins that had ended keep it and
+its ticks. A `perjadin` item and a Perjadin-level hide are undated and always apply; removing the
+item deletes it, and its ticks by cascade. Nothing is snapshotted at the end date: the rule reads the
+trip's `ends_on` as it stands, so moving a trip's dates re-decides which dated changes reach it. Wording is never dated, so a rewording keeps the item's
+id and ticks and shows on finished Perjadins too.
 
-The composite primary key `(perjadin_id, item_key)` is what makes a toggle idempotent — the write
-upserts on it, so a second tick rewrites `checked_by`/`checked_at` rather than duplicating a row.
-`checked_by` and `checked_at` record who and when for later use; nothing renders them yet. **`staff`
-is a single box** — "confirmed with the Pendamping" (the on-Perjadin label for the DITSAMA role,
-[#141](https://github.com/mafiefa02/sugt/issues/141)), not one row per member; the stored key stays
-`staff`. `N` is therefore the
-constant **6**, and every count — the Perjadin list's Persiapan `x/N` pill, the trip card's, the
-dialog's — is taken off the derived six, so an orphan can never make one read 7/6.
+**Only the ticks are stored**, as before ([ADR-0018](./adr/0018-the-preparation-checklist-stores-ticks-and-derives-the-list.md)).
+A row in `perjadin_preparation_tick` means the item is ticked on that Perjadin; un-ticking is a
+`DELETE`. The primary key makes a toggle idempotent, and the toggle refuses an item the Perjadin's
+resolved list does not hold. A hidden item keeps its ticks, so showing it again brings them back.
+`checked_by` and `checked_at` record who and when; nothing renders them yet.
+
+**The system item** carries `clears_on_teaching_team_change`. Any Teaching-Team change (a name
+added, renamed or removed) deletes that Perjadin's tick on it, inside the teacher-mutation queries
+(`queries/perjadin-teachers.ts`). The flag, not an id or a label, is what those queries read, so a
+rewording keeps the coupling. The database holds that **at most one item carries the flag**
+(`preparation_item_one_system_item`) and that it is a `semua` item **never removed**
+(`preparation_item_system_item_kept`). That it is never hidden is the query layer's rule
+(`queries/preparation-items.ts`), as is which items may be hidden or reworded where: a `semua`
+item for a Cluster or a Perjadin, a `cluster` item for a Perjadin of that Cluster. So are the
+wording rules Pengaturan Perjadin (#422) applies: at most `MAX_PREPARATION_ITEM_LABEL_LENGTH` (200)
+characters, runs of spaces made one, and no new item or rewording that repeats, ignoring case,
+another item's wording on the list of the level it is given at. Adding, rewording and moving take
+one transaction-scoped advisory lock, so those checks cannot race. Moving an item renumbers its level's `position`s, undated.
+
+**The cutover** is migration `0043_preparation_levels`. The old six became `semua` items removed
+on the day it ran, so every Perjadin that had already ended keeps them; their ticks were converted
+by `item_key`. Ticks on keys no item had (`dosen:*`, `tiket_keberangkatan`, `tiket_kepulangan`)
+were dropped. The company's 14 were added that same day, the second carrying the flag.
+`perjadin_preparation_item` was dropped.
 
 ---
 
@@ -1429,9 +1528,14 @@ The two CHECKs hold that both ways round, and a third holds `ends_at` after `sta
 content type is pinned to PDF.
 
 **The application holds the rest**, in `recordPerjadinDocument`: `document_date` lies inside the
-trip, and a Peserta sheet's School is in the Perjadin's Sub-Cluster, refused as
-`school-outside-sub-cluster` the way offline Sessions refuse it. That second rule cannot be a foreign
-key, for the reason Sessions give: Sub-Clusters are editable (ADR-0016). There is **no duplicate
+trip, and a Peserta sheet's School is one of **the trip's Schools** — it has a non-cancelled
+Session on this Perjadin (`isTripSchool`, the same rule `tripSchoolNames` reads names through) —
+refused as `school-not-on-perjadin` ([#410](https://github.com/sugt-itb/sugt-itb-26/issues/410)).
+It used to be the trip's Sub-Cluster, but a Sub-Cluster may be covered by several trips (ADR-0043),
+so that offered Schools this trip never visits. The Dokumen dialog's picker offers exactly that set.
+The rule is checked on a new upload only: a sheet recorded for a School whose Sessions on the trip
+were all cancelled later stays listed and deletable. It cannot be a constraint: it reads the
+Sessions, which change after the sheet is written. There is **no duplicate
 rule**: two sheets of one kind and date are two rows, told apart in Drive by `D-{doc8}`.
 
 **The row and its Activity Log entry are written in one transaction**, and the row lands with
@@ -1451,6 +1555,56 @@ of the row's fields, since the row is gone after it. A file already in the trash
 trashed, so if the delete fails after the trash, the row stays, pointing at a trashed file, and
 Hapus again finishes it. Hapus is refused while the connection is not usable. An emptied kind folder
 is left in place, and nothing is ever edited: a wrong upload is a Hapus and a new upload.
+
+### Session Footage
+
+```sql
+create table session_footage (
+  id                     uuid primary key default gen_random_uuid(),
+  session_id             uuid not null references session (id),
+  kind                   text not null check (kind in ('foto', 'video')),
+  content_type           text not null,
+  original_filename      text not null check (length(original_filename) > 0),
+  byte_size              bigint not null,
+  drive_file_id          text not null unique,
+  uploaded_by_person_id  uuid not null,
+  uploaded_by_role       text not null default 'Staff' check (uploaded_by_role = 'Staff'),
+  uploaded_at            timestamptz not null default now(),
+  drive_synced_at        timestamptz,
+  drive_sync_failed_at   timestamptz,
+  check ((kind = 'foto'  and content_type in ('image/jpeg', 'image/png', 'image/heic', 'image/webp'))
+      or (kind = 'video' and content_type in ('video/mp4', 'video/quicktime'))),
+  check (byte_size > 0 and byte_size <= case kind when 'foto' then 52428800 else 1048576000 end),
+  foreign key (uploaded_by_person_id, uploaded_by_role) references person (id, role)
+);
+
+alter table perjadin add column drive_footage_folder_id text;
+alter table session  add column drive_footage_folder_id text;
+```
+
+**One offline Session's photos and videos, one file each** (#424,
+[ADR-0046](./adr/0046-session-footage-is-stored-in-the-company-google-drive.md)), shown as "Foto &
+Video". **The database holds** each file's kind against its type and its kind's cap
+(`MAX_FOOTAGE_PHOTO_BYTES`, `MAX_FOOTAGE_VIDEO_BYTES` as literals), so no write can store a 2 GB
+"photo", and that the uploader is Staff, by the composite key a PIC's is held by. `content_type` is
+the type the server **sniffed**; a HEIF file is stored as `image/heic`.
+
+**The application holds the rest**: in `recordSessionFootage`, the Session is offline and not
+cancelled when the footage is added — checked again under a row lock inside the commit — and, in
+the upload's verify step before it, the file was opened for this Session and its declared kind
+matches the sniffed one. Footage of a Session cancelled later stays. The key to
+`session` has **no cascade**: offline Sessions are only ever cancelled, so a delete that would orphan
+Drive files is refused rather than followed.
+
+**The row and its Activity Log entry are written in one transaction** (`footage_uploaded`), with
+`drive_synced_at` null until the reconcile names, files and shares the file. `id` is generated before
+the insert, because the file's name carries it (`M-{footage8}`). **Hapus** is the Dokumen order: the
+file to the Drive trash first, then the row and a `footage_deleted` entry in one transaction.
+
+**Folders.** `perjadin.drive_footage_folder_id` is the trip's folder under `Foto & Video/Pelaksanaan
+Offline`, named as its other two; `session.drive_footage_folder_id` is the Session's folder inside it,
+`{held_on} · {HH.MM} · {School} · S-{session8}`. Both are claimed by compare-and-set
+(`where … is null`). A Session's folder and files are renamed when its date or time moves.
 
 ## Money
 
@@ -1576,6 +1730,19 @@ unsynced, and its files wait in private `_staging` until the next reconcile fini
 synced only for the receipts it read. If a newer receipt was committed while it ran, the mark does
 not land, so that receipt stays owed rather than stranded under a line that claims to be done.
 
+**A Perjadin's folder names are app-owned, and re-asserted.** Both of a trip's folders are named
+from its Sub-Cluster, both dates and the trip's Schools, read live
+([ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md)); nothing stores the name
+the folder was last given. A write that changes one of those parts renames the folders after it
+commits, best effort (#407): Ubah tanggal on either date, and the three Session writes —
+`addPerjadinSession`, `editPerjadinSession`, `cancelSession` — when they change the trip's set of
+Schools, which each reports from inside its transaction by reading `tripSchoolNames` before and
+after. A Sub-Cluster rename renames nothing at once. The reconciles re-assert the name every time
+they touch a trip, and **Periksa koneksi** reads every Perjadin folder and renames those that are
+out of date — at most 25 per press, within the sweep's time budget, in trip-id order, so the next
+press re-reads the folders already checked and carries on. A folder in the Drive trash or gone is
+reported, never recreated.
+
 **`drive_sync_failed_at` keeps the sweep moving.** It records when a reconcile last failed to finish
 the line, for example because its folder is in the Drive trash, which is never recreated, and it is
 cleared when the line syncs. Periksa koneksi's sweep is bounded per press. It takes lines that have
@@ -1604,7 +1771,8 @@ create table activity_log (
   action           text not null check (action in (
                      'advance_set', 'advance_changed', 'transaction_recorded',
                      'evidence_uploaded', 'report_filed',
-                     'document_uploaded', 'document_deleted')),
+                     'document_uploaded', 'document_deleted',
+                     'footage_uploaded', 'footage_deleted')),
   details          jsonb not null,
   search_text      text not null,
   backfilled       boolean not null default false
@@ -1652,7 +1820,8 @@ a report, so those start at the migration. `/log` marks a backfilled row "(dari 
 
 **The Log stays small** — a few thousand rows over the whole Programme — so `/log` reads one page of
 50 plus one `count(*)`, and the index above serves "newest 50". Its search is a plain substring
-match with no index: `ilike` on the email, the destination and the PIC's name, `like` on the
+match with no index: `ilike` on the email, the trip's Sub-Cluster name, its Schools (joined into
+one string) and the PIC's name, `like` on the
 already lower-cased `search_text`. If search over a much larger table ever becomes slow, a `pg_trgm` trigram index on the
 searched text is the known fix.
 
@@ -1821,8 +1990,8 @@ Drive id ([Money](#money)). Perjadin Documents are beside them, under `Dokumen/`
 
 ```
 SUGT ITB 2026 Internal App Object Storage/
-├── Bukti Transaksi/Pelaksanaan Offline/{destination} · {starts_on}/…
-└── Dokumen/Pelaksanaan Offline/{destination} · {starts_on}/
+├── Bukti Transaksi/Pelaksanaan Offline/{name} · {the trip's Schools} · P-{perjadin8}/…
+└── Dokumen/Pelaksanaan Offline/{name} · {the trip's Schools} · P-{perjadin8}/
     ├── Daftar Hadir Peserta/{date} · {school} · {Siswa|GTK-MS} · Daftar Hadir Peserta · D-{doc8}.pdf
     ├── Daftar Hadir Pendamping/{date} · Daftar Hadir Pendamping · D-{doc8}.pdf
     └── Daftar Hadir Narasumber/{date} · Daftar Hadir Narasumber · D-{doc8}.pdf
@@ -1889,6 +2058,8 @@ create table drive_connection (
   readme_file_id                 text,
   dokumen_folder_id              text,
   dokumen_pelaksanaan_offline_folder_id text,
+  footage_folder_id              text,
+  footage_pelaksanaan_offline_folder_id text,
   folder_problem                 text check (folder_problem in
                                    ('root-trashed', 'root-missing',
                                     'staging-trashed', 'staging-missing',
@@ -1928,7 +2099,10 @@ Terhubung. Uploads and the card read one rule: usable means no `folder_problem` 
 `Pelaksanaan Offline/` (ADR-0042), beside `Bukti Transaksi`. They are not part of the five: a
 connection made before them has neither, and a receipt must not wait on them. A connect, Periksa
 koneksi and the document reconcile each make whichever is unset, missing or trashed, and claim it by
-compare-and-set, so no Administrator has to reconnect for them.
+compare-and-set, so no Administrator has to reconnect for them. **`footage_folder_id` and
+`footage_pelaksanaan_offline_folder_id`** are `Foto & Video/` and its `Pelaksanaan Offline/`
+(ADR-0046), kept and ensured the same way — on connect, by Periksa koneksi and by the footage
+reconcile.
 
 **Who reaches it.** The card's read and the connect writes need the Administrator Grant. The
 credential read, and the two writes a token refresh makes (`last_used_at`, broken), need Staff,
@@ -2033,10 +2207,13 @@ two Sessions at the _same_ School and moment, which ADR-0019 allowed. ADR-0038 f
 through its own per-School index, not by restoring the trip-wide one (see the Delivery section) — so
 the different-Schools rule is still the application's, checked when a trip is planned (`planPerjadin` groups
 the planned Sessions by `(date, time)` and refuses any slot holding more than one distinct School,
-naming the pair) and when a Session is added or edited on the trip. The database does reject two
-live Sessions at the _same_ School, date and time — one Session per School per moment (ADR-0038) —
-through `session_no_duplicate_offline_per_school_per_perjadin`; `planPerjadin` checks that too, from
-the same grouping, so the form gets a `duplicate-session` value rather than a raw violation.
+naming the pair) and when a Session is added or edited on the trip. It is a rule **per trip**: two
+different trips may hold two different Schools at one moment, since two Groups can be in two places.
+The database does reject two live Sessions at the _same_ School, date and time — one Session per
+School per moment (ADR-0038), and since #408 **across every Perjadin** — through
+`session_no_duplicate_offline_per_school`; `planPerjadin` checks that too, from the same grouping
+within the payload and against the other trips, so the form gets a `duplicate-session` or
+`school-booked-on-another-perjadin` value rather than a raw violation.
 
 **Three app caps on the new Perjadin model.** None is a DB constraint, all live in the application in
 the same spirit as the Group rules: **ten** offline Sessions per School per Perjadin
@@ -2081,12 +2258,15 @@ places:
    hour a School is expecting somebody — and it does not move any Session's `held_on` at all, since
    it clamps rather than shifting.
 
-   **A correction that moves `starts_on` also renames the trip's Drive folder**, which is named
-   `{destination} · {starts_on}` ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
-   #376). The rename runs after the commit and is best effort: a failed rename never fails or rolls
-   back the correction. The next reconcile that touches that Perjadin sets the name back to what the
-   database says, because folder names are app-owned. That is a Catat transaksi or Unggah bukti on
-   it, or a sweep reaching one of its unsynced lines. Until then the folder keeps the old date.
+   **A correction that moves either date also renames the trip's Drive folders**, receipts and
+   Dokumen, which are named `{name} · {the trip's Schools} · P-{perjadin8}` — the name carries both
+   dates ([ADR-0040](./adr/0040-transaction-evidence-is-stored-in-the-company-google-drive.md),
+   [ADR-0044](./adr/0044-a-perjadin-is-named-by-its-kelompok-and-dates.md), #376, #407). The rename
+   runs after the commit and is best effort: a failed rename never fails or rolls back the
+   correction. The next reconcile that touches that Perjadin sets the name back to what the database
+   says, because folder names are app-owned. That is a Catat transaksi or Unggah bukti on it, a sweep
+   reaching one of its unsynced lines, or a press of Periksa koneksi. Until then the folder keeps the
+   old date.
 
 So an arranged offline Session can no longer be born outside its trip, nor moved outside it, nor
 stranded when the trip's range is resized — path 3 refuses the resize rather than moving Sessions.
@@ -2099,10 +2279,11 @@ NOT NULL and `school.sub_cluster_id` is NOT NULL, but nothing joins them. The co
 version was designed and rejected — [Delivery](#delivery) has the argument — because it would
 also freeze a School into its Sub-Cluster the moment it had one delivered Session, and the
 whole point of [ADR-0016](./adr/0016-sub-clusters-are-editable-because-nobody-allocated-them.md)
-is that a Sub-Cluster is a revisable judgement. So it is checked in the application at the one
-point it can be violated: planning a trip, where the eligible Schools are read from the chosen
-Sub-Cluster and a payload naming any other School is refused whole. There is no "add a School
-to an existing Perjadin" write, so that is genuinely the only path.
+is that a Sub-Cluster is a revisable judgement. So it is checked in the application at the two
+points it can be violated: planning a trip, where the eligible Schools are read from the chosen
+Sub-Cluster and a payload naming any other School is refused whole; and adding a Session to an
+existing trip (`addPerjadinSession`), whose picker offers the trip's whole Sub-Cluster so a School
+can join a trip after it is planned.
 
 **That a School is not moved out from under a Perjadin that is still going to visit it.** The
 mirror of the rule above, and the reason the pair is application-held rather than declarative.
@@ -2231,6 +2412,8 @@ trip-scoped teacher names and the recorded Pimpinan are the trip's and outlive n
 `session_teaching_team` cascades from `perjadin_teacher`, so an offline Session's "Diajar oleh"
 links go with the names. `activity_log` cascades too, so the trip's Activity Log entries go with it.
 So do `perjadin_document` and `perjadin_document_folder`; the files and folders stay in Drive.
+`session_footage` does not cascade from `session`, which an offline Session's `perjadin_id` keeps
+from being deleted anyway.
 
 `session.perjadin_id` deliberately does **not** cascade and has no `on delete` action at all,
 so an offline Session blocks the delete. A trip that produced teaching cannot be quietly

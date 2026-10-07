@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -44,7 +45,7 @@ function OnlineSessionFields({
   const editable = canEdit && session.status !== "cancelled";
 
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Sesi</h2>
         {editable && <EditDialog session={session} />}
@@ -163,7 +164,7 @@ function EditDialog({ session }: { session: OnlineSessionDetail }) {
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent size="panel">
         <DialogHeader>
           <DialogTitle>Ubah Sesi daring</DialogTitle>
           <DialogDescription>
@@ -171,96 +172,98 @@ function EditDialog({ session }: { session: OnlineSessionDetail }) {
           </DialogDescription>
         </DialogHeader>
 
-        {refusal !== null && (
-          <Alert variant="destructive">
-            <AlertTitle>Sesi belum tersimpan.</AlertTitle>
-            <AlertDescription>{refusal}</AlertDescription>
-          </Alert>
-        )}
+        <DialogBody>
+          {refusal !== null && (
+            <Alert variant="destructive">
+              <AlertTitle>Sesi belum tersimpan.</AlertTitle>
+              <AlertDescription>{refusal}</AlertDescription>
+            </Alert>
+          )}
 
-        <div className="grid gap-3.5">
-          <div className="grid gap-1.5">
-            <Label htmlFor={`${idPrefix}-school`}>Sekolah</Label>
-            <SchoolCombobox
-              id={`${idPrefix}-school`}
-              schools={session.schools}
-              value={schoolId === "" ? null : schoolId}
-              onValueChange={(next) => {
-                setSchoolId(next ?? "");
-                setRefusal(null);
-              }}
-            />
-          </div>
+          <div className="grid gap-3.5">
+            <div className="grid gap-1.5">
+              <Label htmlFor={`${idPrefix}-school`}>Sekolah</Label>
+              <SchoolCombobox
+                id={`${idPrefix}-school`}
+                schools={session.schools}
+                value={schoolId === "" ? null : schoolId}
+                onValueChange={(next) => {
+                  setSchoolId(next ?? "");
+                  setRefusal(null);
+                }}
+              />
+            </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-date`}>Tanggal</Label>
-              <Input
-                id={`${idPrefix}-date`}
-                type="date"
-                value={heldOn}
-                max={today}
-                onChange={(event) => {
-                  setHeldOn(event.target.value);
-                  setRefusal(null);
-                }}
-              />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${idPrefix}-date`}>Tanggal</Label>
+                <Input
+                  id={`${idPrefix}-date`}
+                  type="date"
+                  value={heldOn}
+                  max={today}
+                  onChange={(event) => {
+                    setHeldOn(event.target.value);
+                    setRefusal(null);
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${idPrefix}-time`}>Jam Mulai (WIB)</Label>
+                {/* Online Sessions are always WIB (#283), so the zone is fixed, not School-derived. */}
+                <TimeField
+                  id={`${idPrefix}-time`}
+                  value={startsAt}
+                  onValueChange={(value) => {
+                    setStartsAt(value);
+                    setRefusal(null);
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${idPrefix}-end-time`}>Jam Selesai (WIB)</Label>
+                <TimeField
+                  id={`${idPrefix}-end-time`}
+                  value={endsAt}
+                  onValueChange={(value) => {
+                    setEndsAt(value);
+                    setRefusal(null);
+                  }}
+                />
+                {endBeforeStart && (
+                  <p className="text-xs text-destructive">Jam selesai harus setelah jam mulai.</p>
+                )}
+              </div>
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-time`}>Jam Mulai (WIB)</Label>
-              {/* Online Sessions are always WIB (#283), so the zone is fixed, not School-derived. */}
-              <TimeField
-                id={`${idPrefix}-time`}
-                value={startsAt}
-                onValueChange={(value) => {
-                  setStartsAt(value);
-                  setRefusal(null);
-                }}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-end-time`}>Jam Selesai (WIB)</Label>
-              <TimeField
-                id={`${idPrefix}-end-time`}
-                value={endsAt}
-                onValueChange={(value) => {
-                  setEndsAt(value);
-                  setRefusal(null);
-                }}
-              />
-              {endBeforeStart && (
-                <p className="text-xs text-destructive">Jam selesai harus setelah jam mulai.</p>
-              )}
-            </div>
-          </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-pengajar-siswa`}>Narasumber Siswa</Label>
-              <Input
-                id={`${idPrefix}-pengajar-siswa`}
-                placeholder="Nama narasumber Siswa"
-                value={pengajarSiswaName}
-                onChange={(event) => {
-                  setPengajarSiswaName(event.target.value);
-                  setRefusal(null);
-                }}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor={`${idPrefix}-pengajar-gtk-ms`}>Narasumber GTK-MS</Label>
-              <Input
-                id={`${idPrefix}-pengajar-gtk-ms`}
-                placeholder="Nama narasumber GTK-MS"
-                value={pengajarGtkMsName}
-                onChange={(event) => {
-                  setPengajarGtkMsName(event.target.value);
-                  setRefusal(null);
-                }}
-              />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${idPrefix}-pengajar-siswa`}>Narasumber Siswa</Label>
+                <Input
+                  id={`${idPrefix}-pengajar-siswa`}
+                  placeholder="Nama narasumber Siswa"
+                  value={pengajarSiswaName}
+                  onChange={(event) => {
+                    setPengajarSiswaName(event.target.value);
+                    setRefusal(null);
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`${idPrefix}-pengajar-gtk-ms`}>Narasumber GTK-MS</Label>
+                <Input
+                  id={`${idPrefix}-pengajar-gtk-ms`}
+                  placeholder="Nama narasumber GTK-MS"
+                  value={pengajarGtkMsName}
+                  onChange={(event) => {
+                    setPengajarGtkMsName(event.target.value);
+                    setRefusal(null);
+                  }}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button

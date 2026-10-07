@@ -13,8 +13,8 @@ import { useId, useState, useTransition } from "react";
 
 /**
  * A Perjadin's Teaching Team as trip-scoped names (ADR-0020), edited one at a time — added, renamed
- * and removed. Each write clears the "Narasumber sudah lengkap" Preparation tick, so the team's
- * completeness must be re-confirmed by hand after any change (the amendment to ADR-0018).
+ * and removed. Each write clears the system Preparation Item's tick ("Fiksasi Dosen/Narasumber oleh
+ * PIC Dosen" at the cutover), so the team must be re-confirmed by hand after any change (ADR-0045).
  *
  * Read-only for a professor; the controls appear only for Staff, whom the write re-checks.
  */
@@ -72,7 +72,7 @@ function PerjadinTeachingTeam({
   }
 
   return (
-    <div className="border-b border-border px-7 py-5">
+    <div className="border-b border-border px-4 py-5 sm:px-7">
       <h2 className="font-heading text-sm font-medium">Narasumber</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Nama narasumber untuk Perjadin ini. Mengubah daftar ini menghapus centang “Narasumber sudah

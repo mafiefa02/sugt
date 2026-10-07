@@ -65,7 +65,7 @@ async function scene(
   const trip = await addPerjadin({
     advanceIdr: 5_000_000,
     picPersonId: staff.id,
-    destination: "Kelompok 3: Garut",
+    subClusterName: "Kelompok 3",
     startsOn: "2026-10-12",
     endsOn: "2026-10-14",
   });
@@ -230,7 +230,7 @@ describe("a line with no folder yet", () => {
 
     const [stored] = await db.select().from(schema.perjadin).where(eq(schema.perjadin.id, trip.id));
     const perjadinFolder = (await drive.getFile(stored!.driveFolderId!))!;
-    expect(perjadinFolder.name).toBe("Kelompok 3 · Garut · 2026-10-12");
+    expect(perjadinFolder.name).toBe(`Kelompok 3 · 12–14 Okt 2026 · P-${trip.id.slice(0, 8)}`);
     expect(perjadinFolder.parents).toEqual([folders.pelaksanaanOfflineFolderId]);
 
     const after = await lineRow(line.id);

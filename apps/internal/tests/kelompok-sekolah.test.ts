@@ -293,7 +293,6 @@ describe("moveSchool", () => {
       advanceIdr: 5_000_000,
       picPersonId: staff.id,
       subClusterId: from.id,
-      destination: "Kunjungan Bandung",
     });
     await addOfflineSession({ schoolId: school.id, heldOn: "2026-09-02", perjadinId: perjadin.id });
 
@@ -304,7 +303,7 @@ describe("moveSchool", () => {
     expect(result.perjadins).toEqual([
       {
         id: perjadin.id,
-        destination: "Kunjungan Bandung",
+        subClusterName: from.name,
         startsOn: "2026-09-01",
         endsOn: "2026-09-03",
       },
@@ -324,7 +323,6 @@ describe("moveSchool", () => {
       advanceIdr: 5_000_000,
       picPersonId: staff.id,
       subClusterId: from.id,
-      destination: "Kunjungan selesai",
     });
     await addOfflineSession({
       schoolId: school.id,

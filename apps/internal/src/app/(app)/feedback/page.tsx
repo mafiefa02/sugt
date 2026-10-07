@@ -45,7 +45,7 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <h1 className="font-heading text-lg font-medium">Feedback</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Masukan Peserta atas setiap Sesi dan evaluasi Perjadin, nilai terendah dulu. Saring dan

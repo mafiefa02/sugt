@@ -1,4 +1,4 @@
-import { db, schema } from "@sugt/db";
+import { db, schema, tripSchoolNames } from "@sugt/db";
 import type { PerjadinToken } from "@sugt/db/queries";
 import { eq } from "drizzle-orm";
 
@@ -21,15 +21,20 @@ import { eq } from "drizzle-orm";
  * to whoever opened the link: nothing they can do differently, and the same remedy — ask for a
  * fresh link. There is no cancelled-trip case: a Perjadin is a real trip once it exists.
  *
- * The `open` arm carries the destination, start and end so the form can name which trip is being
- * rated without a second query. The `destination` is the stored snapshot; the page shortens it with
- * `shortenKabupaten` at render, the same read-side transform every other Perjadin surface uses.
+ * The `open` arm carries what the trip is named from — its Sub-Cluster's name, its dates and its
+ * Schools (ADR-0044) — so the form can name which trip is being rated without a second query. The
+ * page puts the name together with `perjadinName`, as every other Perjadin surface does.
  */
 export type ResolvedPerjadinFeedbackToken =
   | {
       outcome: "open";
       caller: PerjadinToken;
-      perjadin: { destination: string; startsOn: string; endsOn: string };
+      perjadin: {
+        subClusterName: string;
+        startsOn: string;
+        endsOn: string;
+        schoolNames: string[];
+      };
     }
   | { outcome: "gone" };
 
@@ -49,12 +54,14 @@ export async function resolvePerjadinFeedbackToken(
     .select({
       perjadinId: schema.perjadinFeedbackToken.perjadinId,
       expiresAt: schema.perjadinFeedbackToken.expiresAt,
-      destination: schema.perjadin.destination,
+      subClusterName: schema.subCluster.name,
       startsOn: schema.perjadin.startsOn,
       endsOn: schema.perjadin.endsOn,
+      schoolNames: tripSchoolNames(schema.perjadin.id),
     })
     .from(schema.perjadinFeedbackToken)
     .innerJoin(schema.perjadin, eq(schema.perjadin.id, schema.perjadinFeedbackToken.perjadinId))
+    .innerJoin(schema.subCluster, eq(schema.subCluster.id, schema.perjadin.subClusterId))
     .where(eq(schema.perjadinFeedbackToken.token, token))
     .limit(1);
 
@@ -64,6 +71,11 @@ export async function resolvePerjadinFeedbackToken(
   return {
     outcome: "open",
     caller: { kind: "perjadin", perjadinId: row.perjadinId },
-    perjadin: { destination: row.destination, startsOn: row.startsOn, endsOn: row.endsOn },
+    perjadin: {
+      subClusterName: row.subClusterName,
+      startsOn: row.startsOn,
+      endsOn: row.endsOn,
+      schoolNames: row.schoolNames,
+    },
   };
 }

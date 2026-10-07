@@ -11,18 +11,13 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "../client";
 import { session, sessionTeachingTeam } from "../schema/delivery";
 import { person } from "../schema/people";
-import { province, school } from "../schema/reference";
-import {
-  groupMember,
-  perjadin,
-  perjadinPimpinan,
-  perjadinPreparationItem,
-  perjadinTeacher,
-} from "../schema/travel";
+import { province, school, subCluster } from "../schema/reference";
+import { groupMember, perjadin, perjadinPimpinan, perjadinTeacher } from "../schema/travel";
 import { logActivity } from "./activity-log";
 import type { Person } from "./caller";
+import { type CoveredSession, offlineSessionsElsewhere } from "./covered-sessions";
 import { duplicatedStaff } from "./group-rules";
-import { derivePreparationChecklist, type PreparationItem } from "./preparation-checklist";
+import { preparationChecklist, type PreparationItem } from "./preparation-checklist";
 import { unknownPimpinanIds } from "./rosters";
 import { heldOnWithinPerjadin } from "./session-detail";
 import { requireStaff } from "./staff-only";
@@ -73,12 +68,18 @@ export type EligibleSchool = {
    * input with the zone the moment a School is picked (#165). A School always sits in one Province.
    */
   timeZone: TimeZone;
+  /**
+   * Its live offline Sessions on **other** Perjadins (#409), for the note the add/edit-Session
+   * picker shows once it is chosen — this trip's own are listed on the page already. Read-only.
+   */
+  offlineSessionsElsewhere: CoveredSession[];
 };
 
 /** Everything the Perjadin detail screen renders, and no money. */
 export type PerjadinDetail = {
   id: string;
-  destination: string;
+  /** The trip is named `{subClusterName} · {dates}` (ADR-0044), read live — never stored. */
+  subClusterName: string;
   startsOn: string;
   endsOn: string;
   picPersonId: string;
@@ -112,10 +113,9 @@ export type PerjadinDetail = {
   /** The Schools of the trip's Sub-Cluster, for the "add a Session" picker (ADR-0016's eligible set). */
   eligibleSchools: EligibleSchool[];
   /**
-   * The Preparation Checklist, each item with its tick state ([#114](https://github.com/mafiefa02/sugt/issues/114)).
-   * **Derived here, not stored**: `perjadin_preparation_item` holds only the ticks. Its per-teacher
-   * derivation is T4's ([#139](https://github.com/mafiefa02/sugt/issues/139)); this ticket leaves it
-   * as it stands. No money, so it rides on this payload rather than the separate acquittal read.
+   * The Preparation Checklist, each item with its tick state ([#114](https://github.com/mafiefa02/sugt/issues/114)),
+   * resolved from the items defined for every Perjadin, its Cluster and itself (ADR-0045). No money,
+   * so it rides on this payload rather than the separate acquittal read.
    */
   preparation: PreparationItem[];
 };
@@ -126,7 +126,9 @@ export type PerjadinDetail = {
  *
  * A header with several independent lists hanging off it, gathered concurrently with `Promise.all`
  * rather than joined at once — joining every list into one statement would multiply each list's rows
- * by the others'. The screen still makes one call and assembles nothing.
+ * by the others'. What each eligible School already has on other trips (#409) is one more round
+ * trip after them, keyed on the Schools the eligible-School list found. The screen still makes one
+ * call and assembles nothing.
  */
 export async function perjadinDetail(
   _caller: Person,
@@ -144,18 +146,19 @@ export async function perjadinDetail(
     staff,
     eligibleSchools,
     teachingLinks,
-    preparationTicks,
+    preparationList,
   ] = await Promise.all([
     db
       .select({
         id: perjadin.id,
-        destination: perjadin.destination,
+        subClusterName: subCluster.name,
         startsOn: perjadin.startsOn,
         endsOn: perjadin.endsOn,
         picPersonId: pic.id,
         picFullName: pic.fullName,
       })
       .from(perjadin)
+      .innerJoin(subCluster, eq(subCluster.id, perjadin.subClusterId))
       .innerJoin(pic, eq(pic.id, perjadin.picPersonId))
       .where(eq(perjadin.id, perjadinId)),
     db
@@ -238,14 +241,7 @@ export async function perjadinDetail(
       .innerJoin(perjadinTeacher, eq(perjadinTeacher.id, sessionTeachingTeam.perjadinTeacherId))
       .where(eq(perjadinTeacher.perjadinId, perjadinId))
       .orderBy(asc(perjadinTeacher.name)),
-    db
-      .select({
-        itemKey: perjadinPreparationItem.itemKey,
-        checkedBy: perjadinPreparationItem.checkedBy,
-        checkedAt: perjadinPreparationItem.checkedAt,
-      })
-      .from(perjadinPreparationItem)
-      .where(eq(perjadinPreparationItem.perjadinId, perjadinId)),
+    preparationChecklist(perjadinId),
   ]);
 
   if (!trip) return null;
@@ -259,9 +255,14 @@ export async function perjadinDetail(
     taughtBySession.set(link.sessionId, list);
   }
 
-  // The Preparation Checklist is a flat fixed six now (amendment to ADR-0018) — no per-member
-  // derivation, so it does not read the Group at all.
-  const preparation = derivePreparationChecklist(preparationTicks);
+  // The trip's own Preparation Checklist (ADR-0045). It exists whenever the trip does.
+  const preparation = preparationList ?? [];
+
+  // What each eligible School already has on other trips (#409), this trip's own left out.
+  const covered = await offlineSessionsElsewhere(
+    eligibleSchools.map((row) => row.id),
+    perjadinId,
+  );
 
   return {
     ...trip,
@@ -274,7 +275,10 @@ export async function perjadinDetail(
     pimpinan: pimpinan.map((row) => ({ personId: row.personId, name: row.name })),
     pimpinanRoster,
     staff,
-    eligibleSchools,
+    eligibleSchools: eligibleSchools.map((row) => ({
+      ...row,
+      offlineSessionsElsewhere: covered.get(row.id) ?? [],
+    })),
     preparation,
   };
 }
@@ -456,10 +460,10 @@ export type PerjadinDatesInput = {
 
 export type UpdatePerjadinDatesResult =
   /**
-   * `startsOnMoved`: the correction changed `starts_on` — the date the trip's Drive folder is named
-   * after (ADR-0040), so the caller renames it (#376).
+   * `datesMoved`: the correction changed `starts_on` or `ends_on` — both are in the trip's name and
+   * so in its Drive folder name (ADR-0044), so the caller renames the folders (#376, #407).
    */
-  | { outcome: "updated"; startsOnMoved: boolean }
+  | { outcome: "updated"; datesMoved: boolean }
   /**
    * Tanggal selesai before Tanggal mulai, so the `[starts_on … ends_on]` range would be inverted.
    * Same-day is allowed. Refused before the transaction opens.
@@ -498,7 +502,7 @@ export async function updatePerjadinDates(
 
   return db.transaction(async (tx) => {
     const [trip] = await tx
-      .select({ id: perjadin.id, startsOn: perjadin.startsOn })
+      .select({ id: perjadin.id, startsOn: perjadin.startsOn, endsOn: perjadin.endsOn })
       .from(perjadin)
       .where(eq(perjadin.id, perjadinId))
       .for("update");
@@ -530,7 +534,10 @@ export async function updatePerjadinDates(
       .set({ startsOn: input.startsOn, endsOn: input.endsOn })
       .where(eq(perjadin.id, perjadinId));
 
-    return { outcome: "updated", startsOnMoved: trip.startsOn !== input.startsOn };
+    return {
+      outcome: "updated",
+      datesMoved: trip.startsOn !== input.startsOn || trip.endsOn !== input.endsOn,
+    };
   });
 }
 

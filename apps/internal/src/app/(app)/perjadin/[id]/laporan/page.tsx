@@ -2,7 +2,7 @@ import { AcquittalTransactions } from "-/components/laporan-perjadin/acquittal-t
 import { FilePerjadinReport } from "-/components/laporan-perjadin/file-perjadin-report";
 import { driveFileUrl, driveFolderUrl } from "-/lib/drive/receipt-files";
 import { uploadGate } from "-/lib/drive/upload-gate";
-import { shortenKabupaten } from "-/lib/format-destination";
+import { perjadinName } from "-/lib/perjadin-name";
 import { requirePerson } from "-/lib/person";
 import { perjadinAcquittal, type AcquittalTransaction } from "@sugt/db/queries";
 import { formatRupiah } from "@sugt/domain";
@@ -14,8 +14,7 @@ import { notFound } from "next/navigation";
 import type { ViewableTransaction } from "./action-types";
 
 /**
- * The browser-tab title: `Laporan — <destination>`, reusing the same shortened destination the page
- * links back with; a not-found id falls back to the section label (#309). Reads `perjadinAcquittal`
+ * The browser-tab title: `Laporan — <name>`, the same name the page links back with (ADR-0044); a not-found id falls back to the section label (#309). Reads `perjadinAcquittal`
  * again — a minimal title query, as the ticket asks, not shared state.
  */
 export async function generateMetadata({
@@ -25,7 +24,7 @@ export async function generateMetadata({
   const { id } = await params;
   const acquittal = await perjadinAcquittal(person, id);
   return {
-    title: acquittal ? `Laporan — ${shortenKabupaten(acquittal.destination)}` : "Laporan Perjadin",
+    title: acquittal ? `Laporan — ${perjadinName(acquittal)}` : "Laporan Perjadin",
   };
 }
 
@@ -63,20 +62,17 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="border-b border-border px-7 py-5">
+      <header className="border-b border-border px-4 py-5 sm:px-7">
         <Link
           href={`/perjadin/${id}`}
           className="text-sm text-muted-foreground hover:underline"
         >
-          {shortenKabupaten(acquittal.destination)}
+          {perjadinName(acquittal)}
         </Link>
         <h1 className="mt-1 font-heading text-lg font-medium">Laporan Perjadin</h1>
-        <p className="text-sm text-muted-foreground tabular-nums">
-          {acquittal.startsOn} – {acquittal.endsOn}
-        </p>
       </header>
 
-      <div className="border-b border-border px-7 py-5">
+      <div className="border-b border-border px-4 py-5 sm:px-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-heading text-sm font-medium">Uang Perjalanan</h2>
@@ -138,7 +134,7 @@ export default async function Page({ params }: PageProps<"/perjadin/[id]/laporan
       </div>
 
       {acquittal.pimpinan.length > 0 && (
-        <section className="border-b border-border px-7 py-5">
+        <section className="border-b border-border px-4 py-5 sm:px-7">
           <h2 className="font-heading text-sm font-medium">Pimpinan yang turut serta</h2>
           <ul className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
             {acquittal.pimpinan.map((name) => (

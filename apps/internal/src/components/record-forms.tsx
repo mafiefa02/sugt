@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@sugt/ui/components/alert";
 import { Button } from "@sugt/ui/components/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -192,20 +193,22 @@ function RecordDialog({
           </Button>
         }
       />
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
+      <DialogContent size="panel">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{INSTRUCTION}</DialogDescription>
         </DialogHeader>
 
-        {stale !== null && (
-          <Alert variant="destructive">
-            <AlertTitle>Tidak jadi disimpan.</AlertTitle>
-            <AlertDescription>{stale}</AlertDescription>
-          </Alert>
-        )}
+        <DialogBody>
+          {stale !== null && (
+            <Alert variant="destructive">
+              <AlertTitle>Tidak jadi disimpan.</AlertTitle>
+              <AlertDescription>{stale}</AlertDescription>
+            </Alert>
+          )}
 
-        <div className="grid gap-3.5">{children}</div>
+          <div className="grid gap-3.5">{children}</div>
+        </DialogBody>
 
         <DialogFooter>
           <Button
@@ -229,7 +232,8 @@ function RecordDialog({
 }
 
 /** One Aspect's label and its 1–10 control. The `name` is namespaced so two dialogs on one
- * page do not fuse into a single radio group. */
+ * page do not fuse into a single radio group. The label sits above the boxes, so the row fits a
+ * 360px phone (#417). */
 function RatingField({
   namePrefix,
   aspect,
@@ -246,7 +250,7 @@ function RatingField({
   const labelId = useId();
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="grid gap-2">
       <Label id={labelId}>{label}</Label>
       <RatingInput
         name={`${namePrefix}-${aspect}`}

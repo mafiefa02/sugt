@@ -1,5 +1,12 @@
 # The Preparation Checklist stores ticks and derives the list
 
+> **Partially superseded by [ADR-0045](./0045-the-preparation-checklist-is-stored-per-level-and-frozen-for-finished-perjadins.md).**
+> The items are no longer derived from code. They are rows defined at three levels (Semua Perjadin,
+> Cluster, Perjadin), and a change does not reach a Perjadin that has already ended. The fixed list
+> below, and its amendment's, was retired by migration 0043. Ticks reference an item's id, not an
+> `item_key`. The auto-untick now belongs to the item flagged `clears_on_teaching_team_change`.
+> Only the ticks are still stored, and the checklist is still not a gate or a record.
+
 > **Partially superseded by [ADR-0041](./0041-a-perjadin-carries-no-travel-legs-and-its-dates-are-typed.md).**
 > The two ticket boxes are one `tiket_pp` ("Tiket / transportasi PP") now, so the fixed set below is
 > six, not seven; ticks on the retired `tiket_keberangkatan` and `tiket_kepulangan` keys are ignored
