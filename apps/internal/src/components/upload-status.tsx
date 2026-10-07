@@ -11,7 +11,7 @@ import { useEffect } from "react";
  * measurement of it.
  *
  * `uploading` while the files are readied and their bytes go to Drive — `done` of `total` finished,
- * whether they go in parallel (receipts) or one after another (Foto & Video, #425, will) — then
+ * whether they go in parallel (receipts) or one after another (Foto & Video, #425) — then
  * `saving` while the server records and reconciles them.
  */
 export type UploadProgress =

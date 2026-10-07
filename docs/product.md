@@ -224,6 +224,34 @@ spill sideways. Each section shows three cards with **Tampilkan lebih banyak** f
 left out when it has none. With neither, the page says "Anda belum tergabung dalam Perjalanan
 Dinas."
 
+**Each Session row of the timeline has its own buttons**: **Tandai** while it is still arranged,
+**Feedback**, and **Foto & Video** (#425) — in both sections, since footage is often uploaded after
+the trip. A cancelled Session is not in the timeline, so it has none. There is no Foto & Video
+button on the card's own row: footage belongs to a Session, not to the trip.
+
+**Foto & Video** opens a large popup titled "Foto & Video — 12 Okt 2026 · SMA Pradita Dirgantara",
+described "Upload dokumentasi kegiatan luring untuk sesi ini"
+([ADR-0046](./adr/0046-session-footage-is-stored-in-the-company-google-drive.md)):
+
+- **Pilih foto/video** takes several files at once — photos JPG, PNG, HEIC or WebP up to 50 MB,
+  videos MP4 or MOV up to 1000 MB, at most 30 in one go. Each picked file is listed with its kind and
+  size and a × to drop it. A file of another type, empty, or over its cap is named at once with the
+  reason ("Jenis berkas tidak didukung", "Foto lebih dari 50 MB", "Video lebih dari 1000 MB") and
+  left out; past 30, the rest are left out with a sentence saying so.
+- **Unggah** sends them one at a time, each straight to Google Drive in pieces, under the usual
+  status — "Mengunggah 2 dari 5 berkas ke Google Drive…", "Jangan tutup halaman ini sampai selesai.",
+  "Menyimpan…" — with the popup locked and the browser asking before the page is left. Afterwards it
+  says "{n} berkas terunggah", names each file that failed with its reason, and offers **Coba lagi**
+  for just those; picking more files keeps that summary. Files whose place in Drive is not yet
+  finished are counted ("{k} berkas belum tersinkron…"), as Dokumen says it. A file picked twice is
+  left out the second time ("Sudah dipilih").
+- **Sudah diunggah** lists the Session's files, newest first: Foto or Video, the file's own name, its
+  size, who uploaded it and when, **Buka** (it opens in Drive in a new tab), "belum tersinkron" while
+  it is not yet in place, and **Hapus**, which asks "Hapus berkas ini? File akan dipindahkan ke Sampah
+  Google Drive." first.
+- **While Drive is down** the popup still opens and lists the files; uploading and Hapus are closed,
+  with the reason said as text.
+
 **Dokumen**, beside Catat Transaksi on every card in both sections, opens **"Dokumen —
 {name}"**: the trip's attendance sheets
 ([ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)).
@@ -307,6 +335,11 @@ actionable difference.
 tool does not schedule one and confirm it later — it **logs a Session that already took place**,
 written straight to _delivered_ (ADR-0036). The form is titled "Catat Sesi daring" and its button
 reads "Tandai Terlaksana"; the date cannot be in the future.
+
+**An offline Session's own page, `/sesi/[id]`, has a Foto & Video section** (#425), so a Pimpinan —
+who has no `/pendamping` — sees its photos and videos too. Everyone signed in gets the list with
+**Buka**; Staff also get **Hapus** and **Unggah Foto & Video**, which opens the same popup. A
+cancelled Session keeps its list but offers no upload. An online Session has none.
 
 **Only an offline Session has a PIC** — its Perjadin's. An online Session has none: a third-party
 LMS runs delivery, so DITSAMA staffs no PIC and an online Session files no Session Record
@@ -861,7 +894,8 @@ SUGT ITB 2026 Internal App Object Storage/
 holds the photos (JPEG, PNG, HEIC or WebP, up to 50 MB) and videos (MP4 or MOV, up to 1000 MB) of
 each offline Session, uploaded as they were taken — a photo keeps its location data — and shared one
 file at a time. A large file is sent to Drive in 16 MB pieces and picks up where it stopped if the
-connection drops. Where Staff upload and view them is the screens' own ticket (#425).
+connection drops. Staff upload them from each Session's **Foto & Video** on `/pendamping` and on `/sesi/[id]`;
+anyone signed in views them on `/sesi/[id]`.
 
 **A badge on Pengaturan** in the sidebar tells an Administrator that Drive needs them: not
 connected, broken, or its folders unresolved — the states in which nobody can upload a receipt or a Dokumen.
