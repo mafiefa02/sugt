@@ -207,7 +207,8 @@ export async function cancelPerjadinSessionAction(
 export type IssuePerjadinFeedbackTokenActionResult = { outcome: "issued"; url: string; qr: string };
 
 /**
- * **Issue — or reissue — the Perjadin Evaluation token, and render its QR** (ADR-0024).
+ * **The Perjadin's Evaluation link, and its QR** (ADR-0024) — the existing link, or a new one when
+ * the trip has none (ADR-0049).
  *
  * No `staffSurface` and no role check: a Perjadin Evaluation is not Staff-only (ADR-0004 — it carries
  * no money), so `issuePerjadinFeedbackToken` takes a plain `Person` and any signed-in Person may share

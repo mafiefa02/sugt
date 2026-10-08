@@ -736,7 +736,12 @@ record and is not one. Their form is chased in the room, not by the tool.
 Separate from every internal record, deliberately and permanently — see
 [ADR-0012](./adr/0012-participants-write-through-a-short-lived-session-token.md).
 
-At the end of a Session a link or QR code is shown, live for **24 hours**. Anyone taught there
+At the end of a Session a link or QR code is shown. **It never expires and is never replaced**
+([ADR-0049](./adr/0049-feedback-links-never-expire-and-are-never-replaced.md)): staff print the QR
+the day before and shorten the link, so "Tampilkan QR" shows the Session's one link to whoever
+presses it — a colleague, another device, after a reload — and makes one only the first time.
+There is no "Terbitkan QR baru". A cancelled Session offers no QR, and its link opens on "Tautan
+sudah tidak berlaku", as an unknown link does. Anyone taught there
 can open it without signing in — almost always on a phone, so the form is laid out for ~360px —
 say which Class they sat in, type their name, then answer, in this order (#446):
 
@@ -786,6 +791,11 @@ share a table, a screen or a query.
 
 How the trip went, as against how the teaching went. **Only the Group that travelled can file
 one**, and each of them files at most one.
+
+It is filed through the trip's link (`/ep/{token}`), shared from **Evaluasi Perjadin** as a QR or a
+copyable URL. Like the Participant Feedback link it **never expires and is never replaced**
+([ADR-0049](./adr/0049-feedback-links-never-expire-and-are-never-replaced.md)): "Tampilkan QR" shows
+the trip's one link, and there is no "Terbitkan tautan baru".
 
 Four Aspects, same 1–10 scale, same rule that 7 or below needs an explanation:
 **Lodging**, **Transport**, **Meals** and **Punctuality**. Transport is the ground transport

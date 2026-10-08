@@ -130,7 +130,8 @@ export type IssueFeedbackTokenActionResult =
   | Extract<IssueFeedbackTokenResult, { outcome: "session-cancelled" }>;
 
 /**
- * **Issue — or reissue — the Participant Feedback token, and render its QR.**
+ * **The Session's Participant Feedback link, and its QR** — the existing link, or a new one when
+ * the Session has none (ADR-0049).
  *
  * No `staffSurface` and no role check: anyone signed in may hold up the QR at the end of a
  * Session, so `issueFeedbackToken` takes a plain `Person` and refuses only a cancelled Session.

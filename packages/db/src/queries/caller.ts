@@ -85,7 +85,7 @@ export type ServiceCaller = {
  */
 export type ParticipantToken = {
   readonly kind: "participant";
-  /** The Session the token was issued for, already resolved and already unexpired. */
+  /** The Session the token was issued for, already resolved and not cancelled. */
   sessionId: string;
 };
 
@@ -103,6 +103,6 @@ export type ParticipantToken = {
  */
 export type PerjadinToken = {
   readonly kind: "perjadin";
-  /** The Perjadin the token was issued for, already resolved and already unexpired. */
+  /** The Perjadin the token was issued for, already resolved. */
   perjadinId: string;
 };
