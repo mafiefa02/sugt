@@ -1,5 +1,9 @@
 # Participants write through a short-lived Session token, into their own table
 
+> **Partially superseded by [ADR-0049](./0049-feedback-links-never-expire-and-are-never-replaced.md).**
+> The link is no longer short-lived and issuing no longer replaces it: a Session's link never
+> expires, "Tampilkan QR" returns the one it has, and a Session may hold several. The rest stands.
+
 Participants — the people taught at a Session — may leave Feedback on it without signing in, through one link per Session that is live only briefly. Their submissions land in `participant_feedback`, never in a Session Record.
 
 ## Why this needs recording

@@ -873,14 +873,13 @@ submission in the same table and a professor can no longer be sure who else is i
 
 ```sql
 create table session_feedback_token (
-  session_id            uuid primary key references session (id) on delete cascade,
-  token                 text not null unique,
+  token                 text primary key,
+  session_id            uuid not null references session (id) on delete cascade,
   issued_at             timestamptz not null default now(),
-  expires_at            timestamptz not null default now() + interval '24 hours',
-  issued_by_person_id   uuid not null references person (id),
-
-  check (expires_at > issued_at)
+  issued_by_person_id   uuid not null references person (id)
 );
+
+create index session_feedback_token_session_id_idx on session_feedback_token (session_id);
 
 create table participant_feedback (
   id          uuid primary key default gen_random_uuid(),
@@ -944,10 +943,16 @@ not say which Aspect it was about, so the concerns list could show a low
 Aspect lets the list show the comment for the Aspect that was actually Rated low — or none, when
 that box was left blank. All of them stay nullable; the no-elaboration rule above is unchanged.
 
-**One token per Session, shared.** The primary key is `session_id`, so issuing a new one replaces
-it. `expires_at` defaults 24 hours out and is stored rather than derived: the token is issued at
-the end of the Session by construction — the link is the QR code shown in the room — so "24 hours
-after the Session ended" needs no Session end time to exist.
+**A Session's links never expire and are never replaced**
+([ADR-0049](./adr/0049-feedback-links-never-expire-and-are-never-replaced.md)). Staff print the QR
+the day before and shorten the link, so a row has no `expires_at`, and nothing in the app updates or
+deletes one: `issueFeedbackToken` locks the Session row, returns the link it has, and inserts only
+when it has none. **The token is the key** and `session_id` a plain indexed foreign key, so a
+Session may hold several links. Only `db:reattach-links` adds a second, putting back a link that an
+earlier reissue overwrote (the old design upserted on `session_id`). Issuing returns the original,
+which is the earliest `issued_at`, then `token`. Every link resolves to its Session, and a cancelled
+Session's links resolve to `gone`. Migration `0048` changed the key in place and dropped
+`expires_at`, keeping every row and its token string.
 
 `name` is typed by the Participant and referenced by nothing. No `person_id`, no enrolment, no
 attendee list — [ADR-0009](./adr/0009-the-tool-tracks-delivery-not-outcomes.md) decided against
@@ -983,19 +988,18 @@ chased in the room, not by the tool.
 ## Perjadin Evaluation
 
 How the trip went, as distinct from how the teaching went. Filed **without signing in**, through a
-short-lived token link shared from the trip's page, by a filer who **self-declares** a Role and a
+token link shared from the trip's page, by a filer who **self-declares** a Role and a
 Name (ADR-0024).
 
 ```sql
 create table perjadin_feedback_token (
-  perjadin_id           uuid primary key references perjadin (id) on delete cascade,
-  token                 text not null unique,
+  token                 text primary key,
+  perjadin_id           uuid not null references perjadin (id) on delete cascade,
   issued_at             timestamptz not null default now(),
-  expires_at            timestamptz not null default now() + interval '14 days',
-  issued_by_person_id   uuid not null references person (id),
-
-  check (expires_at > issued_at)
+  issued_by_person_id   uuid not null references person (id)
 );
+
+create index perjadin_feedback_token_perjadin_id_idx on perjadin_feedback_token (perjadin_id);
 
 create table perjadin_evaluation (
   id             uuid primary key default gen_random_uuid(),
@@ -1031,12 +1035,12 @@ create index perjadin_evaluation_concerns_idx
   where least(lodging, transport, meals, punctuality) <= 7;
 ```
 
-**`perjadin_feedback_token` mirrors `session_feedback_token`.** One token per Perjadin, keyed on
-`perjadin_id`, so issuing a new one replaces it and every link already shared resolves to nothing.
-`expires_at` defaults **14 days** out — far longer than the Session token's 24 hours, because the
-link is shared by hand after the trip and filed when the recipient gets to it, not scanned in the
-room. Any signed-in Person may issue it; a Perjadin is a real trip once it exists, so there is no
-cancelled state to bar (as the Session token has).
+**`perjadin_feedback_token` mirrors `session_feedback_token`.** Keyed on the token, with
+`perjadin_id` an indexed foreign key. A link never expires and is never replaced (ADR-0049):
+`issuePerjadinFeedbackToken` locks the Perjadin row, returns the trip's original link, and inserts
+only when it has none. Several links per trip arise only from `db:reattach-links`. Any signed-in
+Person may issue it. A Perjadin is a real trip once it exists, so there is no cancelled state to bar
+(as the Session token has).
 
 **`filed_by_role` and `filed_by_name` are self-declared and untrusted.** There is no
 `filed_by_person_id` and no foreign key: the filer may be a name-based Narasumber or a record-only
@@ -2198,7 +2202,7 @@ ran against the Drizzle-built database.
 
 The unauthenticated feedback route needs its own care. It is the only path in either app that
 writes without a signed-in Person, so it belongs behind a single handler that resolves the
-token, checks the expiry, and can insert into `participant_feedback` and nothing else. See
+token, refuses a cancelled Session's, and can insert into `participant_feedback` and nothing else. See
 [ADR-0012](./adr/0012-participants-write-through-a-short-lived-session-token.md).
 
 Connection strings, both IPv4:
@@ -2432,13 +2436,14 @@ across two tables, and nothing can require a row to exist. It is a query the Ses
 runs, not a constraint.
 
 **Anything about who submitted Participant Feedback.** No de-duplication, no rate limit, no
-proof the submitter attended. The token's expiry is the only gate, and it is a weak one by
-design — see [ADR-0012](./adr/0012-participants-write-through-a-short-lived-session-token.md).
-Rate limiting belongs at the edge, not in a constraint.
+proof the submitter attended. Holding the link is the only gate, and it is a weak one by design.
+The link never expires (ADR-0049), so a leaked one is removed by deleting its row by hand. See
+[ADR-0012](./adr/0012-participants-write-through-a-short-lived-session-token.md). Rate limiting
+belongs at the edge, not in a constraint.
 
-**That the token was still live when feedback arrived.** `expires_at` is a column, not a
-gate; nothing stops a direct insert after it has passed. The handler that resolves the token
-is what enforces it.
+**That a cancelled Session's link takes no feedback.** Nothing in `session_feedback_token` knows the
+Session's status. The handler that resolves the token refuses it, and the submit action resolves
+again.
 
 **That a Story's cover is one of its own photographs.** `story.cover_photo_id` references
 `story_photo (id)` alone, so nothing prevents one Story carrying another Story's photograph as

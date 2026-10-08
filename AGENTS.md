@@ -69,8 +69,8 @@ shell. Anything reading one goes through `requireEnv` in `@sugt/internal`, which
 with a sentence naming the strict-mode cause rather than with `undefined`. A new
 variable belongs in `turbo.json` in the same commit that first reads it.
 
-`DIRECT_URL` and `TEST_DATABASE_URL` are deliberately absent: drizzle-kit and vitest
-both run as package scripts, outside turbo. `NEXT_PUBLIC_*` is handled automatically
+`DIRECT_URL` and `TEST_DATABASE_URL` are deliberately absent: drizzle-kit, `@sugt/db`'s
+`db:seed` and `db:reattach-links`, and vitest all run as package scripts, outside turbo. `NEXT_PUBLIC_*` is handled automatically
 for Next apps.
 
 Tests are **Vitest, in `@sugt/internal`, against a real local Postgres** —

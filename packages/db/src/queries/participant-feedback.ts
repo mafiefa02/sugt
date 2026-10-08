@@ -1,11 +1,10 @@
 import {
-  FEEDBACK_TOKEN_LIFETIME_HOURS,
   PARTICIPANT_FEEDBACK_ASPECTS,
   PARTICIPANT_FEEDBACK_ASPECTS_BY_CLASS,
   type ClassKind,
   type ParticipantFeedbackAspect,
 } from "@sugt/domain";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { session } from "../schema/delivery";
@@ -31,12 +30,12 @@ import type { ParticipantToken, Person } from "./caller";
  */
 
 export type IssueFeedbackTokenResult =
-  | { outcome: "issued"; token: string; expiresAt: Date }
+  | { outcome: "issued"; token: string }
   /** A cancelled Session gets no feedback — there was nothing to sit in the room for. */
   | { outcome: "session-cancelled" };
 
 /**
- * Issue — or reissue — the feedback token for one Session.
+ * The Session's feedback link: the one it has, or a new one when it has none.
  *
  * **Anyone signed in may do this**, so there is no `requireStaff`; the QR is held up at the end
  * of the Session by whoever is standing there. The only bar is a cancelled Session. A cancelled
@@ -44,13 +43,16 @@ export type IssueFeedbackTokenResult =
  * because the token is shown at the end of a Session that happened, which is exactly when it is
  * marked delivered.
  *
- * **The upsert is keyed on `session_id`, the table's primary key, so reissuing replaces the
- * row.** The moment the new row lands, the previous token string is gone from the table and
- * every link already handed out resolves to nothing — which is the whole of what makes "one
- * token per Session, issuing a new one replaces the old" true.
+ * **It never replaces a link** (ADR-0049). Staff print the QR the day before and shorten the link
+ * by hand, so a second press — from a colleague, another device, or after a reload — must show the
+ * same QR rather than kill the printed one. Nothing here updates or deletes a row: it reads the
+ * Session's existing link and inserts only when there is none. When a Session holds several (only
+ * `db:reattach-links` adds a second), the original is returned — the earliest `issued_at`, then
+ * `token` — and a reattached link, stamped when it was reattached, never becomes the one shown.
  *
- * The status read and the upsert share a transaction, with the Session row locked, so a Session
- * cancelled at the same instant cannot slip a token out.
+ * The status read, the lookup and the insert share a transaction, with the Session row locked, so
+ * a Session cancelled at the same instant cannot slip a token out, and two presses at the same
+ * moment queue on the lock: the second reads the link the first inserted.
  */
 export async function issueFeedbackToken(
   caller: Person,
@@ -73,32 +75,23 @@ export async function issueFeedbackToken(
     }
     if (current.status === "cancelled") return { outcome: "session-cancelled" };
 
+    const [existing] = await tx
+      .select({ token: sessionFeedbackToken.token })
+      .from(sessionFeedbackToken)
+      .where(eq(sessionFeedbackToken.sessionId, sessionId))
+      .orderBy(asc(sessionFeedbackToken.issuedAt), asc(sessionFeedbackToken.token))
+      .limit(1);
+    if (existing) return { outcome: "issued", token: existing.token };
+
     // The token is minted in the database, the way every id in this schema is — `@sugt/db`
     // generates none in TypeScript, and a UUID is URL-safe and unique by the column's own
     // constraint. `gen_random_uuid()` is what `defaultRandom()` compiles to for the id columns.
-    const token = sql`gen_random_uuid()::text`;
-    // The lifetime is set from `FEEDBACK_TOKEN_LIFETIME_HOURS` on **both** paths rather than
-    // leaning on the column default for the insert — otherwise a change to the constant would
-    // move a reissued token's expiry while a first-issued one silently kept the old default.
-    const expiresAt = sql`now() + make_interval(hours => ${FEEDBACK_TOKEN_LIFETIME_HOURS})`;
     const [row] = await tx
       .insert(sessionFeedbackToken)
-      .values({ sessionId, token, issuedByPersonId: caller.id, expiresAt })
-      .onConflictDoUpdate({
-        target: sessionFeedbackToken.sessionId,
-        set: {
-          token,
-          issuedByPersonId: caller.id,
-          issuedAt: sql`now()`,
-          expiresAt,
-        },
-      })
-      .returning({
-        token: sessionFeedbackToken.token,
-        expiresAt: sessionFeedbackToken.expiresAt,
-      });
+      .values({ sessionId, token: sql`gen_random_uuid()::text`, issuedByPersonId: caller.id })
+      .returning({ token: sessionFeedbackToken.token });
 
-    return { outcome: "issued", token: row!.token, expiresAt: row!.expiresAt };
+    return { outcome: "issued", token: row!.token };
   });
 }
 
@@ -151,9 +144,9 @@ export type SubmitParticipantFeedbackResult =
  * Insert one Participant's feedback.
  *
  * **The caller is a `ParticipantToken`, never a `Person`** — the sole write in the system
- * keyed on a token rather than an account. The `sessionId` it carries was resolved and
- * unexpired when the token was checked; this trusts that, exactly as a `Person`-taking write
- * trusts `requireStaff` ran. It writes `participant_feedback` and nothing else, which is the
+ * keyed on a token rather than an account. The `sessionId` it carries was resolved, and its
+ * Session not cancelled, when the token was checked; this trusts that, exactly as a
+ * `Person`-taking write trusts `requireStaff` ran. It writes `participant_feedback` and nothing else, which is the
  * whole of what the token authorises.
  */
 export async function submitParticipantFeedback(
