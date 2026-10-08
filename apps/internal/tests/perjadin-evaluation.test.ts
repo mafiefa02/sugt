@@ -20,14 +20,15 @@ import {
   refusedBy,
   resetDatabase,
 } from "./support/fixtures";
+import { overlappingAtInsert } from "./support/overlap";
 
 /**
  * **The Perjadin Evaluation** — how the trip went, filed **without signing in** through a
  * token link (ADR-0024). The rules under test are the token's — who mints it, that it is never
- * replaced and never expires (ADR-0049), that a dead one lets nobody write — and the write's own: a blank name is refused, the
- * per-Aspect elaboration rule holds application-side and behind a CHECK, and `lodging` is nullable,
- * so a day trip with no hotel drops out of the minimum rather than forcing prose or reaching the
- * concerns list. The old Group-member gate and one-per-filer dedup are gone with the sign-in.
+ * replaced and never expires (ADR-0049), that a dead one lets nobody write — and the write's own:
+ * a blank name is refused, the per-Aspect elaboration rule holds application-side and behind a
+ * CHECK, and `lodging` is nullable, so a day trip with no hotel drops out of the minimum rather
+ * than forcing prose or reaching the concerns list. The old Group-member gate and one-per-filer dedup are gone with the sign-in.
  */
 
 /** Any signed-in Person may mint the token. `perjadin_feedback_token.issued_by_person_id` references one. */
@@ -229,10 +230,10 @@ describe("issuePerjadinFeedbackToken", () => {
     const colleague = await staff("dewi@ditsama.itb.ac.id");
     const trip = await aTrip(pic.id);
 
-    const presses = await Promise.all([
-      issuePerjadinFeedbackToken(pic, trip.id),
-      issuePerjadinFeedbackToken(colleague, trip.id),
-      issuePerjadinFeedbackToken(pic, trip.id),
+    const presses = await overlappingAtInsert("perjadin_feedback_token", [
+      () => issuePerjadinFeedbackToken(pic, trip.id),
+      () => issuePerjadinFeedbackToken(colleague, trip.id),
+      () => issuePerjadinFeedbackToken(pic, trip.id),
     ]);
 
     expect(new Set(presses.map((p) => p.token)).size).toBe(1);

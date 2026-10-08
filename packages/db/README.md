@@ -65,7 +65,7 @@ in. It is deliberately not idempotent — see the header in the template for why
 `db:reattach-links` puts back feedback links that an earlier reissue overwrote
 ([ADR-0049](../../docs/adr/0049-feedback-links-never-expire-and-are-never-replaced.md), #453).
 The file has one `link,target[,kind]` line per link. The link is a full `/f/{token}` or
-`/ep/{token}` URL, or a bare token with `kind` set to `session` or `perjadin`. The target is the
+`/ep/{token}` URL, or a bare token with `kind` set to `session` (or `sesi`) or `perjadin`. The target is the
 Session or Perjadin id. Each line becomes an additional link on that target, recorded against the
 operator, who must be an active Staff Person. Nothing is updated, deleted or moved. **It is a dry
 run unless `--apply` is given**, and a second `--apply` of the same file reports every line as

@@ -29,7 +29,7 @@ export type RecoveryLine = {
   line: number;
   link: string;
   target: string;
-  /** Required only for a bare token. `session` or `f`, `perjadin` or `ep`. */
+  /** Required only for a bare token. `session` (or `sesi`, `f`), `perjadin` (or `ep`). */
   kind: string | null;
 };
 
@@ -318,11 +318,12 @@ export function formatRecoveryReport(report: RecoveryReport): string {
   const count = (outcome: RecoveryOutcome) =>
     report.results.filter((r) => r.outcome === outcome).length;
   const flagged = report.results.filter((r) => r.flag).length;
+  const written: RecoveryOutcome = report.apply ? "attached" : "would-attach";
   out.push(
     "",
     `Ringkasan: ${report.results.length} baris — ` +
       [
-        `${count(report.apply ? "attached" : "would-attach")} ${OUTCOME_LABEL[report.apply ? "attached" : "would-attach"]}`,
+        `${count(written)} ${OUTCOME_LABEL[written]}`,
         `${count("already-active")} sudah aktif`,
         `${count("refused")} ditolak`,
         ...(flagged > 0 ? [`${flagged} perlu perhatian`] : []),

@@ -85,8 +85,8 @@ function FeedbackForm({ token }: { token: string }) {
     });
   }
 
-  // The link died while the form was open — its Session was cancelled. The same notice a fresh
-  // dead load shows, and no form: there is nothing a second try here would reach.
+  // The link died while the form was open — its Session was cancelled, or the link was removed by
+  // hand (ADR-0049). The same notice a fresh dead load shows, and no form: there is nothing a second try here would reach.
   if (gone) return <GoneNotice />;
 
   // A thank-you and no form. A second submission is not prevented, so the page must not invite

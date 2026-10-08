@@ -27,6 +27,7 @@ import {
   refusedBy,
   resetDatabase,
 } from "./support/fixtures";
+import { overlappingAtInsert } from "./support/overlap";
 
 /**
  * **Participant Feedback** — the token a Session hands out, the resolution that turns it into a
@@ -156,10 +157,10 @@ describe("issueFeedbackToken", () => {
     const colleague = await staff("dewi@ditsama.itb.ac.id");
     const session = await aSession(pic.id, "arranged");
 
-    const presses = await Promise.all([
-      issueFeedbackToken(pic, session.id),
-      issueFeedbackToken(colleague, session.id),
-      issueFeedbackToken(pic, session.id),
+    const presses = await overlappingAtInsert("session_feedback_token", [
+      () => issueFeedbackToken(pic, session.id),
+      () => issueFeedbackToken(colleague, session.id),
+      () => issueFeedbackToken(pic, session.id),
     ]);
 
     expect(new Set(presses.map((p) => (p.outcome === "issued" ? p.token : p.outcome))).size).toBe(

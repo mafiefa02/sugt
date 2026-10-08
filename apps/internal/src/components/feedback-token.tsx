@@ -38,7 +38,7 @@ type FeedbackTokenDialogProps = (
  * `SessionWrites`. It is **barred on a cancelled Session**: nobody sat in a room that never
  * happened, and `issueFeedbackToken` refuses one anyway.
  *
- * **"Tampilkan QR" shows the Session's one link, and never replaces it** (ADR-0049). Staff print
+ * **"Tampilkan QR" shows the Session's link, and never replaces it** (ADR-0049). Staff print
  * the QR the day before they leave and shorten the link by hand, so whoever presses it — a
  * colleague, another device, the same person after a reload — gets the same QR back from
  * `issueFeedbackToken`, which mints one only when the Session has none. There is no way to replace
@@ -133,8 +133,8 @@ function FeedbackTokenDialog(props: FeedbackTokenDialogProps) {
         )}
 
         {/*
-          Only before the QR is shown. Once it is, there is nothing left to do here but close: the
-          link is the one link, and no button replaces it.
+          Only before the QR is shown. Once it is, there is nothing left to do here but close: it
+          is the link everyone else gets too, and no button replaces it.
         */}
         {issued === null && (
           <DialogFooter>

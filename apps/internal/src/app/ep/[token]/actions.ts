@@ -18,8 +18,9 @@ import {
  * database while the form was open (ADR-0049's only remedy for a leaked one) must fail here, so the
  * resolution runs again inside the action.
  *
- * `gone` is an unknown token — the form shows the same dead-link message a fresh load would. The write's own outcomes (`filed`, `name-required`,
- * `prose-required`) are reused rather than restated; `gone` is the one this layer adds.
+ * `gone` is an unknown token — the form shows the same dead-link message a fresh load would. The
+ * write's own outcomes (`filed`, `name-required`, `prose-required`) are reused rather than
+ * restated; `gone` is the one this layer adds.
  */
 export type SubmitPerjadinEvaluationActionResult =
   | FilePerjadinEvaluationResult

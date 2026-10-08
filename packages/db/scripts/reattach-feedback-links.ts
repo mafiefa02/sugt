@@ -1,13 +1,13 @@
 /**
  * `pnpm --filter @sugt/db db:reattach-links <file.csv> --operator <email> [--apply]`
  *
- * Reattaches feedback links an earlier reissue overwrote (#453, ADR-0049): each `link,target[,kind]`
- * line becomes an additional link on its Session or Perjadin. **A dry run unless `--apply` is
+ * Reattaches feedback links an earlier reissue overwrote (#453, ADR-0049): each
+ * `link,target[,kind]` line becomes an additional link on its Session or Perjadin. **A dry run unless `--apply` is
  * given**, and either way it prints a line-by-line report and a summary. The rules are in
  * `src/feedback-link-recovery.ts`.
  *
- * Runs against `DIRECT_URL`, on the footing `db:seed` is on: a package script outside turbo, with the
- * variable set in the shell rather than read from a file, so the database it writes is the one the
+ * Runs against `DIRECT_URL`, on the footing `db:seed` is on: a package script outside turbo, with
+ * the variable set in the shell rather than read from a file, so the database it writes is the one the
  * operator named. The report's first line names that database's host. It runs on Node's own type
  * stripping (Node 22.18 or later), which is why the import below carries its `.ts` extension.
  */

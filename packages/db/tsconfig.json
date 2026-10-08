@@ -1,9 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "types": ["node"]
-  },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "drizzle.config.ts"],
+  "include": ["src/**/*.ts", "drizzle.config.ts"],
   "exclude": ["node_modules"]
 }

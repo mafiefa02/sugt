@@ -2,8 +2,8 @@
  * What a dead Perjadin Evaluation link shows — an unknown link, the only way here now that a link
  * never expires and is never replaced (ADR-0049). One component so a fresh load and a link that
  * dies while the form is open read the exact same message; the two code paths that reach here must
- * not drift apart. The sibling of
- * `f/[token]/gone-notice.tsx`, its copy adapted from a Session feedback QR to a Perjadin link.
+ * not drift apart. The sibling of `f/[token]/gone-notice.tsx`, its copy adapted from a Session
+ * feedback QR to a Perjadin link.
  *
  * No `"use client"`: it holds no state, so it renders in the server page and inside the client
  * form alike.

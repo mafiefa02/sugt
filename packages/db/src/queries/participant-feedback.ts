@@ -145,8 +145,8 @@ export type SubmitParticipantFeedbackResult =
  *
  * **The caller is a `ParticipantToken`, never a `Person`** — the sole write in the system
  * keyed on a token rather than an account. The `sessionId` it carries was resolved, and its
- * Session not cancelled, when the token was checked; this trusts that, exactly as a `Person`-taking write
- * trusts `requireStaff` ran. It writes `participant_feedback` and nothing else, which is the
+ * Session not cancelled, when the token was checked; this trusts that, exactly as a
+ * `Person`-taking write trusts `requireStaff` ran. It writes `participant_feedback` and nothing else, which is the
  * whole of what the token authorises.
  */
 export async function submitParticipantFeedback(

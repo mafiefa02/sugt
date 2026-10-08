@@ -23,7 +23,7 @@ import { type ReactElement, useState, useTransition } from "react";
  * `issuePerjadinFeedbackToken` takes a plain `Person`. Unlike the Session QR there is **no cancelled
  * bar**: a Perjadin is a real trip once it exists, so the button is always live.
  *
- * **"Tampilkan QR" shows the trip's one link, and never replaces it** (ADR-0049), exactly as the
+ * **"Tampilkan QR" shows the trip's link, and never replaces it** (ADR-0049), exactly as the
  * Session QR does: whoever presses it, wherever, gets the same link back from
  * `issuePerjadinFeedbackToken`, which mints one only when the trip has none. There is no way to
  * replace or kill a link from here.
@@ -110,8 +110,8 @@ function PerjadinFeedbackTokenDialog({
         )}
 
         {/*
-          Only before the QR is shown. Once it is, there is nothing left to do here but close: the
-          link is the one link, and no button replaces it.
+          Only before the QR is shown. Once it is, there is nothing left to do here but close: it
+          is the link everyone else gets too, and no button replaces it.
         */}
         {issued === null && (
           <DialogFooter>
