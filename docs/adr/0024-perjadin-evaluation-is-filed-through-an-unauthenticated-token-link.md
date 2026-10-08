@@ -1,5 +1,9 @@
 # Perjadin Evaluation is filed through an unauthenticated token link, not a signed-in Group member
 
+> **Partially superseded by [ADR-0049](./0049-feedback-links-never-expire-and-are-never-replaced.md).**
+> The 14-day lifetime and "a reissue replaces the row" below no longer hold: a Perjadin's link never
+> expires, "Tampilkan QR" returns the one it has, and a Perjadin may hold several. The rest stands.
+
 A Perjadin Evaluation is now filed **without signing in**, through a short-lived token link shared
 from the trip's page, by a filer who self-declares a **Role** (`Pengajar` / `Pendamping` /
 `Pimpinan`) and a **Name**. This reverses two standing decisions: that _only the Group that

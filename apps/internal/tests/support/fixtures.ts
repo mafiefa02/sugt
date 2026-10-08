@@ -453,22 +453,17 @@ export type PerjadinFeedbackTokenFixture = {
   /** Defaults to a fresh random token. Pass one to drive the resolver at a known value. */
   token?: string;
   /**
-   * When the token was issued. Defaults to the schema's `now()`. Pass a past `Date` **with** a past
-   * `expiresAt` to build an already-expired token — `perjadin_feedback_token_expiry_check` refuses
-   * `expires_at <= issued_at`, so an expired token needs both in the past.
+   * When the token was issued. Defaults to the schema's `now()`. Pass a past `Date` for a link
+   * printed long ago — it still resolves (ADR-0049) — or to decide which of several links on one
+   * trip is the original that issuing returns.
    */
   issuedAt?: Date;
-  /**
-   * When the token dies. Defaults to the schema's 14-days-from-now. Pass a past `Date` to build an
-   * already-expired token — the resolver enforces expiry itself, so a test needs a real one.
-   */
-  expiresAt?: Date;
 };
 
 /**
- * One Perjadin's feedback token — the link's target (ADR-0024). The primary key is `perjadin_id`,
- * so a second one for the same trip replaces the first, which is how a reissue kills the old link.
- * The sibling of `addFeedbackToken`.
+ * One of a Perjadin's feedback links — the link's target (ADR-0024). The token is the key, so a
+ * second one for the same trip is a second link beside the first, as `db:reattach-links` adds; it
+ * never replaces it (ADR-0049). The sibling of `addFeedbackToken`.
  */
 export async function addPerjadinFeedbackToken(fixture: PerjadinFeedbackTokenFixture) {
   const [token] = await db
@@ -478,7 +473,6 @@ export async function addPerjadinFeedbackToken(fixture: PerjadinFeedbackTokenFix
       token: fixture.token ?? randomUUID(),
       issuedByPersonId: fixture.issuedByPersonId,
       ...(fixture.issuedAt ? { issuedAt: fixture.issuedAt } : {}),
-      ...(fixture.expiresAt ? { expiresAt: fixture.expiresAt } : {}),
     })
     .returning();
   return token!;
@@ -491,21 +485,17 @@ export type FeedbackTokenFixture = {
   /** Defaults to a fresh random token. Pass one to drive the resolver at a known value. */
   token?: string;
   /**
-   * When the token was issued. Defaults to the schema's `now()`. Pass a past `Date` **with** a
-   * past `expiresAt` to build an already-expired token — `session_feedback_token_expiry_check`
-   * refuses `expires_at <= issued_at`, so an expired token needs both in the past.
+   * When the token was issued. Defaults to the schema's `now()`. Pass a past `Date` for a link
+   * printed long ago — it still resolves (ADR-0049) — or to decide which of several links on one
+   * Session is the original that issuing returns.
    */
   issuedAt?: Date;
-  /**
-   * When the token dies. Defaults to the schema's 24-hours-from-now. Pass a past `Date` to build
-   * an already-expired token — the resolver enforces expiry itself, so a test needs a real one.
-   */
-  expiresAt?: Date;
 };
 
 /**
- * One Session's feedback token — the QR's target. The primary key is `session_id`, so a second
- * one for the same Session replaces the first, which is how a reissue kills the old link.
+ * One of a Session's feedback links — the QR's target. The token is the key, so a second one for
+ * the same Session is a second link beside the first, as `db:reattach-links` adds; it never
+ * replaces it (ADR-0049).
  */
 export async function addFeedbackToken(fixture: FeedbackTokenFixture) {
   const [token] = await db
@@ -515,7 +505,6 @@ export async function addFeedbackToken(fixture: FeedbackTokenFixture) {
       token: fixture.token ?? randomUUID(),
       issuedByPersonId: fixture.issuedByPersonId,
       ...(fixture.issuedAt ? { issuedAt: fixture.issuedAt } : {}),
-      ...(fixture.expiresAt ? { expiresAt: fixture.expiresAt } : {}),
     })
     .returning();
   return token!;

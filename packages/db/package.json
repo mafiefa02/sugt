@@ -7,14 +7,16 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
     "./queries": "./src/queries/index.ts",
-    "./migrations": "./src/migrations.ts"
+    "./migrations": "./src/migrations.ts",
+    "./feedback-link-recovery": "./src/feedback-link-recovery.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "psql \"$DIRECT_URL\" -v ON_ERROR_STOP=1 -f seed/reference-data.sql",
-    "db:seed:people": "psql \"$DIRECT_URL\" -v ON_ERROR_STOP=1 -f seed/founding-staff.sql"
+    "db:seed:people": "psql \"$DIRECT_URL\" -v ON_ERROR_STOP=1 -f seed/founding-staff.sql",
+    "db:reattach-links": "node scripts/reattach-feedback-links.ts"
   },
   "dependencies": {
     "@sugt/domain": "workspace:*",
@@ -22,6 +24,7 @@
     "postgres": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "drizzle-kit": "catalog:",
     "typescript": "catalog:"
   }

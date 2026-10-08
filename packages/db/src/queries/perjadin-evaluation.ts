@@ -1,21 +1,21 @@
 import {
   CONCERN_AT_OR_BELOW,
   PERJADIN_ASPECTS,
-  PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS,
   type PerjadinAspect,
   type PerjadinEvaluationRole,
 } from "@sugt/domain";
-import { sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 
 import { db } from "../client";
 import { perjadinEvaluation, perjadinFeedbackToken } from "../schema/evaluations";
+import { perjadin } from "../schema/travel";
 import type { PerjadinToken, Person } from "./caller";
 
 /**
  * **The Perjadin Evaluation** — how the trip went, as against how the teaching went. Four Aspects
  * about the journey and none about a School.
  *
- * **Filed without signing in, through a short-lived token link (ADR-0024).** This used to be a
+ * **Filed without signing in, through a token link (ADR-0024).** This used to be a
  * signed-in write gated on membership of the Group that travelled. That gate silently excluded
  * exactly the voices the evaluation wants — the name-based Narasumber and the record-only Pimpinan,
  * neither of whom has a login — so #167 retargeted it onto the Participant Feedback token pattern
@@ -49,55 +49,61 @@ function prose(value: string | null): string | null {
 export type IssuePerjadinFeedbackTokenResult = {
   outcome: "issued";
   token: string;
-  expiresAt: Date;
 };
 
 /**
- * Issue — or reissue — the feedback token for one Perjadin.
+ * The Perjadin's Evaluation link: the one it has, or a new one when it has none.
  *
  * **Anyone signed in may do this**, so there is no `requireStaff` (ADR-0004 — the Evaluation carries
  * no money); whoever has the trip's page open shares the QR with the Narasumber, Pendamping and
  * Pimpinan. Unlike the Session token there is **no cancelled bar**: a Perjadin is a real trip once
- * it exists and is never cancelled, so the token always has a live trip behind it and the write is
- * a plain upsert with no status to read or lock.
+ * it exists and is never cancelled, so the token always has a live trip behind it.
  *
- * **The upsert is keyed on `perjadin_id`, the table's primary key, so reissuing replaces the row.**
- * The moment the new row lands, the previous token string is gone from the table and every link
- * already handed out resolves to nothing — the whole of what makes "one token per Perjadin,
- * issuing a new one replaces the old" true.
- *
- * The lifetime is set from `PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS` on **both** paths rather than
- * leaning on the column default for the insert — otherwise a change to the constant would move a
- * reissued token's expiry while a first-issued one silently kept the old default. This mirrors
- * `issueFeedbackToken` exactly.
+ * **It never replaces a link** (ADR-0049), exactly as `issueFeedbackToken` does not: it reads the
+ * trip's existing link and inserts only when there is none, and of several (only
+ * `db:reattach-links` adds a second) it returns the original — the earliest `issued_at`, then
+ * `token`. The Perjadin row is locked for the lookup and the insert, so two presses at the same
+ * moment queue on it and the second reads the link the first inserted.
  */
 export async function issuePerjadinFeedbackToken(
   caller: Person,
   perjadinId: string,
 ): Promise<IssuePerjadinFeedbackTokenResult> {
-  // The token is minted in the database, the way every id in this schema is — a UUID is URL-safe and
-  // unique by the column's own constraint. `gen_random_uuid()` is what `defaultRandom()` compiles to.
-  const token = sql`gen_random_uuid()::text`;
-  const expiresAt = sql`now() + make_interval(hours => ${PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS})`;
+  return db.transaction(async (tx) => {
+    const [trip] = await tx
+      .select({ id: perjadin.id })
+      .from(perjadin)
+      .where(eq(perjadin.id, perjadinId))
+      // `no key update` rather than `update`: two presses still queue on it, but a write that only
+      // references the trip — an Evaluation landing, a Session added — is not held up behind it.
+      .for("no key update");
+    // A missing row throws, as `issueFeedbackToken` does for a Session: the trip page 404s on an
+    // unknown id before offering the button, so this is a bug or a hand-edited request.
+    if (!trip) {
+      throw new Error(
+        `No Perjadin has id ${perjadinId}. The trip page 404s on an unknown id before offering ` +
+          "the button, so this is a bug or a hand-edited request.",
+      );
+    }
 
-  const [row] = await db
-    .insert(perjadinFeedbackToken)
-    .values({ perjadinId, token, issuedByPersonId: caller.id, expiresAt })
-    .onConflictDoUpdate({
-      target: perjadinFeedbackToken.perjadinId,
-      set: {
-        token,
-        issuedByPersonId: caller.id,
-        issuedAt: sql`now()`,
-        expiresAt,
-      },
-    })
-    .returning({
-      token: perjadinFeedbackToken.token,
-      expiresAt: perjadinFeedbackToken.expiresAt,
-    });
+    const [existing] = await tx
+      .select({ token: perjadinFeedbackToken.token })
+      .from(perjadinFeedbackToken)
+      .where(eq(perjadinFeedbackToken.perjadinId, perjadinId))
+      .orderBy(asc(perjadinFeedbackToken.issuedAt), asc(perjadinFeedbackToken.token))
+      .limit(1);
+    if (existing) return { outcome: "issued", token: existing.token };
 
-  return { outcome: "issued", token: row!.token, expiresAt: row!.expiresAt };
+    // The token is minted in the database, the way every id in this schema is — a UUID is URL-safe
+    // and unique by the column's own constraint. `gen_random_uuid()` is what `defaultRandom()`
+    // compiles to.
+    const [row] = await tx
+      .insert(perjadinFeedbackToken)
+      .values({ perjadinId, token: sql`gen_random_uuid()::text`, issuedByPersonId: caller.id })
+      .returning({ token: perjadinFeedbackToken.token });
+
+    return { outcome: "issued", token: row!.token };
+  });
 }
 
 /**
@@ -145,7 +151,7 @@ export type FilePerjadinEvaluationResult =
  * File one Perjadin Evaluation.
  *
  * **The caller is a `PerjadinToken`, never a `Person`** (ADR-0024) — the `perjadinId` it carries
- * was resolved and unexpired when the token was checked; this trusts that, exactly as a
+ * was resolved when the token was checked; this trusts that, exactly as a
  * `Person`-taking write trusts `requireStaff` ran, and as `submitParticipantFeedback` trusts its
  * `ParticipantToken`. It writes `perjadin_evaluation` and nothing else, which is the whole of what
  * the token authorises. There is no Group-member check and no `already-filed` bar any more — the

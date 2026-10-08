@@ -31,8 +31,8 @@ import {
 /**
  * **Participant Feedback** — the token a Session hands out, the resolution that turns it into a
  * caller, and the one write it authorises. This is the only write path in either app with no
- * signed-in Person, so the rules under test are all about the token: who may mint it, when it
- * dies, and that a dead one lets nobody write.
+ * signed-in Person, so the rules under test are all about the token: who may mint it, that it is
+ * never replaced and never expires (ADR-0049), and that a dead one lets nobody write.
  */
 
 async function staff(email = "rina@ditsama.itb.ac.id") {
@@ -137,21 +137,66 @@ describe("issueFeedbackToken", () => {
     expect((await tokenRows(session.id)).length).toBe(0);
   });
 
-  it("reissuing replaces the row, so the old token resolves to nothing", async () => {
+  it("a second press returns the same link, so the printed one keeps working", async () => {
     const pic = await staff();
+    const colleague = await staff("dewi@ditsama.itb.ac.id");
     const session = await aSession(pic.id, "arranged");
 
     const first = await issueFeedbackToken(pic, session.id);
-    const second = await issueFeedbackToken(pic, session.id);
+    const second = await issueFeedbackToken(colleague, session.id);
 
-    expect(first.outcome).toBe("issued");
-    expect(second.outcome).toBe("issued");
-    if (first.outcome !== "issued" || second.outcome !== "issued") throw new Error("unreachable");
-
-    expect(second.token).not.toBe(first.token);
+    expect(second).toEqual(first);
     expect((await tokenRows(session.id)).length).toBe(1);
-    expect(await resolveFeedbackToken(first.token)).toEqual({ outcome: "gone" });
-    expect((await resolveFeedbackToken(second.token)).outcome).toBe("open");
+    if (first.outcome !== "issued") throw new Error("unreachable");
+    expect((await resolveFeedbackToken(first.token)).outcome).toBe("open");
+  });
+
+  it("two presses at the same moment get the same link, and one row", async () => {
+    const pic = await staff();
+    const colleague = await staff("dewi@ditsama.itb.ac.id");
+    const session = await aSession(pic.id, "arranged");
+
+    const presses = await Promise.all([
+      issueFeedbackToken(pic, session.id),
+      issueFeedbackToken(colleague, session.id),
+      issueFeedbackToken(pic, session.id),
+    ]);
+
+    expect(new Set(presses.map((p) => (p.outcome === "issued" ? p.token : p.outcome))).size).toBe(
+      1,
+    );
+    expect((await tokenRows(session.id)).length).toBe(1);
+  });
+
+  it("returns the original of several links — the earliest issued, then the lowest token", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+    const day = 24 * 60 * 60 * 1000;
+    const issuedAt = new Date(Date.now() - 10 * day);
+    // Two issued in the same instant, and one reattached today by `db:reattach-links`.
+    await addFeedbackToken({
+      sessionId: session.id,
+      issuedByPersonId: pic.id,
+      token: "b0000000-0000-4000-8000-000000000000",
+      issuedAt,
+    });
+    await addFeedbackToken({
+      sessionId: session.id,
+      issuedByPersonId: pic.id,
+      token: "a0000000-0000-4000-8000-000000000000",
+      issuedAt,
+    });
+    await addFeedbackToken({
+      sessionId: session.id,
+      issuedByPersonId: pic.id,
+      token: "00000000-0000-4000-8000-000000000000",
+    });
+
+    expect(await issueFeedbackToken(pic, session.id)).toEqual({
+      outcome: "issued",
+      token: "a0000000-0000-4000-8000-000000000000",
+    });
+    expect((await tokenRows(session.id)).length).toBe(3);
   });
 });
 
@@ -175,18 +220,20 @@ describe("resolveFeedbackToken", () => {
     expect(await resolveFeedbackToken("no-such-token")).toEqual({ outcome: "gone" });
   });
 
-  it("is gone for an expired token", async () => {
+  it("still resolves a token issued weeks ago — a link never expires", async () => {
     const pic = await staff();
     const session = await aSession(pic.id, "delivered");
     const day = 24 * 60 * 60 * 1000;
     const token = await addFeedbackToken({
       sessionId: session.id,
       issuedByPersonId: pic.id,
-      issuedAt: new Date(Date.now() - 2 * day),
-      expiresAt: new Date(Date.now() - day),
+      issuedAt: new Date(Date.now() - 400 * day),
     });
 
-    expect(await resolveFeedbackToken(token.token)).toEqual({ outcome: "gone" });
+    expect(await resolveFeedbackToken(token.token)).toEqual({
+      outcome: "open",
+      caller: { kind: "participant", sessionId: session.id },
+    });
   });
 
   it("is gone for a cancelled Session's token", async () => {
@@ -289,8 +336,8 @@ describe("submitParticipantFeedback", () => {
 
 /**
  * The submit Server Action, which is what actually guards the write: it re-resolves the token
- * server-side rather than trusting the page that rendered the form. A form left open past expiry
- * or past a reissue must fail here — this is the test that would catch a refactor moving
+ * server-side rather than trusting the page that rendered the form. A form left open while the
+ * Session is cancelled must fail here — this is the test that would catch a refactor moving
  * resolution to the page alone.
  */
 describe("submitFeedbackAction", () => {
@@ -313,15 +360,14 @@ describe("submitFeedbackAction", () => {
     expect((await feedbackRows(session.id)).length).toBe(1);
   });
 
-  it("writes nothing when the token expired after the form was rendered", async () => {
+  it("lands through a token issued weeks ago", async () => {
     const pic = await staff();
     const session = await aSession(pic.id, "delivered");
     const day = 24 * 60 * 60 * 1000;
     const token = await addFeedbackToken({
       sessionId: session.id,
       issuedByPersonId: pic.id,
-      issuedAt: new Date(Date.now() - 2 * day),
-      expiresAt: new Date(Date.now() - day),
+      issuedAt: new Date(Date.now() - 30 * day),
     });
 
     const result = await submitFeedbackAction(token.token, {
@@ -332,16 +378,54 @@ describe("submitFeedbackAction", () => {
       answers: NO_ANSWERS,
     });
 
-    expect(result).toEqual({ outcome: "gone" });
-    expect((await feedbackRows(session.id)).length).toBe(0);
+    expect(result).toEqual({ outcome: "submitted" });
+    expect((await feedbackRows(session.id)).length).toBe(1);
   });
 
-  it("writes nothing through a token a reissue replaced", async () => {
+  it("stores a submission through each of a Session's several links against that Session", async () => {
+    const pic = await staff();
+    const session = await aSession(pic.id, "delivered");
+    const other = await addSession({
+      schoolId: session.schoolId,
+      heldOn: "2026-09-11",
+      status: "delivered",
+    });
+    const issued = await issueFeedbackToken(pic, session.id);
+    if (issued.outcome !== "issued") throw new Error("unreachable");
+    const reattached = await addFeedbackToken({ sessionId: session.id, issuedByPersonId: pic.id });
+    await addFeedbackToken({ sessionId: other.id, issuedByPersonId: pic.id });
+
+    for (const [token, name] of [
+      [issued.token, "Budi"],
+      [reattached.token, "Siti"],
+    ] as const) {
+      expect(await resolveFeedbackToken(token)).toEqual({
+        outcome: "open",
+        caller: { kind: "participant", sessionId: session.id },
+      });
+      const result = await submitFeedbackAction(token, {
+        classKind: "GTK",
+        name,
+        ratings: FINE,
+        comments: NO_COMMENTS,
+        answers: NO_ANSWERS,
+      });
+      expect(result).toEqual({ outcome: "submitted" });
+    }
+
+    expect((await feedbackRows(session.id)).map((row) => row.name).sort()).toEqual([
+      "Budi",
+      "Siti",
+    ]);
+    expect(await feedbackRows(other.id)).toEqual([]);
+  });
+
+  it("writes nothing once the Session is cancelled after the form was rendered", async () => {
     const pic = await staff();
     const session = await aSession(pic.id, "arranged");
     const first = await issueFeedbackToken(pic, session.id);
     if (first.outcome !== "issued") throw new Error("unreachable");
-    await issueFeedbackToken(pic, session.id);
+    await cancelSession(pic, session.id, "Sekolah meminta penjadwalan ulang");
 
     const result = await submitFeedbackAction(first.token, {
       classKind: "Student",

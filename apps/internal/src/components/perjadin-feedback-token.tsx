@@ -23,12 +23,10 @@ import { type ReactElement, useState, useTransition } from "react";
  * `issuePerjadinFeedbackToken` takes a plain `Person`. Unlike the Session QR there is **no cancelled
  * bar**: a Perjadin is a real trip once it exists, so the button is always live.
  *
- * **Issuing confirms first, and reissuing asks again, more pointedly.** The table is keyed on
- * `perjadin_id`, so a new token invalidates every link already shared. Once a link is shown it
- * **stays shown** across closing and reopening the dialog — re-viewing it must not silently replace
- * it while it is still being shared. Replacing it is *Terbitkan tautan baru*, which opens its own
- * confirmation naming what dies, so a reissue is a second, deliberate act rather than a repeat of
- * the neutral first-issue notice.
+ * **"Tampilkan QR" shows the trip's one link, and never replaces it** (ADR-0049), exactly as the
+ * Session QR does: whoever presses it, wherever, gets the same link back from
+ * `issuePerjadinFeedbackToken`, which mints one only when the trip has none. There is no way to
+ * replace or kill a link from here.
  */
 function PerjadinFeedbackTokenDialog({
   perjadinId,
@@ -42,7 +40,6 @@ function PerjadinFeedbackTokenDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [issued, setIssued] = useState<{ url: string; qr: string } | null>(null);
-  const [confirmingReissue, setConfirmingReissue] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, startSaving] = useTransition();
 
@@ -50,7 +47,6 @@ function PerjadinFeedbackTokenDialog({
     startSaving(async () => {
       const result = await issuePerjadinFeedbackTokenAction(perjadinId);
       setIssued({ url: result.url, qr: result.qr });
-      setConfirmingReissue(false);
       setCopied(false);
     });
   }
@@ -61,11 +57,6 @@ function PerjadinFeedbackTokenDialog({
     setCopied(true);
   }
 
-  // Three states: no link yet (confirm and mint), a link shown, and a link shown with a reissue
-  // being confirmed. The shown link persists across close; only reissuing — a second, pointed
-  // confirmation — replaces it, because that is the act that kills a link still being shared.
-  const showingQr = issued !== null && !confirmingReissue;
-
   return (
     <Dialog
       open={open}
@@ -73,7 +64,6 @@ function PerjadinFeedbackTokenDialog({
         setOpen(next);
         if (!next) {
           setCopied(false);
-          setConfirmingReissue(false);
         }
       }}
     >
@@ -84,13 +74,11 @@ function PerjadinFeedbackTokenDialog({
           <DialogDescription>
             {issued === null
               ? "Bagikan QR atau tautan ini agar Narasumber, Pendamping dan Pimpinan dapat mengisi evaluasi perjalanan tanpa perlu masuk."
-              : confirmingReissue
-                ? "Tautan yang sedang dibagikan akan langsung mati begitu tautan baru dibuat. Lanjutkan?"
-                : "Tunjukkan atau bagikan tautan ini untuk diisi."}
+              : "Tunjukkan atau bagikan tautan ini untuk diisi."}
           </DialogDescription>
         </DialogHeader>
 
-        {showingQr && issued !== null && (
+        {issued !== null && (
           <div className="grid gap-4">
             {/*
               Black on white regardless of the theme. The colours are baked into the image by the
@@ -121,53 +109,28 @@ function PerjadinFeedbackTokenDialog({
           </div>
         )}
 
-        <DialogFooter>
-          {issued === null ? (
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setOpen(false);
-                }}
-              >
-                Batal
-              </Button>
-              <Button
-                disabled={saving}
-                onClick={issue}
-              >
-                {saving ? "Menyiapkan…" : "Tampilkan QR"}
-              </Button>
-            </>
-          ) : confirmingReissue ? (
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setConfirmingReissue(false);
-                }}
-              >
-                Batal
-              </Button>
-              <Button
-                variant="destructive"
-                disabled={saving}
-                onClick={issue}
-              >
-                {saving ? "Menyiapkan…" : "Terbitkan tautan baru"}
-              </Button>
-            </>
-          ) : (
+        {/*
+          Only before the QR is shown. Once it is, there is nothing left to do here but close: the
+          link is the one link, and no button replaces it.
+        */}
+        {issued === null && (
+          <DialogFooter>
             <Button
               variant="ghost"
               onClick={() => {
-                setConfirmingReissue(true);
+                setOpen(false);
               }}
             >
-              Terbitkan tautan baru
+              Batal
             </Button>
-          )}
-        </DialogFooter>
+            <Button
+              disabled={saving}
+              onClick={issue}
+            >
+              {saving ? "Menyiapkan…" : "Tampilkan QR"}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

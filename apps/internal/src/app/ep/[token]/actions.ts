@@ -14,11 +14,11 @@ import {
  * **It takes the opaque token and re-resolves it here.** The token is the credential; the
  * `perjadinId` is a *result* of validating it and is never an argument — a `perjadinId` parameter
  * would be an unauthenticated INSERT into any Perjadin anyone cared to name. The page resolved the
- * token to render the form, but that proves nothing about this call: a form held open past expiry,
- * or past a reissue, must fail here, so the resolution runs again inside the action.
+ * token to render the form, but that proves nothing about this call: a link removed by hand in the
+ * database while the form was open (ADR-0049's only remedy for a leaked one) must fail here, so the
+ * resolution runs again inside the action.
  *
- * `gone` collapses expired, replaced and unknown into one outcome — the form shows the same
- * dead-link message a fresh load would. The write's own outcomes (`filed`, `name-required`,
+ * `gone` is an unknown token — the form shows the same dead-link message a fresh load would. The write's own outcomes (`filed`, `name-required`,
  * `prose-required`) are reused rather than restated; `gone` is the one this layer adds.
  */
 export type SubmitPerjadinEvaluationActionResult =
