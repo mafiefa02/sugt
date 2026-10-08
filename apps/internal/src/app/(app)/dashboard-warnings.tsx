@@ -31,21 +31,23 @@ import {
  * every load.
  *
  * The two accordions are kept separate on purpose (#303): active warnings collapse under a single
- * destructive-toned **Peringatan (N)** trigger, open by default so the operator sees them, while the
- * "diabaikan" list is its own independently-toggled section. Both the trigger's default-open state
- * and the warnings themselves are deterministic (server-derived, no `Date.now()`/`Math.random()` in
- * render), and no button uses the base-ui `disabled` prop, so nothing here diverges across the
- * SSR/hydration boundary (#302).
+ * destructive-toned **Peringatan (N)** trigger, while the "diabaikan" list is its own
+ * independently-toggled section. Both start **collapsed** on every visit and refresh (#458 reverses
+ * #303's open-by-default rule; the count and the red tone carry the signal). Nothing is persisted, but
+ * an expanded card stays expanded across tab switches because this component does not remount. Both
+ * the trigger's collapsed initial state and the warnings themselves are deterministic (server-derived,
+ * no `Date.now()`/`Math.random()` in render), and no button uses the base-ui `disabled` prop, so
+ * nothing here diverges across the SSR/hydration boundary (#302).
  */
 export function DashboardWarnings({ warnings }: { warnings: Warning[] }) {
   const [state, setState] = useState(() => initialWarningState(warnings));
 
   return (
     <div className="flex flex-col gap-6 px-4 pt-6 sm:px-7">
-      {/* Active warnings — one collapsible card, open by default, that folds to a single line. Hidden
-          entirely when nothing is active, exactly as the per-warning stack was. */}
+      {/* Active warnings — one collapsible card, collapsed by default (#458), that folds to a single
+          line. Hidden entirely when nothing is active, exactly as the per-warning stack was. */}
       {state.active.length > 0 && (
-        <Accordion defaultValue={["peringatan"]}>
+        <Accordion>
           <AccordionItem value="peringatan">
             <AccordionTrigger>
               <span className="flex items-center gap-2 text-destructive">
