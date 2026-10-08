@@ -10,7 +10,7 @@ import { db } from "../client";
 import { session } from "../schema/delivery";
 import { sessionRecord } from "../schema/evaluations";
 import type { Person } from "./caller";
-import { requireStaff } from "./staff-only";
+import { requireSessionWriter, requireStaff } from "./staff-only";
 
 /**
  * **The PIC's Session Record form**, filed against a Session that has been delivered.
@@ -124,9 +124,10 @@ export type FileSessionRecordResult =
  * filer taught nothing.
  *
  * Opens with the Staff-only choke point, which throws `NotStaffError` on a Teaching Team
- * caller. That is the opposite case to the refusals below: only Staff file one, and the
- * composite foreign key `session_record_filed_by_staff` holds the same rule behind the
- * throw. A refusal here is instead a state a correct screen can reach — the Session was
+ * caller, then `requireSessionWriter`, which throws `NotOnPerjadinError` on a Staff member off
+ * the Session's trip without the Editor Grant (ADR-0048). Those are the opposite case to the
+ * refusals below: only Staff file one, and the composite foreign key
+ * `session_record_filed_by_staff` holds the Staff half behind the throw. A refusal here is instead a state a correct screen can reach — the Session was
  * cancelled, or this member already filed while the page was open.
  */
 export async function fileSessionRecord(
@@ -145,6 +146,8 @@ export async function fileSessionRecord(
 
   try {
     return await db.transaction(async (tx) => {
+      await requireSessionWriter(caller, input.sessionId, tx);
+
       const status = await statusOf(tx, input.sessionId);
       if (status !== "delivered") return { outcome: "session-not-delivered", status };
 

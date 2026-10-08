@@ -50,9 +50,10 @@ export function tripTimeline(trip: TimelineTrip): TimelineNode[] {
 /**
  * How much of the travel float is spent, as the bar's 0–100 fill: `drawnDownIdr / advanceIdr`,
  * clamped, so an overspend fills the bar rather than overflowing it. No advance means nothing to
- * fill. The Tersisa figure beside it is shown unclamped — only the bar clamps.
+ * fill — a zero one, and an unset one (`null`, #437), checked by name rather than through
+ * `null <= 0`. The Tersisa figure beside it is shown unclamped — only the bar clamps.
  */
-export function spentPercent(advanceIdr: number, drawnDownIdr: number): number {
-  if (advanceIdr <= 0) return 0;
+export function spentPercent(advanceIdr: number | null, drawnDownIdr: number): number {
+  if (advanceIdr === null || advanceIdr <= 0) return 0;
   return Math.min(100, Math.max(0, (drawnDownIdr / advanceIdr) * 100));
 }

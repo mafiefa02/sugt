@@ -59,6 +59,15 @@ export async function addGrant(personId: string, grant: Grant) {
   await db.insert(schema.personGrant).values({ personId, grant }).onConflictDoNothing();
 }
 
+/**
+ * The same Person holding the **Editor** Grant, stored and on the caller — what planning a Perjadin and
+ * recording, editing or deleting an online Session need (ADR-0047).
+ */
+export async function asEditor<P extends { id: string; grants: Grant[] }>(person: P): Promise<P> {
+  await addGrant(person.id, "Editor");
+  return { ...person, grants: [...person.grants, "Editor"] };
+}
+
 /** Every `better_auth.user` row. The invite gate's job is to leave this empty. */
 export async function authUsers() {
   return db.select().from(schema.user);
@@ -337,7 +346,13 @@ export type ParticipantFeedbackFixture = {
   name?: string;
   /** Optional comment per Aspect, as the form is — a Participant owes no prose. Null by default. */
   comments?: Partial<Record<ParticipantFeedbackAspect, string>>;
-  ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>>;
+  /** The three every Class has default to a fine Rating; `handsOnRbl` (Siswa only, #446) to none. */
+  ratings?: Partial<Record<"materials" | "instructor" | "relevance", number>> & {
+    handsOnRbl?: number | null;
+  };
+  /** The two written answers (#446). Null by default. */
+  knowledgeGain?: string;
+  suggestions?: string;
   /**
    * When it was submitted. Defaults to the schema's `now()`. The Feedback list orders on this
    * and pages by it, so a test that asserts on the order supplies distinct values; existing
@@ -358,6 +373,7 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
       sessionId: fixture.sessionId,
       classKind: fixture.classKind,
       name: fixture.name ?? "Siti",
+      handsOnRblComment: fixture.comments?.hands_on_rbl ?? null,
       materialsComment: fixture.comments?.materials ?? null,
       instructorComment: fixture.comments?.instructor ?? null,
       relevanceComment: fixture.comments?.relevance ?? null,
@@ -365,6 +381,8 @@ export async function addParticipantFeedback(fixture: ParticipantFeedbackFixture
       instructor: FINE,
       relevance: FINE,
       ...fixture.ratings,
+      knowledgeGain: fixture.knowledgeGain ?? null,
+      suggestions: fixture.suggestions ?? null,
       ...(fixture.submittedAt ? { submittedAt: fixture.submittedAt } : {}),
     })
     .returning();
@@ -380,7 +398,7 @@ export type PerjadinEvaluationFixture = {
    */
   role?: PerjadinEvaluationRole;
   name?: string;
-  /** The one nullable Rating — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
+  /** Nullable — pass `null` for a day trip with no hotel. Defaults to a fine Rating. */
   lodging?: number | null;
   ratings?: Partial<Record<"transport" | "meals" | "punctuality", number>>;
   /**
@@ -511,7 +529,8 @@ export type PerjadinFixture = {
   subClusterName?: string;
   startsOn?: string;
   endsOn?: string;
-  advanceIdr: number;
+  /** Uang Perjalanan; `null` is a trip planned without one, not yet filled in (#437). */
+  advanceIdr: number | null;
   /**
    * Where the trip goes. A Perjadin needs one, so `addPerjadin` builds a throwaway Cluster
    * and Sub-Cluster when a test does not supply this — the Schools-belong-to-the-Sub-Cluster
@@ -592,6 +611,14 @@ export async function addPerjadin(fixture: PerjadinFixture) {
 
     return perjadin!;
   });
+}
+
+/**
+ * Add one Staff member to a Perjadin's Group — the way they come to write it (ADR-0048). The PIC is
+ * already a member through `addPerjadin`.
+ */
+export async function addGroupMember(perjadinId: string, personId: string) {
+  await db.insert(schema.groupMember).values({ perjadinId, personId, role: "Staff", stream: null });
 }
 
 export type TransactionFixture = {

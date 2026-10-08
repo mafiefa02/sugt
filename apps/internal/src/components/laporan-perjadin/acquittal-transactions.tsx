@@ -98,10 +98,17 @@ function AcquittalTransactions({
   perjadinId,
   transactions,
   uploadGate,
+  canWrite,
 }: {
   perjadinId: string;
   transactions: ViewableTransaction[];
   uploadGate: UploadGate;
+  /**
+   * Whether the viewer writes this trip — its Group, an Editor or an Administrator (ADR-0048). Catat
+   * transaksi and every Unggah bukti are absent for anyone else, who reads the lines and their
+   * receipts; the queries refuse them again.
+   */
+  canWrite: boolean;
 }) {
   // Sort/filter is a lens on the rendered list only. The list is bounded and already fully loaded,
   // so this is in-memory (no server round-trip, unlike `/feedback`); the Laporan money figures and
@@ -135,12 +142,14 @@ function AcquittalTransactions({
     <div className="border-b border-border px-4 py-5 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-heading text-sm font-medium">Transaksi</h2>
-        <RecordTransaction
-          perjadinId={perjadinId}
-          uploadGate={uploadGate}
-        />
+        {canWrite && (
+          <RecordTransaction
+            perjadinId={perjadinId}
+            uploadGate={uploadGate}
+          />
+        )}
       </div>
-      {!uploadGate.open && (
+      {canWrite && !uploadGate.open && (
         <p className="mt-1.5 text-sm text-muted-foreground">{uploadGate.reason}</p>
       )}
 
@@ -193,6 +202,7 @@ function AcquittalTransactions({
                     perjadinId={perjadinId}
                     line={line}
                     uploadGate={uploadGate}
+                    canWrite={canWrite}
                   />
                 </li>
               ))}
@@ -213,10 +223,12 @@ function TransactionCard({
   perjadinId,
   line,
   uploadGate,
+  canWrite,
 }: {
   perjadinId: string;
   line: ViewableTransaction;
   uploadGate: UploadGate;
+  canWrite: boolean;
 }) {
   return (
     <Card size="sm">
@@ -236,6 +248,7 @@ function TransactionCard({
               perjadinId={perjadinId}
               line={line}
               uploadGate={uploadGate}
+              canWrite={canWrite}
             />
           </div>
         </div>
@@ -337,10 +350,13 @@ function Receipts({
   perjadinId,
   line,
   uploadGate,
+  canWrite,
 }: {
   perjadinId: string;
   line: ViewableTransaction;
   uploadGate: UploadGate;
+  /** Unggah bukti is offered only to whoever writes the trip (ADR-0048); the links are everyone's. */
+  canWrite: boolean;
 }) {
   const [note, setNote] = useState<string | null>(null);
   const [uploading, startUploading] = useTransition();
@@ -445,27 +461,31 @@ function Receipts({
         </a>
       )}
 
-      <input
-        ref={picker}
-        type="file"
-        accept={RECEIPT_ACCEPT}
-        multiple
-        className="hidden"
-        onChange={(event) => {
-          const files = Array.from(event.target.files ?? []);
-          event.target.value = "";
-          if (files.length > 0) upload(files);
-        }}
-      />
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={uploading || slotsLeft <= 0 || !uploadGate.open}
-        title={uploadGate.open ? undefined : uploadGate.reason}
-        onClick={() => picker.current?.click()}
-      >
-        Unggah bukti
-      </Button>
+      {canWrite && (
+        <>
+          <input
+            ref={picker}
+            type="file"
+            accept={RECEIPT_ACCEPT}
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              event.target.value = "";
+              if (files.length > 0) upload(files);
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={uploading || slotsLeft <= 0 || !uploadGate.open}
+            title={uploadGate.open ? undefined : uploadGate.reason}
+            onClick={() => picker.current?.click()}
+          >
+            Unggah bukti
+          </Button>
+        </>
+      )}
 
       {uploading && progress !== null && (
         <UploadStatus

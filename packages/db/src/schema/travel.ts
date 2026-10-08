@@ -71,7 +71,10 @@ export const perjadin = pgTable(
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
 
-    advanceIdr: bigint("advance_idr", { mode: "number" }).notNull(),
+    // Uang Perjalanan. Null means "not filled in yet" — never the same as Rp 0, which stays a real
+    // amount. A Perjadin is often planned before anyone knows it, so it may be set later; once set it
+    // can be changed but not cleared, and the Laporan cannot be filed while it is null (#437).
+    advanceIdr: bigint("advance_idr", { mode: "number" }),
 
     picPersonId: uuid("pic_person_id").notNull(),
     picRole: text("pic_role").$type<"Staff">().notNull().default("Staff"),
@@ -538,19 +541,22 @@ export const activityLog = pgTable(
 );
 
 /**
- * **Perjadin Documents** (#397, ADR-0042): the trip's attendance sheets, one PDF each, in the
- * company Google Drive under `Dokumen/`. Three kinds. A **Daftar Hadir Peserta** is one School's
- * attendance at one session, for one cohort, so it alone carries a School, a cohort and the
- * session's local start and end; the other two are one day's sheet and carry none of the four. Two
- * CHECKs hold that both ways round, so a row can neither lack a Peserta field nor carry one it
- * should not.
+ * **Perjadin Documents** (#397, ADR-0042): the trip's paperwork, one PDF each, in the company
+ * Google Drive under `Dokumen/`. Four kinds, each with an exact shape, held by one CHECK per kind:
+ * - a **Daftar Hadir Peserta** is one School's attendance at one session, for one cohort, so it
+ *   carries a date, a School, a cohort and the session's local start and end;
+ * - a **Daftar Hadir Narasumber** or **Pendamping** is one day's sheet: a date and none of the rest;
+ * - an **SPPD** (#441) is one School's Surat Perintah Perjalanan Dinas for this trip: a School and
+ *   nothing else, not even a date.
  *
- * **The School must be in the Perjadin's Sub-Cluster** — held by the application
+ * **The School must be one of the trip's Schools** — held by the application
  * (`recordPerjadinDocument`), not here, for the reason offline Sessions give: Sub-Clusters are
  * editable, so a foreign key into the grouping would forbid regrouping (ADR-0016).
  *
  * `id` is generated before the insert, because the file's name carries it (`D-{doc8}`). There is no
- * duplicate rule: two sheets of one kind and date are allowed, and the marker tells them apart.
+ * duplicate rule for the three attendance kinds: two sheets of one kind and date are allowed, and
+ * the marker tells them apart. **SPPD is the exception**: at most one per (Perjadin, School), held
+ * by `perjadin_document_sppd_unique` — per Perjadin, so the same School on another trip gets its own.
  * `drive_synced_at` and `drive_sync_failed_at` mean what they mean on `transaction`.
  */
 export const perjadinDocument = pgTable(
@@ -561,8 +567,8 @@ export const perjadinDocument = pgTable(
       .notNull()
       .references(() => perjadin.id, { onDelete: "cascade" }),
     kind: text("kind").$type<PerjadinDocumentKind>().notNull(),
-    // Tanggal Sesi on a Peserta sheet, Tanggal Dokumen on the other two.
-    documentDate: date("document_date").notNull(),
+    // Tanggal Sesi on a Peserta sheet, Tanggal Dokumen on the other two; none on an SPPD.
+    documentDate: date("document_date"),
     schoolId: uuid("school_id").references(() => school.id),
     participantType: text("participant_type").$type<PerjadinDocumentParticipantType>(),
     // Wall-clock times local to the School, read beside its Province's Time Zone.
@@ -581,29 +587,38 @@ export const perjadinDocument = pgTable(
   (t) => [
     check(
       "perjadin_document_kind_check",
-      sql`${t.kind} in ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber', 'Daftar Hadir Pendamping')`,
+      sql`${t.kind} in ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber', 'Daftar Hadir Pendamping', 'SPPD')`,
     ),
     check(
       "perjadin_document_participant_type_check",
       sql`${t.participantType} in ('Siswa', 'GTK-MS')`,
     ),
     check("perjadin_document_content_type_check", sql`${t.contentType} = 'application/pdf'`),
+    // One CHECK per kind, each that kind's exact shape; a row of another kind passes it untouched.
     check(
       "perjadin_document_peserta_fields_check",
-      sql`(${t.kind} = 'Daftar Hadir Peserta') = (${t.schoolId} is not null and ${t.participantType} is not null and ${t.startsAt} is not null and ${t.endsAt} is not null)`,
+      sql`${t.kind} <> 'Daftar Hadir Peserta' or (${t.documentDate} is not null and ${t.schoolId} is not null and ${t.participantType} is not null and ${t.startsAt} is not null and ${t.endsAt} is not null)`,
     ),
     check(
-      "perjadin_document_other_fields_null_check",
-      sql`${t.kind} = 'Daftar Hadir Peserta' or (${t.schoolId} is null and ${t.participantType} is null and ${t.startsAt} is null and ${t.endsAt} is null)`,
+      "perjadin_document_day_sheet_fields_check",
+      sql`${t.kind} not in ('Daftar Hadir Narasumber', 'Daftar Hadir Pendamping') or (${t.documentDate} is not null and ${t.schoolId} is null and ${t.participantType} is null and ${t.startsAt} is null and ${t.endsAt} is null)`,
+    ),
+    check(
+      "perjadin_document_sppd_fields_check",
+      sql`${t.kind} <> 'SPPD' or (${t.schoolId} is not null and ${t.documentDate} is null and ${t.participantType} is null and ${t.startsAt} is null and ${t.endsAt} is null)`,
     ),
     check("perjadin_document_times_check", sql`${t.endsAt} > ${t.startsAt}`),
     // The dialog lists a trip's documents; Postgres does not index the FK on its own (#270).
     index("perjadin_document_perjadin_id_idx").on(t.perjadinId),
+    // At most one SPPD per School on one Perjadin (#441); another Perjadin's does not count.
+    uniqueIndex("perjadin_document_sppd_unique")
+      .on(t.perjadinId, t.schoolId)
+      .where(sql`${t.kind} = 'SPPD'`),
   ],
 );
 
 /**
- * **A Perjadin's three kind folders** under its Dokumen folder (ADR-0042), each made the first time
+ * **A Perjadin's four kind folders** under its Dokumen folder (ADR-0042), each made the first time
  * a document of that kind is reconciled. The primary key is the compare-and-set: the insert does
  * nothing on conflict, and a caller that lost reads back the winner's id and trashes its own.
  */
@@ -620,7 +635,7 @@ export const perjadinDocumentFolder = pgTable(
     primaryKey({ columns: [t.perjadinId, t.kind] }),
     check(
       "perjadin_document_folder_kind_check",
-      sql`${t.kind} in ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber', 'Daftar Hadir Pendamping')`,
+      sql`${t.kind} in ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber', 'Daftar Hadir Pendamping', 'SPPD')`,
     ),
   ],
 );

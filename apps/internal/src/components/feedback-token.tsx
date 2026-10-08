@@ -32,7 +32,7 @@ type FeedbackTokenDialogProps = (
 
 /**
  * **The Participant Feedback QR.** Anyone signed in presses this at the end of a Session and
- * holds up the code; students in the room scan it and rate three Aspects without signing in.
+ * holds up the code; students in the room scan it and rate the Session without signing in.
  *
  * **Offered to everyone, not only Staff** — so it lives here rather than in the Staff-only
  * `SessionWrites`. It is **barred on a cancelled Session**: nobody sat in a room that never

@@ -109,4 +109,13 @@ describe("the acquittal CSV", () => {
     // terminator, so an empty Pimpinan list leaves the file exactly as it was before #142.
     expect(csv.trimEnd().endsWith('"Sisa","","","","5000000",""')).toBe(true);
   });
+
+  it("leaves the Uang Perjalanan and Sisa cells empty while the Advance is not filled in (#437)", () => {
+    const csv = csvOf(acquittal({ advanceIdr: null, remainderIdr: null, spentIdr: 250_000 }));
+
+    expect(csv).toContain('"Uang Perjalanan","","","","",""');
+    expect(csv).toContain('"Sisa","","","","",""');
+    expect(csv).toContain('"Terpakai","","","","250000",""');
+    expect(csv).not.toContain("null");
+  });
 });

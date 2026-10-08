@@ -66,7 +66,7 @@ list below exists so nobody later "completes" the schema by adding the rest.
 | Participant                                                  | Not a table. Nobody enrols Participants; one exists in the records only as a name they typed on their own feedback.                                        |
 | Project Team, Final Project                                  | Not stored at all. [ADR-0009](./adr/0009-the-tool-tracks-delivery-not-outcomes.md) is explicit; they reach the public as curated pieces, never as records. |
 | Treasurer                                                    | Not a role. A Treasurer is Staff; what is stored is that an Advance was returned, not to whom.                                                             |
-| Advance                                                      | A column on `perjadin`, not a row. It is fixed at planning and never exists independently.                                                                 |
+| Advance                                                      | A column on `perjadin`, not a row. Set at planning or later (null until then, #437) and never exists independently.                                        |
 | Report deadline                                              | Not a column. Two days after the Group returns, derived from `perjadin.ends_on` and a constant.                                                            |
 | Aspect                                                       | Not a table and not a value. Every Aspect on all four evaluations is a **column**; `@sugt/domain` names each rubric.                                       |
 | Rating                                                       | Not a table. A Rating is one Aspect column on one row of an evaluation.                                                                                    |
@@ -724,7 +724,7 @@ rubric, because each asks a question only that person can answer.
 | ---------------------- | ------------- | --------------------- | -------------------------------------------------------------------------------- |
 | `class_record`         | Teaching Team | Class, per professor  | Comprehension, Participation, Readiness, Materials, Delivery, Facilities, Timing |
 | `session_record`       | PIC / Staff   | Session               | Facilities, Turnout, School support, Timing, Coordination                        |
-| `participant_feedback` | Participants  | Class, per respondent | Materials, Instructor, Relevance                                                 |
+| `participant_feedback` | Participants  | Class, per respondent | Materials, Instructor, Relevance; Hands-on RBL for the Student Class only        |
 | `perjadin_evaluation`  | Token link    | Perjadin (no dedup)   | Lodging, Transport, Meals, Punctuality                                           |
 
 They share a scale (1–10), a threshold (`CONCERN_AT_OR_BELOW`, 7), and one rule — **a Rating at
@@ -888,42 +888,61 @@ create table participant_feedback (
   class_kind  text not null check (class_kind in ('GTK', 'MS', 'Student')),
   name        text not null,
 
+  hands_on_rbl smallint        check (hands_on_rbl between 1 and 10),   -- Student Class only (#446)
   materials   smallint not null check (materials  between 1 and 10),
   instructor  smallint not null check (instructor between 1 and 10),
   relevance   smallint not null check (relevance  between 1 and 10),
 
-  materials_comment   text,
-  instructor_comment  text,
-  relevance_comment   text,
-  submitted_at        timestamptz not null default now()
+  hands_on_rbl_comment text,
+  materials_comment    text,
+  instructor_comment   text,
+  relevance_comment    text,
+  knowledge_gain       text,                                         -- written answers (#446),
+  suggestions          text,                                         -- not Aspects
+  submitted_at         timestamptz not null default now(),
+
+  check (class_kind = 'Student' or (hands_on_rbl is null and hands_on_rbl_comment is null))
 );
 
 create index participant_feedback_concerns_idx
-  on participant_feedback (least(materials, instructor, relevance))
-  where least(materials, instructor, relevance) <= 7;
+  on participant_feedback (least(hands_on_rbl, materials, instructor, relevance))
+  where least(hands_on_rbl, materials, instructor, relevance) <= 7;
 ```
 
-**Three Aspects, and none of them ask a Participant to rate themselves.** Comprehension,
-Participation and Readiness are on the Class Record precisely because they are judgements about
-the room, and a room grading its own readiness is not evidence. Materials and Instructor overlap
-deliberately with the Class Record's `materials` and `delivery` — that overlap is the point,
-because it lets what the professor thought be set against what the room thought.
+**Three Aspects for every Class — four for the Student Class, with Hands-on RBL — and none of them
+ask a Participant to rate themselves.** Comprehension, Participation and Readiness are on the
+Class Record precisely because they are judgements about the room, and a room grading its own
+readiness is not evidence. Materials and Instructor overlap deliberately with the Class Record's
+`materials` and `delivery` — that overlap is the point, because it lets what the professor thought
+be set against what the room thought.
 
 `class_kind` says which Class the respondent sat in. It is what makes their Rating comparable to
 the Class Record for that same cohort.
+
+**Hands-on RBL is the Student Class's alone** ([#446](https://github.com/sugt-itb/sugt-itb-26/issues/446)):
+`hands_on_rbl` and its `hands_on_rbl_comment`. A CHECK holds both null on every GTK and MS row.
+The column is nullable, and **"required for Siswa" is the application's rule**
+(`submitParticipantFeedback`, which refuses a Siswa submission without one as `ratings-mismatch`),
+not a constraint: Student feedback filed before the column existed has none, and is not
+backfilled. `least()` ignores a null, so the rebuilt concerns index still covers GTK, MS and those
+older rows, and a Hands-on RBL Rating of 7 or below reaches the concerns list like any other.
+Where a row's Ratings are averaged (the `/feedback` row average), it is over the Ratings present.
+
+**Two written answers that are not Aspects**, `knowledge_gain` and `suggestions`: optional, no
+Rating, never counted, never on the concerns list.
 
 **No elaboration rule applies to Participants.** The `CHECK` forcing prose on a low Rating is on
 `class_record` and `session_record` only. A Participant owes nothing and is not signed in;
 refusing their 3 because they did not justify it would simply lose the 3.
 
 **One optional comment per Aspect**, `materials_comment` / `instructor_comment` /
-`relevance_comment`, rather than one shared `comment`
+`relevance_comment` / `hands_on_rbl_comment`, rather than one shared `comment`
 ([#102](https://github.com/mafiefa02/sugt/issues/102),
 [ADR-0017](./adr/0017-participant-feedback-has-a-comment-per-aspect.md)). A single comment could
-not say which of the three Aspects it was about, so the concerns list could show a low
+not say which Aspect it was about, so the concerns list could show a low
 `instructor` Rating beside prose that was really about the materials. Pairing each comment with its
 Aspect lets the list show the comment for the Aspect that was actually Rated low — or none, when
-that box was left blank. All three stay nullable; the no-elaboration rule above is unchanged.
+that box was left blank. All of them stay nullable; the no-elaboration rule above is unchanged.
 
 **One token per Session, shared.** The primary key is `session_id`, so issuing a new one replaces
 it. `expires_at` defaults 24 hours out and is stored rather than derived: the token is issued at
@@ -1037,11 +1056,12 @@ box is retired outright — advice with no per-Aspect home now lives inside the 
 nowhere. This mirrors the #102 reversal on `participant_feedback`, plus the per-Aspect CHECK that
 Participant Feedback (which owes no prose) never needed.
 
-**`lodging` is the one nullable Rating in the system, because a day-trip has no hotel.** Not
-every Perjadin involves a night away — the programme budget carries at least one group visiting
-two Schools and returning the same day, with accommodation, flights and airport transfer all at
-zero. A `not null` column would require those travellers to rate a hotel they never saw, and
-inventing a Rating to satisfy a constraint is worse than the missing row.
+**`lodging` is nullable, because a day-trip has no hotel** — one of two nullable Ratings, with
+`participant_feedback.hands_on_rbl` (#446). Not every Perjadin involves a night away — the
+programme budget carries at least one group visiting two Schools and returning the same day, with
+accommodation, flights and airport transfer all at zero. A `not null` column would require those
+travellers to rate a hotel they never saw, and inventing a Rating to satisfy a constraint is worse
+than the missing row.
 
 **Nothing constrains when it may be null**, deliberately. A Group that did stay somewhere and
 skipped the Aspect is a filer being unhelpful, not a state worth preventing, and the CHECK that
@@ -1118,10 +1138,11 @@ select 'Participant', sch.name || ' · ' || f.class_kind, r.aspect, r.rating,
   from participant_feedback f
   join session sn on sn.id = f.session_id
   join school sch on sch.id = sn.school_id
-  cross join lateral (values ('materials',  f.materials,  f.materials_comment),
-                             ('instructor', f.instructor, f.instructor_comment),
-                             ('relevance',  f.relevance,  f.relevance_comment))
-                     as r(aspect, rating, said)
+  cross join lateral (values ('hands_on_rbl', f.hands_on_rbl, f.hands_on_rbl_comment),
+                             ('materials',    f.materials,    f.materials_comment),
+                             ('instructor',   f.instructor,   f.instructor_comment),
+                             ('relevance',    f.relevance,    f.relevance_comment))
+                     as r(aspect, rating, said)   -- a null hands_on_rbl fails `<= 7` and drops out
  where r.rating <= 7
 
 union all
@@ -1186,7 +1207,7 @@ create table perjadin (
   starts_on                   date not null,
   ends_on                     date not null,
 
-  advance_idr                 bigint not null check (advance_idr >= 0),
+  advance_idr                 bigint check (advance_idr >= 0),
 
   pic_person_id               uuid not null,
   pic_role                    text not null default 'Staff' check (pic_role = 'Staff'),
@@ -1234,8 +1255,12 @@ alter table perjadin
   deferrable initially deferred;
 ```
 
-`advance_idr` is NOT NULL because the Advance is fixed at planning and transferred before
-departure — a Perjadin is never in an unfunded state, so there is no nullable phase to model.
+`advance_idr` is **nullable** (#437, migration 0045). Null means "not filled in yet": a trip is often
+planned before anyone knows its Advance. It is never the same as 0, which stays a real amount, and
+`perjadin_advance_check` passes for null. Three rules the application holds, not the database:
+once set it can be changed but not cleared (`updatePerjadinAdvance` answers `advance-required`);
+the remainder is null while it is (never `null − spend`); and `filePerjadinReport` refuses with
+`advance-missing` — the one write that waits for it. Rows that existed before kept their values.
 
 **There is no `report_deadline` column.** The Report is due two days after the Group gets back,
 always, so the deadline is `ends_on + REPORT_DEADLINE_DAYS_AFTER_RETURN` and nothing stores it.
@@ -1487,8 +1512,8 @@ create table perjadin_document (
   perjadin_id            uuid not null references perjadin (id) on delete cascade,
   kind                   text not null check (kind in
                            ('Daftar Hadir Peserta', 'Daftar Hadir Narasumber',
-                            'Daftar Hadir Pendamping')),
-  document_date          date not null,
+                            'Daftar Hadir Pendamping', 'SPPD')),
+  document_date          date,
   school_id              uuid references school (id),
   participant_type       text check (participant_type in ('Siswa', 'GTK-MS')),
   starts_at              time,
@@ -1500,16 +1525,24 @@ create table perjadin_document (
   uploaded_at            timestamptz not null default now(),
   drive_synced_at        timestamptz,
   drive_sync_failed_at   timestamptz,
-  check ((kind = 'Daftar Hadir Peserta') = (school_id is not null and participant_type is not null
-                                            and starts_at is not null and ends_at is not null)),
-  check (kind = 'Daftar Hadir Peserta' or (school_id is null and participant_type is null
-                                           and starts_at is null and ends_at is null)),
+  -- One CHECK per kind, each that kind's exact shape.
+  check (kind <> 'Daftar Hadir Peserta' or (document_date is not null and school_id is not null
+          and participant_type is not null and starts_at is not null and ends_at is not null)),
+  check (kind not in ('Daftar Hadir Narasumber', 'Daftar Hadir Pendamping')
+          or (document_date is not null and school_id is null and participant_type is null
+              and starts_at is null and ends_at is null)),
+  check (kind <> 'SPPD' or (school_id is not null and document_date is null
+          and participant_type is null and starts_at is null and ends_at is null)),
   check (ends_at > starts_at)
 );
 
+-- At most one SPPD per School on one Perjadin (#441).
+create unique index perjadin_document_sppd_unique
+  on perjadin_document (perjadin_id, school_id) where kind = 'SPPD';
+
 create table perjadin_document_folder (
   perjadin_id      uuid not null references perjadin (id) on delete cascade,
-  kind             text not null check (kind in (…the three…)),
+  kind             text not null check (kind in (…the four…)),
   drive_folder_id  text not null,
   primary key (perjadin_id, kind)
 );
@@ -1517,25 +1550,35 @@ create table perjadin_document_folder (
 alter table perjadin add column drive_dokumen_folder_id text;
 ```
 
-**A Perjadin's attendance sheets, one PDF each** (#397,
-[ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)). `kind` is
+**A Perjadin's paperwork, one PDF each** (#397,
+[ADR-0042](./adr/0042-perjadin-documents-are-stored-in-the-company-google-drive.md)): three
+attendance sheets, and each School's **SPPD** (#441). `kind` is
 character for character `PERJADIN_DOCUMENT_KINDS`, and `participant_type` is
 `PERJADIN_DOCUMENT_PARTICIPANT_TYPES`, a const of its own as `PRETEST_PARTICIPANT_TYPES` is.
 
-**The database holds which fields a sheet carries.** A Daftar Hadir Peserta, and only it, has a
-School, a cohort and a session's local start and end; the other two kinds have none of the four.
-The two CHECKs hold that both ways round, and a third holds `ends_at` after `starts_at`. The
+**The database holds which fields a document carries**, one CHECK per kind. A Daftar Hadir
+Peserta has a date, a School, a cohort and a session's local start and end; a Narasumber or
+Pendamping sheet has a date and none of the four; an SPPD has a School and nothing else, not even a
+date — so `document_date` is nullable. Another CHECK holds `ends_at` after `starts_at`, and the
 content type is pinned to PDF.
+
+**At most one SPPD per (Perjadin, School)** is the partial unique index
+`perjadin_document_sppd_unique`. It is per Perjadin, never per School alone: the same School on
+another trip gets its own. `checkDocumentFields` checks it first — the upload opener asks it, so a
+second SPPD is refused before a byte moves (`sppd-exists`) — and `recordPerjadinDocument` asks again
+in its transaction; the index is what holds two uploads racing, the loser's violation coming back
+as the same `sppd-exists`.
 
 **The application holds the rest**, in `recordPerjadinDocument`: `document_date` lies inside the
 trip, and a Peserta sheet's School is one of **the trip's Schools** — it has a non-cancelled
 Session on this Perjadin (`isTripSchool`, the same rule `tripSchoolNames` reads names through) —
 refused as `school-not-on-perjadin` ([#410](https://github.com/sugt-itb/sugt-itb-26/issues/410)).
+An SPPD's School is held to the same rule.
 It used to be the trip's Sub-Cluster, but a Sub-Cluster may be covered by several trips (ADR-0043),
 so that offered Schools this trip never visits. The Dokumen dialog's picker offers exactly that set.
 The rule is checked on a new upload only: a sheet recorded for a School whose Sessions on the trip
 were all cancelled later stays listed and deletable. It cannot be a constraint: it reads the
-Sessions, which change after the sheet is written. There is **no duplicate
+Sessions, which change after the sheet is written. The three attendance kinds have **no duplicate
 rule**: two sheets of one kind and date are two rows, told apart in Drive by `D-{doc8}`.
 
 **The row and its Activity Log entry are written in one transaction**, and the row lands with
@@ -1543,7 +1586,7 @@ rule**: two sheets of one kind and date are two rows, told apart in Drive by `D-
 generated before the insert, because the file's name carries it.
 
 **Folders.** `perjadin.drive_dokumen_folder_id` is the trip's folder under `Dokumen/Pelaksanaan
-Offline`, and `perjadin_document_folder` holds its three kind folders, each made on first use. Both
+Offline`, and `perjadin_document_folder` holds its four kind folders, each made on first use. Both
 are claimed by compare-and-set: the first by `where drive_dokumen_folder_id is null`, the second by
 the primary key, `on conflict do nothing`. A caller that lost trashes its own folder and uses the
 winner's.
@@ -1792,7 +1835,8 @@ or failed write logs nothing. Five writes log today, each through `logActivity` 
 
 | Write                       | `action`               | `details`                                                                         |
 | --------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
-| `planPerjadin`              | `advance_set`          | `{ amountIdr }`                                                                   |
+| `planPerjadin`              | `advance_set`          | `{ amountIdr }`; only when planned with one (#437)                                |
+| `updatePerjadinAdvance`     | `advance_set`          | `{ amountIdr }`, when it fills an unset Advance in for the first time (#437)      |
 | `updatePerjadinAdvance`     | `advance_changed`      | `{ fromIdr, toIdr }`; the old value is read under `for update`; no change, no row |
 | `recordTransaction`         | `transaction_recorded` | `{ transactionId, category, amountIdr, participantType, spentOn, receiptCount }`  |
 | `attachTransactionEvidence` | `evidence_uploaded`    | `{ transactionId, category, amountIdr, spentOn, added, total }`                   |
@@ -2330,8 +2374,18 @@ SECURITY`: a great deal of machinery for one role rule. Every money-_writing_ qu
 the authenticated Person and refuses a non-Staff caller, at a single choke point in `@sugt/db`. See
 [ADR-0011](./adr/0011-supabase-and-better-auth.md).
 
+**Who writes a Perjadin** is the same kind of rule, at the same choke point. A Perjadin and its
+offline Sessions are written only by **its Group** — a `group_member` row for the caller, the PIC
+included — or by a Staff Person holding **Editor** (an Administrator implies it)
+([ADR-0048](./adr/0048-a-perjadin-is-written-by-its-group.md), #439). Every write on a trip runs
+`requirePerjadinWriter` (or `requireSessionWriter`, for a write naming an offline Session) after its
+`requireStaff`, on the write's own transaction where it has one, and a non-member without the Grant
+is refused with `NotOnPerjadinError`. No key or CHECK could hold it: whether a row may be written
+depends on who is asking, which Postgres does not know here, for the reason above.
+
 Note what this is _not_: the public/internal boundary is still structural, held by the
-dependency graph. It is only the Staff/non-Staff write line that is a runtime check.
+dependency graph. It is only the Staff/non-Staff write line — and the Group line inside it — that is
+a runtime check.
 
 **Who a caller is, is a type.** This document used to leave open whether the Staff-only choke
 point needed a sibling for "no Person at all, but a valid secret". It does, and the sibling is
@@ -2437,7 +2491,8 @@ cascade and the deferred PIC foreign key resolve against each other rather than 
   but it is the Aspect most likely to be noise.
 - **Whether a Perjadin Evaluation is required of anyone.** Nothing currently is — unlike a
   Session Record, where the PIC's is expected. The PIC is the obvious candidate.
-- **What else the Participant form asks for.** Right now: Class, three Ratings, a comment on each Aspect, name.
+- **What else the Participant form asks for.** Right now: Class, name, three Ratings (four for
+  Siswa, with Hands-on RBL), a comment on each Aspect, and two optional written answers (#446).
   A role or year group would be a column, not a redesign.
 - **The four Cluster Problems are placeholders.** Invented here to be plausible per Cluster and
   workable from both Streams; they are not DITSAMA's. Replace them by editing

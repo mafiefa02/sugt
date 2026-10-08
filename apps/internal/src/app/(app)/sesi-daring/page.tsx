@@ -1,6 +1,6 @@
 import { OnlineSessionDirectoryList } from "-/components/online-session-directory-list";
 import { requirePerson } from "-/lib/person";
-import { onlineSessionDirectory } from "@sugt/db/queries";
+import { hasGrant, onlineSessionDirectory } from "@sugt/db/queries";
 import { LinkButton } from "@sugt/ui/components/link-button";
 import { Plus } from "lucide-react";
 import type { Metadata } from "next";
@@ -14,8 +14,8 @@ export const metadata: Metadata = { title: "Sesi Daring" };
  * The online counterpart to `/perjadin`: offline Sessions are reached through their trip's page,
  * but an online Session has no Perjadin, so this is the one screen that lists them together. One
  * `requirePerson()`, one query, no role check — a Session's School, date, start time and status are
- * delivery data, open to everyone signed in (ADR-0004). Recording one stays Staff-only, on
- * `/sesi-daring/baru` (#318), and its create action is the only affordance here.
+ * delivery data, open to everyone signed in (ADR-0004). Recording one needs the Editor Grant
+ * (ADR-0047), on `/sesi-daring/baru` (#318), and its create action is the only affordance here.
  *
  * The table lives in the `"use client"` `OnlineSessionDirectoryList`, which filters (#333) and sorts
  * (#344) the payload in the browser. An online Session is always WIB (#283), so its times are shown
@@ -35,9 +35,9 @@ export default async function Page() {
             Catat Sesi daring.
           </p>
         </div>
-        {/* Staff-only create action, moved off the sidebar onto its list page (#294). Non-Staff
-            render nothing — no disabled state. */}
-        {person.role === "Staff" && (
+        {/* The create action, moved off the sidebar onto its list page (#294). It needs the Editor
+            Grant (ADR-0047); anyone without it renders nothing — no disabled state. */}
+        {hasGrant(person, "Editor") && (
           <LinkButton render={<Link href="/sesi-daring/baru" />}>
             <Plus data-icon="inline-start" />
             Catat Sesi Daring

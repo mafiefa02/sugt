@@ -14,7 +14,7 @@ import {
   type SchoolBookedOnAnotherPerjadin,
   slotViolationRefusal,
 } from "./school-slot";
-import { requireStaff } from "./staff-only";
+import { requireSessionWriter, requireStaff } from "./staff-only";
 
 /**
  * **Detail Sesi** — one Session, what has been filed against it, who still owes what,
@@ -23,7 +23,8 @@ import { requireStaff } from "./staff-only";
  * The read is open to anyone signed in, because a Session carries no money and ADR-0004
  * opens delivery data to both roles. **Every write here is Staff-only**, by the surface
  * list rather than by ADR-0004 — the same one guard for the second of its two reasons,
- * as `./staff-only.ts` sets out.
+ * as `./staff-only.ts` sets out. On an offline Session each is also its trip's Group's, an Editor's
+ * or an Administrator's (`requireSessionWriter`, ADR-0048).
  *
  * Settled on [#17](https://github.com/mafiefa02/sugt/issues/17): marking delivered is offered
  * only while `arranged`, cancelling likewise, a slipped date is an edit rather than a
@@ -324,6 +325,8 @@ export async function markSessionDelivered(
   requireStaff(caller);
 
   return db.transaction(async (tx) => {
+    await requireSessionWriter(caller, sessionId, tx);
+
     const { status } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
@@ -355,6 +358,8 @@ export async function cancelSession(
   if (cancelledReason === "") return { outcome: "reason-required" };
 
   return db.transaction(async (tx) => {
+    await requireSessionWriter(caller, sessionId, tx);
+
     const { status, perjadinId } = await lockedSession(tx, sessionId);
     if (status !== "arranged") return { outcome: "not-arranged", status };
 
@@ -436,6 +441,8 @@ export async function moveSessionDate(
   let moving = null as { schoolId: string; perjadinId: string | null } | null;
   try {
     return await db.transaction(async (tx) => {
+      await requireSessionWriter(caller, sessionId, tx);
+
       const [row] = await tx
         .select({
           status: session.status,

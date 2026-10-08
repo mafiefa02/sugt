@@ -2,7 +2,7 @@ import { ArrangeOnlineSessionForm } from "-/components/arrange-online-session-fo
 import { SchoolSessions } from "-/components/school-sessions";
 import { requirePerson } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
-import { arrangeOnlineSessionAt, schoolDetail } from "@sugt/db/queries";
+import { arrangeOnlineSessionAt, hasGrant, schoolDetail } from "@sugt/db/queries";
 import { TOTAL_SESSIONS_PER_SCHOOL } from "@sugt/domain";
 import { Progress } from "@sugt/ui/components/progress";
 import type { Metadata } from "next";
@@ -29,9 +29,9 @@ export async function generateMetadata({
  * and ADR-0004 opens it to everyone signed in.
  *
  * **The record-a-Session affordance is the second entry point for Catat Sesi daring (#70, #318)**
- * — you are already thinking about one School here. It is Staff-only, so its read runs only for a
- * Staff caller and renders only when it returns; `requireStaff` in the write is the enforcement,
- * since a layout does not run before a Server Action.
+ * — you are already thinking about one School here. It needs the Editor Grant (ADR-0047), so its read
+ * runs only for an Editor (or Administrator) and renders only when it returns; the guard in the write
+ * is the enforcement, since a layout does not run before a Server Action.
  *
  * Keyed on the School's `slug` rather than its id — the column is unique, it is what the public
  * site already addresses a School by, and it survives being pasted into a message. A slug naming
@@ -44,8 +44,9 @@ export default async function Page({ params }: PageProps<"/sekolah/[slug]">) {
   const school = await schoolDetail(person, slug);
   if (!school) notFound();
 
-  const arrange =
-    person.role === "Staff" ? await staffSurface(() => arrangeOnlineSessionAt(person, slug)) : null;
+  const arrange = hasGrant(person, "Editor")
+    ? await staffSurface(() => arrangeOnlineSessionAt(person, slug))
+    : null;
 
   return (
     <div className="flex min-h-full flex-col">

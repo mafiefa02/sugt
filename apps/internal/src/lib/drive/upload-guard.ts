@@ -1,6 +1,6 @@
 import type { Person } from "-/lib/person";
 import { staffSurface } from "-/lib/staff-surface";
-import { perjadinAcquittal, requireStaff } from "@sugt/db/queries";
+import { perjadinAcquittal, requirePerjadinWriter } from "@sugt/db/queries";
 import { MAX_UPLOAD_BYTES } from "@sugt/domain";
 
 import type { driveAccessToken } from "./access-token";
@@ -18,18 +18,19 @@ import {
  */
 
 /**
- * **The guard every upload write runs before it touches Drive**: an explicit `requireStaff`, then a
- * read of the Perjadin. Returns whether the Perjadin exists.
+ * **The guard every upload write runs before it touches Drive**: `requirePerjadinWriter` — Staff,
+ * then the trip's Group or the Editor Grant (ADR-0048) — then a read of the Perjadin. Returns whether
+ * the Perjadin exists.
  *
  * The order is load-bearing. An upload session is a write credential on the company Drive, and the
- * verify reads files with the company's own token; doing either first would give a non-Staff caller
- * an upload URL, or tell them whether a file exists and how big it is. The `requireStaff` is what
- * closes this: `perjadinAcquittal` is an open money read since #180 (ADR-0026), so the read alone
- * no longer refuses a Pimpinan.
+ * verify reads files with the company's own token; doing either first would give a caller who may
+ * not write this trip an upload URL, or tell them whether a file exists and how big it is. The guard
+ * is what closes this: `perjadinAcquittal` is an open money read since #180 (ADR-0026), so the read
+ * alone refuses nobody.
  */
 export async function staffOnTrip(person: Person, perjadinId: string): Promise<boolean> {
-  const acquittal = await staffSurface(() => {
-    requireStaff(person);
+  const acquittal = await staffSurface(async () => {
+    await requirePerjadinWriter(person, perjadinId);
     return perjadinAcquittal(person, perjadinId);
   });
   return acquittal !== null;

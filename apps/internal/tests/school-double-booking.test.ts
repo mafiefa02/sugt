@@ -21,6 +21,7 @@ import {
   addProvince,
   addSchool,
   addSubCluster,
+  asEditor,
   refusedBy,
   resetDatabase,
 } from "./support/fixtures";
@@ -65,7 +66,10 @@ vi.mock("../../../packages/db/src/queries/school-slot", async (importOriginal) =
  * the 12th to the 14th, empty.
  */
 async function scene() {
-  const pic = await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" });
+  // An Editor: planning needs the Grant (ADR-0047).
+  const pic = await asEditor(
+    await addPerson({ fullName: "Rina", email: "rina@itb.ac.id", role: "Staff" }),
+  );
   await addProvince("KT", "Kalimantan Timur", "WITA");
   const cluster = await addCluster({ slug: "kaltim", name: "Cluster Kaltim" });
   const subCluster = await addSubCluster({

@@ -1,13 +1,11 @@
 "use client";
 
 import {
-  CONCERN_AT_OR_BELOW,
-  PARTICIPANT_FEEDBACK_ASPECTS,
-  RATING_MAX,
-  RATING_MIN,
-  type ClassKind,
-  type ParticipantFeedbackAspect,
-} from "@sugt/domain";
+  PARTICIPANT_ASPECT_QUESTIONS,
+  PARTICIPANT_CLASS_LABELS,
+  PARTICIPANT_WRITTEN_QUESTIONS,
+} from "-/lib/participant-feedback-copy";
+import { CONCERN_AT_OR_BELOW, RATING_MAX, RATING_MIN, type ClassKind } from "@sugt/domain";
 import { Button } from "@sugt/ui/components/button";
 import { Input } from "@sugt/ui/components/input";
 import { Label } from "@sugt/ui/components/label";
@@ -16,37 +14,40 @@ import { Textarea } from "@sugt/ui/components/textarea";
 import { useId, useState, useTransition } from "react";
 
 import { submitFeedbackAction } from "./actions";
+import {
+  answersForClass,
+  askedAspects,
+  feedbackSubmission,
+  type AspectAnswers,
+} from "./feedback-answers";
 import { GoneNotice } from "./gone-notice";
 
 /**
- * The phone form a Participant fills after scanning the QR. Three Aspects, the Class they sat
- * in, a name they type themselves, and an optional comment. **No elaboration rule** — a
- * Participant owes nothing, so a low Rating needs no sentence.
+ * The phone form a Participant fills after scanning the QR: the Class they sat in, a name they
+ * type themselves, then each Aspect their Class is asked — a Rating, a one-line description of
+ * what is being Rated, and an optional comment — and last two optional written questions (#446).
+ * A Siswa is asked **Hands-on RBL** first; GTK and MS are not, and switching away from Siswa drops
+ * whatever was given for it. **No elaboration rule** — a Participant owes nothing, so a low Rating
+ * needs no sentence.
  *
  * Client-side because it holds a rubric's worth of state and swaps itself for a thank-you on
  * submit. The token is the only credential it carries; the submit re-resolves it server-side.
  *
  * The Rating cells are `size="sm"` — 23px — because this is filled on a phone in a classroom,
- * which is the one surface `RatingInput`'s small size exists for.
+ * which is the one surface `RatingInput`'s small size exists for. Each Rating sits on its own line
+ * under its label and description, so the form reads at 360px.
  */
 
-/** GTK and MS are Indonesian initialisms already; only *Student* translates, to *Siswa*. */
-const CLASS_LABELS: Record<ClassKind, string> = { GTK: "GTK", MS: "MS", Student: "Siswa" };
-
-const CLASS_KINDS_ORDERED = Object.keys(CLASS_LABELS) as ClassKind[];
-
-/** The Aspect names in Indonesian — form copy around the English domain terms (`CONTEXT.md`). */
-const ASPECT_LABELS: Record<ParticipantFeedbackAspect, string> = {
-  materials: "Materi",
-  instructor: "Narasumber",
-  relevance: "Relevansi",
-};
+const CLASS_KINDS_ORDERED = Object.keys(PARTICIPANT_CLASS_LABELS) as ClassKind[];
 
 function FeedbackForm({ token }: { token: string }) {
   const [classKind, setClassKind] = useState<ClassKind | undefined>(undefined);
   const [name, setName] = useState("");
-  const [ratings, setRatings] = useState<Partial<Record<ParticipantFeedbackAspect, number>>>({});
-  const [comments, setComments] = useState<Partial<Record<ParticipantFeedbackAspect, string>>>({});
+  const [ratings, setRatings] = useState<AspectAnswers<number>>({});
+  const [comments, setComments] = useState<AspectAnswers<string>>({});
+  const [knowledgeGain, setKnowledgeGain] = useState("");
+  const [suggestions, setSuggestions] = useState("");
+  const [incomplete, setIncomplete] = useState(false);
   const [nameError, setNameError] = useState(false);
   const [done, setDone] = useState(false);
   const [gone, setGone] = useState(false);
@@ -54,8 +55,16 @@ function FeedbackForm({ token }: { token: string }) {
   const namePrefix = useId();
   const nameId = useId();
 
-  const rated = PARTICIPANT_FEEDBACK_ASPECTS.every((aspect) => ratings[aspect] !== undefined);
+  const asked = askedAspects(classKind);
+  const rated = asked.every((aspect) => ratings[aspect] !== undefined);
   const canSubmit = classKind !== undefined && name.trim() !== "" && rated;
+
+  /** Pick a Class, dropping any answer to an Aspect it is not asked (`answersForClass`). */
+  function chooseClass(kind: ClassKind) {
+    setClassKind(kind);
+    setRatings((previous) => answersForClass(kind, previous));
+    setComments((previous) => answersForClass(kind, previous));
+  }
 
   function submit() {
     if (name.trim() === "") {
@@ -65,22 +74,13 @@ function FeedbackForm({ token }: { token: string }) {
     if (classKind === undefined || !rated) return;
 
     startSaving(async () => {
-      const result = await submitFeedbackAction(token, {
-        classKind,
-        name: name.trim(),
-        ratings: {
-          materials: ratings.materials!,
-          instructor: ratings.instructor!,
-          relevance: ratings.relevance!,
-        },
-        comments: {
-          materials: comments.materials?.trim() || null,
-          instructor: comments.instructor?.trim() || null,
-          relevance: comments.relevance?.trim() || null,
-        },
-      });
+      const result = await submitFeedbackAction(
+        token,
+        feedbackSubmission({ classKind, name, ratings, comments, knowledgeGain, suggestions }),
+      );
       if (result.outcome === "submitted") setDone(true);
       else if (result.outcome === "name-required") setNameError(true);
+      else if (result.outcome === "ratings-mismatch") setIncomplete(true);
       else setGone(true);
     });
   }
@@ -118,10 +118,10 @@ function FeedbackForm({ token }: { token: string }) {
                 type="button"
                 variant={classKind === kind ? "default" : "outline"}
                 onClick={() => {
-                  setClassKind(kind);
+                  chooseClass(kind);
                 }}
               >
-                {CLASS_LABELS[kind]}
+                {PARTICIPANT_CLASS_LABELS[kind]}
               </Button>
             ))}
           </div>
@@ -141,35 +141,37 @@ function FeedbackForm({ token }: { token: string }) {
           {nameError && <p className="text-sm text-destructive">Nama wajib diisi.</p>}
         </div>
 
-        {PARTICIPANT_FEEDBACK_ASPECTS.map((aspect) => {
+        {asked.map((aspect) => {
           const labelId = `${namePrefix}-${aspect}-label`;
           const commentId = `${namePrefix}-${aspect}-comment`;
+          const question = PARTICIPANT_ASPECT_QUESTIONS[aspect];
           return (
             <div
               key={aspect}
               className="grid gap-2"
             >
-              <div className="flex items-center justify-between gap-3">
-                <Label id={labelId}>{ASPECT_LABELS[aspect]}</Label>
-                <RatingInput
-                  name={`${namePrefix}-${aspect}`}
-                  aria-labelledby={labelId}
-                  size="sm"
-                  min={RATING_MIN}
-                  max={RATING_MAX}
-                  concernAtOrBelow={CONCERN_AT_OR_BELOW}
-                  value={ratings[aspect]}
-                  onValueChange={(value) => {
-                    setRatings((previous) => ({ ...previous, [aspect]: value }));
-                  }}
-                />
+              <div className="grid gap-0.5">
+                <Label id={labelId}>{question.label}</Label>
+                <p className="text-sm text-muted-foreground">{question.description}</p>
               </div>
+              <RatingInput
+                name={`${namePrefix}-${aspect}`}
+                aria-labelledby={labelId}
+                size="sm"
+                min={RATING_MIN}
+                max={RATING_MAX}
+                concernAtOrBelow={CONCERN_AT_OR_BELOW}
+                value={ratings[aspect]}
+                onValueChange={(value) => {
+                  setRatings((previous) => ({ ...previous, [aspect]: value }));
+                }}
+              />
               {/* One optional comment per Aspect, so it belongs to the Rating it explains (#102). */}
               <Label
                 htmlFor={commentId}
                 className="text-xs text-muted-foreground"
               >
-                Komentar {ASPECT_LABELS[aspect]} (opsional)
+                Komentar {question.label} (opsional)
               </Label>
               <Textarea
                 id={commentId}
@@ -182,6 +184,35 @@ function FeedbackForm({ token }: { token: string }) {
           );
         })}
 
+        {/* The two written questions (#446): optional, and not Aspects — nothing Rates them. */}
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${namePrefix}-knowledge-gain`}>
+            {PARTICIPANT_WRITTEN_QUESTIONS.knowledgeGain.question}
+          </Label>
+          <Textarea
+            id={`${namePrefix}-knowledge-gain`}
+            value={knowledgeGain}
+            onChange={(event) => {
+              setKnowledgeGain(event.target.value);
+            }}
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${namePrefix}-suggestions`}>
+            {PARTICIPANT_WRITTEN_QUESTIONS.suggestions.question}
+          </Label>
+          <Textarea
+            id={`${namePrefix}-suggestions`}
+            value={suggestions}
+            onChange={(event) => {
+              setSuggestions(event.target.value);
+            }}
+          />
+        </div>
+
+        {incomplete && (
+          <p className="text-sm text-destructive">Beri nilai untuk tiap aspek, lalu kirim lagi.</p>
+        )}
         <Button
           disabled={saving || !canSubmit}
           onClick={submit}

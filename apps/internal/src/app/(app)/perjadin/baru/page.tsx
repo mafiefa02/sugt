@@ -16,9 +16,9 @@ export const metadata: Metadata = { title: "Rencanakan Perjadin" };
  * Group and a row per School is a page with a backdrop.
  *
  * **Reached from the nav**, not from a selection made elsewhere — the form begins by picking a
- * Sub-Cluster and revealing its Schools. **Staff-only, so the read is too:** without
- * `staffSurface` on the read, a Teaching Team member reaching this URL directly would be shown
- * the whole form and refused only on submit.
+ * Sub-Cluster and revealing its Schools. **Editor-only (ADR-0047), so the read is too:** without
+ * `staffSurface` on the read, a Staff member without the Grant reaching this URL directly would be
+ * shown the whole form and refused only on submit; with it they get a 403.
  *
  * The route sits under its list route as `/perjadin/baru`, beside `/sesi-daring/baru` and
  * matching the `/cerita/baru` house pattern (#308). The trip that results is read at `/perjadin` —

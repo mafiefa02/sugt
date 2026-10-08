@@ -97,6 +97,7 @@ export {
   type FeedbackFilters,
   type FeedbackFilterValue,
   type FeedbackSort,
+  type ParticipantFeedbackAverages,
   type ParticipantFeedbackRow,
   type PerjadinFeedbackCursor,
   type PerjadinFeedbackFilters,
@@ -188,6 +189,8 @@ export { type PerjadinNameRef } from "./perjadin-naming";
 export { perjadinDirectory, type DirectoryPerjadin } from "./perjadin-directory";
 export {
   myPerjadin,
+  pendampingOptions,
+  pendampingPerjadin,
   type MyPerjadin,
   type MyPerjadinPengajar,
   type MyPerjadinPimpinan,
@@ -195,6 +198,8 @@ export {
   type MyPerjadinSession,
   type MyPerjadinStaff,
   type MyPerjadinTrip,
+  type PendampingOption,
+  type PendampingPerjadinResult,
 } from "./my-perjadin";
 export {
   togglePreparationItem,
@@ -300,6 +305,7 @@ export {
   submitParticipantFeedback,
   type IssueFeedbackTokenResult,
   type NewParticipantFeedback,
+  type ParticipantFeedbackAnswers,
   type ParticipantFeedbackComments,
   type ParticipantFeedbackRatings,
   type SubmitParticipantFeedbackResult,
@@ -420,12 +426,17 @@ export {
 } from "./perjadin-documents";
 export {
   canViewDashboard,
+  canWritePerjadin,
   hasGrant,
   isNotGrantedError,
+  isNotOnPerjadinError,
   isNotStaffError,
   NotGrantedError,
+  NotOnPerjadinError,
   NotStaffError,
   requireGrant,
+  requirePerjadinWriter,
+  requireSessionWriter,
   requireStaff,
 } from "./staff-only";
 export {

@@ -250,7 +250,7 @@ describe("myPerjadin carries the same money as the acquittal", () => {
     expect(mine.drawnDownIdr).toBe(1_200_000);
     // The acquittal still logs the full 1.5M spend, but its remainder draws down only the 1.2M.
     expect(acquittal.spentIdr).toBe(1_500_000);
-    expect(mine.advanceIdr - mine.drawnDownIdr).toBe(acquittal.remainderIdr);
+    expect(mine.advanceIdr! - mine.drawnDownIdr).toBe(acquittal.remainderIdr);
   });
 
   it("draws nothing down for a trip with no transactions", async () => {
@@ -464,5 +464,272 @@ describe("myPerjadin resolves the Preparation Checklist", () => {
     expect(mine?.id).toBe(trip.id);
     expect(mine?.preparation).toHaveLength(COMPANY_PREPARATION_ITEMS.length);
     expect(mine?.preparation.every((item) => !item.checked)).toBe(true);
+  });
+});
+
+describe("myPerjadin lists the Narasumber by School (#447)", () => {
+  beforeEach(resetDatabase);
+
+  /**
+   * The ticket's Perjadin A, done PP: one trip, a School a day, each with its own "Diajar oleh".
+   * Returns the caller, the trip and a way to add a School with one Session and its team.
+   */
+  async function perjadinA() {
+    const caller = asPerson(
+      await addPerson({ fullName: "Rina", email: "rina@ditsama.itb.ac.id", role: "Staff" }),
+    );
+    await addProvince("KT", "Kalimantan Timur", "WITA");
+    const cluster = await addCluster({ slug: "kaltim", name: "Cluster Kaltim" });
+    const subCluster = await addSubCluster({
+      slug: "kelompok-10",
+      name: "Kelompok 10",
+      clusterId: cluster.id,
+    });
+    const trip = await addPerjadin({
+      picPersonId: caller.id,
+      subClusterId: subCluster.id,
+      advanceIdr: 1_000_000,
+      startsOn: daysFromToday(1),
+      endsOn: daysFromToday(8),
+    });
+
+    const teachers = new Map<string, string>();
+    /** The trip's Narasumber, by name — the `perjadin_teacher` rows, entered in no order. */
+    async function narasumber(...names: string[]) {
+      const rows = await db
+        .insert(schema.perjadinTeacher)
+        .values(names.map((name) => ({ perjadinId: trip.id, name })))
+        .returning();
+      for (const row of rows) teachers.set(row.name, row.id);
+    }
+
+    const schools = new Map<string, string>();
+    /** One Session at a School of the trip, "Diajar oleh" the named Narasumber. */
+    async function session(
+      schoolName: string,
+      fixture: { day: number; startsAt?: string; status?: "cancelled"; diajarOleh: string[] },
+    ) {
+      let schoolId = schools.get(schoolName);
+      if (!schoolId) {
+        schoolId = (
+          await addSchool({
+            slug: schoolName.toLowerCase().replaceAll(" ", "-"),
+            name: schoolName,
+            clusterId: cluster.id,
+            subClusterId: subCluster.id,
+            provinceCode: "KT",
+          })
+        ).id;
+        schools.set(schoolName, schoolId);
+      }
+      const row = await addOfflineSession({
+        schoolId,
+        heldOn: daysFromToday(fixture.day),
+        startsAt: fixture.startsAt ?? "09:00",
+        status: fixture.status,
+        perjadinId: trip.id,
+      });
+      if (fixture.diajarOleh.length > 0) {
+        await db.insert(schema.sessionTeachingTeam).values(
+          fixture.diajarOleh.map((name) => ({
+            sessionId: row.id,
+            perjadinTeacherId: teachers.get(name)!,
+          })),
+        );
+      }
+    }
+
+    async function card() {
+      const {
+        current: [mine],
+      } = await myPerjadin(caller);
+      if (!mine) throw new Error("expected the trip");
+      return mine.anggota;
+    }
+
+    /** The block as names: each School's list, and the unassigned, for a readable comparison. */
+    async function names() {
+      const { pengajarBySchool, pengajar } = await card();
+      return {
+        total: pengajar.length,
+        bySchool: pengajarBySchool.bySchool.map((school) => [
+          school.name,
+          school.pengajar.map((person) => person.name),
+        ]),
+        unassigned: pengajarBySchool.unassigned.map((person) => person.name),
+      };
+    }
+
+    return { narasumber, session, card, names };
+  }
+
+  const sman1 = ["Bu Ani", "Pak Budi", "Bu Citra", "Pak Dedi", "Bu Eka", "Pak Fajar"];
+  const sman2 = ["Bu Ani", "Pak Gilang", "Bu Hana", "Pak Indra", "Bu Joko", "Pak Fajar"];
+
+  it("repeats a Narasumber under each School they taught at, and counts the trip's once", async () => {
+    const a = await perjadinA();
+    await a.narasumber(
+      "Pak Gilang",
+      "Bu Ani",
+      "Pak Budi",
+      "Bu Citra",
+      "Pak Dedi",
+      "Bu Eka",
+      "Pak Fajar",
+      "Bu Hana",
+      "Pak Indra",
+      "Bu Joko",
+    );
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: sman1 });
+    await a.session("SMAN 2 Bontang", { day: 4, diajarOleh: sman2 });
+
+    expect(await a.names()).toEqual({
+      total: 10,
+      bySchool: [
+        ["SMAN 1 Bontang", ["Bu Ani", "Bu Citra", "Bu Eka", "Pak Budi", "Pak Dedi", "Pak Fajar"]],
+        [
+          "SMAN 2 Bontang",
+          ["Bu Ani", "Bu Hana", "Bu Joko", "Pak Fajar", "Pak Gilang", "Pak Indra"],
+        ],
+      ],
+      unassigned: [],
+    });
+  });
+
+  it("lists a School with no team and the trip's untaught Narasumber (the variant)", async () => {
+    const a = await perjadinA();
+    await a.narasumber(
+      "Bu Ani",
+      "Pak Budi",
+      "Bu Citra",
+      "Pak Dedi",
+      "Bu Eka",
+      "Pak Fajar",
+      "Pak Gilang",
+      "Bu Hana",
+      "Pak Indra",
+      "Bu Joko",
+      "Pak Kurnia",
+    );
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: sman1 });
+    await a.session("SMAN 2 Bontang", { day: 4, diajarOleh: sman2 });
+    await a.session("SMAN 3 Bontang", { day: 5, diajarOleh: [] });
+
+    const { total, bySchool, unassigned } = await a.names();
+    expect(total).toBe(11);
+    expect(bySchool.map(([school]) => school)).toEqual([
+      "SMAN 1 Bontang",
+      "SMAN 2 Bontang",
+      "SMAN 3 Bontang",
+    ]);
+    expect(bySchool[2]).toEqual(["SMAN 3 Bontang", []]);
+    expect(unassigned).toEqual(["Pak Kurnia"]);
+  });
+
+  it("drops a cancelled Session: its School leaves the list and its team is unassigned", async () => {
+    const a = await perjadinA();
+    await a.narasumber(...sman1, "Pak Kurnia");
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: sman1 });
+    await a.session("SMAN 3 Bontang", { day: 5, status: "cancelled", diajarOleh: ["Pak Kurnia"] });
+
+    expect(await a.names()).toEqual({
+      total: 7,
+      bySchool: [
+        ["SMAN 1 Bontang", ["Bu Ani", "Bu Citra", "Bu Eka", "Pak Budi", "Pak Dedi", "Pak Fajar"]],
+      ],
+      unassigned: ["Pak Kurnia"],
+    });
+  });
+
+  it("lists someone who taught two of a School's Sessions once, and a cancelled one adds nobody", async () => {
+    const a = await perjadinA();
+    await a.narasumber("Bu Ani", "Pak Budi", "Bu Citra");
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: ["Bu Ani", "Pak Budi"] });
+    await a.session("SMAN 1 Bontang", { day: 3, diajarOleh: ["Bu Ani"] });
+    await a.session("SMAN 1 Bontang", { day: 4, status: "cancelled", diajarOleh: ["Bu Citra"] });
+
+    expect(await a.names()).toEqual({
+      total: 3,
+      bySchool: [["SMAN 1 Bontang", ["Bu Ani", "Pak Budi"]]],
+      unassigned: ["Bu Citra"],
+    });
+  });
+
+  it("orders Schools by their earliest live Session, then by name, whatever their names", async () => {
+    const a = await perjadinA();
+    await a.narasumber("Bu Ani");
+    // SMAN 9's only live Session is first; SMAN 5's cancelled one, earlier still, does not count.
+    await a.session("SMAN 5 Bontang", { day: 1, status: "cancelled", diajarOleh: [] });
+    await a.session("SMAN 5 Bontang", { day: 4, diajarOleh: [] });
+    await a.session("SMAN 9 Bontang", { day: 2, diajarOleh: ["Bu Ani"] });
+    // Same day and time as SMAN 5's live one: the name breaks the tie.
+    await a.session("SMAN 4 Bontang", { day: 4, diajarOleh: [] });
+    // Same day, earlier start.
+    await a.session("SMAN 7 Bontang", { day: 4, startsAt: "07:30", diajarOleh: [] });
+
+    const { bySchool } = await a.names();
+    expect(bySchool.map(([school]) => school)).toEqual([
+      "SMAN 9 Bontang",
+      "SMAN 7 Bontang",
+      "SMAN 4 Bontang",
+      "SMAN 5 Bontang",
+    ]);
+  });
+
+  it("gives a trip with no Narasumber an empty block, each School unassigned", async () => {
+    const a = await perjadinA();
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: [] });
+
+    expect(await a.names()).toEqual({
+      total: 0,
+      bySchool: [["SMAN 1 Bontang", []]],
+      unassigned: [],
+    });
+  });
+
+  it("puts every name of a freshly planned trip under belum ditugaskan", async () => {
+    const a = await perjadinA();
+    await a.narasumber("Bu Ani", "Pak Budi", "Bu Citra", "Pak Dedi", "Bu Eka", "Pak Fajar");
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: [] });
+    await a.session("SMAN 2 Bontang", { day: 4, diajarOleh: [] });
+
+    expect(await a.names()).toEqual({
+      total: 6,
+      bySchool: [
+        ["SMAN 1 Bontang", []],
+        ["SMAN 2 Bontang", []],
+      ],
+      unassigned: ["Bu Ani", "Bu Citra", "Bu Eka", "Pak Budi", "Pak Dedi", "Pak Fajar"],
+    });
+  });
+
+  it("tells two Narasumber of one name apart by their trip-scoped row", async () => {
+    const a = await perjadinA();
+    await a.narasumber("Dr. Sari");
+    // A second `perjadin_teacher` row of the same name: a different person who taught nowhere.
+    await a.narasumber("Dr. Sari");
+    const [first] = (await a.card()).pengajar;
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: [] });
+    await db.insert(schema.sessionTeachingTeam).values({
+      sessionId: (await db.select({ id: schema.session.id }).from(schema.session))[0]!.id,
+      perjadinTeacherId: first!.id,
+    });
+
+    const { pengajar, pengajarBySchool } = await a.card();
+    expect(pengajar).toHaveLength(2);
+    expect(pengajarBySchool.bySchool[0]?.pengajar.map((person) => person.id)).toEqual([first!.id]);
+    expect(pengajarBySchool.unassigned.map((person) => person.id)).toEqual(
+      pengajar.filter((person) => person.id !== first!.id).map((person) => person.id),
+    );
+  });
+
+  it("carries each School's id and each Narasumber's trip-scoped id", async () => {
+    const a = await perjadinA();
+    await a.narasumber("Bu Ani");
+    await a.session("SMAN 1 Bontang", { day: 2, diajarOleh: ["Bu Ani"] });
+
+    const { pengajarBySchool, pengajar } = await a.card();
+    expect(pengajarBySchool.bySchool[0]?.schoolId).toEqual(expect.any(String));
+    expect(pengajarBySchool.bySchool[0]?.pengajar).toEqual(pengajar);
   });
 });

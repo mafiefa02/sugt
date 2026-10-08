@@ -36,8 +36,8 @@ import type { PerjadinToken, Person } from "./caller";
  * The elaboration rule is **kept unchanged from #163/ADR-0023**, retargeted per-Aspect: a Rating at
  * or below `CONCERN_AT_OR_BELOW` on Aspect X needs X's OWN Komentar, checked here beside the write
  * and by `perjadin_evaluation_low_rating_needs_prose` behind it. A comment on a different Aspect no
- * longer excuses a low one. **`lodging` is the one nullable Rating**: a skipped hotel needs no
- * comment, exactly as Postgres `least()` drops a NULL out of the minimum.
+ * longer excuses a low one. **`lodging` is a nullable Rating**: a skipped hotel needs no comment,
+ * exactly as Postgres `least()` drops a NULL out of the minimum.
  */
 
 /** Trim to the prose the CHECK counts, or `null` when only whitespace is left. */
