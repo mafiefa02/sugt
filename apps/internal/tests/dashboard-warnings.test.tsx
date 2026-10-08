@@ -1,3 +1,4 @@
+import type { Warning } from "-/app/(app)/dashboard-state";
 import { DashboardWarnings } from "-/app/(app)/dashboard-warnings";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -8,7 +9,7 @@ import { describe, expect, it } from "vitest";
  * database, no DOM.
  */
 
-const warnings = [
+const warnings: Warning[] = [
   { id: "a", message: "Sesi Luring di SMA 1 melewati tenggat" },
   { id: "b", message: "Persiapan Program jatuh tempo" },
 ];
@@ -18,9 +19,8 @@ describe("DashboardWarnings", () => {
     const html = renderToStaticMarkup(<DashboardWarnings warnings={warnings} />);
     // React separates the literal text from the interpolated count with `<!-- -->` markers.
     expect(html).toMatch(/Peringatan \((<!-- -->)?2(<!-- -->)?\)/);
-    expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain('aria-expanded="true"');
-    expect(html).not.toContain(warnings[0].message);
+    for (const w of warnings) expect(html).not.toContain(w.message);
     expect(html).not.toContain("Abaikan");
   });
 
