@@ -20,14 +20,15 @@ import {
   refusedBy,
   resetDatabase,
 } from "./support/fixtures";
+import { overlappingAtInsert } from "./support/overlap";
 
 /**
  * **The Perjadin Evaluation** — how the trip went, filed **without signing in** through a
- * short-lived token link (ADR-0024). The rules under test are the token's — who mints it, when it
- * dies, that a dead one lets nobody write — and the write's own: a blank name is refused, the
- * per-Aspect elaboration rule holds application-side and behind a CHECK, and `lodging` is nullable,
- * so a day trip with no hotel drops out of the minimum rather than forcing prose or reaching the
- * concerns list. The old Group-member gate and one-per-filer dedup are gone with the sign-in.
+ * token link (ADR-0024). The rules under test are the token's — who mints it, that it is never
+ * replaced and never expires (ADR-0049), that a dead one lets nobody write — and the write's own:
+ * a blank name is refused, the per-Aspect elaboration rule holds application-side and behind a
+ * CHECK, and `lodging` is nullable, so a day trip with no hotel drops out of the minimum rather
+ * than forcing prose or reaching the concerns list. The old Group-member gate and one-per-filer dedup are gone with the sign-in.
  */
 
 /** Any signed-in Person may mint the token. `perjadin_feedback_token.issued_by_person_id` references one. */
@@ -211,17 +212,63 @@ describe("issuePerjadinFeedbackToken", () => {
     expect((await tokenRows(trip.id)).length).toBe(1);
   });
 
-  it("reissuing replaces the row, so the old token resolves to nothing", async () => {
+  it("a second press returns the same link, so the shared one keeps working", async () => {
     const pic = await staff();
+    const colleague = await staff("dewi@ditsama.itb.ac.id");
     const trip = await aTrip(pic.id);
 
     const first = await issuePerjadinFeedbackToken(pic, trip.id);
-    const second = await issuePerjadinFeedbackToken(pic, trip.id);
+    const second = await issuePerjadinFeedbackToken(colleague, trip.id);
 
-    expect(second.token).not.toBe(first.token);
+    expect(second).toEqual(first);
     expect((await tokenRows(trip.id)).length).toBe(1);
-    expect(await resolvePerjadinFeedbackToken(first.token)).toEqual({ outcome: "gone" });
-    expect((await resolvePerjadinFeedbackToken(second.token)).outcome).toBe("open");
+    expect((await resolvePerjadinFeedbackToken(first.token)).outcome).toBe("open");
+  });
+
+  it("two presses at the same moment get the same link, and one row", async () => {
+    const pic = await staff();
+    const colleague = await staff("dewi@ditsama.itb.ac.id");
+    const trip = await aTrip(pic.id);
+
+    const presses = await overlappingAtInsert("perjadin_feedback_token", [
+      () => issuePerjadinFeedbackToken(pic, trip.id),
+      () => issuePerjadinFeedbackToken(colleague, trip.id),
+      () => issuePerjadinFeedbackToken(pic, trip.id),
+    ]);
+
+    expect(new Set(presses.map((p) => p.token)).size).toBe(1);
+    expect((await tokenRows(trip.id)).length).toBe(1);
+  });
+
+  it("returns the original of several links — the earliest issued, then the lowest token", async () => {
+    const pic = await staff();
+    const trip = await aTrip(pic.id);
+    const day = 24 * 60 * 60 * 1000;
+    const issuedAt = new Date(Date.now() - 10 * day);
+    // Two issued in the same instant, and one reattached today by `db:reattach-links`.
+    await addPerjadinFeedbackToken({
+      perjadinId: trip.id,
+      issuedByPersonId: pic.id,
+      token: "b0000000-0000-4000-8000-000000000000",
+      issuedAt,
+    });
+    await addPerjadinFeedbackToken({
+      perjadinId: trip.id,
+      issuedByPersonId: pic.id,
+      token: "a0000000-0000-4000-8000-000000000000",
+      issuedAt,
+    });
+    await addPerjadinFeedbackToken({
+      perjadinId: trip.id,
+      issuedByPersonId: pic.id,
+      token: "00000000-0000-4000-8000-000000000000",
+    });
+
+    expect(await issuePerjadinFeedbackToken(pic, trip.id)).toEqual({
+      outcome: "issued",
+      token: "a0000000-0000-4000-8000-000000000000",
+    });
+    expect((await tokenRows(trip.id)).length).toBe(3);
   });
 });
 
@@ -258,26 +305,28 @@ describe("resolvePerjadinFeedbackToken", () => {
     expect(await resolvePerjadinFeedbackToken("no-such-token")).toEqual({ outcome: "gone" });
   });
 
-  it("is gone for an expired token", async () => {
+  it("still resolves a token issued months ago — a link never expires", async () => {
     const pic = await staff();
     const trip = await aTrip(pic.id);
     const day = 24 * 60 * 60 * 1000;
     const token = await addPerjadinFeedbackToken({
       perjadinId: trip.id,
       issuedByPersonId: pic.id,
-      issuedAt: new Date(Date.now() - 20 * day),
-      expiresAt: new Date(Date.now() - day),
+      issuedAt: new Date(Date.now() - 400 * day),
     });
 
-    expect(await resolvePerjadinFeedbackToken(token.token)).toEqual({ outcome: "gone" });
+    expect(await resolvePerjadinFeedbackToken(token.token)).toMatchObject({
+      outcome: "open",
+      caller: { kind: "perjadin", perjadinId: trip.id },
+    });
   });
 });
 
 /**
  * The submit Server Action, which is what actually guards the write: it re-resolves the token
- * server-side rather than trusting the page that rendered the form. A form left open past expiry
- * or past a reissue must fail here — the test that would catch a refactor moving resolution to the
- * page alone.
+ * server-side rather than trusting the page that rendered the form. A form left open while its link
+ * is removed by hand in the database (ADR-0049's only remedy for a leaked link) must fail here —
+ * the test that would catch a refactor moving resolution to the page alone.
  */
 describe("submitPerjadinEvaluationAction", () => {
   beforeEach(resetDatabase);
@@ -305,15 +354,14 @@ describe("submitPerjadinEvaluationAction", () => {
     expect((await evaluationRows(trip.id)).length).toBe(1);
   });
 
-  it("writes nothing when the token expired after the form was rendered", async () => {
+  it("files through a token issued weeks ago", async () => {
     const pic = await staff();
     const trip = await aTrip(pic.id);
     const day = 24 * 60 * 60 * 1000;
     const token = await addPerjadinFeedbackToken({
       perjadinId: trip.id,
       issuedByPersonId: pic.id,
-      issuedAt: new Date(Date.now() - 20 * day),
-      expiresAt: new Date(Date.now() - day),
+      issuedAt: new Date(Date.now() - 30 * day),
     });
 
     const result = await submitPerjadinEvaluationAction(token.token, {
@@ -323,15 +371,52 @@ describe("submitPerjadinEvaluationAction", () => {
       comments: NO_COMMENTS,
     });
 
-    expect(result).toEqual({ outcome: "gone" });
-    expect((await evaluationRows(trip.id)).length).toBe(0);
+    expect(result.outcome).toBe("filed");
+    expect((await evaluationRows(trip.id)).length).toBe(1);
   });
 
-  it("writes nothing through a token a reissue replaced", async () => {
+  it("files through each of a trip's several links against that trip", async () => {
+    const pic = await staff();
+    const trip = await aTrip(pic.id);
+    const otherTrip = await aTrip(pic.id);
+    const issued = await issuePerjadinFeedbackToken(pic, trip.id);
+    const reattached = await addPerjadinFeedbackToken({
+      perjadinId: trip.id,
+      issuedByPersonId: pic.id,
+    });
+    await addPerjadinFeedbackToken({ perjadinId: otherTrip.id, issuedByPersonId: pic.id });
+
+    for (const [token, name] of [
+      [issued.token, "Pak Andi"],
+      [reattached.token, "Bu Sri"],
+    ] as const) {
+      expect(await resolvePerjadinFeedbackToken(token)).toMatchObject({
+        outcome: "open",
+        caller: { kind: "perjadin", perjadinId: trip.id },
+      });
+      const result = await submitPerjadinEvaluationAction(token, {
+        role: "Narasumber",
+        name,
+        ratings: FINE,
+        comments: NO_COMMENTS,
+      });
+      expect(result.outcome).toBe("filed");
+    }
+
+    expect((await evaluationRows(trip.id)).map((row) => row.filedByName).sort()).toEqual([
+      "Bu Sri",
+      "Pak Andi",
+    ]);
+    expect(await evaluationRows(otherTrip.id)).toEqual([]);
+  });
+
+  it("writes nothing through a link removed by hand after the form was rendered", async () => {
     const pic = await staff();
     const trip = await aTrip(pic.id);
     const first = await issuePerjadinFeedbackToken(pic, trip.id);
-    await issuePerjadinFeedbackToken(pic, trip.id);
+    await db
+      .delete(schema.perjadinFeedbackToken)
+      .where(eq(schema.perjadinFeedbackToken.token, first.token));
 
     const result = await submitPerjadinEvaluationAction(first.token, {
       role: "Pimpinan",

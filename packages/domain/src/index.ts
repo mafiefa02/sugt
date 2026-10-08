@@ -482,24 +482,6 @@ export const RATING_MAX = 10;
 export const CONCERN_AT_OR_BELOW = 7;
 
 /**
- * How long a Session's Participant Feedback link stays open. Counted from when the token
- * is issued, which is at the end of the Session by construction — the link is the QR code
- * shown in the room, so "24 hours after the Session ended" and "24 hours after issue" are
- * the same moment without storing a Session end time.
- */
-export const FEEDBACK_TOKEN_LIFETIME_HOURS = 24;
-
-/**
- * How long a Perjadin's Evaluation link stays open — **14 days**, far longer than the Session
- * feedback token's 24 hours. A Participant Feedback QR is held up in the room and scanned on the
- * spot, so a day is generous; a Perjadin link is shared by hand to the Narasumber, Pendamping and
- * Pimpinan after a trip that may have run over a week, and they file when they get to it. Counted
- * from issue, like `FEEDBACK_TOKEN_LIFETIME_HOURS`, and expressed in hours so both tokens set
- * their `expires_at` the same way (`now() + make_interval(hours => …)`).
- */
-export const PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS = 24 * 14;
-
-/**
  * A Perjadin Report is due this many days after the Group gets back, so the deadline is
  * derived from the Perjadin's end date and never stored. Nothing is gated on it — it is
  * shown as days remaining and that is all.

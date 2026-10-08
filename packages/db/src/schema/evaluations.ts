@@ -188,29 +188,29 @@ export const sessionRecord = pgTable(
 );
 
 /**
- * One token per Session, shared — a link or QR code shown at the end of it. The
- * primary key is `session_id`, so issuing a new one replaces the old.
+ * A Session's feedback links — a link or QR code shown at the end of it. **The token is the key**,
+ * and `session_id` is a plain indexed foreign key, so one Session may hold several (ADR-0049).
  *
- * `expiresAt` defaults 24 hours out and is stored rather than derived: the token is
- * issued at the end of the Session by construction, so "24 hours after the Session
- * ended" needs no Session end time to exist.
+ * **A link never expires and is never replaced.** Staff print the QR the day before they leave and
+ * shorten the link with bit.ly, so a row has no `expires_at` and nothing in the app updates or
+ * deletes one: issuing returns the Session's existing link, and mints one only when it has none.
+ * More than one per Session arises only from `db:reattach-links`, which adds back links an earlier
+ * reissue overwrote, and issuing hands out the original — the earliest `issued_at`, then `token`.
+ * A cancelled Session's links still resolve to `gone`; that is the Session's state, not the link's.
  */
 export const sessionFeedbackToken = pgTable(
   "session_feedback_token",
   {
+    token: text("token").primaryKey(),
     sessionId: uuid("session_id")
-      .primaryKey()
-      .references(() => session.id, { onDelete: "cascade" }),
-    token: text("token").notNull().unique(),
-    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
-    expiresAt: timestamp("expires_at", { withTimezone: true })
       .notNull()
-      .default(sql`now() + interval '24 hours'`),
+      .references(() => session.id, { onDelete: "cascade" }),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
     issuedByPersonId: uuid("issued_by_person_id")
       .notNull()
       .references(() => person.id),
   },
-  (t) => [check("session_feedback_token_expiry_check", sql`${t.expiresAt} > ${t.issuedAt}`)],
+  (t) => [index("session_feedback_token_session_id_idx").on(t.sessionId)],
 );
 
 /**
@@ -297,7 +297,7 @@ export const participantFeedback = pgTable(
  * on purpose — two evaluation forms that behaved differently would be two things to
  * learn. There is no `covered`: nothing was taught on a journey.
  *
- * **Filed without signing in, through a short-lived token link (ADR-0024).** The filer
+ * **Filed without signing in, through a token link (ADR-0024).** The filer
  * is not a `person` any more — the old `filed_by_person_id` foreign key and the
  * `perjadin_evaluation_one_per_filer` unique are both gone. The people best placed to
  * say how a trip went include the name-based Narasumber and the record-only Pimpinan,
@@ -384,31 +384,24 @@ export const perjadinEvaluation = pgTable(
 );
 
 /**
- * One token per Perjadin, shared — the link (a QR or copyable URL) handed out from the trip's page
- * so its Evaluation can be filed without signing in (ADR-0024). A direct mirror of
- * `sessionFeedbackToken`, keyed on `perjadin_id` so **issuing a new one replaces the old** and
- * every link already shared resolves to nothing.
- *
- * `expiresAt` defaults 14 days out — the `PERJADIN_FEEDBACK_TOKEN_LIFETIME_HOURS` window — and is
- * stored rather than derived, as the Session token's is: the link is shared after the trip and the
- * filers (Narasumber, Pendamping, Pimpinan) file when they get to it, so it outlives the trip's
- * dates by design. There is no cancelled-trip bar the Session token needs: a Perjadin is a real
- * trip once it exists and is never cancelled, so a token always has a live trip behind it.
+ * A Perjadin's Evaluation links — the link (a QR or copyable URL) handed out from the trip's page so
+ * its Evaluation can be filed without signing in (ADR-0024). A direct mirror of
+ * `sessionFeedbackToken`: **the token is the key**, `perjadin_id` an indexed foreign key, and a link
+ * **never expires and is never replaced** (ADR-0049). Issuing returns the trip's original link; more
+ * than one arises only from `db:reattach-links`. There is no cancelled-trip bar the Session's links
+ * need: a Perjadin is a real trip once it exists and is never cancelled.
  */
 export const perjadinFeedbackToken = pgTable(
   "perjadin_feedback_token",
   {
+    token: text("token").primaryKey(),
     perjadinId: uuid("perjadin_id")
-      .primaryKey()
-      .references(() => perjadin.id, { onDelete: "cascade" }),
-    token: text("token").notNull().unique(),
-    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
-    expiresAt: timestamp("expires_at", { withTimezone: true })
       .notNull()
-      .default(sql`now() + interval '14 days'`),
+      .references(() => perjadin.id, { onDelete: "cascade" }),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
     issuedByPersonId: uuid("issued_by_person_id")
       .notNull()
       .references(() => person.id),
   },
-  (t) => [check("perjadin_feedback_token_expiry_check", sql`${t.expiresAt} > ${t.issuedAt}`)],
+  (t) => [index("perjadin_feedback_token_perjadin_id_idx").on(t.perjadinId)],
 );

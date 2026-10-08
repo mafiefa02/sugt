@@ -15,11 +15,9 @@ import { eq } from "drizzle-orm";
 /**
  * A resolved token, or `gone`.
  *
- * **`gone` is one outcome and carries no reason**, deliberately. An unknown token, an expired
- * one, one replaced by a reissue, and one for a cancelled Session are all the same to a scanner:
- * nothing they can do differently, and the same remedy — ask for a fresh QR. A reason field
- * would be a thing somebody eventually renders, and #33 asks that expired and replaced show the
- * same page and the same message.
+ * **`gone` is one outcome and carries no reason**, deliberately. An unknown token and one for a
+ * cancelled Session are the same to a scanner: nothing they can do differently. A link no longer
+ * expires and is never replaced (ADR-0049), so those two are the only ways here.
  */
 export type ResolvedFeedbackToken =
   | { outcome: "open"; caller: ParticipantToken }
@@ -28,19 +26,15 @@ export type ResolvedFeedbackToken =
 /**
  * Resolve the token in a `/f/{token}` URL.
  *
- * **The expiry is enforced here, in the handler.** `expires_at` is a column and not a gate —
- * nothing in the database refuses an expired token — so this reads it and compares it to now.
- * A cancelled Session's token is refused for the same money-free reason a cancelled Session
- * takes no feedback.
- *
- * A replaced token needs no special case: the row is keyed on `session_id`, so a reissue
- * overwrites the `token` column and the old string matches nothing here.
+ * A lookup by token, and nothing about when it was issued: a link printed weeks ago opens as well
+ * as one issued a minute ago (ADR-0049). A Session may hold several links (`db:reattach-links`),
+ * and each resolves to that Session. A cancelled Session's token is refused, for the same
+ * money-free reason a cancelled Session takes no feedback.
  */
 export async function resolveFeedbackToken(token: string): Promise<ResolvedFeedbackToken> {
   const [row] = await db
     .select({
       sessionId: schema.sessionFeedbackToken.sessionId,
-      expiresAt: schema.sessionFeedbackToken.expiresAt,
       status: schema.session.status,
     })
     .from(schema.sessionFeedbackToken)
@@ -50,7 +44,6 @@ export async function resolveFeedbackToken(token: string): Promise<ResolvedFeedb
 
   if (!row) return { outcome: "gone" };
   if (row.status === "cancelled") return { outcome: "gone" };
-  if (row.expiresAt.getTime() <= Date.now()) return { outcome: "gone" };
 
   return { outcome: "open", caller: { kind: "participant", sessionId: row.sessionId } };
 }

@@ -55,11 +55,22 @@ pnpm --filter @sugt/db db:generate     # diff src/schema against the last snapsh
 pnpm --filter @sugt/db db:migrate      # apply pending migrations
 pnpm --filter @sugt/db db:seed         # Provinces, 4 Clusters, 47 Schools (idempotent)
 pnpm --filter @sugt/db db:seed:people  # the founding Staff, once, on a new environment
+pnpm --filter @sugt/db db:reattach-links links.csv --operator you@ditsama.itb.ac.id [--apply]
 ```
 
 `db:seed:people` reads `seed/founding-staff.sql`, which is **gitignored**: this repository
 is public and those are real addresses. Copy `seed/founding-staff.example.sql` and fill it
 in. It is deliberately not idempotent — see the header in the template for why.
+
+`db:reattach-links` puts back feedback links that an earlier reissue overwrote
+([ADR-0049](../../docs/adr/0049-feedback-links-never-expire-and-are-never-replaced.md), #453).
+The file has one `link,target[,kind]` line per link. The link is a full `/f/{token}` or
+`/ep/{token}` URL, or a bare token with `kind` set to `session` (or `sesi`) or `perjadin`. The target is the
+Session or Perjadin id. Each line becomes an additional link on that target, recorded against the
+operator, who must be an active Staff Person. Nothing is updated, deleted or moved. **It is a dry
+run unless `--apply` is given**, and a second `--apply` of the same file reports every line as
+"sudah aktif". Like `db:seed` it reads `DIRECT_URL` from the shell and prints that database's host
+first. It runs on Node's own type stripping (Node 22.18 or later), so it needs no build step.
 
 ## Two things drizzle-kit cannot express
 

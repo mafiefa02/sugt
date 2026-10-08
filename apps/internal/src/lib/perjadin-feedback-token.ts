@@ -16,10 +16,9 @@ import { eq } from "drizzle-orm";
 /**
  * A resolved token — carrying the Perjadin's display info the public form shows — or `gone`.
  *
- * **`gone` is one outcome and carries no reason**, deliberately, exactly as the Participant
- * resolver's is. An unknown token, an expired one, and one replaced by a reissue are all the same
- * to whoever opened the link: nothing they can do differently, and the same remedy — ask for a
- * fresh link. There is no cancelled-trip case: a Perjadin is a real trip once it exists.
+ * **`gone` means an unknown token**, the only way here: a link no longer expires and is never
+ * replaced (ADR-0049), and there is no cancelled-trip case — a Perjadin is a real trip once it
+ * exists. It carries no reason, exactly as the Participant resolver's `gone` does.
  *
  * The `open` arm carries what the trip is named from — its Sub-Cluster's name, its dates and its
  * Schools (ADR-0044) — so the form can name which trip is being rated without a second query. The
@@ -41,11 +40,8 @@ export type ResolvedPerjadinFeedbackToken =
 /**
  * Resolve the token in an `/ep/{token}` URL.
  *
- * **The expiry is enforced here, in the handler.** `expires_at` is a column and not a gate —
- * nothing in the database refuses an expired token — so this reads it and compares it to now.
- *
- * A replaced token needs no special case: the row is keyed on `perjadin_id`, so a reissue overwrites
- * the `token` column and the old string matches nothing here.
+ * A lookup by token, and nothing about when it was issued (ADR-0049). A Perjadin may hold several
+ * links (`db:reattach-links`), and each resolves to that Perjadin.
  */
 export async function resolvePerjadinFeedbackToken(
   token: string,
@@ -53,7 +49,6 @@ export async function resolvePerjadinFeedbackToken(
   const [row] = await db
     .select({
       perjadinId: schema.perjadinFeedbackToken.perjadinId,
-      expiresAt: schema.perjadinFeedbackToken.expiresAt,
       subClusterName: schema.subCluster.name,
       startsOn: schema.perjadin.startsOn,
       endsOn: schema.perjadin.endsOn,
@@ -66,7 +61,6 @@ export async function resolvePerjadinFeedbackToken(
     .limit(1);
 
   if (!row) return { outcome: "gone" };
-  if (row.expiresAt.getTime() <= Date.now()) return { outcome: "gone" };
 
   return {
     outcome: "open",

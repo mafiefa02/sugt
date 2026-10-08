@@ -14,11 +14,12 @@ import {
  * **It takes the opaque token and re-resolves it here.** The token is the credential; the
  * `sessionId` is a *result* of validating it and is never an argument — a `sessionId` parameter
  * would be an unauthenticated INSERT into any Session anyone cared to name. The page resolved
- * the token to render the form, but that proves nothing about this call: a form held open past
- * expiry, or past a reissue, must fail here, so the resolution runs again inside the action.
+ * the token to render the form, but that proves nothing about this call: a form held open while
+ * the Session was cancelled, or its link removed by hand in the database (ADR-0049's only remedy
+ * for a leaked one), must fail here, so the resolution runs again inside the action.
  *
- * `gone` collapses expired, replaced, unknown and cancelled into one outcome — the form shows
- * the same dead-link message a fresh load would, because a scanner can do nothing differently.
+ * `gone` collapses unknown and cancelled into one outcome — the form shows the same dead-link
+ * message a fresh load would, because a scanner can do nothing differently.
  * The write's own outcomes are reused rather than restated; `gone` is the one this layer adds.
  */
 export type SubmitFeedbackActionResult = SubmitParticipantFeedbackResult | { outcome: "gone" };
